@@ -14,7 +14,7 @@ from cv_funcs import show, get_frame
 
 # from typing import Union
 
-@dataclass
+@dataclass(frozen = True)
 class Point:
     """
     A point: tuple of integers, signifying x and y coordinates.
@@ -22,13 +22,17 @@ class Point:
     coords: tuple
     
     def __post_init__(self):
+        #### TYPE CHECKS ####
         typecheck(self)
         pointcheck(self)
-        self.x, self.y = self.coords
-        ### prohibit negative points.
-        if not (self.x >= 0 and self.y >= 0):
-            self = None ## or maybe make none point?
+        #####################  
         
+        #### IMMUTABILITY BREAKS ####
+        object.__setattr__(self, 'x', self.coords[0])
+        object.__setattr__(self, 'y', self.coords[1])
+        #############################  
+        
+    ### METHODS ###
     # def conform_to(self, image: Union[BGRFrame, GreyFrame]): ### circular annotation not allowed...
     def conform_to(self, image):
         # force the point to be in bounds
@@ -37,40 +41,44 @@ class Point:
         return Point((corr_x, corr_y))
 
     def up(self, points):
-        return Point((self.x, self.y - points))
+        return Point((self.x, max(self.y - points, 0)))
 
     def down(self, points):
         return Point((self.x, self.y + points))
 
     def left(self, points):
-        return Point((self.x - points, self.y))
+        return Point((max(self.x - points, 0), self.y))
 
     def right(self, points):
         return Point((self.x + points, self.y))
-
+    ###########
     
 
-@dataclass
+@dataclass(frozen = True)
 class GreyFrame:
     array: np.ndarray
     name: str = 'frame'
     
     def __post_init__(self):
+        #### TYPE CHECKS ####
         typecheck(self)
-        
         ### we can actually deal with a three dim array, by turning it back to Grey
         arraycheck(self, channel_number = 3, color_channel_length = None)
-            
+        ########################  
+        
+        #### IMMUTABILITY BREAKS ####
         ### convert a 1-dim array to a line, with 1 row.
         if len(self.array.shape) == 1:
-            self.array = np.array([self.array])
+            object.__setattr__(self, 'array', np.array([self.array]))
         
         ### convert grayscale to a grey BGR
         if len(self.array.shape) == 3:
-            self.array = cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY)
+            object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
         
-        self.rows, self.cols = self.array.shape[:2]
-        self.shape = self.array.shape
+        object.__setattr__(self, 'rows', self.array.shape[0])
+        object.__setattr__(self, 'cols', self.array.shape[1])
+        object.__setattr__(self, 'shape', self.array.shape)
+        #############################  
     
     ### CONSTRUCTORS ###
     @staticmethod
@@ -100,27 +108,31 @@ class GreyFrame:
     ###############
 
 
-@dataclass
+@dataclass(frozen = True)
 class BGRFrame:
     array: np.ndarray
     name: str = 'frame'
     
     def __post_init__(self):
+        #### TYPE CHECKS ####
         typecheck(self)
-        
         arraycheck(self, channel_number = 3, color_channel_length = 3)
-            
+        #####################   
+        
+        #### IMMUTABILITY BREAKS ####
         ### convert a 1-dim array to a line, with 1 row.
         if len(self.array.shape) == 1:
-            self.array = np.array([self.array])
+            object.__setattr__(self, 'array', np.array([self.array]))
         
         ### convert grayscale to a grey BGR
         if len(self.array.shape) == 2:
-            self.array = cv.cvtColor(self.array,  cv.COLOR_GRAY2BGR)
+            object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_GRAY2BGR))
+
+        object.__setattr__(self, 'rows', self.array.shape[0])
+        object.__setattr__(self, 'cols', self.array.shape[1])
+        object.__setattr__(self, 'shape', self.array.shape)
+        #############################  
         
-        self.rows, self.cols = self.array.shape[:2]
-        self.shape = self.array.shape
-       
     ### CONSTRUCTORS ###
     @staticmethod
     def from_video(cap, frame_num, name = 'frame'):
@@ -165,4 +177,24 @@ if __name__ == '__main__':
     cFrm = gFrm.to_BGR()
     cFrm = cFrm.overlay(aPt, radius = 5)
     cFrm.show()
+
+
+    Point((4, 4)).up(10)
+
+
+    ### immutability preserved?
+    gFrm = GreyFrame(a)
+    print(gFrm.shape)
+    cv.cvtColor(gFrm.array, cv.COLOR_GRAY2BGR)
+    print(gFrm.shape)
+    # gFrm.array = cv.cvtColor(gFrm.array, cv.COLOR_GRAY2BGR)
+    # print(gFrm.shape)
+
+
+
+
+
+
+
+
 

@@ -36,4 +36,8 @@ def arraycheck(myClass, channel_number: int, color_channel_length: Optional[int]
 def pointcheck(myClass):
     x, y = myClass.coords
     if not (isinstance(x, int) and isinstance(y, int)):
-        raise TypeError(f"Point coordinates have to be integers.")
+        raise TypeError("Point coordinates have to be integers.")
+    ### prohibit negative points.
+    if not (x >= 0 and y >= 0):
+        raise TypeError("Negative coordinates not allowed.")
+        
