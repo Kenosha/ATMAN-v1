@@ -14,20 +14,22 @@ def typecheck(myClass):
         initialized_attribute = getattr(myClass, name)
         if not isinstance(initialized_attribute, field_type):
             curr_type = type(initialized_attribute)
-            raise TypeError(f"Field Name {name} has to be {field_type}, not {curr_type}")
+            raise TypeError(f"Field Name {name} has to be {field_type}, not {curr_type}!")
     
 # def arraycheck(myClass, channel_number: int, color_channel_length = int | None):
-def arraycheck(myClass, channel_number: int, color_channel_length: Optional[int] = None):
-    if myClass.array.dtype != 'uint8':
-        raise TypeError('Unsigned 8-bit integers expected')
+def arraycheck(myClass, 
+               member_type: str = 'uint8',
+               channel_number: int = 3, color_channel_length: Optional[int] = None):
+    if myClass.array.dtype != member_type:
+        raise TypeError(f'{member_type} integers expected!')
     
     if len(myClass.array.shape) > channel_number:
-        raise TypeError(f'{channel_number}-dimensional array expected.')
+        raise TypeError(f'{channel_number}-dimensional array expected!')
     elif len(myClass.array.shape) == channel_number:
         if color_channel_length is not None:
             ### enforce BGR channel to be of length 3
             if myClass.array.shape[-1] != color_channel_length:
-                raise TypeError(f"RGB Channel has to be {color_channel_length}-dimensional")
+                raise TypeError(f"Color Channel has to be {color_channel_length}-dimensional!")
     else:
         ### if the array is of smaller dimension than the target, 
         ### we can generally fix it inside the specific post_init
@@ -36,8 +38,8 @@ def arraycheck(myClass, channel_number: int, color_channel_length: Optional[int]
 def pointcheck(myClass):
     x, y = myClass.coords
     if not (isinstance(x, int) and isinstance(y, int)):
-        raise TypeError("Point coordinates have to be integers.")
+        raise TypeError("Point coordinates have to be integers!")
     ### prohibit negative points.
     if not (x >= 0 and y >= 0):
-        raise TypeError("Negative coordinates not allowed.")
+        raise TypeError("Negative coordinates not allowed!")
         
