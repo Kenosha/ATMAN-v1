@@ -9,7 +9,7 @@ Utility Functions
 
 import os
 
-mainDir = r'C:\Users\gianl\Desktop\ATMAN'
+mainDir = r'C:\Users\gianl\Documents\GitHub\ATMAN'
 
 def get_folder_struct(source, verbose = True):
     sourceDir = os.path.join(mainDir, source)
@@ -24,3 +24,8 @@ def get_folder_struct(source, verbose = True):
         
     else:
         if verbose: print(f'No such directory: {sourceDir}')
+
+
+####### video read in
+    
+
