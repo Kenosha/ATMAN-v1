@@ -5,7 +5,10 @@ Created on Wed Mar 16 16:58:08 2022
 @author: gianl
 """
 
-from ATMANpy.types import Frame, BGRFrame, GreyFrame, BoolFrame, Point, Line, Lines
+from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Lines import Line, Lines
+from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
+
 
 ############ DETECTING WHITE LINES #############
 def get_vicinity(aPt: Point, 
