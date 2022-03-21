@@ -9,18 +9,10 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.utils as atu
-import ATMANpy.cv_funcs as acv
+from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Lines import Line, Lines, CourtLines
+from ATMANpy.Frames import BGRFrame, GreyFrame
 
-from ATMANpy.types import Frame, BGRFrame, GreyFrame, BoolFrame, Point, Line, Lines
-
-
-# misc
-import os
-import shutil
-import math
-import datetime
-# plots
-import matplotlib.pyplot as plt
 # image operation
 import cv2 as cv
 import numpy as np
@@ -46,7 +38,6 @@ gFrm.show()
 cFrm = BGRFrame.from_video(cap, FRAME_NUM)
 cFrm.show()
 ############################# 
-
 
 ##### FIND LINES #######
 
@@ -102,6 +93,56 @@ l_v_Lines, r_v_Lines, h_Lines = filter_court_line_candidates(l_v_Lines, r_v_Line
 gFrm.zero().put(l_v_Lines).show()
 gFrm.zero().put(r_v_Lines).show()
 gFrm.zero().put(h_Lines).show()
+
+####### 5) Court Correspondences
+
+### i) a theoretical model of the court 
+
+from ATMANpy.line_funcs import fit_frame_to_lines
+# court display parameters, not important
+SIZE = 4 
+MARGIN = 10
+schemaLines = CourtLines.make(size = SIZE, margin = MARGIN).add_singles_netline()
+
+courtFrm = fit_frame_to_lines(schemaLines)
+courtFrm.show()
+
+### ii) create the 11 theoretical 4-point configurations on the court schema so created.
+# from ATMANpy.line_funcs import show_configs
+# show_configs(courtFrm, court_configs, thickness = 6, radius = 5, color = (0, 0, 255))
+
+### iii) by comparing these configs with all possible 4-line intersections of our hough lines, 
+# we can derive a homography. 
+# The best homography is selected via goodness of fit, using the comparing the implied court with the white in the image.
+from ATMANpy.line_funcs import get_homography 
+
+v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
+H = get_homography(v_Lines, h_Lines, allBFrm, verbose = False)
+
+courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
+gFrm.to_BGR().put(courtLines, thickness = 3).show()
+
+###### 6) Find the top of the net #####
+FACTOR = 0.9
+POINTS_TO_SEARCH = 100
+
+from ATMANpy.net_funcs import find_net_points, remove_outlier_net_points
+relPoints = find_net_points(courtLines, gFrm, 
+                            factor = FACTOR, points_to_search = POINTS_TO_SEARCH)
+relPoints = remove_outlier_net_points(relPoints)
+
+from ATMANpy.net_funcs import cubic_regress, make_net_cord_lines
+b_0, b_1 = cubic_regress(relPoints)
+netLines = make_net_cord_lines(courtLines, b_0, b_1)
+
+
+gFrm.to_BGR().put(courtLines, thickness = 3).put(netLines, color = (255, 0, 0), thickness = 3).show()
+
+
+
+
+
+
 
 
 
