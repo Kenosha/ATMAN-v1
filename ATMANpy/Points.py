@@ -5,8 +5,9 @@ Created on Fri Mar 11 17:30:35 2022
 @author: gianl
 """
 
-from dataclasses import dataclass
+import numpy as np
 
+from dataclasses import dataclass
 from ATMANpy.type_funcs import typecheck, pointcheck
 from typing import Optional
 
@@ -78,6 +79,21 @@ class Point:
             new_y = self.y
             return Point((new_x, new_y))
     
+    def apply_homography(self, H):
+        """
+        Apply a 3x3 homography matrix H to a point.        
+        """
+        _epsilon = 10 ** -5 # a small number, to approximate points at infinity
+        hom_coords = np.matmul(H, [self.x, self.y, 1])
+        try:
+            norm_coords = hom_coords[:2] / hom_coords[2]
+        except:
+            ### figure out the scale of the first two coords, so we can approximate the point at infinity
+            _smaller = max(min(hom_coords[:2]), 1) ### we're only worried about very small coords, hence the maximum condition
+            _scale = round(np.log10(_smaller)) + 1
+            norm_coords = hom_coords[:2] / (_epsilon ** _scale)
+        return Point(tuple(norm_coords))
+    
     def is_left(self, inObj):
         if isinstance(inObj, Point):
             comp = inObj.x
@@ -109,7 +125,10 @@ class Point:
     def round_coords(self):
         x, y = self.coords
         return (round(x), round(y))
-
+    
+    def round_point(self):
+        return Point(self.round_coords(), value = self.value)
+        
     
 @dataclass(frozen = True)
 class SafePoint(Point):

@@ -8,7 +8,7 @@ Created on Fri Mar 11 17:30:35 2022
 import numpy as np
 from dataclasses import dataclass
 
-from ATMANpy.Points import Point
+from ATMANpy.Points import Point, SafePoint
 
 from typing import List
 
@@ -115,6 +115,9 @@ class Line:
     def right(self, points, name = 'Line'):
         return Line(self.leftPt.right(points), self.rightPt.right(points), name = name)
 
+    def length(self):
+        return self.leftPt.distance_to(self.rightPt)
+
     def slope(self):
         try:
             slp = (self.rightPt.y - self.leftPt.y) / (self.rightPt.x - self.leftPt.x)
@@ -143,11 +146,11 @@ class Line:
         if slp1 is None and slp2 is None: ### vertical, parallel lines
             return None 
         elif slp1 is None:
-            x_int = self.x
-            y_int = slp2 * self.x + int2
+            x_int = self.leftPt.x
+            y_int = slp2 * x_int + int2
         elif slp2 is None:
-            x_int = bLn.x
-            y_int = slp1 * bLn.x + int1
+            x_int = bLn.leftPt.x
+            y_int = slp1 * x_int + int1
         else:
             if slp1 == slp2:
                 return None
@@ -179,12 +182,25 @@ class Line:
         else:
             return (y - itc) / slp
         
-    def flip_vertically(self, aLn):
-        return Line(self.leftPt.flip_vertically(aLn), self.rightPt.flip_vertically(aLn))
+    def flip_vertically(self, aLn, name = 'Line'):
+        return Line(self.leftPt.flip_vertically(aLn), self.rightPt.flip_vertically(aLn),
+                    name = name)
         
-    def flip_horizontally(self, aLn):
-        return Line(self.leftPt.flip_horizontally(aLn), self.rightPt.flip_horizontally(aLn))
-        
+    def flip_horizontally(self, aLn, name = 'Line'):
+        return Line(self.leftPt.flip_horizontally(aLn), self.rightPt.flip_horizontally(aLn), 
+                    name = name)
+    
+    def apply_homography(self, H):
+        return Line(self.leftPt.apply_homography(H), self.rightPt.apply_homography(H), name = self.name)
+    
+    def round_points(self):
+        return Line(self.leftPt.round_point(), self.rightPt.round_point(), name = self.name)
+
+    def subdivide(self, elements = 100):
+        x_space = np.linspace(self.left_point().x, self.right_point().x, num = elements, dtype = 'int32')
+        y_space = np.linspace(self.high_point().y, self.low_point().y, num = elements, dtype = 'int32')
+        x_y_space = zip(x_space, y_space)
+        return [Point(x_y) for x_y in x_y_space]
 
 @dataclass(frozen = True)
 class Lines:
@@ -222,7 +238,7 @@ class Lines:
     def __len__(self):
         return len(self.lineList)
 
-    #### METHODS ###
+    #### METHODS ###    
     def append(self, other):
         if isinstance(other, Line):
             return Lines([*self.lineList, other])
@@ -283,6 +299,12 @@ class Lines:
                 newLines = l2.append(ls)
                 return newLines.merge(mergeFunc, flushedLines = flushedLines.append(l1))
     
+    def transform(self, lineFunc, *args, **kwargs):
+        if isinstance(lineFunc, str):
+            return Lines([getattr(l, lineFunc)(*args, **kwargs) for l in self.lineList])
+        else:
+            return Lines([lineFunc(l, *args, **kwargs) for l in self.lineList])
+            
     def filt(self, filtFunc):
         print(f"{self.name}: {len(self)} before filter...")
         filtList = list(filter(filtFunc, self.lineList))
@@ -325,3 +347,93 @@ class Lines:
                 extremum = extremum_candidate
         return extremum
     
+    
+
+@dataclass(frozen = True)
+class CourtLines(Lines):
+    lineList: List[Line]
+    name: str = 'Lines'
+    size: int = None
+    margin: int = None
+    
+    @staticmethod
+    def get_dimensions(size = 4):
+        ## court dimensions in feet
+        court_width = 36
+        side_length = 39
+        doubles_alley_width = 4.5
+        singles_width = court_width - 2 * doubles_alley_width
+        service_box_length = 21
+        service_box_width = singles_width / 2
+        net_beyond_line = 3
+    
+        scale_minimum = 2 ### minimum scale, so we have integers
+    
+        scale = size * scale_minimum
+        
+        return {'court_width': scale * court_width,
+                'side_length': scale * side_length,
+                'doubles_alley_width': scale * doubles_alley_width,
+                'singles_width': scale * singles_width,
+                'service_box_length': scale * service_box_length,
+                'service_box_width': scale * service_box_width,
+                'net_beyond_line': scale * net_beyond_line}
+        
+    def _set_dimensions(self, size = 4):
+        ### This method is just for convenience, so we can initialize the dimensions
+        # created in 'get_dimensions' 
+        dimDict = CourtLines.get_dimensions(size = size)
+        
+        for attr, value in dimDict.items():
+            object.__setattr__(self, attr, value)
+    
+    
+    ### always use this method to construct the court lines!
+    @staticmethod
+    def make(size = 4, margin = 10):
+        
+        dim = CourtLines.get_dimensions(size = size)
+        
+        _origin = SafePoint((margin, margin))
+        
+        ### top half of court
+        baseLine = Line(_origin, _origin.right(dim['court_width']), name = 'Top Baseline')
+        netLine = baseLine.down(dim['side_length'])
+        doubles_deuceLine = Line(_origin, _origin.down(dim['side_length']), name = 'Top Doubles Deuce Line')
+        singles_deuceLine = doubles_deuceLine.right(dim['doubles_alley_width'], name = 'Top Singles Deuce Line')
+        singles_adLine = singles_deuceLine.right(dim['singles_width'], name = 'Top Singles Ad Line')
+        doubles_adLine = singles_adLine.right(dim['doubles_alley_width'], name = 'Top Doubles Ad Line')
+        serviceLine = Line(baseLine.weak_intersect(singles_deuceLine), baseLine.weak_intersect(singles_adLine)).down(dim['side_length'] - dim['service_box_length'], name = 'Top Service Line').round_points()
+        centerLine = Line(singles_deuceLine.weak_intersect(serviceLine), singles_deuceLine.weak_intersect(netLine)).right(dim['service_box_width'], name = 'Top Center Line').round_points()
+        
+        topLines = Lines([baseLine, serviceLine, centerLine,
+                          doubles_deuceLine, singles_deuceLine, singles_adLine, doubles_adLine])
+        
+        botLines = Lines([l.flip_vertically(netLine, name = l.name.replace('Top', 'Bottom')).round_points() for l in topLines])
+        
+        courtLines = topLines.append(botLines)
+            
+        courtLines = CourtLines(courtLines.lineList, 
+                                name = 'Court Lines', 
+                                size = size, 
+                                margin = margin)
+        courtLines._set_dimensions(size = size)
+        return courtLines
+    
+    def add_singles_netline(self):
+        netLine = self['Top Baseline'].down(self.side_length)
+        netLine = Line(netLine.leftPt.right(self.doubles_alley_width).left(self.net_beyond_line),
+                                netLine.rightPt.left(self.doubles_alley_width).right(self.net_beyond_line),
+                                name = 'Net Line')
+        return self.append(netLine)
+        
+    def add_doubles_netline(self):
+        netLine = self['Top Baseline'].down(self.side_length)
+        netLine = Line(netLine.leftPt.left(self.net_beyond_line),
+                                netLine.rightPt.right(self.net_beyond_line),
+                                name = 'Net Line')
+        return self.append(netLine)
+        
+        
+        
+        

@@ -5,8 +5,11 @@ Created on Wed Mar 16 16:58:08 2022
 @author: gianl
 """
 
+import numpy as np
+import cv2 as cv
+
 from ATMANpy.Points import Point, SafePoint
-from ATMANpy.Lines import Line, Lines
+from ATMANpy.Lines import Line, Lines, CourtLines
 from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
 
 
@@ -174,3 +177,119 @@ def filter_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_L
     return left_vert_Lines, right_vert_Lines, new_horizontal_Lines
 
 
+########## COURT CORRESPONDENCES #######
+
+
+def fit_frame_to_lines(aLns, margin = 10):
+    b, r = aLns.lowest(), aLns.rightest()
+    gFrm = GreyFrame(np.zeros((b.y + margin, r.x + margin), dtype = 'uint8'))
+    lnFrm = gFrm.put(aLns)
+    return lnFrm
+
+def get_court_schema_intersection_points(courtLines: CourtLines):
+    # court schema intersection points
+    p11 = courtLines['Top Baseline'].weak_intersect(courtLines['Top Doubles Deuce Line'])
+    p12 = courtLines['Top Baseline'].weak_intersect(courtLines['Top Singles Deuce Line'])
+    p13 = courtLines['Top Baseline'].weak_intersect(courtLines['Top Singles Ad Line'])
+    p14 = courtLines['Top Baseline'].weak_intersect(courtLines['Top Doubles Ad Line'])
+    p21 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Doubles Deuce Line'])
+    p22 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Singles Deuce Line'])
+    p23 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Singles Ad Line'])
+    p24 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Doubles Ad Line'])
+    p31 = courtLines['Top Service Line'].weak_intersect(courtLines['Top Singles Deuce Line'])
+    p32 = courtLines['Top Service Line'].weak_intersect(courtLines['Top Center Line'])
+    p33 = courtLines['Top Service Line'].weak_intersect(courtLines['Top Singles Ad Line'])
+    p41 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Singles Deuce Line'])
+    p42 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Center Line'])
+    p43 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Singles Ad Line'])
+    
+    # replicate 11 four-point court configs given in appendix f
+    court_configs = [(p11, p14, p21, p24),
+                     (p12, p13, p22, p23),
+                     (p12, p14, p22, p24),
+                     (p11, p13, p21, p23),
+                     (p31, p33, p41, p43),
+                     (p31, p33, p22, p23),
+                     (p12, p13, p41, p43),
+                     (p13, p14, p23, p24),
+                     (p11, p12, p21, p22),
+                     (p31, p32, p41, p42),
+                     (p32, p33, p42, p43)]
+    return court_configs
+
+def show_configs(courtFrm, court_configs, **kwargs):
+    for a, b, c, d in court_configs:
+        pFrm = courtFrm.to_BGR().put(a, **kwargs).put(b, **kwargs).put(c, **kwargs).put(d, **kwargs)
+        pFrm.show()
+
+def find_homography(schemaPts: tuple, projectedPts: tuple):
+    schemaPtsArray = np.array([list(pt.coords) for pt in schemaPts])
+    projectedPtsArray = np.array([list(pt.coords) for pt in projectedPts])    
+    H, status = cv.findHomography(schemaPtsArray, projectedPtsArray)
+    return H
+
+def get_homography(v_Lines, h_Lines, white_BoolFrm, 
+                   verbose = False, show_threshold_score = 1000, displayFrame = None):
+    ## scores for matched and unmatched
+    MATCH_SCORE = 1
+    UNMATCH_SCORE = -0.5
+    
+    ### prepare court lines and point configs
+    SIZE = 4 ## these parameters do not impact performance
+    MARGIN = 10  ## these parameters do not impact performance
+    courtLines = CourtLines.make(size = SIZE, margin = MARGIN)
+    court_configs = get_court_schema_intersection_points(courtLines)
+    if displayFrame is None:
+        displayFrame = white_BoolFrm.to_grey()
+    
+    from itertools import combinations
+    vert_combos = list(combinations(v_Lines, 2))
+    hori_combos = list(combinations(h_Lines, 2))
+    
+    max_score = 0
+    for v1, v2 in vert_combos:
+        for h1, h2 in hori_combos:
+            
+            pts_prj = (v1.weak_intersect(h1), 
+                       v2.weak_intersect(h1), 
+                       v1.weak_intersect(h2), 
+                       v2.weak_intersect(h2)) ### order here is important! has to be lexicographic!
+        
+            for pts_crt in court_configs:
+                
+                H = find_homography(pts_crt, pts_prj)
+                
+                ### iii) given a homography, project court schema onto frame.
+                projLines = courtLines.transform('apply_homography', H).transform('round_points')
+                
+                try:
+                    projFrm = (displayFrame.zero().put(projLines) > 0)
+                except OverflowError:
+                    continue
+                
+                projected_matches_white = projFrm & white_BoolFrm
+                good_score = MATCH_SCORE * projected_matches_white.array.sum()
+    
+                projected_does_not_match_white = projFrm & ~white_BoolFrm
+                bad_score = UNMATCH_SCORE * projected_does_not_match_white.array.sum()
+    
+                score = good_score + bad_score
+                
+                if verbose:
+                    if score > show_threshold_score:
+                        t1 = f'Match Score: {good_score}'
+                        t2 = f'Non-Match Penalty: {-bad_score}'
+                        t3 = f'TOTAL: {score}'
+                        t4 = f'Best so far: {max_score}'
+                        scoreFrm = displayFrame.to_BGR().put(projLines, thickness = 3) ### THICKNESS: HALF, OR FULL COURT LINE WIDTH?
+                        scoreFrm = scoreFrm.put(t1, where = (50, 50), thickness = 3)
+                        scoreFrm = scoreFrm.put(t2, where = (50, 80), thickness = 3)
+                        scoreFrm = scoreFrm.put(t3, where = (50, 110), thickness = 3)
+                        scoreFrm = scoreFrm.put(t4, where = (50, 140), thickness = 3)
+                        scoreFrm.show()
+    
+                if score > max_score:
+                    max_score = score
+                    best_homography = H.copy()
+
+    return best_homography

@@ -101,8 +101,12 @@ class BoolFrame(Frame):
                          name = f"{self.name} or {other.name}")
 
     def __and__(self, other):
-        return BoolFrame(np.bitwise_or(self.array, other.array), 
+        return BoolFrame(np.bitwise_and(self.array, other.array), 
                          name = f"{self.name} and {other.name}")
+    
+    def __invert__(self):
+        return BoolFrame(np.logical_not(self.array), 
+                         name = f"not {self.name}") 
 
     def to_grey(self):
         return GreyFrame(self.array.astype('uint8') * 255)
@@ -118,6 +122,10 @@ class BoolFrame(Frame):
                                      minLineLength = minLineLength, maxLineGap = maxLineGap)
         hough_lines = Lines.from_coordList(hough_lines)
         return hough_lines
+
+    ## override show
+    def show(self):
+        show(self.to_grey().array, name = self.name)
 
 @dataclass(frozen = True)
 class GreyFrame(Frame):
@@ -185,6 +193,12 @@ class GreyFrame(Frame):
             self_copy = cv.line(self_copy, c1, c2, color, thickness)
         return GreyFrame(self_copy)
         
+    @dispatch(str)
+    def put(self, text: str, where = (50, 50), size = 1, color = 255, thickness = 1):
+        self_copy = self.array.copy()
+        font = cv.FONT_HERSHEY_SIMPLEX
+        return GreyFrame(cv.putText(self_copy, text, where, font, size, color, thickness))
+        
     def zero(self):
         return GreyFrame(np.zeros(self.shape, dtype = 'uint8'))
     ###############
@@ -241,6 +255,13 @@ class BGRFrame(Frame):
             c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()
             self_copy = cv.line(self_copy, c1, c2, color, thickness)
         return BGRFrame(self_copy)
+    
+    @dispatch(str)
+    def put(self, text: str, where = (50, 50), size = 1, color = (0, 255, 0), thickness = 1):
+        self_copy = self.array.copy()
+        font = cv.FONT_HERSHEY_SIMPLEX
+        return BGRFrame(cv.putText(self_copy, text, where, font, size, color, thickness))
+        
     
     def zero(self):
         return BGRFrame(np.zeros(self.shape[:2], dtype = 'uint8'))
