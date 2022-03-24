@@ -50,9 +50,12 @@ def check_vicinity_of_point(aPt: Point, aFrm: Frame,
 
 
 def get_white_lines(gFrm: GreyFrame, width_of_line: int = 5,
-                    white_thresh: int = 200, int_diff_thresh: int = 10):
+                    white_thresh: int = 200, int_diff_thresh: int = 10,
+                    verbose = False):
     whiteBFrm = gFrm > white_thresh
-    gFrm.mask(whiteBFrm).show()
+    
+    if verbose:
+        gFrm.mask(whiteBFrm).show()
     
     ## since frames are immutable, but arrays are not, we will build the new array dynamically, then turn it into a frame
     horiArr = gFrm.zero().array.astype("bool")
@@ -73,7 +76,8 @@ def get_white_lines(gFrm: GreyFrame, width_of_line: int = 5,
     horiBFrm = BoolFrame(horiArr)
     vertBFrm = BoolFrame(vertArr)
    
-    gFrm.mask(horiBFrm | vertBFrm).show()
+    if verbose:
+        gFrm.mask(horiBFrm | vertBFrm).show()
     
     return horiBFrm, vertBFrm
       
@@ -180,9 +184,10 @@ def filter_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_L
 ########## COURT CORRESPONDENCES #######
 
 
-def fit_frame_to_lines(aLns, margin = 10):
+def fit_frame_to_lines(aLns):
+    t, l = aLns.highest(), aLns.leftest()
     b, r = aLns.lowest(), aLns.rightest()
-    gFrm = GreyFrame(np.zeros((b.y + margin, r.x + margin), dtype = 'uint8'))
+    gFrm = GreyFrame(np.zeros((b.y + t.y, r.x + l.x), dtype = 'uint8')) 
     lnFrm = gFrm.put(aLns)
     return lnFrm
 
@@ -192,16 +197,16 @@ def get_court_schema_intersection_points(courtLines: CourtLines):
     p12 = courtLines['Top Baseline'].weak_intersect(courtLines['Top Singles Deuce Line'])
     p13 = courtLines['Top Baseline'].weak_intersect(courtLines['Top Singles Ad Line'])
     p14 = courtLines['Top Baseline'].weak_intersect(courtLines['Top Doubles Ad Line'])
-    p21 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Doubles Deuce Line'])
-    p22 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Singles Deuce Line'])
-    p23 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Singles Ad Line'])
-    p24 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Doubles Ad Line'])
+    p21 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Doubles Ad Line'])
+    p22 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Singles Ad Line'])
+    p23 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Singles Deuce Line'])
+    p24 = courtLines['Bottom Baseline'].weak_intersect(courtLines['Bottom Doubles Deuce Line'])
     p31 = courtLines['Top Service Line'].weak_intersect(courtLines['Top Singles Deuce Line'])
     p32 = courtLines['Top Service Line'].weak_intersect(courtLines['Top Center Line'])
     p33 = courtLines['Top Service Line'].weak_intersect(courtLines['Top Singles Ad Line'])
-    p41 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Singles Deuce Line'])
+    p41 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Singles Ad Line'])
     p42 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Center Line'])
-    p43 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Singles Ad Line'])
+    p43 = courtLines['Bottom Service Line'].weak_intersect(courtLines['Bottom Singles Deuce Line'])
     
     # replicate 11 four-point court configs given in appendix f
     court_configs = [(p11, p14, p21, p24),
@@ -229,15 +234,14 @@ def find_homography(schemaPts: tuple, projectedPts: tuple):
     return H
 
 def get_homography(v_Lines, h_Lines, white_BoolFrm, 
-                   verbose = False, show_threshold_score = 1000, displayFrame = None):
+                   verbose = False, show_threshold_score = 1000, displayFrame = None,
+                   size = 4, margin = 10):
     ## scores for matched and unmatched
     MATCH_SCORE = 1
     UNMATCH_SCORE = -0.5
     
     ### prepare court lines and point configs
-    SIZE = 4 ## these parameters do not impact performance
-    MARGIN = 10  ## these parameters do not impact performance
-    courtLines = CourtLines.make(size = SIZE, margin = MARGIN)
+    courtLines = CourtLines.make(size = size, margin = margin)
     court_configs = get_court_schema_intersection_points(courtLines)
     if displayFrame is None:
         displayFrame = white_BoolFrm.to_grey()

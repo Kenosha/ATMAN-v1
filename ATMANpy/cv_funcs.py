@@ -18,13 +18,46 @@ def show(frame, name = 'frame'):
 
 def get_frame(cap, frame_num):
     
-    total_frames = cap.get(7)  ### total number of frames
+    total_frames = cap.get(cv.CAP_PROP_FRAME_COUNT)  ### total number of frames
     
     if frame_num < 0 or frame_num > total_frames:
         print(f'No such frame, choose number between 0 and {total_frames}')
         return None
     
-    cap.set(1, frame_num)
+    cap.set(cv.CAP_PROP_POS_FRAMES, frame_num)
     ret, frame = cap.read()
     
     return frame
+
+def show_video(cap, start_frame = None, stop_frame = None, ms_between_frames = None,
+               fps_counter = False):
+       
+    if ms_between_frames is None:
+        ms_between_frames = 25
+    if start_frame is None:
+        start_frame = 0
+    if stop_frame is None:
+        stop_frame = cap.get(cv.CAP_PROP_FRAME_COUNT)
+    
+    cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
+    frame_num = start_frame
+    
+    while cap.isOpened() and (start_frame <= frame_num <= stop_frame):
+        ret, frame = cap.read()
+        
+        if fps_counter:
+            cv.putText(frame, str(frame_num), org = (40, 40), 
+                       fontFace = cv.FONT_HERSHEY_SIMPLEX, fontScale = 2,
+                       color = (0, 255, 0), thickness = 3)
+        
+        if ret:
+            cv.imshow('frame', frame)
+            frame_num += 1
+            if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+                break
+        else:
+            break
+        
+    cap.release()
+    cv.destroyAllWindows()
+    
