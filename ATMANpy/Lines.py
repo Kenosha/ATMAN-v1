@@ -121,7 +121,7 @@ class Line:
     def slope(self):
         try:
             slp = (self.rightPt.y - self.leftPt.y) / (self.rightPt.x - self.leftPt.x)
-        except ZeroDivisionError:
+        except:
             slp = None
         finally:
             return slp
@@ -183,18 +183,26 @@ class Line:
             return (y - itc) / slp
         
     def flip_vertically(self, aLn, name = 'Line'):
+        if name is None:
+            name = f'Flipped {self.name}'
         return Line(self.leftPt.flip_vertically(aLn), self.rightPt.flip_vertically(aLn),
                     name = name)
         
-    def flip_horizontally(self, aLn, name = 'Line'):
+    def flip_horizontally(self, aLn, name = None):
+        if name is None:
+            name = f'Flipped {self.name}'
         return Line(self.leftPt.flip_horizontally(aLn), self.rightPt.flip_horizontally(aLn), 
                     name = name)
     
-    def apply_homography(self, H):
-        return Line(self.leftPt.apply_homography(H), self.rightPt.apply_homography(H), name = self.name)
+    def apply_homography(self, H, name = None):
+        if name is None:
+            name = self.name
+        return Line(self.leftPt.apply_homography(H), self.rightPt.apply_homography(H), name = name)
     
-    def round_points(self):
-        return Line(self.leftPt.round_point(), self.rightPt.round_point(), name = self.name)
+    def round_points(self, name = None):
+        if name is None:
+            name = self.name
+        return Line(self.leftPt.round_point(), self.rightPt.round_point(), name = name)
 
     def subdivide(self, elements = 100):
         x_space = np.linspace(self.left_point().x, self.right_point().x, num = elements, dtype = 'int32')
@@ -301,7 +309,7 @@ class Lines:
     
     def transform(self, lineFunc, *args, **kwargs):
         if isinstance(lineFunc, str):
-            return Lines([getattr(l, lineFunc)(*args, **kwargs) for l in self.lineList])
+            return Lines([getattr(l, lineFunc)(*args, name = l.name, **kwargs) for l in self.lineList])
         else:
             return Lines([lineFunc(l, *args, **kwargs) for l in self.lineList])
             
@@ -355,9 +363,21 @@ class CourtLines(Lines):
     name: str = 'Lines'
     size: int = None
     margin: int = None
+    force_dimensions: bool = False
+    
+    def _set_dimensions(self, size = 4, force_dimensions = False):
+        ### This method is just for convenience, so we can initialize the dimensions
+        # created in 'get_dimensions' 
+        dimDict = CourtLines.get_dimensions(size = size, force_dimensions = force_dimensions)
+        
+        for attr, value in dimDict.items():
+            object.__setattr__(self, attr, value)
+    
+    def __post_init__(self):
+        self._set_dimensions(size = self.size, force_dimensions = self.force_dimensions)
     
     @staticmethod
-    def get_dimensions(size = 4):
+    def get_dimensions(size = 4, force_dimensions = False):
         ## court dimensions in feet
         court_width = 36
         side_length = 39
@@ -371,30 +391,30 @@ class CourtLines(Lines):
     
         scale = size * scale_minimum
         
-        return {'court_width': scale * court_width,
-                'side_length': scale * side_length,
-                'doubles_alley_width': scale * doubles_alley_width,
-                'singles_width': scale * singles_width,
-                'service_box_length': scale * service_box_length,
-                'service_box_width': scale * service_box_width,
-                'net_beyond_line': scale * net_beyond_line}
+        outDict = {'court_width': scale * court_width,
+                   'side_length': scale * side_length,
+                   'doubles_alley_width': scale * doubles_alley_width,
+                   'singles_width': scale * singles_width,
+                   'service_box_length': scale * service_box_length,
+                   'service_box_width': scale * service_box_width,
+                   'net_beyond_line': scale * net_beyond_line}
         
-    def _set_dimensions(self, size = 4):
-        ### This method is just for convenience, so we can initialize the dimensions
-        # created in 'get_dimensions' 
-        dimDict = CourtLines.get_dimensions(size = size)
+        if force_dimensions:
+            outDict = {k: round(v) for k, v in outDict.items()}
+            
+        return outDict
         
-        for attr, value in dimDict.items():
-            object.__setattr__(self, attr, value)
-    
     
     ### always use this method to construct the court lines!
     @staticmethod
-    def make(size = 4, margin = 10):
+    def make(size = 4, margin = 10, force_dimensions = False):
         
-        dim = CourtLines.get_dimensions(size = size)
-        
-        _origin = SafePoint((margin, margin))
+        dim = CourtLines.get_dimensions(size = size, force_dimensions = force_dimensions)
+        if force_dimensions:
+            margin = round(margin)
+
+        aspect_ratio = dim['side_length'] * 2 / dim['court_width']
+        _origin = SafePoint((margin, round(margin * aspect_ratio)))
         
         ### top half of court
         baseLine = Line(_origin, _origin.right(dim['court_width']), name = 'Top Baseline')
@@ -409,15 +429,26 @@ class CourtLines(Lines):
         topLines = Lines([baseLine, serviceLine, centerLine,
                           doubles_deuceLine, singles_deuceLine, singles_adLine, doubles_adLine])
         
-        botLines = Lines([l.flip_vertically(netLine, name = l.name.replace('Top', 'Bottom')).round_points() for l in topLines])
+        def switch_name(nameStr):
+            to_switch = [('Top ', 'Bottom '), ('Deuce ', 'Ad ')]
+            
+            for x, y in to_switch:
+                if x in nameStr:
+                    nameStr = nameStr.replace(x, y)
+                elif y in nameStr:
+                    nameStr = nameStr.replace(y, x)
+            return nameStr
+        
+        botLines = Lines([l.flip_vertically(netLine, name = switch_name(l.name)).round_points() for l in topLines])
         
         courtLines = topLines.append(botLines)
             
         courtLines = CourtLines(courtLines.lineList, 
                                 name = 'Court Lines', 
                                 size = size, 
-                                margin = margin)
-        courtLines._set_dimensions(size = size)
+                                margin = margin,
+                                force_dimensions = force_dimensions)
+        
         return courtLines
     
     def add_singles_netline(self):
@@ -425,15 +456,96 @@ class CourtLines(Lines):
         netLine = Line(netLine.leftPt.right(self.doubles_alley_width).left(self.net_beyond_line),
                                 netLine.rightPt.left(self.doubles_alley_width).right(self.net_beyond_line),
                                 name = 'Net Line')
-        return self.append(netLine)
+        return CourtLines(self.append(netLine), 
+                          name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
         
     def add_doubles_netline(self):
         netLine = self['Top Baseline'].down(self.side_length)
         netLine = Line(netLine.leftPt.left(self.net_beyond_line),
                                 netLine.rightPt.right(self.net_beyond_line),
                                 name = 'Net Line')
-        return self.append(netLine)
+        return CourtLines(self.append(netLine), 
+                          name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
+        
+    def get_half_region(self, side = 'Top', width = 'Doubles'):
+        p1 = self[f'{side} {width} Ad Line'].weak_intersect(self['Net Line'])
+        p2 = self[f'{side} {width} Deuce Line'].weak_intersect(self['Net Line'])
+        p3 = self[f'{side} {width} Ad Line'].weak_intersect(self[f'{side} Baseline'])
+        p4 = self[f'{side} {width} Deuce Line'].weak_intersect(self[f'{side} Baseline'])
+        return Region.from_points(p1, p2, p3, p4)
+    
+    def get_court_region(self, width = 'Doubles'):
+        p1 = self[f'Top {width} Ad Line'].weak_intersect(self['Top Baseline'])
+        p2 = self[f'Top {width} Deuce Line'].weak_intersect(self['Top Baseline'])
+        p3 = self[f'Bottom {width} Ad Line'].weak_intersect(self['Bottom Baseline'])
+        p4 = self[f'Bottom {width} Deuce Line'].weak_intersect(self['Bottom Baseline'])
+        return Region.from_points(p1, p2, p3, p4)
+    
+    def transform(self, lineFunc, *args, **kwargs):
+        if isinstance(lineFunc, str):
+            return CourtLines([getattr(l, lineFunc)(*args, name = l.name, **kwargs) for l in self.lineList], 
+                              name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
+        else:
+            return CourtLines([lineFunc(l, *args, name = l.name, **kwargs) for l in self.lineList],
+                              name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
+    
+@dataclass(frozen = True)
+class Region(Lines):
+    lineList: List[Line]
+    name: str = 'Region'
+    area: int = None
+    centroid: Point = None
+    
+    @staticmethod
+    def from_points(p1: Point, p2: Point, p3: Point = None, p4: Point = None,
+                    area = None, centroid = None):
+        is_rectangle = p3 is None and p4 is None
+        if is_rectangle:
+            p3 = Point((p1.x, p2.y))
+            p4 = Point((p2.x, p1.y))
+            
+        ### to connect arbitrary four points without crossing lines,
+        # check the two leftmost points, and the two upper points.
+        l1, l2, r1, r2 = sorted([p1, p2, p3, p4], key = lambda pt: pt.x)   
+        lt, lb = sorted([l1, l2], key = lambda pt: pt.y)   
+        rt, rb = sorted([r1, r2], key = lambda pt: pt.y)   
+        
+        lineList = [Line(lt, lb, name = 'Left'), 
+                    Line(lt, rt, name = 'Top'), 
+                    Line(rt, rb, name = 'Right'), 
+                    Line(lb, rb, name = 'Bottom')]
+        
+        if is_rectangle:
+            h, w = lineList[0].length(), lineList[1].length()
+            if area is None:
+                area = (h + 1) * (w + 1) # note: a 'region' where all points are the same has h, w = zero, but contains one pixel -> therefore, area has to be one.
+            if centroid is None:
+                centroid = lt.down(h/2).right(w/2)
+        
+        return Region(lineList, area = area, centroid = centroid)
+        
+    @staticmethod
+    def from_lines(lines: Lines):
+        unique_points = [l.leftPt for l in lines] + [l.rightPt for l in lines]
+        pointSet = set(unique_points)
+        try:
+            p1, p2, p3, p4 = pointSet
+        except ValueError:
+            raise Exception("Construction of Region with Lines: Needs lines with four unique points!")
+        else:
+            return Region.from_points(p1, p2, p3, p4)
+            
+    def to_points(self):
+        t, b = self['Top'], self['Bottom']
+        return t.leftPt, t.rightPt, b.leftPt, b.rightPt
+        
+        
+    
         
         
         
         
+        
+        
+    
+    
