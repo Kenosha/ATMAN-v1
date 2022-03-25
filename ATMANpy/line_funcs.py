@@ -49,6 +49,16 @@ def check_vicinity_of_point(aPt: Point, aFrm: Frame,
     return (Bool1 and Bool2)
 
 
+def find_brightest_neighbour(gFrm, aPt):
+    c, l, r = get_vicinity(aPt, radius = 1, direction = 'horizontal')
+    _, b, t = get_vicinity(aPt, radius = 1, direction = 'vertical')
+    
+    neighbours = [c, l, r, b, t] 
+    vals = sorted([(pt, gFrm.eval_at(pt)) for pt in neighbours], key = lambda tup: tup[1])
+    maxPt, maxVal = vals[-1]
+    return maxPt, maxVal
+
+
 def get_white_lines(gFrm: GreyFrame, width_of_line: int = 5,
                     white_thresh: int = 200, int_diff_thresh: int = 10,
                     verbose = False):
@@ -134,19 +144,32 @@ def merge_vertical_lines(aLn, bLn, fixed_horizontal_line = None, threshold = 10)
 def horizontal_filter(horiLn, lo_thresh = 1000, hi_thresh = 0):
     return not (horiLn.is_strictly_above(hi_thresh) or horiLn.is_strictly_below(lo_thresh))
 
+# def sort_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Lines):
+#     return (left_vert_Lines.sort('left_point', 'r2l', 't2b'), 
+#             right_vert_Lines.sort('left_point', 'l2r', 't2b'),
+#             horizontal_Lines.sort('left_point', 't2b', 'l2r'))
+
+def get_high_line(vertLines):
+    hiPt = vertLines.highest()
+    return Line(hiPt, hiPt.right(20))
+
 def sort_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Lines):
-    return (left_vert_Lines.sort('left_point', 'r2l', 't2b'), 
-            right_vert_Lines.sort('left_point', 'l2r', 't2b'),
+    
+    ### get the horizontal line used for vertical sort
+    ### vertical lines are sorted by where they intersect the respective line!!!
+    left_vert_hori_line = get_high_line(left_vert_Lines)
+    right_vert_hori_line = get_high_line(right_vert_Lines)
+    
+    return (left_vert_Lines.sort(left_vert_hori_line, 'r2l', 't2b'),
+            right_vert_Lines.sort(right_vert_hori_line, 'l2r', 't2b'),
             horizontal_Lines.sort('left_point', 't2b', 'l2r'))
 
 def merge_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Lines,
                                 threshold = 10):
-    ### instantiate parameters as in appendix C vinyes:
-    hi_left, hi_right = left_vert_Lines.highest(), right_vert_Lines.highest()
     
     ### get the horizontal line used for vertical merge
-    left_vert_hori_line = Line(hi_left, hi_left.right(20))
-    right_vert_hori_line = Line(hi_right, hi_right.right(20))
+    left_vert_hori_line = get_high_line(left_vert_Lines)
+    right_vert_hori_line = get_high_line(right_vert_Lines)
     
     ### define the partial merge functions
     from functools import partial
@@ -227,7 +250,7 @@ def show_configs(courtFrm, court_configs, **kwargs):
         pFrm = courtFrm.to_BGR().put(a, **kwargs).put(b, **kwargs).put(c, **kwargs).put(d, **kwargs)
         pFrm.show()
 
-def find_homography(schemaPts: tuple, projectedPts: tuple):
+def calculate_homography(schemaPts: tuple, projectedPts: tuple):
     schemaPtsArray = np.array([list(pt.coords) for pt in schemaPts])
     projectedPtsArray = np.array([list(pt.coords) for pt in projectedPts])    
     H, status = cv.findHomography(schemaPtsArray, projectedPtsArray)
@@ -251,6 +274,7 @@ def get_homography(v_Lines, h_Lines, white_BoolFrm,
     hori_combos = list(combinations(h_Lines, 2))
     
     max_score = 0
+    best_config = None
     for v1, v2 in vert_combos:
         for h1, h2 in hori_combos:
             
@@ -261,7 +285,7 @@ def get_homography(v_Lines, h_Lines, white_BoolFrm,
         
             for pts_crt in court_configs:
                 
-                H = find_homography(pts_crt, pts_prj)
+                H = calculate_homography(pts_crt, pts_prj)
                 
                 ### iii) given a homography, project court schema onto frame.
                 projLines = courtLines.transform('apply_homography', H).transform('round_points')
@@ -295,5 +319,21 @@ def get_homography(v_Lines, h_Lines, white_BoolFrm,
                 if score > max_score:
                     max_score = score
                     best_homography = H.copy()
+                    best_config = pts_crt
 
-    return best_homography
+    return best_homography, best_config
+
+####### COURT TRACKING #############
+
+def linear_regress(relPoints):
+    ### iv) lets now try to estimate a parabola fitting these points
+    import statsmodels.api as sm
+    
+    Y = [y for x, y in relPoints]
+    X = [x for x, y in relPoints]
+    X = sm.add_constant(X)
+    
+    model = sm.OLS(Y, X)
+    results = model.fit()
+    b_0, b_1 = results.params
+    return b_0, b_1

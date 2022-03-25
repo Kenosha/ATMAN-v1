@@ -207,6 +207,8 @@ class Line:
     def subdivide(self, elements = 100):
         x_space = np.linspace(self.left_point().x, self.right_point().x, num = elements, dtype = 'int32')
         y_space = np.linspace(self.high_point().y, self.low_point().y, num = elements, dtype = 'int32')
+        if self.left_point() != self.high_point():
+            y_space = np.flip(y_space)
         x_y_space = zip(x_space, y_space)
         return [Point(x_y) for x_y in x_y_space]
 
@@ -253,13 +255,21 @@ class Lines:
         elif isinstance(other, Lines):
             return Lines([*self.lineList, *other.lineList])
     
-    def sort(self, which_point, primary_direction, secondary_direction):
+    def sort(self, which, primary_direction, secondary_direction):
         ### do we sort by left point, or right point or high point or low point?
         ### t2b, b2t, l2r or r2l?
         
+        def point_func(aLine):
+            try:
+                relevantPt = getattr(aLine, which)()
+            except:
+                relevantPt = aLine.weak_intersect(which)
+            return relevantPt
+        
         ### supply a key which maps element to sorting order
         def key_func(aLine):
-            relevantPt = getattr(aLine, which_point)()
+            
+            relevantPt = point_func(aLine)
             
             if primary_direction in ['l2r', 'r2l']:
                 primary_key = relevantPt.x
@@ -280,7 +290,7 @@ class Lines:
             return (primary_key, secondary_key)
         
         return Lines(sorted(self.lineList, key = key_func))
-        
+    
     def merge(self, mergeFunc, flushedLines = None):
         """
         This method recursively applies a mergeFunc to merge Lines according to 
@@ -539,11 +549,19 @@ class Region(Lines):
         t, b = self['Top'], self['Bottom']
         return t.leftPt, t.rightPt, b.leftPt, b.rightPt
         
+    def join_corners(self):
+        ### issue: given 4 lines, we might have eight different points.
+        ### this function ensures that the corner points are identical
+        tl1, tl2 = self['Left'].high_point(), self['Top'].left_point()
+        bl1, bl2 = self['Left'].low_point(), self['Bottom'].left_point()
+        tr1, tr2 = self['Right'].high_point(), self['Top'].right_point()
+        br1, br2 = self['Right'].low_point(), self['Bottom'].right_point()
         
-    
+        avg = lambda p1, p2: Point((0.5 * (p1.x + p2.x), 0.5 * (p1.y + p2.y))).round_point()
         
+        tl, bl, tr, br = avg(tl1, tl2), avg(bl1, bl2), avg(tr1, tr2), avg(br1, br2)
         
-        
+        return Region.from_points(tl, bl, tr, br)
         
         
         

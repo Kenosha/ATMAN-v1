@@ -73,7 +73,7 @@ def get_connected_elements(inList):
     myList = sorted(inList)
     
     median_index = int((len(myList) - 1) / 2)
-    median = inList[median_index]
+    median = myList[median_index]
     
     mySet = set(myList)
     
