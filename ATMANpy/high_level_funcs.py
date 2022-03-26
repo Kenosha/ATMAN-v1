@@ -39,6 +39,9 @@ def find_homography(gFrm, verbose = False):
     houghLines = allBFrm.prob_hough(rho = 3, theta = np.pi/180, min_votes = 500, 
                                     minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
     
+    if len(houghLines) < 4:
+        return None
+    
     if verbose: gFrm.zero().to_BGR().put(houghLines).show()
     
     from ATMANpy.line_funcs import split_court_line_candidates, sort_court_line_candidates
@@ -149,3 +152,12 @@ def update_homography(gFrm, H, config, white_pixel_threshold = WHITE_PIXEL_THRES
     H = calculate_homography(config, newRegion.to_points())
     
     return H, config
+
+
+
+
+
+
+
+
+

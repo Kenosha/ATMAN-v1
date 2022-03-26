@@ -224,7 +224,10 @@ class Lines:
     @staticmethod
     def from_coordList(coordList):
         coordList = np.squeeze(coordList) ## hough lines sometimes have an extra dim...
-        return Lines([Line.from_coords(l) for l in coordList])
+        try:
+            return Lines([Line.from_coords(l) for l in coordList])
+        except:
+            return Lines([])
 
     def __iter__(self):
         return iter(self.lineList)
