@@ -91,6 +91,31 @@ def get_white_lines(gFrm: GreyFrame, width_of_line: int = 5,
     
     return horiBFrm, vertBFrm
       
+
+def get_white_lines_fast(gFrm: GreyFrame, width_of_line: int = 5, 
+                         white_thresh: int = 200, int_diff_thresh: int = 10,
+                         verbose = False):
+    shift = round(width_of_line / 2)
+    
+    upFrm = gFrm.roll(how = 'up', shift = shift)
+    dnFrm = gFrm.roll(how = 'down', shift = shift)
+    lfFrm = gFrm.roll(how = 'left', shift = shift)
+    rtFrm = gFrm.roll(how = 'right', shift = shift)
+ 
+    whiteMask = (gFrm > white_thresh)
+    horiMask = (gFrm - upFrm > int_diff_thresh) & (gFrm - dnFrm > int_diff_thresh)
+    vertMask = (gFrm - lfFrm > int_diff_thresh) & (gFrm - rtFrm > int_diff_thresh)
+    
+    line_candidateMask = whiteMask & (horiMask | vertMask)
+    
+    if verbose:
+        gFrm.mask(whiteMask).show()
+        gFrm.mask(horiMask).show()
+        gFrm.mask(vertMask).show()
+        gFrm.mask(line_candidateMask)
+    
+    return line_candidateMask
+
 #####################
 
 ######## LINE SPLIT, FILTER, MERGE ########

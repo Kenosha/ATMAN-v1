@@ -153,7 +153,30 @@ class Frame:
         l, r, t, b = region['Left'], region['Right'], region['Top'], region['Bottom']
         return self.right_of(l) & self.left_of(r) & self.below(t) & self.above(b)
         
-    
+    def roll(self, how = 'down', shift = 1):
+        if shift < 0:
+            raise Exception('Roll with positive shifts only! Give direction via the how keyword!')
+        
+        axis = 1 if how in ['left', 'right'] else 0
+        shift = - shift if how in ['left', 'up'] else shift
+            
+        floatArr = self.array.astype(float)
+        rArr = np.roll(floatArr, axis = axis, shift = shift) 
+        
+        if how == 'down':
+            rArr[:shift] = np.nan # first {shift} rows have to be set to nan 
+        elif how == 'up':
+            rArr[shift:] = np.nan # last {- shift} rows have to be set to nan (note that shift is negative!)
+        elif how == 'right':
+            rArr[:, :shift] = np.nan # first {shift} columns have to be set to nan 
+        elif how == 'left':
+            rArr[:, shift:] = np.nan # last {- shift} columns have to be set to nan (note that shift is negative!)
+        else:
+            raise Exception('Give down, up, right or left as keywords for how in roll method of frame!')
+        
+        return Frame(rArr)
+            
+            
     ###############
 
 @dataclass(frozen = True)
