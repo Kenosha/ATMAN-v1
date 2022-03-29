@@ -85,7 +85,42 @@ def video_stream(cap, start_frame = None, stop_frame = None, ms_between_frames =
             cv.destroyAllWindows()  
             yield None
                 
+       
+
+def random_or_next_stream(cap, ms_between_frames = None, verbose = False):
+    from random import randrange
+    
+    if ms_between_frames is None:
+        ms_between_frames = 25
+    total_frames = cap.get(cv.CAP_PROP_FRAME_COUNT)
         
+    doFlag = 'random' ### this flag signals to the generator what to do.
+                        # it takes three values. 'random', 'next', 'stop'
+                   
+    while doFlag != 'stop':
+        
+        if doFlag == 'random':
+            
+            randFrame = randrange(0, total_frames - 1)
+            cap.set(cv.CAP_PROP_POS_FRAMES, randFrame)
+            ret, frame = cap.read()
+            
+            doFlag, frame = yield randFrame, frame 
+        
+        elif doFlag == 'next':
+            
+            frmNum = cap.get(cv.CAP_PROP_POS_FRAMES)
+            ret, frame = cap.read()
+            
+            doFlag, frame = yield frmNum, frame
+        
+        if verbose:
+            cv.imshow('frame', frame)
+            if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+                cv.destroyAllWindows()  
+
+        
+     
     
         
         

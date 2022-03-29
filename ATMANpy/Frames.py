@@ -311,6 +311,14 @@ class GreyFrame(Frame):
         self_copy = self.array.copy()
         font = cv.FONT_HERSHEY_SIMPLEX
         return GreyFrame(cv.putText(self_copy, text, where, font, size, color, thickness))
+    
+    @dispatch(list)
+    def put(self, putList: list, **kwargs):
+        if len(putList) == 0:
+            return self
+        else:
+            p, ps = putList[0], putList[1:]
+            return self.put(self.put(p, **kwargs), ps, **kwargs)
         
     def zero(self):
         return GreyFrame(np.zeros(self.shape, dtype = 'uint8'))

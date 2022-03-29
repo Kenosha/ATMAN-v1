@@ -27,5 +27,4 @@ def get_folder_struct(source, verbose = True):
 
 
 ####### video read in
-    
 
