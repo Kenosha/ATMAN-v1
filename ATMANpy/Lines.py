@@ -211,6 +211,12 @@ class Line:
             y_space = np.flip(y_space)
         x_y_space = zip(x_space, y_space)
         return [Point(x_y) for x_y in x_y_space]
+    
+    def join(self, bLn):
+        if self.rightPt == bLn.leftPt:
+            return Line(self.leftPt, bLn.rightPt)
+        elif self.leftPt == bLn.rightPt:
+            return Line(bLn.leftPt, self.rightPt)
 
 @dataclass(frozen = True)
 class Lines:
@@ -303,12 +309,12 @@ class Lines:
         depending on whether the lines where assessed to have to be merged or not.        
         """
         if flushedLines is None:
-            print(f"{self.name}: {len(self)} before merge...")
+            # print(f"{self.name}: {len(self)} before merge...")
             flushedLines = Lines([]) ### these are the lines that have 'survived' the merge
             
         if len(self) <= 1:
             outLines = flushedLines.append(self)
-            print(f"... and {len(outLines)} after merge!")
+            # print(f"... and {len(outLines)} after merge!")
             return outLines
         else:
             l1, l2, ls = self[0], self[1], self[2:]
@@ -327,9 +333,9 @@ class Lines:
             return Lines([lineFunc(l, *args, **kwargs) for l in self.lineList])
             
     def filt(self, filtFunc):
-        print(f"{self.name}: {len(self)} before filter...")
+        # print(f"{self.name}: {len(self)} before filter...")
         filtList = list(filter(filtFunc, self.lineList))
-        print(f"... and {len(filtList)} after filter!")
+        # print(f"... and {len(filtList)} after filter!")
         try:
             filtName = filtFunc.__str__().split(' ')[1]
         except:
@@ -509,6 +515,13 @@ class Region(Lines):
     area: int = None
     centroid: Point = None
     
+    def __post_init__(self):
+        object.__setattr__(self, 'p1', self['Top'].leftPt)
+        object.__setattr__(self, 'p2', self['Top'].rightPt)
+        object.__setattr__(self, 'p3', self['Bottom'].leftPt)
+        object.__setattr__(self, 'p4', self['Bottom'].rightPt)
+        object.__setattr__(self, 'points', (self.p1, self.p2, self.p3, self.p4))
+    
     @staticmethod
     def from_points(p1: Point, p2: Point, p3: Point = None, p4: Point = None,
                     area = None, centroid = None):
@@ -565,6 +578,10 @@ class Region(Lines):
         tl, bl, tr, br = avg(tl1, tl2), avg(bl1, bl2), avg(tr1, tr2), avg(br1, br2)
         
         return Region.from_points(tl, bl, tr, br)
+        
+    def get_homography(self, othRegion):
+        from ATMANpy.line_funcs import calculate_homography
+        return calculate_homography(self.points, othRegion.points)
         
         
         

@@ -27,15 +27,63 @@ NET_FACTOR = 0.9
 NET_POINTS_TO_SEARCH = 100
 #####
 
+def find_homography_225_only(gFrm, verbose = False):
+    from ATMANpy.line_funcs import get_white_lines_fast
+    
+    allBFrm = get_white_lines_fast(gFrm, 
+                                   width_of_line = COURT_LINE_WIDTH,
+                                   int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
+                                   white_thresh = WHITE_PIXEL_THRESHOLD)
+    
+    houghLines = allBFrm.prob_hough(rho = 3, theta = np.pi/180, min_votes = 500, 
+                                    minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
+    
+    if len(houghLines) < 9:
+        return None
+    
+    if verbose: gFrm.zero().to_BGR().put(houghLines).show()
+    
+    from ATMANpy.line_funcs import split_court_line_candidates, sort_court_line_candidates
+    from ATMANpy.line_funcs import merge_court_line_candidates, filter_court_line_candidates
+    
+    l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
+                                                                gFrm.cols / 3, 2 * gFrm.cols / 3) 
+                      
+    if len(l_v_Lines) < 2 or len(r_v_Lines) < 2:
+        return None
+    
+    l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
+    
+    l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                                threshold = MERGE_THRESHOLD)   
+    
+    l_v_Lines, r_v_Lines, h_Lines = filter_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                                 margin = MARGIN_TO_CUT_HORIZONTAL)  
+    if verbose: 
+        gFrm.zero().to_BGR().put(r_v_Lines).show()
+        gFrm.zero().to_BGR().put(l_v_Lines).show()
+        gFrm.zero().to_BGR().put(h_Lines).show()
+    
+    if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
+        # print('Fast Homography Algorithm...')
+        from ATMANpy.line_funcs import get_homography_225
+        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+        return H, config
+    else:
+        return None
+    
+    
+
+
 def find_homography(gFrm, verbose = False):
     
-    from ATMANpy.line_funcs import get_white_lines
+    from ATMANpy.line_funcs import get_white_lines_fast
     
-    horiBFrm, vertBFrm = get_white_lines(gFrm, 
-                                         width_of_line = COURT_LINE_WIDTH,
-                                         int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
-                                         white_thresh = WHITE_PIXEL_THRESHOLD)
-    allBFrm = horiBFrm | vertBFrm
+    allBFrm = get_white_lines_fast(gFrm, 
+                                   width_of_line = COURT_LINE_WIDTH,
+                                   int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
+                                   white_thresh = WHITE_PIXEL_THRESHOLD)
+    
     houghLines = allBFrm.prob_hough(rho = 3, theta = np.pi/180, min_votes = 500, 
                                     minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
     
@@ -68,11 +116,16 @@ def find_homography(gFrm, verbose = False):
     
     # from ATMANpy.line_funcs import fit_frame_to_lines
     # courtFrm = fit_frame_to_lines(schemaLines)
-    
-    from ATMANpy.line_funcs import get_homography 
-    
-    v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
-    H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+    if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
+        print('Fast Homography Algorithm...')
+        from ATMANpy.line_funcs import get_homography_225
+        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+
+    else:
+        print('General Homography Algorithm...')
+        from ATMANpy.line_funcs import get_homography 
+        v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
+        H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
 
     return H, config
 
@@ -134,7 +187,7 @@ def update_homography(gFrm, H, config, white_pixel_threshold = WHITE_PIXEL_THRES
             # print(f'Failed to track: {aLn.name}')
             # gFrm.to_BGR().put(courtRegion, thickness = 2).show()
             # print(lPts)
-            
+            print('Lost Tracking...')
             return None
         else:
             b0, b1 = linear_regress(coordList)

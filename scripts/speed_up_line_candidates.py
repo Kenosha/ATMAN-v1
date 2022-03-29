@@ -157,6 +157,9 @@ mask1 = hmask | vmask
 mask2 = get_white_lines_fast(gFrm, width_of_line = COURT_LINE_WIDTH, white_thresh = WHITE_PIXEL_THRESHOLD,
                              int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD, verbose = False)
 
-mask1.array == mask2.array
+gFrm.mask(mask1).show()
+gFrm.mask(mask2).show()
+
+(mask1.array != mask2.array).sum()
 
 
