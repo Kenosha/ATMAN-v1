@@ -187,7 +187,7 @@ def update_homography(gFrm, H, config, white_pixel_threshold = WHITE_PIXEL_THRES
             # print(f'Failed to track: {aLn.name}')
             # gFrm.to_BGR().put(courtRegion, thickness = 2).show()
             # print(lPts)
-            print('Lost Tracking...')
+            # print('Lost Tracking...')
             return None
         else:
             b0, b1 = linear_regress(coordList)

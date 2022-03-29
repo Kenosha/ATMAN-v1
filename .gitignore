@@ -1,6 +1,8 @@
 # Project Specific
 papers/
 video_files/
+*.csv
+*.stats
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
