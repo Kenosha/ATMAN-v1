@@ -70,29 +70,23 @@ def video_stream(cap, start_frame = None, stop_frame = None, ms_between_frames =
         stop_frame = cap.get(cv.CAP_PROP_FRAME_COUNT)
     
     cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
-    frame_num = start_frame
+    frmNum = cap.get(cv.CAP_PROP_POS_FRAMES)
     
-    while cap.isOpened() and (start_frame <= frame_num <= stop_frame):
+    while cap.isOpened() and (start_frame <= frmNum <= stop_frame):
+        
+        frmNum = cap.get(cv.CAP_PROP_POS_FRAMES)
         ret, frame = cap.read()
         
-        if ret:
-            yield frame ### give out frame 
-        else:
-            break
-        
-        frame = yield frame # take in frame, possibly altered, to show
+        frame = yield frmNum, frame # take in frame, possibly altered, to show
+        # print(frame)
         
         cv.imshow('frame', frame)
-        frame_num += 1
         if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
             cv.destroyAllWindows()  
             yield None
+                
         
-        
-        
-        
-        
-        
+    
         
         
         
