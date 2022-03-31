@@ -40,7 +40,7 @@ def get_initial_ROIs(schemaLines,
     return ROI_lower, ROI_upper
 
 
-def get_roi_masks(frame, projROI, projCourtLines, which = 'Top'):
+def get_initial_ROI_masks(frame, projROI, projCourtLines, which = 'Top'):
     ##### Split regions - upper out, upper in, lower out, lower inside court.
     
     projCourt = projCourtLines.get_half_region(side = which, width = 'Doubles')
@@ -50,7 +50,13 @@ def get_roi_masks(frame, projROI, projCourtLines, which = 'Top'):
 
     return roi_mask_in, roi_mask_out
 
-def get_avg_std(cFrm, boolFrame):
+def get_avg_std(cFrm, ROIMask: BoolFrame, white_pixel_threshold = None):
+    if not white_pixel_threshold is None:
+        ### region of interest bool, except we filter out white pixels, too.
+        boolFrame = ROIMask & (cFrm.to_grey() <= white_pixel_threshold)
+    else:
+        boolFrame = ROIMask
+    
     avg = cFrm.mask(boolFrame).sum((0, 1)) / boolFrame.sum((0, 1))
     
     devFrm = (cFrm - avg) ** 2
@@ -59,23 +65,17 @@ def get_avg_std(cFrm, boolFrame):
     
     return avg, std
 
-def get_ROI_foreground_mask(cFrm, boolFrame, 
-                            white_pixel_threshold = 150,
+def get_foreground_ndc_mask(cFrm, avgColor, stdColor, 
                             channel_weights = (1, 1, 1)):
     
-    ### region of interest bool, except we filter out white pixels, too.
-    nonwhiteROImask = boolFrame & (cFrm.to_grey() <= white_pixel_threshold)
-    
-    ### calculate normalized deviation
-    avg, std = get_avg_std(cFrm, nonwhiteROImask)
-    dev = abs(cFrm - avg) / std
+    dev = abs(cFrm - avgColor) / stdColor
 
     ### deviation is only relevant in region of interest
-    dev = dev.mask(boolFrame)
+    # dev = dev.mask(ROIMask) # now done outside of function!
     
     ### calculate ALPHA
     BETA = 1/6 ### quantization step size of H channel ??
-    alpha = (0.5 * BETA + std[0]) / std[0]
+    alpha = (0.5 * BETA + stdColor[0]) / stdColor[0]
     
     ### allow for channel thresholds that differ across BGR, or HSV
     channel_thresholds = tuple([alpha * c for c in channel_weights])
@@ -101,6 +101,7 @@ def within_regions(frm, regions):
 
 
 def find_player(cFrm: BGRFrame, ROI: Region, 
+                avgColor_in, stdColor_in, avgColor_out, stdColor_out,
                 courtLines: Lines, netLines: Lines,
                 line_width = 8,
                 court_dilation_factor = 1.5, net_dilation_factor = 2, roi_dilation_factor = 1.5, 
@@ -114,8 +115,8 @@ def find_player(cFrm: BGRFrame, ROI: Region,
     roi_mask_in, roi_mask_out = get_roi_masks(gFrm, ROI, courtLines, which = which)
     
     ### Prepare Foreground Masks
-    fore_out_mask = get_ROI_foreground_mask(hFrm, roi_mask_out, channel_weights = (1, 0, 1))
-    fore_in_mask = get_ROI_foreground_mask(hFrm, roi_mask_in, channel_weights = (1, 0, 1))
+    fore_out_mask = get_ROI_foreground_mask(hFrm, avgColor_out, stdColor_out, roi_mask_out, channel_weights = (1, 0, 1))
+    fore_in_mask = get_ROI_foreground_mask(hFrm, avgColor_in, stdColor_in, roi_mask_in, channel_weights = (1, 0, 1))
     ndcMask = fore_out_mask | fore_in_mask #non-dominant color
     
     ### Prepare ROI and Line boundary masks
@@ -176,3 +177,106 @@ def find_player(cFrm: BGRFrame, ROI: Region,
     largestRegion = sorted(regList, key = lambda r: r.area)[-1]
     
     return largestRegion
+
+
+def get_burn_in_mask(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
+                     normalized_deviation_threshold = 1, channel_weights = (1, 1, 1),
+                     verbose = False):
+    """
+    medFrm and stdFrm are the standard deviations of the court color, 
+    projected onto the court schema during burn in.
+    They are basically what is produced and saved by the burn in script
+    """
+    if not type(medFrm) == type(stdFrm):
+        raise Exception('Median and Stan. Dev. Frames have to be of same type!')
+    
+    if isinstance(medFrm, HSVFrame):
+        try:
+            imgFrm = imgFrm.to_HSV()
+        except AttributeError:
+            pass
+    elif isinstance(medFrm, BGRFrame):
+        try:
+            imgFrm = imgFrm.to_BGR()
+        except AttributeError:
+            pass
+    
+    # H_inv = np.linalg.inv(H)
+    wrpFrm = medFrm.warp(H, cols = imgFrm.cols, rows = imgFrm.rows)
+    if verbose: wrpFrm.show()
+    
+    stdwrpFrm = stdFrm.warp(H, cols = imgFrm.cols, rows = imgFrm.rows)
+    if verbose: stdwrpFrm.show()
+    
+    ### Background Differencing ###
+    normdiffFrm = abs(imgFrm - wrpFrm) / stdwrpFrm.clip_lo(1)
+    
+    backgroundMask = normdiffFrm < [c * normalized_deviation_threshold for c in channel_weights]
+    backgroundMask = backgroundMask.all(axes = 2)
+    foregroundMask = ~backgroundMask
+    
+    if verbose: imgFrm.mask(foregroundMask).show()
+    return foregroundMask
+    
+    
+
+def find_player_with_burn_in(hFrm: HSVFrame, burninMask: BoolFrame, 
+                             courtLines: Lines, netLines: Lines,
+                             initial_inner_avgCol, initial_outer_avgCol,
+                             initial_inner_stdCol, initial_outer_stdCol,
+                             initialROI, playerROI = None,
+                             line_width = 8,
+                             court_dilation_factor = 1.5, net_dilation_factor = 2, 
+                             verbose = False):
+    
+    if not isinstance(hFrm, HSVFrame):
+        raise Exception('HSV Frame needed to find player')
+    
+    if verbose:
+        cFrm = hFrm.to_BGR()
+    
+    open_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
+    close_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (9, 20))
+    foreground_mask_channel_weights = (1, 20, 2)
+    
+    ### Prepare Foreground Masks
+    fore_in_mask = get_foreground_ndc_mask(hFrm, initial_inner_avgCol, initial_inner_stdCol, 
+                                           channel_weights = foreground_mask_channel_weights)
+    fore_out_mask = get_foreground_ndc_mask(hFrm, initial_outer_avgCol, initial_outer_stdCol, 
+                                            channel_weights = foreground_mask_channel_weights)
+    ### Mask them with ROI
+    ndcMask = (fore_out_mask | fore_in_mask) & hFrm.within(initialROI) #non-dominant color
+    if verbose: cFrm.mask(ndcMask).show()
+    
+    ### Prepare ROI and Line boundary masks
+    courtline_mask = get_line_pixel_mask(hFrm.to_grey(), courtLines, thickness = court_dilation_factor * line_width)
+    netline_mask = get_line_pixel_mask(hFrm.to_grey(), netLines, thickness = net_dilation_factor * line_width)
+    # roi_upper_mask = get_line_pixel_mask(gFrm, ROI, thickness = roi_dilation_factor * line_width)
+    
+    ### Combine ndc mask with negated, dilated courtlines
+    ndcMask = ndcMask & ~(courtline_mask | netline_mask)
+    if verbose: cFrm.mask(ndcMask).show()
+    
+    ### Open and Close NDC mask - first remove noise, then fill gaps
+    ndcMask = ndcMask.to_grey().opse(open_kernel, close_kernel) > 0
+    if verbose: cFrm.mask(ndcMask).show()
+    
+    ####### FOREGROUND MASK ####
+    if verbose: cFrm.mask(burninMask).show()
+    
+    burninMask = burninMask.to_grey().opse(open_kernel, close_kernel) > 0
+    if verbose: cFrm.mask(burninMask).show()
+    
+    pMask = ndcMask & burninMask
+    if verbose: cFrm.mask(pMask).show()
+    
+    regList = pMask.to_grey().connected_regions(size_threshold = 400)
+    largestRegion = sorted(regList, key = lambda r: r.area)[-1]
+    
+    if verbose: cFrm.put(largestRegion).show()
+    return largestRegion
+
+    
+    
+    
+

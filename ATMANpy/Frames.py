@@ -5,6 +5,7 @@ Created on Fri Mar 11 17:30:35 2022
 @author: gianl
 """
 
+import os
 import cv2 as cv
 import numpy as np
 from dataclasses import dataclass
@@ -60,25 +61,25 @@ class Frame:
     @staticmethod
     def get_operant(op):
         try: 
-            operant = op.array
+            operant = op.array.astype(float)
         except:
             operant = op
         finally:
             return operant
             
     def __add__(self, y):
-        return Frame(self.array + Frame.get_operant(y))
+        return Frame(self.array.astype(float) + Frame.get_operant(y))
     def __sub__(self, y):
-        return Frame(self.array - Frame.get_operant(y))
+        return Frame(self.array.astype(float) - Frame.get_operant(y))
     def __mul__(self, y):
-        return Frame(self.array * Frame.get_operant(y))
+        return Frame(self.array.astype(float) * Frame.get_operant(y))
     def __truediv__(self, y):
-        return Frame(self.array / Frame.get_operant(y))
+        return Frame(self.array.astype(float) / Frame.get_operant(y))
     
     def __pow__(self, y):
-        return Frame(self.array ** y)
+        return Frame(self.array.astype(float) ** y)
     def __abs__(self):
-        return Frame(np.abs(self.array))
+        return Frame(np.abs(self.array.astype(float)))
 
     def __lt__(self, y):
         return BoolFrame(self.array < Frame.get_operant(y))
@@ -111,6 +112,12 @@ class Frame:
         
     def sum(self, axes):
         return self.array.sum(axes)
+    
+    def clip_lo(self, y):
+        return Frame(np.maximum(self.array.astype(float), Frame.get_operant(y)))
+    def clip_hi(self, y):
+        return Frame(np.minimum(self.array.astype(float), Frame.get_operant(y)))     
+
     
     def mask(self, boolFrm):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
@@ -175,8 +182,12 @@ class Frame:
             raise Exception('Give down, up, right or left as keywords for how in roll method of frame!')
         
         return Frame(rArr)
-            
-            
+               
+    def crop(self, cropRegion: Region):
+        self_copy = self.array.copy()
+        top_left, bot_right = cropRegion.p1, cropRegion.p4
+        cropArr = self_copy[top_left.y:bot_right.y, top_left.x:bot_right.x]
+        return Frame(cropArr)
     ###############
 
 @dataclass(frozen = True)
@@ -206,7 +217,7 @@ class BoolFrame(Frame):
     def any(self, axes):
         return BoolFrame(np.any(self.array, axis = axes))
     def all(self, axes):
-        return BoolFrame(np.any(self.array, axis = axes))
+        return BoolFrame(np.all(self.array, axis = axes))
 
     def to_grey(self):
         return GreyFrame(self.array.astype('uint8') * 255)
@@ -214,6 +225,10 @@ class BoolFrame(Frame):
         return BoolFrame(self.to_grey().zero().array.astype('bool'), name = self.name)
     def to_true(self):
         return ~self.to_false()
+    def to_csv(self, savePath, name = None):
+        if name == None:
+            name = self.name
+        np.savetxt(os.path.join(savePath, f'{name}_bool.csv'), self.array, delimiter = ',')
         
     def prob_hough(self, 
                    rho = 1,  ### the resolution of parameter r in pixels
@@ -230,6 +245,7 @@ class BoolFrame(Frame):
     ## override show
     def show(self):
         show(self.to_grey().array, name = self.name)
+        
 
 @dataclass(frozen = True)
 class GreyFrame(Frame):
@@ -277,6 +293,11 @@ class GreyFrame(Frame):
     def to_HSV(self):
         self_copy = self.array.copy() # to preverve immutability of frame
         return HSVFrame(cv.cvtColor(self_copy, cv.COLOR_GRAY2HSV), name = self.name)
+    
+    def to_csv(self, savePath, name = None):
+        if name is None:
+            name = self.name
+        np.savetxt(os.path.join(savePath, f'{name}_grey.csv'), self.array, delimiter = ',')
     ##################     
     
     ### METHODS ###
@@ -345,6 +366,18 @@ class GreyFrame(Frame):
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
         return GreyFrame(arr)
     
+    def clopen(self, close_kernel, open_kernel):
+        self_copy = self.array.copy()
+        arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, close_kernel)
+        arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, open_kernel)
+        return GreyFrame(arr)
+
+    def opse(self, open_kernel, close_kernel):
+        self_copy = self.array.copy()
+        arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, open_kernel)
+        arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, close_kernel)
+        return GreyFrame(arr)
+    
     def connected_regions(self, size_threshold = 0):
         SCREEN_SIZE_CONSTANT = 0.95 ### sometime, the entire screen is chosen as region...
                                     ## if a region is larger than SCREEN_SIZE_CONSTANT of the screen, 
@@ -392,6 +425,16 @@ class BGRFrame(Frame):
     @staticmethod
     def from_video(cap, frame_num, name = 'frame'):
         return BGRFrame(get_frame(cap, frame_num))
+    
+    @staticmethod
+    def from_csv(readpath, name = 'frame'):
+        colMap = {0: 'blue', 1: 'green', 2: 'red'}
+        arrList = []
+        for idx, col in colMap.items():
+            arr = np.genfromtxt(os.path.join(readpath, f'{name}_{col}.csv'), delimiter = ',', dtype = 'uint8')
+            arrList.append(arr)
+        arr = np.stack(arrList, axis = -1)
+        return BGRFrame(arr, name = name)
     ####################
     
     ### TRANSFORMS ###
@@ -402,6 +445,14 @@ class BGRFrame(Frame):
     def to_HSV(self):
         self_copy = self.array.copy() # to preverve immutability of frame
         return HSVFrame(cv.cvtColor(self_copy, cv.COLOR_BGR2HSV), name = self.name)
+    
+    def to_csv(self, savePath, name = None):
+        if name is None:
+            name = self.name
+            
+        colMap = {0: 'blue', 1: 'green', 2: 'red'}
+        for idx, col in colMap.items():
+            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array, delimiter = ',')
     ##################     
     
     ### METHODS ###
@@ -443,6 +494,20 @@ class BGRFrame(Frame):
     def mask(self, boolFrm):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
         return BGRFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
+    
+    def warp(self, H, cols = None, rows = None):
+        if cols is None:
+            cols = self.cols
+        if rows is None:
+            rows = self.rows
+        wrpArr = cv.warpPerspective(self.array, H, (cols, rows))
+        return BGRFrame(wrpArr)
+        
+    def crop(self, cropRegion: Region):
+        self_copy = self.array.copy()
+        top_left, bot_right = cropRegion.p1, cropRegion.p4
+        cropArr = self_copy[top_left.y:bot_right.y, top_left.x:bot_right.x]
+        return BGRFrame(cropArr)
     ###############
     
 
@@ -468,7 +533,17 @@ class HSVFrame(Frame):
     ### CONSTRUCTORS ###
     @staticmethod
     def from_video(cap, frame_num, name = 'frame'):
-        return HSVFrame(get_frame(cap, frame_num))
+        return BGRFrame(get_frame(cap, frame_num)).to_HSV()
+    
+    @staticmethod
+    def from_csv(readpath, name = 'frame'):
+        colMap = {0: 'hue', 1: 'saturation', 2: 'value'}
+        arrList = []
+        for idx, col in colMap.items():
+            arr = np.genfromtxt(os.path.join(readpath, f'{name}_{col}.csv'), delimiter = ',', dtype = 'uint8')
+            arrList.append(arr)
+        arr = np.stack(arrList, axis = -1)
+        return HSVFrame(arr, name = name)
     ####################
     
     ### TRANSFORMS ###
@@ -487,9 +562,17 @@ class HSVFrame(Frame):
     def to_grey(self):
         return self.V()
     
-    def to_RGB(self):
+    def to_BGR(self):
         self_copy = self.array.copy() # to preverve immutability of frame
         return BGRFrame(cv.cvtColor(self_copy, cv.COLOR_HSV2BGR), name = self.name)
+    
+    def to_csv(self, savePath, name = None):
+        if name is None:
+            name = self.name
+            
+        colMap = {0: 'hue', 1: 'saturation', 2: 'val'}
+        for idx, col in colMap.items():
+            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array, delimiter = ',')
     ##################     
     
     ### METHODS ###
@@ -531,6 +614,21 @@ class HSVFrame(Frame):
     def mask(self, boolFrm):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
         return HSVFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
+    
+    def warp(self, H, cols = None, rows = None):
+        if cols is None:
+            cols = self.cols
+        if rows is None:
+            rows = self.rows
+        wrpArr = cv.warpPerspective(self.array, H, (cols, rows))
+        return HSVFrame(wrpArr)
+    
+    def crop(self, cropRegion: Region):
+        self_copy = self.array.copy()
+        top_left, bot_right = cropRegion.p1, cropRegion.p4
+        cropArr = self_copy[top_left.y:bot_right.y, top_left.x:bot_right.x]
+        return HSVFrame(cropArr)
+        
     ###############
     
 

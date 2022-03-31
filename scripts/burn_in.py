@@ -71,7 +71,12 @@ def collect_courtlines(cap, target_number = 1000, verbose = False):
         cFrm = BGRFrame(rawArr)
         gFrm = cFrm.to_grey()
         
-        courtLines, netLines, H, config = track_courtlines(gFrm, H, config)
+        try:
+            courtLines, netLines, H, config = track_courtlines(gFrm, H, config)
+        except Exception as e:
+            print('Exception in track_courtlines:')
+            print(e)
+            courtLines = None
         
         if courtLines is None:
             
@@ -134,10 +139,17 @@ def get_normal_bool(courtlineList, normalized_deviation_threshold = 1, verbose =
 
     return all_corners_within
 
-def courtlines_to_schema(courtlineList, normalboolList, schemaFrm = schemaFrm):
+def courtlines_to_schema(courtlineList, normalboolList, schemaFrm = schemaFrm, color_encoding = 'BGR'):
     ######### APPLY INVERSE H TO FIT FRAME COLORS RELATIVE TO COURTLINES BACK TO SCHEMA #######
     courtlines_to_check = len(courtlineList)
     wrpList = []
+    
+    if color_encoding == 'BGR':
+        frmType = BGRFrame
+    elif color_encoding == 'HSV':
+        frmType = HSVFrame
+    else:
+        raise Exception('color_encoding: select one of BGR or HSV')
     
     for i in range(courtlines_to_check):
         
@@ -149,7 +161,7 @@ def courtlines_to_schema(courtlineList, normalboolList, schemaFrm = schemaFrm):
         
         if normBool:
             H_inv = np.linalg.inv(H)
-            cFrm = BGRFrame.from_video(cap, frmNum)
+            cFrm = frmType.from_video(cap, frmNum)
             # cFrm.show()
             cols_rows = (schemaFrm.cols, schemaFrm.rows)
             wrpArr = cv.warpPerspective(cFrm.array, H_inv, cols_rows)
@@ -160,10 +172,16 @@ def courtlines_to_schema(courtlineList, normalboolList, schemaFrm = schemaFrm):
     
     return np.stack(wrpList, axis = 0)
 
-def get_median_and_deviation_frame(wrpArrs, max_arrays = 1000, verbose = False):
+def get_median_and_deviation_frame(wrpArrs, max_arrays = 1000, verbose = False, color_encoding = 'BGR'):
     ## GET MEDIAN AND STD OF PIXEL COLORS REL. TO COURTLINES, ON THE SCHEMA ##
     
-    
+    if color_encoding == 'BGR':
+        frmType = BGRFrame
+    elif color_encoding == 'HSV':
+        frmType = HSVFrame
+    else:
+        raise Exception('color_encoding: select one of BGR or HSV')
+        
     ### prune away parts that are superfluous because they are completely dark
     ## in the unimaginable case that we have black rows within the picture, (not at the edges), 
     ## we'd be fucked.
@@ -179,8 +197,8 @@ def get_median_and_deviation_frame(wrpArrs, max_arrays = 1000, verbose = False):
                                          # check task manager while it runs; RAM usage increases a lot.
     
     # avgFrm = BGRFrame(avgArr.astype('uint8'))
-    medFrm = BGRFrame(medArr.astype('uint8'))
-    stdFrm = BGRFrame(stdArr.astype('uint8'))
+    medFrm = frmType(medArr.astype('uint8'))
+    stdFrm = frmType(stdArr.astype('uint8'))
     
     if verbose:
         # avgFrm.show()
@@ -189,8 +207,16 @@ def get_median_and_deviation_frame(wrpArrs, max_arrays = 1000, verbose = False):
         
     return medFrm, stdFrm
 
-def save_burn_in_data(medFrm, stdFrm, video_id):
+def save_burn_in_data(medFrm, stdFrm, video_id, color_encoding = 'BGR'):
     ####### SAVE DATA ##############
+    
+    if color_encoding == 'BGR':
+        colMap = {0: 'blue', 1: 'green', 2: 'red'}
+    elif color_encoding == 'HSV':
+        colMap = {0: 'hue', 1: 'saturation', 2: 'value'}
+    else:
+        raise Exception('color_encoding: select one of BGR or HSV')
+    
     import os
     burnDict = atu.get_folder_struct('burn_in')
     savePath = os.path.join(burnDict['main'], video_id)
@@ -201,7 +227,7 @@ def save_burn_in_data(medFrm, stdFrm, video_id):
         print('   Burn-In Data already exists... Overwriting Results...')
     
     def to_csv(frm, path, name = 'frame'):
-        colMap = {0: 'blue', 1: 'green', 2: 'red'}
+        
         for idx, col in colMap.items():
             np.savetxt(os.path.join(path, f'{name}_{col}.csv'), frm.array[:, :, idx], delimiter = ',')
     
@@ -215,6 +241,7 @@ def save_burn_in_data(medFrm, stdFrm, video_id):
 TARGET_COURTLINE_NUMBER = 3000
 NORM_DEV_THRESHOLD = 1
 MAX_NUMBER_OF_ARRAYS = 1000
+COLOR_ENCODING = 'HSV'
 verbose = True
 ######
 
@@ -236,15 +263,17 @@ if __name__ == '__main__':
                                          verbose = verbose)
     
     print('Warping back courtlines to schema...')
-    wrpArrs = courtlines_to_schema(courtlineList, all_corners_within)
+    wrpArrs = courtlines_to_schema(courtlineList, all_corners_within, 
+                                   color_encoding = COLOR_ENCODING)
     
     print('Calculating median and deviation pixel frames...')
     medFrm, stdFrm = get_median_and_deviation_frame(wrpArrs, 
                                                     max_arrays = MAX_NUMBER_OF_ARRAYS,
+                                                    color_encoding = COLOR_ENCODING,
                                                     verbose = verbose)
     
     print('Saving...')
-    save_burn_in_data(medFrm, stdFrm, VIDEO_ID)
+    save_burn_in_data(medFrm, stdFrm, VIDEO_ID, color_encoding = COLOR_ENCODING)
 
     print('Done!')
 
