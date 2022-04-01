@@ -103,15 +103,17 @@ NET_DILATION = 2.5
 ROI_DILATION = 1
 
 from ATMANpy.high_level_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
-from ATMANpy.player_funcs import get_avg_std, find_player_with_burn_in, get_initial_ROI_masks
+from ATMANpy.player_funcs import get_initial_ROI_masks, find_player_with_burn_in, find_player_only_burn_in
 
 
 def find_avg_and_std(frame, projROI, courtLines, which = 'Top'):
     
     roi_mask_in, roi_mask_out = get_initial_ROI_masks(frame, projROI, courtLines, which = which)
-    avg_in, std_in = get_avg_std(frame, roi_mask_in, white_pixel_threshold = WHITE_PIXEL_THRESHOLD)
-    avg_out, std_out = get_avg_std(frame, roi_mask_out, white_pixel_threshold = WHITE_PIXEL_THRESHOLD)
-
+    
+    white_mask = frame.to_grey() >= WHITE_PIXEL_THRESHOLD
+    avg_in, std_in = frame.mean_std(mask = roi_mask_in & white_mask)
+    avg_out, std_out = frame.mean_std(mask = roi_mask_out & white_mask)
+    
     return avg_in, std_in, avg_out, std_out    
 
 
@@ -127,11 +129,13 @@ def find_player(frame, courtLines, netLines, H, avg_stdTup = None,
     avg_in, avg_out, std_in, std_out = avg_stdTup
 
     playerRegion = find_player_with_burn_in(frame, burn_foreMask, courtLines, netLines,
-                                         avg_in, avg_out, std_in, std_out, projROI, playerROI = None,
-                                         line_width = COURT_LINE_WIDTH, 
-                                         court_dilation_factor = COURT_DILATION,
-                                         net_dilation_factor = NET_DILATION,
-                                         verbose = verbose)
+                                          avg_in, avg_out, std_in, std_out, projROI, playerROI = None,
+                                          line_width = COURT_LINE_WIDTH, 
+                                          court_dilation_factor = COURT_DILATION,
+                                          net_dilation_factor = NET_DILATION,
+                                          verbose = verbose)
+    
+    # playerRegion = find_player_only_burn_in(hFrm, burn_foreMask, projROI)
     
     return playerRegion
 
@@ -142,7 +146,7 @@ def find_player(frame, courtLines, netLines, H, avg_stdTup = None,
 ################ ################
 
 START_FRAME = 11000
-STOP_FRAME = 20000
+STOP_FRAME = 11050
 
 
 H = None

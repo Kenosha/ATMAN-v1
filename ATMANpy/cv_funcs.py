@@ -84,6 +84,9 @@ def video_stream(cap, start_frame = None, stop_frame = None, ms_between_frames =
         if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
             cv.destroyAllWindows()  
             yield None
+    
+    else:
+        cv.destroyAllWindows()
                 
        
 
