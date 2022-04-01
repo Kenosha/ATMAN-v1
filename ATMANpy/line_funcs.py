@@ -95,16 +95,19 @@ def get_white_lines(gFrm: GreyFrame, width_of_line: int = 5,
 def get_white_lines_fast(gFrm: GreyFrame, width_of_line: int = 5, 
                          white_thresh: int = 200, int_diff_thresh: int = 10,
                          verbose = False):
+    
     shift = round(width_of_line / 2)
     
-    upFrm = gFrm.roll(how = 'up', shift = shift)
-    dnFrm = gFrm.roll(how = 'down', shift = shift)
-    lfFrm = gFrm.roll(how = 'left', shift = shift)
-    rtFrm = gFrm.roll(how = 'right', shift = shift)
+    NAN_SENTINEL = 255  # nans become completely white: this way, we can preserve the uint8 type, 
+                        # and have the same behaviour as if we had had np.nan
+    upFrm = gFrm.roll(how = 'up', shift = shift, nan_sentinel = NAN_SENTINEL)
+    dnFrm = gFrm.roll(how = 'down', shift = shift, nan_sentinel = NAN_SENTINEL)
+    lfFrm = gFrm.roll(how = 'left', shift = shift, nan_sentinel = NAN_SENTINEL)
+    rtFrm = gFrm.roll(how = 'right', shift = shift, nan_sentinel = NAN_SENTINEL)
  
     whiteMask = (gFrm > white_thresh)
-    horiMask = (gFrm - upFrm > int_diff_thresh) & (gFrm - dnFrm > int_diff_thresh)
-    vertMask = (gFrm - lfFrm > int_diff_thresh) & (gFrm - rtFrm > int_diff_thresh)
+    horiMask = (gFrm - upFrm > int_diff_thresh) & (gFrm - dnFrm > int_diff_thresh) & (gFrm > upFrm) & (gFrm > dnFrm)
+    vertMask = (gFrm - lfFrm > int_diff_thresh) & (gFrm - rtFrm > int_diff_thresh) & (gFrm > lfFrm) & (gFrm > rtFrm)
     
     line_candidateMask = whiteMask & (horiMask | vertMask)
     

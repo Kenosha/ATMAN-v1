@@ -17,6 +17,8 @@ from ATMANpy.Lines import Line, Lines, Region
 
 from multipledispatch import dispatch
 
+
+
 class FrameIterator:
     def __init__(self, frame):
         self._frame = frame
@@ -58,38 +60,86 @@ class Frame:
             object.__setattr__(self, 'array', np.array([self.array]))
         #############################  
     
-    @staticmethod
+    @staticmethod       
+    def dispatch_arithmetic(x, y, func):
+        try:
+            outArr = func(x, y)
+        except TypeError:
+            outArrs = [func(x[:, :, chIdx], chVal) for chIdx, chVal in enumerate(y)] ### if y is a list: we subtract channels one-by-one
+            outArr = np.stack(outArrs, -1)
+        return outArr
+    
+    @staticmethod      
     def get_operant(op):
         try: 
-            operant = op.array.astype(float)
+            operant = op.array
         except:
             operant = op
         finally:
-            return operant
-            
+            return operant   
+    # def __add__(self, y):
+    #     return Frame(self.array.astype(float) + Frame.get_operant(y))
+    # def __sub__(self, y):
+    #     return Frame(self.array.astype(float) - Frame.get_operant(y))
+    
+    # def __truediv__(self, y):
+    #     return Frame(self.array.astype(float) / Frame.get_operant(y))
+    # def __abs__(self):
+    #     return Frame(np.abs(self.array.astype(float)))
     def __add__(self, y):
-        return Frame(self.array.astype(float) + Frame.get_operant(y))
+        InstClass = self.__class__
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.add)
+        return InstClass(outArr)
     def __sub__(self, y):
-        return Frame(self.array.astype(float) - Frame.get_operant(y))
+        InstClass = self.__class__
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.absdiff)
+        return InstClass(outArr)
+    def __truediv__(self, y):
+        InstClass = self.__class__
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.divide)
+        return InstClass(outArr)
+    
     def __mul__(self, y):
         return Frame(self.array.astype(float) * Frame.get_operant(y))
-    def __truediv__(self, y):
-        return Frame(self.array.astype(float) / Frame.get_operant(y))
-    
     def __pow__(self, y):
         return Frame(self.array.astype(float) ** y)
-    def __abs__(self):
-        return Frame(np.abs(self.array.astype(float)))
 
     def __lt__(self, y):
-        return BoolFrame(self.array < Frame.get_operant(y))
+        try:
+            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_LT).astype(bool) ### fast, using opencv. only for scalar or array of same shape
+        except TypeError:
+            compArr = self.array < Frame.get_operant(y) ### more general, possibly slower, using numpy
+        finally:
+            return BoolFrame(compArr)
     def __le__(self, y):
-        return BoolFrame(self.array <= Frame.get_operant(y))
+        try:
+            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_LE).astype(bool) ### fast, using opencv. only for scalar or array of same shape
+        except TypeError:
+            compArr = self.array <= Frame.get_operant(y) ### more general, possibly slower, using numpy
+        finally:
+            return BoolFrame(compArr)
     def __gt__(self, y):
-        return BoolFrame(self.array > Frame.get_operant(y))
+        try:
+            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_GT).astype(bool) ### fast, using opencv. only for scalar or array of same shape
+        except TypeError:
+            compArr = self.array > Frame.get_operant(y) ### more general, possibly slower, using numpy
+        finally:
+            return BoolFrame(compArr)
     def __ge__(self, y):
-        return BoolFrame(self.array >= Frame.get_operant(y))
-
+        try:
+            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_GE).astype(bool) ### fast, using opencv. only for scalar or array of same shape
+        except TypeError:
+            compArr = self.array >= Frame.get_operant(y) ### more general, possibly slower, using numpy
+        finally:
+            return BoolFrame(compArr)
+    def __eq__(self, y):
+        try:
+            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_EQ) ### fast, using opencv. only for scalar or array of same shape
+        except TypeError:
+            compArr = self.array == Frame.get_operant(y) ### more general, possibly slower, using numpy
+        finally:
+            return BoolFrame(compArr)
+    
     def __iter__(self):
         return FrameIterator(self)
     
@@ -109,15 +159,22 @@ class Frame:
             return self.array[point.y, point.x]
         except IndexError:
             return None
-        
+    
+    def mean_std(self, mask = None):
+        if mask is not None:
+            mask = mask.to_grey().array
+        mean, std = cv.meanStdDev(self.array, mask = mask)
+        return (list(mean.squeeze()), list(std.squeeze()))
+    
     def sum(self, axes):
         return self.array.sum(axes)
     
     def clip_lo(self, y):
-        return Frame(np.maximum(self.array.astype(float), Frame.get_operant(y)))
+        InstClass = self.__class__
+        return InstClass(cv.max(self.array, Frame.get_operant(y)))
     def clip_hi(self, y):
-        return Frame(np.minimum(self.array.astype(float), Frame.get_operant(y)))     
-
+        InstClass = self.__class__
+        return InstClass(cv.min(self.array, Frame.get_operant(y))) 
     
     def mask(self, boolFrm):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
@@ -160,24 +217,27 @@ class Frame:
         l, r, t, b = region['Left'], region['Right'], region['Top'], region['Bottom']
         return self.right_of(l) & self.left_of(r) & self.below(t) & self.above(b)
         
-    def roll(self, how = 'down', shift = 1):
+    def roll(self, how = 'down', shift = 1, nan_sentinel = np.nan):
         if shift < 0:
             raise Exception('Roll with positive shifts only! Give direction via the how keyword!')
         
         axis = 1 if how in ['left', 'right'] else 0
         shift = - shift if how in ['left', 'up'] else shift
             
-        floatArr = self.array.astype(float)
-        rArr = np.roll(floatArr, axis = axis, shift = shift) 
+        if nan_sentinel == np.nan:
+            rArr = self.array.astype(float)
+        else:
+            rArr = self.array
+        rArr = np.roll(rArr, axis = axis, shift = shift) 
         
         if how == 'down':
-            rArr[:shift] = np.nan # first {shift} rows have to be set to nan 
+            rArr[:shift] = nan_sentinel # first {shift} rows have to be set to nan ... 
         elif how == 'up':
-            rArr[shift:] = np.nan # last {- shift} rows have to be set to nan (note that shift is negative!)
+            rArr[shift:] = nan_sentinel # last {- shift} rows have to be set to nan (note that shift is negative!)
         elif how == 'right':
-            rArr[:, :shift] = np.nan # first {shift} columns have to be set to nan 
+            rArr[:, :shift] = nan_sentinel # first {shift} columns have to be set to nan 
         elif how == 'left':
-            rArr[:, shift:] = np.nan # last {- shift} columns have to be set to nan (note that shift is negative!)
+            rArr[:, shift:] = nan_sentinel # last {- shift} columns have to be set to nan (note that shift is negative!)
         else:
             raise Exception('Give down, up, right or left as keywords for how in roll method of frame!')
         
@@ -267,16 +327,16 @@ class GreyFrame(Frame):
             object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
         #############################  
     
-    ### INEQUALITIES ###
-    #for a grey frame, these are defined with respect to integers, and return a boolean frame.
-    def __lt__(self, other: int):
-        return BoolFrame(self.array < other)
-    def __le__(self, other: int):
-        return BoolFrame(self.array <= other)
-    def __gt__(self, other: int):
-        return BoolFrame(self.array > other)
-    def __ge__(self, other: int):
-        return BoolFrame(self.array >= other)
+    # ### INEQUALITIES ###
+    # #for a grey frame, these are defined with respect to integers, and return a boolean frame.
+    # def __lt__(self, other: int):
+    #     return BoolFrame(self.array < other)
+    # def __le__(self, other: int):
+    #     return BoolFrame(self.array <= other)
+    # def __gt__(self, other: int):
+    #     return BoolFrame(self.array > other)
+    # def __ge__(self, other: int):
+    #     return BoolFrame(self.array >= other)
     #####################
     
     ### CONSTRUCTORS ###
