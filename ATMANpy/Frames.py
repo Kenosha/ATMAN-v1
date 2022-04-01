@@ -61,12 +61,12 @@ class Frame:
         #############################  
     
     @staticmethod       
-    def dispatch_arithmetic(x, y, func):
+    def dispatch_arithmetic(x, y, func, *args, **kwargs):
         try:
-            outArr = func(x, y)
+            outArr = func(x, y, *args, **kwargs)
         except TypeError:
-            outArrs = [func(x[:, :, chIdx], chVal) for chIdx, chVal in enumerate(y)] ### if y is a list: we subtract channels one-by-one
-            outArr = np.stack(outArrs, -1)
+            outArrs = [func(chImg, chVal, *args, **kwargs) for chImg, chVal in zip(cv.split(x), y)] ### if y is a list: we subtract channels one-by-one
+            outArr = cv.merge(outArrs)
         return outArr
     
     @staticmethod      
@@ -105,40 +105,20 @@ class Frame:
         return Frame(self.array.astype(float) ** y)
 
     def __lt__(self, y):
-        try:
-            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_LT).astype(bool) ### fast, using opencv. only for scalar or array of same shape
-        except TypeError:
-            compArr = self.array < Frame.get_operant(y) ### more general, possibly slower, using numpy
-        finally:
-            return BoolFrame(compArr)
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_LT)
+        return BoolFrame(outArr)
     def __le__(self, y):
-        try:
-            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_LE).astype(bool) ### fast, using opencv. only for scalar or array of same shape
-        except TypeError:
-            compArr = self.array <= Frame.get_operant(y) ### more general, possibly slower, using numpy
-        finally:
-            return BoolFrame(compArr)
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_LE)
+        return BoolFrame(outArr)
     def __gt__(self, y):
-        try:
-            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_GT).astype(bool) ### fast, using opencv. only for scalar or array of same shape
-        except TypeError:
-            compArr = self.array > Frame.get_operant(y) ### more general, possibly slower, using numpy
-        finally:
-            return BoolFrame(compArr)
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_GT)
+        return BoolFrame(outArr)
     def __ge__(self, y):
-        try:
-            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_GE).astype(bool) ### fast, using opencv. only for scalar or array of same shape
-        except TypeError:
-            compArr = self.array >= Frame.get_operant(y) ### more general, possibly slower, using numpy
-        finally:
-            return BoolFrame(compArr)
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_GE)
+        return BoolFrame(outArr)
     def __eq__(self, y):
-        try:
-            compArr = cv.compare(self.array, Frame.get_operant(y), cv.CMP_EQ) ### fast, using opencv. only for scalar or array of same shape
-        except TypeError:
-            compArr = self.array == Frame.get_operant(y) ### more general, possibly slower, using numpy
-        finally:
-            return BoolFrame(compArr)
+        outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_EQ)
+        return BoolFrame(outArr)
     
     def __iter__(self):
         return FrameIterator(self)
@@ -273,11 +253,17 @@ class BoolFrame(Frame):
     def __invert__(self):
         return BoolFrame(np.logical_not(self.array)) 
 
-
     def any(self, axes):
         return BoolFrame(np.any(self.array, axis = axes))
     def all(self, axes):
         return BoolFrame(np.all(self.array, axis = axes))
+    
+    def any_channel(self):
+        c1, c2, c3 = cv.split(self.array)
+        return BoolFrame(cv.bitwise_or(cv.bitwise_or(c1, c2), c3))
+    def all_channels(self):
+        c1, c2, c3 = cv.split(self.array)
+        return BoolFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
 
     def to_grey(self):
         return GreyFrame(self.array.astype('uint8') * 255)

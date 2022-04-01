@@ -212,13 +212,13 @@ def get_burn_in_mask(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
     normdiffFrm = (imgFrm - wrpFrm) / stdwrpFrm.clip_lo(1)
     
     ### exclude everything_outside wrpFrms scope. this way, it will not bleed into the frame if we gaussian blur.
-    normdiffFrm = normdiffFrm.mask((wrpFrm > 0).any(2))
+    normdiffFrm = normdiffFrm.mask((wrpFrm > 0).any_channel())
     
     ### Adding a blur stage!
     normdiffFrm = HSVFrame(cv.GaussianBlur(normdiffFrm.array, (21, 21), 0))
     
     backgroundMask = normdiffFrm < [c * normalized_deviation_threshold for c in channel_weights]
-    backgroundMask = backgroundMask.all(axes = 2)
+    backgroundMask = backgroundMask.all_channels()
     foregroundMask = ~backgroundMask
     
     if verbose: imgFrm.mask(foregroundMask).show()

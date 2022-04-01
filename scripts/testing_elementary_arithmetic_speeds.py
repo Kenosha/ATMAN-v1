@@ -55,24 +55,89 @@ def testit():
         print(fn.__name__, np.sum(fn(img1, img2).astype('int64')))
         print(timeit.timeit("%s(img1, img2)" % fn.__name__, "from testing_elementary_arithmetic_speeds import img1, img2, %s" % fn.__name__, number=1000))
         print('')
-     
+   
+if __name__ == '__main__':
+    testit()
+    print('_____________')
+    
 ### Channel subtraction
 
-img1=np.uint8(np.random.randint(0, 255, (480, 640, 3)))
-img2=np.uint8(np.random.randint(0, 255, (480, 640, 3)))
+img3=np.uint8(np.random.randint(0, 255, (480, 640, 3)))
      
 chArr = [36, 2, 10]
 
-outArr = np.stack([cv.absdiff(img1[:, :, chIdx], chVal) for chIdx, chVal in enumerate(chArr)], -1)
-outArr.shape
+def subtractChannels1(img, channels):
+    return np.stack([cv.absdiff(img[:, :, chIdx], chVal) for chIdx, chVal in enumerate(chArr)], -1)
 
+def subtractChannels2(img, channels):
+    return cv.merge([cv.absdiff(img[:, :, chIdx], chVal) for chIdx, chVal in enumerate(chArr)])
 
+def subtractChannels3(img, channels):
+    return cv.merge([cv.absdiff(chImg, chVal) for chImg, chVal in zip(cv.split(img), channels)])
 
-def diff1(img, chArr):    
-    cv.absdiff(img1, int(chArr[0]))
-c
+def subtractChannels4(img, channels):
+    return np.absolute(img - channels)
 
+def testit():
+    for fn in [subtractChannels1, subtractChannels2, subtractChannels3, subtractChannels4]:
+        print(fn.__name__, np.sum(fn(img3, chArr).astype('int64')))
+        print(timeit.timeit("%s(img3, chArr)" % fn.__name__, "from testing_elementary_arithmetic_speeds import img3, chArr, %s" % fn.__name__, number=1000))
+        print('')
 
-        
 if __name__ == '__main__':
     testit()
+    print('_____________')
+    
+    
+### Channel Comparison
+
+img3=np.uint8(np.random.randint(0, 255, (480, 640, 3)))
+     
+chArr = [36, 2, 10]
+
+def compareChannels1(img, channels):
+    return cv.merge([cv.compare(chImg, chVal, cv.CMP_LT)  for chImg, chVal in zip(cv.split(img), channels)])
+
+def compareChannels2(img, channels):
+    return img < channels
+
+def testit():
+    for fn in [compareChannels1, compareChannels2]:
+        print(fn.__name__, np.sum(fn(img3, chArr).astype('int64')))
+        print(timeit.timeit("%s(img3, chArr)" % fn.__name__, "from testing_elementary_arithmetic_speeds import img3, chArr, %s" % fn.__name__, number=1000))
+        print('')
+
+if __name__ == '__main__':
+    testit()
+    print('_____________')
+    
+    
+ 
+### All and Any
+
+img3=np.uint8(np.random.randint(0, 255, (480, 640, 3)))
+     
+chArr = [36, 2, 10]
+
+boolFrm = compareChannels1(img3, chArr)
+
+def any1(boolImg):
+    return boolFrm.any(2)
+
+def any2(boolImg):
+    r, g, b = cv.split(boolImg)
+    return cv.bitwise_or(cv.bitwise_or(r, g), b)
+    
+    
+def testit():
+    for fn in [any1, any2]:
+        print(fn.__name__, np.sum(fn(boolFrm).astype('int64')))
+        print(timeit.timeit("%s(boolFrm)" % fn.__name__, "from testing_elementary_arithmetic_speeds import boolFrm, %s" % fn.__name__, number=1000))
+        print('')
+
+if __name__ == '__main__':
+    testit()
+    print('_____________')
+
+    
+    
