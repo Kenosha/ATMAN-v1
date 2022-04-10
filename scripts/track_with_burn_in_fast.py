@@ -114,7 +114,7 @@ def find_player(frame, courtLines, netLines, H, roiMask = None, verbose = False)
                                     channel_weights = BURN_IN_HSV_CHANNEL_WEIGHTS, 
                                     verbose = verbose)
     
-    playerRegion = find_player_only_burn_in(hFrm, burn_foreMask, roiMask)
+    playerRegion = find_player_only_burn_in(frame, burn_foreMask, roiMask)
     
     return playerRegion
 
@@ -122,7 +122,7 @@ def find_player(frame, courtLines, netLines, H, roiMask = None, verbose = False)
 ################ ################
 
 START_FRAME = 11000
-STOP_FRAME = 12000
+STOP_FRAME = 13000
 
 
 H = None

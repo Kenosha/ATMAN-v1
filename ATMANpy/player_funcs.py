@@ -12,6 +12,7 @@ import numpy as np
 from ATMANpy.Points import Point, SafePoint
 from ATMANpy.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
+from ATMANpy.Contours import Contour
 
 
 def get_initial_ROIs(schemaLines, 
@@ -215,11 +216,15 @@ def get_burn_in_mask(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
     normdiffFrm = normdiffFrm.mask((wrpFrm > 0).any_channel())
     
     ### Adding a blur stage!
-    normdiffFrm = HSVFrame(cv.GaussianBlur(normdiffFrm.array, (21, 21), 0))
+    normdiffFrm = normdiffFrm.gaussian_blur((21, 21))
     
     backgroundMask = normdiffFrm < [c * normalized_deviation_threshold for c in channel_weights]
     backgroundMask = backgroundMask.all_channels()
     foregroundMask = ~backgroundMask
+    
+    ### Adding a closing stage
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (10, 18))
+    foregroundMask = foregroundMask.close(kernel)
     
     if verbose: imgFrm.mask(foregroundMask).show()
     return foregroundMask
@@ -284,12 +289,34 @@ def find_player_with_burn_in(hFrm: HSVFrame, burninMask: BoolFrame,
 
     
 def find_player_only_burn_in(hFrm, burninMask, roiMask, playerROI = None, verbose = False):
+    SIZE_THRESHOLD = 0
+    
     roi_burninMask = burninMask & roiMask
     
-    regList = roi_burninMask.to_grey().connected_regions(size_threshold = 400)
-    largestRegion = sorted(regList, key = lambda r: r.area)[-1]
+    regList = roi_burninMask.to_grey().connected_regions(size_threshold = SIZE_THRESHOLD)
     
-    if verbose: hFrm.put(largestRegion).show()
-    return largestRegion
+    if len(regList) > 0: 
+        largestRegion = sorted(regList, key = lambda r: r.area)[-1]
+        if verbose: hFrm.put(largestRegion).show()
+        return largestRegion
+        
+def find_player_contour(hFrm, burninMask, roiMask, playerROI = None, verbose = False):
     
-
+    roi_burninMask = burninMask & roiMask
+    
+    cntList, _ = roi_burninMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    
+    if len(cntList) > 0:
+        largestContour = sorted(cntList, key = lambda c: cv.contourArea(c))[-1]
+        if verbose: 
+            showFrm = HSVFrame(cv.drawContours(hFrm.array.copy(), [largestContour], -1, (0, 255, 0), thickness = 2))
+            showFrm.show()
+        return Contour(largestContour)
+    
+    
+    
+    
+    
+    
+    
+    
