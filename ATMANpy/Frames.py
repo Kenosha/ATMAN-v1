@@ -14,9 +14,9 @@ from ATMANpy.type_funcs import typecheck, arraycheck
 from ATMANpy.cv_funcs import show, get_frame    
 from ATMANpy.Points import Point
 from ATMANpy.Lines import Line, Lines, Region
+from ATMANpy.Contours import Contour
 
-from multipledispatch import dispatch
-
+from ATMANpy.PutDispatcher import put
 
 
 class FrameIterator:
@@ -115,9 +115,10 @@ class Frame:
     def __iter__(self):
         return FrameIterator(self)
     
-    ### METHODS ###
+    ### SHOW METHODS ###
     def show(self):
         show(self.array, name = self.name)
+
 
     def eval_at(self, point: Point):
         point = point.conform_to(self)
@@ -267,6 +268,11 @@ class BoolFrame(Frame):
     def all(self, axes):
         return BoolFrame(np.all(self.array, axis = axes))
     
+    def put(self, anyObj, 
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1):
+        return put(self.to_grey(), anyObj, 
+                   color = color, radius = radius, thickness = thickness, where = where, size = size)
+    
     def any_channel(self):
         c1, c2, c3 = cv.split(self.array)
         return BoolFrame(cv.bitwise_or(cv.bitwise_or(c1, c2), c3))
@@ -284,6 +290,16 @@ class BoolFrame(Frame):
         if name == None:
             name = self.name
         np.savetxt(os.path.join(savePath, f'{name}_bool.csv'), self.array, delimiter = ',')
+        
+    def open(self, kernel):
+        self_copy = self.to_grey().array.copy()
+        arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, kernel)
+        return BoolFrame(arr)
+        
+    def close(self, kernel):
+        self_copy = self.to_grey().array.copy()
+        arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
+        return BoolFrame(arr)
         
     def prob_hough(self, 
                    rho = 1,  ### the resolution of parameter r in pixels
@@ -355,46 +371,10 @@ class GreyFrame(Frame):
         np.savetxt(os.path.join(savePath, f'{name}_grey.csv'), self.array, delimiter = ',')
     ##################     
     
-    ### METHODS ###
-    @dispatch(Point)
-    def put(self, point: Point, color = 255, radius = 0, thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        # conf_point = point.conform_to(self)
-        return GreyFrame(cv.circle(self_copy, point.round_coords(), radius, color, thickness))
-    
-    @dispatch(Line)
-    def put(self, line: Line, color = 255, thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        # conf_point = point.conform_to(self)
-        c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()
-        return GreyFrame(cv.line(self_copy, c1, c2, color, thickness))
-    
-    @dispatch(Lines)
-    def put(self, lines: Lines, color = 255, thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        for line in lines:
-            c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()
-            self_copy = cv.line(self_copy, c1, c2, color, thickness)
-        return GreyFrame(self_copy)
-        
-    @dispatch(Region)
-    ### maybe at some point fill the region in or something....
-    def put(self, region: Region, color = 255, thickness = 1):
-        return self.put(Lines(region.lineList), color = color, thickness = thickness)
-    
-    @dispatch(str)
-    def put(self, text: str, where = (50, 50), size = 1, color = 255, thickness = 1):
-        self_copy = self.array.copy()
-        font = cv.FONT_HERSHEY_SIMPLEX
-        return GreyFrame(cv.putText(self_copy, text, where, font, size, color, thickness))
-    
-    @dispatch(list)
-    def put(self, putList: list, **kwargs):
-        if len(putList) == 0:
-            return self
-        else:
-            p, ps = putList[0], putList[1:]
-            return self.put(self.put(p, **kwargs), ps, **kwargs)
+    def put(self, anyObj, 
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1):
+        return put(self, anyObj, 
+                   color = color, radius = radius, thickness = thickness, where = where, size = size)
         
     def zero(self):
         return GreyFrame(np.zeros(self.shape, dtype = 'uint8'))
@@ -510,38 +490,10 @@ class BGRFrame(Frame):
             np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array, delimiter = ',')
     ##################     
     
-    ### METHODS ###
-    @dispatch(Point)
-    def put(self, point: Point, color = (0, 255, 0), radius = 0, thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        # conf_point = point.conform_to(self)
-        return BGRFrame(cv.circle(self_copy, point.round_coords(), radius, color, thickness))
-    
-    @dispatch(Line)
-    def put(self, line: Line, color = (0, 255, 0), thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        # conf_point = point.conform_to(self)
-        c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()
-        return BGRFrame(cv.line(self_copy, c1, c2, color, thickness))
-    
-    @dispatch(Lines)
-    def put(self, lines: Lines, color = (0, 255, 0), thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        for line in lines:
-            c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()
-            self_copy = cv.line(self_copy, c1, c2, color, thickness)
-        return BGRFrame(self_copy)
-    
-    @dispatch(Region)
-    ### maybe at some point fill the region in or something....
-    def put(self, region: Region, color = (0, 255, 0), thickness = 1):
-        return self.put(Lines(region.lineList), color = color, thickness = thickness)
-    
-    @dispatch(str)
-    def put(self, text: str, where = (50, 50), size = 1, color = (0, 255, 0), thickness = 1):
-        self_copy = self.array.copy()
-        font = cv.FONT_HERSHEY_SIMPLEX
-        return BGRFrame(cv.putText(self_copy, text, where, font, size, color, thickness))
+    def put(self, anyObj, 
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1):
+        return put(self, anyObj, 
+                   color = color, radius = radius, thickness = thickness, where = where, size = size)
         
     def zero(self):
         return BGRFrame(np.zeros(self.shape[:2], dtype = 'uint8'))
@@ -630,38 +582,10 @@ class HSVFrame(Frame):
             np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array, delimiter = ',')
     ##################     
     
-    ### METHODS ###
-    @dispatch(Point)
-    def put(self, point: Point, color = (120, 100, 100), radius = 0, thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        # conf_point = point.conform_to(self)
-        return HSVFrame(cv.circle(self_copy, point.round_coords(), radius, color, thickness))
-    
-    @dispatch(Line)
-    def put(self, line: Line, color = (120, 100, 100), thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        # conf_point = point.conform_to(self)
-        c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()
-        return HSVFrame(cv.line(self_copy, c1, c2, color, thickness))
-    
-    @dispatch(Lines)
-    def put(self, lines: Lines, color = (120, 100, 100), thickness = 1):
-        self_copy = self.array.copy() # to preverve immutability of frame
-        for line in lines:
-            c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()
-            self_copy = cv.line(self_copy, c1, c2, color, thickness)
-        return HSVFrame(self_copy)
-    
-    @dispatch(Region)
-    ### maybe at some point fill the region in or something....
-    def put(self, region: Region, color = (120, 100, 100), thickness = 1):
-        return self.put(Lines(region.lineList), color = color, thickness = thickness)
-    
-    @dispatch(str)
-    def put(self, text: str, where = (50, 50), size = 1, color = (120, 100, 100), thickness = 1):
-        self_copy = self.array.copy()
-        font = cv.FONT_HERSHEY_SIMPLEX
-        return HSVFrame(cv.putText(self_copy, text, where, font, size, color, thickness))
+    def put(self, anyObj, 
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1):
+        return put(self, anyObj, 
+                   color = color, radius = radius, thickness = thickness, where = where, size = size)
         
     def zero(self):
         return HSVFrame(np.zeros(self.shape[:2], dtype = 'uint8'))
