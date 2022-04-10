@@ -77,15 +77,7 @@ class Frame:
             operant = op
         finally:
             return operant   
-    # def __add__(self, y):
-    #     return Frame(self.array.astype(float) + Frame.get_operant(y))
-    # def __sub__(self, y):
-    #     return Frame(self.array.astype(float) - Frame.get_operant(y))
-    
-    # def __truediv__(self, y):
-    #     return Frame(self.array.astype(float) / Frame.get_operant(y))
-    # def __abs__(self):
-    #     return Frame(np.abs(self.array.astype(float)))
+        
     def __add__(self, y):
         InstClass = self.__class__
         outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.add)
@@ -228,6 +220,23 @@ class Frame:
         top_left, bot_right = cropRegion.p1, cropRegion.p4
         cropArr = self_copy[top_left.y:bot_right.y, top_left.x:bot_right.x]
         return Frame(cropArr)
+    
+    def gaussian_blur(self, kernelSize):
+        self_copy = self.array.copy()
+        InstClass = self.__class__
+        
+        blurArr = cv.GaussianBlur(self_copy, kernelSize, 0)
+        return InstClass(blurArr)
+    
+    def find_contours(self, contour_retrieval_mode, contour_approx_mode):
+        ### retrieval: cv.RETR_TREE
+        ### approx: cv.CHAIN_APPROX_SIMPLE
+        self_copy = self.array.copy()
+        cts, hierarchy = cv.findContours(self_copy, 
+                                         contour_retrieval_mode, contour_approx_mode)
+        return cts, hierarchy
+        
+    
     ###############
 
 @dataclass(frozen = True)
