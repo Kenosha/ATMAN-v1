@@ -47,6 +47,6 @@ def put(someFrm, someObj,
             return someFrm
         else:
             p, ps = someObj[0], someObj[1:]
-            return someFrm.put(someFrm.put(p, color = color, radius = radius, thickness = thickness, where = where, size = size), 
-                               ps, color = color, radius = radius, thickness = thickness, where = where, size = size)
+            return put(put(someFrm, p, color = color, radius = radius, thickness = thickness, where = where, size = size), 
+                       ps, color = color, radius = radius, thickness = thickness, where = where, size = size)
     ####################
