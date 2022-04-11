@@ -91,6 +91,11 @@ class Frame:
         outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.divide)
         return InstClass(outArr)
     
+    def __mod__(self, y):
+        InstClass = self.__class__
+        outArr = np.mod(self.array, Frame.get_operant(y))
+        return InstClass(outArr)
+    
     def __mul__(self, y):
         return Frame(self.array.astype(float) * Frame.get_operant(y))
     def __pow__(self, y):
@@ -119,6 +124,8 @@ class Frame:
     def show(self):
         show(self.array, name = self.name)
 
+    def unique(self):
+        return np.unique(self.array)
 
     def eval_at(self, point: Point):
         point = point.conform_to(self)
@@ -137,7 +144,7 @@ class Frame:
         if mask is not None:
             mask = mask.to_grey().array
         mean, std = cv.meanStdDev(self.array, mask = mask)
-        return (list(mean.squeeze()), list(std.squeeze()))
+        return mean.squeeze().tolist(), std.squeeze().tolist()
     
     def sum(self, axes):
         return self.array.sum(axes)
@@ -186,10 +193,15 @@ class Frame:
             outArray[:first_beyond_threshold, x] = True
         return BoolFrame(outArray)
           
-    def within(self, region: Region):
+    def within_region(self, region: Region):
         l, r, t, b = region['Left'], region['Right'], region['Top'], region['Bottom']
         return self.right_of(l) & self.left_of(r) & self.below(t) & self.above(b)
         
+    def within_contour(self, contour: Contour):
+        zeroArr = np.zeros((self.rows, self.cols), dtype = 'uint8')
+        cntMask = cv.fillPoly(zeroArr, [contour.points], 255)
+        return BoolFrame(cntMask)
+    
     def roll(self, how = 'down', shift = 1, nan_sentinel = np.nan):
         if shift < 0:
             raise Exception('Roll with positive shifts only! Give direction via the how keyword!')
@@ -217,11 +229,19 @@ class Frame:
         return Frame(rArr)
                
     def crop(self, cropRegion: Region):
+        InstClass = self.__class__
         self_copy = self.array.copy()
         top_left, bot_right = cropRegion.p1, cropRegion.p4
         cropArr = self_copy[top_left.y:bot_right.y, top_left.x:bot_right.x]
-        return Frame(cropArr)
+        return InstClass(cropArr)
     
+    def zoom(self, zoom_factor, interpolation = cv.INTER_LINEAR):
+        InstClass = self.__class__
+        self_copy = self.array.copy()
+        zoomArr = cv.resize(self_copy, None, 
+                            fx = zoom_factor, fy = zoom_factor, interpolation = interpolation)
+        return InstClass(zoomArr)
+
     def gaussian_blur(self, kernelSize):
         self_copy = self.array.copy()
         InstClass = self.__class__
@@ -281,7 +301,11 @@ class BoolFrame(Frame):
         return BoolFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
 
     def to_grey(self):
-        return GreyFrame(self.array.astype('uint8') * 255)
+        if 255 in self.unique(): ### this is a problem... unify the values of bool frames!
+            return GreyFrame(self.array.astype('uint8'))
+        else:
+            return GreyFrame(self.array.astype('uint8') * 255)
+
     def to_false(self):
         return BoolFrame(self.to_grey().zero().array.astype('bool'), name = self.name)
     def to_true(self):
@@ -300,6 +324,17 @@ class BoolFrame(Frame):
         self_copy = self.to_grey().array.copy()
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
         return BoolFrame(arr)
+    
+    def dilate(self, kernel):
+        self_copy = self.to_grey().array.copy()
+        arr = cv.dilate(self_copy, kernel)
+        return BoolFrame(arr)
+    
+    def erode(self, kernel):
+        self_copy = self.to_grey().array.copy()
+        arr = cv.erode(self_copy, kernel)
+        return BoolFrame(arr)
+        
         
     def prob_hough(self, 
                    rho = 1,  ### the resolution of parameter r in pixels
@@ -390,6 +425,22 @@ class GreyFrame(Frame):
         grad = np.sqrt(grad_x**2 + grad_y**2)
         grad_norm = (grad * 255 / grad.max()).astype(np.uint8)
         return GreyFrame(grad_norm)
+    
+    def sobel_dirs(self, toward_high_intensity = True):
+        ### how: atan or atan2
+        # - atan: calculate arctan of quotient, losing info if x is negative
+        # - atan2: two argument arctan.
+        self_copy = self.array.copy()
+        grad_x = cv.Sobel(self_copy, cv.CV_64F, 1, 0)
+        grad_y = cv.Sobel(self_copy, cv.CV_64F, 0, 1)
+        theta = np.arctan2(grad_y, grad_x)
+        
+        ### by default, sobel gradients point toward high intensity regions
+        # we can also turn this around if we want
+        if not toward_high_intensity:
+            theta = theta + np.pi
+        
+        return theta
     
     def open(self, kernel):
         self_copy = self.array.copy()
@@ -510,11 +561,6 @@ class BGRFrame(Frame):
         wrpArr = cv.warpPerspective(self.array, H, (cols, rows))
         return BGRFrame(wrpArr)
         
-    def crop(self, cropRegion: Region):
-        self_copy = self.array.copy()
-        top_left, bot_right = cropRegion.p1, cropRegion.p4
-        cropArr = self_copy[top_left.y:bot_right.y, top_left.x:bot_right.x]
-        return BGRFrame(cropArr)
     ###############
     
 
@@ -601,12 +647,6 @@ class HSVFrame(Frame):
             rows = self.rows
         wrpArr = cv.warpPerspective(self.array, H, (cols, rows))
         return HSVFrame(wrpArr)
-    
-    def crop(self, cropRegion: Region):
-        self_copy = self.array.copy()
-        top_left, bot_right = cropRegion.p1, cropRegion.p4
-        cropArr = self_copy[top_left.y:bot_right.y, top_left.x:bot_right.x]
-        return HSVFrame(cropArr)
         
     ###############
     

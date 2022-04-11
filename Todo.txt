@@ -1,0 +1,4 @@
+- Connected Regions Player Finding: Join Regions which are close, and calculate the smallest cover region
+- Find 3D camera matrix using net post height!
+- Shadow Removal in player tracking (remember that one paper (dang??), they did it!)
+- Player Region prior
