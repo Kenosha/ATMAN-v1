@@ -9,7 +9,8 @@ import warnings
 import cv2 as cv
 import numpy as np
 
-from ATMANpy.Frames import Frame, BoolFrame
+from ATMANpy.Frames import Frame, BoolFrame, GreyFrame
+from ATMANpy.Contours import Contour
 
 ####### color orientation versus spatial orientation of ball candidate ellipse #####
 
@@ -111,3 +112,117 @@ def calculate_alpha(sobGrads, normGrads, ellipseMask, unit = 'deg'):
     
     mean, std = anglFrm.mean_std(mask = ellipseMask)
     return mean, std
+
+
+def find_alpha_and_std_and_semiaxes(cnt, gFrm, maskFrm):
+    PIXEL_MARGIN = 3
+    ZOOM_FACTOR = 10
+    
+    cntRegion = cnt.enclosing_region(margin = PIXEL_MARGIN)
+    
+    foreBlob_large = gFrm.crop(cntRegion).zoom(ZOOM_FACTOR)
+    foreBool_large = maskFrm.crop(cntRegion).zoom(ZOOM_FACTOR)
+    
+    cnts_large, _ = foreBool_large.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    
+    if len(cnts_large) == 1:
+        cnt_large = Contour(cnts_large[0])
+    else:
+        cnt_large = sorted([Contour(c) for c in cnts_large], key = lambda c: c.area())[-1] #take largest
+    
+    from ATMANpy.ball_funcs import get_ellipse, get_ellipse_mask, get_sobel_grads, get_normal_grads, calculate_alpha
+    
+    centerCoords, semiAxes, theta = get_ellipse(cnt_large)
+    ellipseMask = get_ellipse_mask(foreBlob_large, centerCoords, semiAxes, theta)
+    
+    sobGrads = get_sobel_grads(foreBlob_large)
+    normGrads = get_normal_grads(foreBlob_large, centerCoords)
+    
+    alpha, std = calculate_alpha(sobGrads, normGrads, ellipseMask)
+    return alpha, std, semiAxes ### we also return the semiAxes, since they will be params
+
+
+##### Motion Mask, Ball Candidates ####
+
+def get_motion_mask(cap, frameNum, diffList = [4, 6, 8]):
+    myFrame = GreyFrame.from_video(cap, frameNum)
+    
+    frameList = [frameNum - d for d in diffList] + [frameNum + d for d in diffList]
+    gFrames = [GreyFrame.from_video(cap, fnum) for fnum in frameList]
+    
+    def isFG(myFrame, diffFrame):
+        THRESH = 10
+        return myFrame - diffFrame > THRESH
+    
+    outFrame = BoolFrame(myFrame.zero().array + 1)
+    for diffFrame in gFrames:
+        outFrame = outFrame & isFG(myFrame, diffFrame)
+   
+    return outFrame
+
+def find_ball_candidate_mask(cFrm, motMask, topPlayerContour, botPlayerContour):
+    # cFrm.mask(motMask).show()
+    
+    def cntMask(frm, cnt):
+        ### Dilated player mask
+        dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 10))
+        return frm.within_contour(cnt).dilate(dil_kernel)
+    playerMask = cntMask(cFrm, topPlayerContour) | cntMask(cFrm, botPlayerContour)
+    # cFrm.mask(playerMask).show()
+    
+    ### Opened Motion Mask
+    open_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
+    motMask = motMask.open(open_kernel)
+    # cFrm.mask(motMask).show()
+    
+    ### Player and Motion Mask
+    intMask = ~playerMask & motMask
+    # cFrm.mask(intMask).show()
+    
+    return intMask
+
+#### SVM Feature collection for each ball candidate ####
+import pandas as pd
+def make_feature_frame(cnts, hFrm, gFrm, intMask):
+    
+    cntSers = []
+    
+    for cnt_index, cnt in enumerate(cnts):
+
+        ### COLLECT SVM FEATURES
+        cntDict = {}
+            
+        # Alpha (and maybe add std?) and semiaxes
+        try:
+            alpha, std, semiAxes = find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask)
+            semiMaj, semiMin = semiAxes
+        except:
+            alpha, std, semiMaj, semiMin = np.nan, np.nan, np.nan, np.nan #occasionally, a contour has no ellipse that can be fitted.
+        finally:
+            cntDict['Alpha'] = alpha
+            cntDict['AlphaSTD'] = std
+            cntDict['SemiMaj'] = semiMaj
+            cntDict['SemiMin'] = semiMin
+        
+        # Blob Center Location
+        try:
+            centPt = cnt.center()
+            x, y = centPt.x, centPt.y
+        except:
+            x, y = np.nan, np.nan ### this happens if the contour does not have an area (if the points are colinear)
+            
+        cntDict['Cx'] = x
+        cntDict['Cy'] = y
+        
+        # HSV Channels
+        mean, std = hFrm.mean_std(mask = hFrm.within_contour(cnt))
+        h, s, v = mean
+        cntDict['H'] = h
+        cntDict['S'] = s
+        cntDict['V'] = v
+        
+        cntSer = pd.Series(cntDict, name = cnt_index)
+        cntSers.append(cntSer)
+        
+    cntFrm = pd.concat(cntSers, axis = 1).T
+    return cntFrm

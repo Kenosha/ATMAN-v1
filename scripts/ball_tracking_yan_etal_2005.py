@@ -170,36 +170,31 @@ botplayerRegion = find_player(hFrm, courtLines, netLines, H, roiMask = roiMask_l
 
 motMask = get_motion_mask(frameNum)
 
-def cntMask(frm, cnt):
-    dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 10))
-    return frm.within_contour(cnt).dilate(dil_kernel)
-
-playerMask = cntMask(cFrm, topplayerRegion) | cntMask(cFrm, botplayerRegion)
-
-### Dilated player mask
-cFrm.mask(playerMask).show()
-
-### Motion mask
-cFrm.mask(motMask).show()
-
-### Opened Motion Mask
-open_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
-motMask = motMask.open(open_kernel)
-cFrm.mask(motMask).show()
-
-### Player and Motion Mask
-intMask = ~playerMask & motMask
-cFrm.mask(intMask).show()
-
-cnts, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-
-len(cnts)
-
-cFrm.put([Contour(cnt) for cnt in cnts]).show()
-
-
+def find_ball_candidate_mask(cFrm, motMask, topPlayerContour, botPlayerContour):
+    # cFrm.mask(motMask).show()
+    
+    def cntMask(frm, cnt):
+        ### Dilated player mask
+        dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 10))
+        return frm.within_contour(cnt).dilate(dil_kernel)
+    playerMask = cntMask(cFrm, topPlayerContour) | cntMask(cFrm, botPlayerContour)
+    # cFrm.mask(playerMask).show()
+    
+    ### Opened Motion Mask
+    open_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
+    motMask = motMask.open(open_kernel)
+    # cFrm.mask(motMask).show()
+    
+    ### Player and Motion Mask
+    intMask = ~playerMask & motMask
+    # cFrm.mask(intMask).show()
+    
+    return intMask
+    
 ### finding alpha-criterion ###
 
+intMask = find_ball_candidate_mask(cFrm, motMask, topplayerRegion, botplayerRegion)
+cnts, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
 cnt = Contour(cnts[4])
 
 def find_alpha_and_std_and_semiaxes(cnt, gFrm, maskFrm):
@@ -209,7 +204,7 @@ def find_alpha_and_std_and_semiaxes(cnt, gFrm, maskFrm):
     cntRegion = cnt.enclosing_region(margin = PIXEL_MARGIN)
     
     foreBlob_large = gFrm.crop(cntRegion).zoom(ZOOM_FACTOR)
-    foreBool_large = motMask.crop(cntRegion).zoom(ZOOM_FACTOR)
+    foreBool_large = maskFrm.crop(cntRegion).zoom(ZOOM_FACTOR)
     
     cnts_large, _ = foreBool_large.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     
@@ -230,26 +225,48 @@ def find_alpha_and_std_and_semiaxes(cnt, gFrm, maskFrm):
     return alpha, std, semiAxes ### we also return the semiAxes, since they will be params
 
 
-for cnt_points in cnts:
-    cnt = Contour(cnt_points)
+import pandas as pd
+def make_feature_frame(cnts):
     
-    ### COLLECT SVM FEATURES
+    cntSers = []
     
-    # Alpha (and maybe add std?) and semiaxes
-    alpha, std, semiAxes = find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask)
-    semiMaj, semiMin = semiAxes
-    
-    # Blob Center Location
-    centPt = cnt.center()
-    x, y = centPt.x, centPt.y
-    
-    # HSV Channels
-    mean, std = hFrm.mean_std(mask = hFrm.within_contour(cnt))
-    h, s, v = mean
+    for cnt_index, cnt_points in enumerate(cnts):
+        cnt = Contour(cnt_points)
+        
+        ### COLLECT SVM FEATURES
+        cntDict = {}
+            
+        # Alpha (and maybe add std?) and semiaxes
+        try:
+            alpha, std, semiAxes = find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask)
+            semiMaj, semiMin = semiAxes
+        except:
+            alpha, std, semiMaj, semiMin = np.nan, np.nan, np.nan, np.nan #occasionally, a contour has no ellipse that can be fitted.
+        finally:
+            cntDict['Alpha'] = alpha
+            cntDict['AlphaSTD'] = std
+            cntDict['SemiMaj'] = semiMaj
+            cntDict['SemiMin'] = semiMin
+        
+        # Blob Center Location
+        centPt = cnt.center()
+        cntDict['Cx'] = centPt.x
+        cntDict['Cy'] = centPt.y
+        
+        # HSV Channels
+        mean, std = hFrm.mean_std(mask = hFrm.within_contour(cnt))
+        h, s, v = mean
+        cntDict['H'] = h
+        cntDict['S'] = s
+        cntDict['V'] = v
+        
+        cntSer = pd.Series(cntDict, name = cnt_index)
+        cntSers.append(cntSer)
+        
+    cntFrm = pd.concat(cntSers, axis = 1).T
+    return cntFrm
 
-
-
-
+cntFrm = make_feature_frame(cnts)
 
 
 
