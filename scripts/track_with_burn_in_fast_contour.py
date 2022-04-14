@@ -154,7 +154,7 @@ while True:
         
         ### Project Regions of Interest
         projROI_lower, projROI_upper = schema_specific_roi_projection_func(H)
-        roiMask_lower, roiMask_upper = hFrm.within(projROI_lower), hFrm.within(projROI_upper)
+        roiMask_lower, roiMask_upper =  hFrm.within_region(projROI_lower), hFrm.within_region(projROI_upper)
 
         ### Top Player, with updated averages
         topplayerRegion = find_player(hFrm, courtLines, netLines, H, roiMask = roiMask_upper)
@@ -174,7 +174,12 @@ while True:
         sendFrm = cFrm.put(topplayerRegion, thickness = 2, color = (0, 0, 255)).put(botplayerRegion, thickness = 2, color = (0, 0, 255))
     
     sendArr = sendFrm.array  
-    frmNum, rawArr = gen.send(sendArr)
+    
+    try:
+        frmNum, rawArr = gen.send(sendArr)
+    except:
+        cv.destroyAllWindows()
+        break
 else:
     cv.destroyAllWindows()
 

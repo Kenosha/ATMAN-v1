@@ -16,6 +16,9 @@ def put(someFrm, someObj,
     InstClass = someFrm.__class__
     self_copy = someFrm.array.copy() # to preverve immutability of frame
     
+    if someObj is None:
+        return someFrm
+    
     if isinstance(someObj, Point):
         # conf_point = point.conform_to(self)
         return InstClass(cv.circle(self_copy, someObj.round_coords(), radius, color, thickness))
