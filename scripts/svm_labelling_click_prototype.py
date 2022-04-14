@@ -252,8 +252,8 @@ while True:
 ##### CONCATENATE AND SAVE ######
 
 import os
-burnDict = atu.get_folder_struct('ball_svm')
-savePath = os.path.join(burnDict['main'], VIDEO_ID)
+ballDict = atu.get_folder_struct('ball_svm')
+savePath = os.path.join(ballDict['main'], VIDEO_ID, 'raw_data')
 
 try:
     os.mkdir(savePath)
