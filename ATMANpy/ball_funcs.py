@@ -160,6 +160,18 @@ def get_motion_mask(cap, frameNum, diffList = [4, 6, 8]):
    
     return outFrame
 
+def get_motion_mask_from_frames(gFrm, diffFrames):
+    
+    def isFG(myFrame, diffFrame):
+        THRESH = 10
+        return myFrame - diffFrame > THRESH
+    
+    outFrame = BoolFrame(gFrm.zero().array + 1)
+    for diffFrame in diffFrames:
+        outFrame = outFrame & isFG(gFrm, diffFrame)
+   
+    return outFrame
+
 def find_ball_candidate_mask(cFrm, motMask, topPlayerContour, botPlayerContour):
     # cFrm.mask(motMask).show()
     
