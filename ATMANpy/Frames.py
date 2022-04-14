@@ -142,7 +142,7 @@ class Frame:
     
     def mean_std(self, mask = None):
         if mask is not None:
-            mask = mask.to_grey().array
+            mask = mask.array
         mean, std = cv.meanStdDev(self.array, mask = mask)
         return mean.squeeze().tolist(), std.squeeze().tolist()
     
@@ -162,35 +162,35 @@ class Frame:
     ###############
         
     def right_of(self, aLn: Line):
-        outArray = np.zeros((self.rows, self.cols), dtype = 'bool')
+        outArray = np.zeros((self.rows, self.cols), dtype = 'uint8')
         for y in range(self.rows):
             threshold_x = aLn.weak_x(y)
             first_beyond_threshold = max(int(threshold_x) + 1, 0)
-            outArray[y, first_beyond_threshold:] = True
+            outArray[y, first_beyond_threshold:] = 255
         return BoolFrame(outArray)
         
     def left_of(self, aLn: Line):
-        outArray = np.zeros((self.rows, self.cols), dtype = 'bool')
+        outArray = np.zeros((self.rows, self.cols), dtype = 'uint8')
         for y in range(self.rows):
             threshold_x = aLn.weak_x(y)
             first_beyond_threshold = max(int(threshold_x) + 1, 0)
-            outArray[y, :first_beyond_threshold] = True
+            outArray[y, :first_beyond_threshold] = 255
         return BoolFrame(outArray)
     
     def below(self, aLn: Line):
-        outArray = np.zeros((self.rows, self.cols), dtype = 'bool')
+        outArray = np.zeros((self.rows, self.cols), dtype = 'uint8')
         for x in range(self.cols):
             threshold_y = aLn.weak_y(x)
             first_beyond_threshold = max(int(threshold_y) + 1, 0)
-            outArray[first_beyond_threshold:, x] = True
+            outArray[first_beyond_threshold:, x] = 255
         return BoolFrame(outArray)
             
     def above(self, aLn: Line):
-        outArray = np.zeros((self.rows, self.cols), dtype = 'bool')
+        outArray = np.zeros((self.rows, self.cols), dtype = 'uint8')
         for x in range(self.cols):
             threshold_y = aLn.weak_y(x)
             first_beyond_threshold = max(int(threshold_y) + 1, 0)
-            outArray[:first_beyond_threshold, x] = True
+            outArray[:first_beyond_threshold, x] = 255
         return BoolFrame(outArray)
           
     def within_region(self, region: Region):
@@ -262,6 +262,9 @@ class Frame:
 
 @dataclass(frozen = True)
 class BoolFrame(Frame):
+    ### amended 14.04.22 to contain only 0 and 255, not bools or 0 and 1.
+    ### this makes it predictable, and fit for fast cv arithmetic and logical funcs
+    
     array: np.ndarray
     name: str = 'frame'
     
@@ -274,19 +277,22 @@ class BoolFrame(Frame):
         #            channel_number = 2, color_channel_length = None)
         #####################
 
+    def _check_values(self):
+        return set([0, 255]).issubset(self.unique())
+
     def __or__(self, other):
-        return BoolFrame(np.bitwise_or(self.array, other.array))
+        return BoolFrame(cv.bitwise_or(self.array, other.array))
 
     def __and__(self, other):
-        return BoolFrame(np.bitwise_and(self.array, other.array))
+        return BoolFrame(cv.bitwise_and(self.array, other.array))
     
     def __invert__(self):
-        return BoolFrame(np.logical_not(self.array)) 
+        return BoolFrame(cv.bitwise_not(self.array)) 
 
-    def any(self, axes):
-        return BoolFrame(np.any(self.array, axis = axes))
-    def all(self, axes):
-        return BoolFrame(np.all(self.array, axis = axes))
+    # def any(self, axes):
+    #     return BoolFrame(np.any(self.array, axis = axes))
+    # def all(self, axes):
+    #     return BoolFrame(np.all(self.array, axis = axes))
     
     def put(self, anyObj, 
             color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1):
@@ -300,14 +306,20 @@ class BoolFrame(Frame):
         c1, c2, c3 = cv.split(self.array)
         return BoolFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
 
+    # def to_grey(self):
+    #     if 255 in self.unique(): ### this is a problem... unify the values of bool frames!
+    #         return GreyFrame(self.array.astype('uint8'))
+    #     else:
+    #         return GreyFrame(self.array.astype('uint8') * 255)
+
     def to_grey(self):
-        if 255 in self.unique(): ### this is a problem... unify the values of bool frames!
-            return GreyFrame(self.array.astype('uint8'))
-        else:
-            return GreyFrame(self.array.astype('uint8') * 255)
+        return GreyFrame(self.array)
+
+    def zero(self):
+        return BoolFrame(np.zeros(self.shape, dtype = 'uint8'))
 
     def to_false(self):
-        return BoolFrame(self.to_grey().zero().array.astype('bool'), name = self.name)
+        return BoolFrame(self.zero().array, name = self.name)
     def to_true(self):
         return ~self.to_false()
     def to_csv(self, savePath, name = None):
@@ -316,22 +328,22 @@ class BoolFrame(Frame):
         np.savetxt(os.path.join(savePath, f'{name}_bool.csv'), self.array, delimiter = ',')
         
     def open(self, kernel):
-        self_copy = self.to_grey().array.copy()
+        self_copy = self.array.copy()
         arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, kernel)
         return BoolFrame(arr)
         
     def close(self, kernel):
-        self_copy = self.to_grey().array.copy()
+        self_copy = self.array.copy()
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
         return BoolFrame(arr)
     
     def dilate(self, kernel):
-        self_copy = self.to_grey().array.copy()
+        self_copy = self.array.copy()
         arr = cv.dilate(self_copy, kernel)
         return BoolFrame(arr)
     
     def erode(self, kernel):
-        self_copy = self.to_grey().array.copy()
+        self_copy = self.array.copy()
         arr = cv.erode(self_copy, kernel)
         return BoolFrame(arr)
         
@@ -343,14 +355,14 @@ class BoolFrame(Frame):
                    minLineLength = 50,  ### the minimum length of a candidate line 
                    maxLineGap = 10): ### the maximum gap between two points to be considered the same line
         
-        hough_lines = cv.HoughLinesP(self.to_grey().array, rho, theta, min_votes, 
+        hough_lines = cv.HoughLinesP(self.array, rho, theta, min_votes, 
                                      minLineLength = minLineLength, maxLineGap = maxLineGap)
         hough_lines = Lines.from_coordList(hough_lines)
         return hough_lines
 
     ## override show
     def show(self):
-        show(self.to_grey().array, name = self.name)
+        show(self.array, name = self.name)
         
 
 @dataclass(frozen = True)
