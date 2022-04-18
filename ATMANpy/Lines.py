@@ -508,6 +508,14 @@ class CourtLines(Lines):
             return CourtLines([lineFunc(l, *args, name = l.name, **kwargs) for l in self.lineList],
                               name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
     
+    def pixel_in_meter(self, horiLine = 'Top Baseline', vertLine = 'Top Center Line'):
+        ### how many pixel are in a meter?
+        hori_scale = self[horiLine].length() / 10.97 ### 36 foot in metres
+        vert_scale = self[vertLine].length() / 6.4
+        return hori_scale, vert_scale
+
+
+    
 @dataclass(frozen = True)
 class Region(Lines):
     lineList: List[Line]
