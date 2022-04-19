@@ -6,9 +6,9 @@ Created on Sun Apr 10 15:11:50 2022
 """
 
 import cv2 as cv
-from ATMANpy.Points import Point
-from ATMANpy.Lines import Line, Lines, Region
-from ATMANpy.Contours import Contour
+from ATMANpy.types.Points import Point
+from ATMANpy.types.Lines import Line, Lines, Region
+from ATMANpy.types.Contours import Contour
 
 def put(someFrm, someObj, 
         color = None, radius = None, thickness = None, where = None, size = None):

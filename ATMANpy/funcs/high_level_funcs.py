@@ -7,9 +7,9 @@ Created on Fri Mar 25 16:57:49 2022
 
 import numpy as np
 
-from ATMANpy.Points import Point, SafePoint
-from ATMANpy.Lines import Line, Lines, CourtLines, Region
-from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
+from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
+from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
 
 
 ### PARAMETERS ###
@@ -28,7 +28,7 @@ NET_POINTS_TO_SEARCH = 100
 #####
 
 def find_homography_225_only(gFrm, verbose = False):
-    from ATMANpy.line_funcs import get_white_lines_fast
+    from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
     allBFrm = get_white_lines_fast(gFrm, 
                                    width_of_line = COURT_LINE_WIDTH,
@@ -43,8 +43,8 @@ def find_homography_225_only(gFrm, verbose = False):
     
     if verbose: gFrm.zero().to_BGR().put(houghLines).show()
     
-    from ATMANpy.line_funcs import split_court_line_candidates, sort_court_line_candidates
-    from ATMANpy.line_funcs import merge_court_line_candidates, filter_court_line_candidates
+    from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
+    from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
     
     l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
                                                                 gFrm.cols / 3, 2 * gFrm.cols / 3) 
@@ -66,7 +66,7 @@ def find_homography_225_only(gFrm, verbose = False):
     
     if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
         # print('Fast Homography Algorithm...')
-        from ATMANpy.line_funcs import get_homography_225
+        from ATMANpy.funcs.line_funcs import get_homography_225
         H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
         return H, config
     else:
@@ -77,7 +77,7 @@ def find_homography_225_only(gFrm, verbose = False):
 
 def find_homography(gFrm, verbose = False):
     
-    from ATMANpy.line_funcs import get_white_lines_fast
+    from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
     allBFrm = get_white_lines_fast(gFrm, 
                                    width_of_line = COURT_LINE_WIDTH,
@@ -92,8 +92,8 @@ def find_homography(gFrm, verbose = False):
     
     if verbose: gFrm.zero().to_BGR().put(houghLines).show()
     
-    from ATMANpy.line_funcs import split_court_line_candidates, sort_court_line_candidates
-    from ATMANpy.line_funcs import merge_court_line_candidates, filter_court_line_candidates
+    from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
+    from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
     
     l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
                                                                 gFrm.cols / 3, 2 * gFrm.cols / 3) 
@@ -135,12 +135,12 @@ def find_courtlines(H, schemaLines):
     
 def find_netlines(gFrm, courtLines):
 
-    from ATMANpy.net_funcs import find_net_points, remove_outlier_net_points
+    from ATMANpy.funcs.net_funcs import find_net_points, remove_outlier_net_points
     relPoints = find_net_points(courtLines, gFrm, 
                                 factor = NET_FACTOR, points_to_search = NET_POINTS_TO_SEARCH)
     relPoints = remove_outlier_net_points(relPoints)
     
-    from ATMANpy.net_funcs import cubic_regress, make_net_cord_lines
+    from ATMANpy.funcs.net_funcs import cubic_regress, make_net_cord_lines
     b_0, b_1 = cubic_regress(relPoints)
     netLines = make_net_cord_lines(courtLines, b_0, b_1)
 
@@ -150,7 +150,7 @@ def find_netlines(gFrm, courtLines):
 #####################
 
     
-from ATMANpy.line_funcs import linear_regress, calculate_homography, find_brightest_neighbour
+from ATMANpy.funcs.line_funcs import linear_regress, calculate_homography, find_brightest_neighbour
 
 def update_homography(gFrm, H, config, white_pixel_threshold = WHITE_PIXEL_THRESHOLD,
                       points_on_line = 100, acceptable_failure_rate = 0.5,

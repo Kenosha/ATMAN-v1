@@ -8,7 +8,7 @@ Created on Fri Mar 11 17:30:35 2022
 import numpy as np
 
 from dataclasses import dataclass
-from ATMANpy.type_funcs import typecheck, pointcheck
+from ATMANpy.funcs.type_funcs import typecheck, pointcheck
 from typing import Optional
 
 @dataclass(frozen = True)

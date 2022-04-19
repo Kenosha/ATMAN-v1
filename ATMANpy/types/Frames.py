@@ -10,13 +10,13 @@ import cv2 as cv
 import numpy as np
 from dataclasses import dataclass
 
-from ATMANpy.type_funcs import typecheck, arraycheck
-from ATMANpy.cv_funcs import show, get_frame    
-from ATMANpy.Points import Point
-from ATMANpy.Lines import Line, Lines, Region
-from ATMANpy.Contours import Contour
+from ATMANpy.funcs.type_funcs import typecheck, arraycheck
+from ATMANpy.funcs.cv_funcs import show, get_frame    
+from ATMANpy.types.Points import Point
+from ATMANpy.types.Lines import Line, Lines, Region
+from ATMANpy.types.Contours import Contour
 
-from ATMANpy.PutDispatcher import put
+from ATMANpy.types.PutDispatcher import put
 
 
 class FrameIterator:

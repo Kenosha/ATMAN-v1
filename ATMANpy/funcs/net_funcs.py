@@ -5,7 +5,7 @@ Created on Mon Mar 21 14:12:58 2022
 @author: gianl
 """
 
-from ATMANpy.Lines import Line, Lines
+from ATMANpy.types.Lines import Line, Lines
 
 def get_search_distance(courtLines, factor = 0.9):
     ### SEARCH HEIGHT

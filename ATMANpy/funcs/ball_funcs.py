@@ -9,8 +9,8 @@ import warnings
 import cv2 as cv
 import numpy as np
 
-from ATMANpy.Frames import Frame, BoolFrame, GreyFrame
-from ATMANpy.Contours import Contour
+from ATMANpy.types.Frames import Frame, BoolFrame, GreyFrame
+from ATMANpy.types.Contours import Contour
 
 ####### color orientation versus spatial orientation of ball candidate ellipse #####
 
@@ -130,7 +130,7 @@ def find_alpha_and_std_and_semiaxes(cnt, gFrm, maskFrm):
     else:
         cnt_large = sorted([Contour(c) for c in cnts_large], key = lambda c: c.area())[-1] #take largest
     
-    from ATMANpy.ball_funcs import get_ellipse, get_ellipse_mask, get_sobel_grads, get_normal_grads, calculate_alpha
+    from ATMANpy.funcs.ball_funcs import get_ellipse, get_ellipse_mask, get_sobel_grads, get_normal_grads, calculate_alpha
     
     centerCoords, semiAxes, theta = get_ellipse(cnt_large)
     ellipseMask = get_ellipse_mask(foreBlob_large, centerCoords, semiAxes, theta)

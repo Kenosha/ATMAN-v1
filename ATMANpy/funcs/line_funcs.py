@@ -8,9 +8,9 @@ Created on Wed Mar 16 16:58:08 2022
 import numpy as np
 import cv2 as cv
 
-from ATMANpy.Points import Point, SafePoint
-from ATMANpy.Lines import Line, Lines, CourtLines
-from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
+from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Lines import Line, Lines, CourtLines
+from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
 
 
 ############ DETECTING WHITE LINES #############
