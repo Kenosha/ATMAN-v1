@@ -40,7 +40,7 @@ with open(svmPath, 'rb') as f:
 # clf.predict([[1] * 8]) ## test if it works
 
 ######## GET SCHEMA ########
-from ATMANpy.funcs.high_level_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
+from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines
 schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
 schemaRegion = schemaLines.get_court_region()
@@ -48,8 +48,8 @@ schemaFrm = fit_frame_to_lines(schemaLines)
 
 
 ###### DEFINE TRACK PROCEDURE ########
-from ATMANpy.funcs.high_level_funcs import find_homography_225_only, update_homography
-from ATMANpy.funcs.high_level_funcs import find_courtlines, find_netlines
+from ATMANpy.funcs.court_funcs import find_homography_225_only, update_homography
+from ATMANpy.funcs.court_funcs import find_courtlines, find_netlines
 
 def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines):
     if prev_H is None:
@@ -126,7 +126,7 @@ COURT_DILATION = 1.5
 NET_DILATION = 2.5
 ROI_DILATION = 1
 
-from ATMANpy.funcs.high_level_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
+from ATMANpy.funcs.court_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
 from ATMANpy.funcs.player_funcs import find_player_contour
 
 
@@ -188,7 +188,7 @@ N = 1000
 import ATMANpy.funcs.particle_funcs as pf
 
 
-chamferThresh = 50
+CHAMFER_THRESH = 50
 def decide_particle_propagation(particles, frm, 
                                 topplayer = None, botplayer = None, 
                                 closeHistories = None, modelHistories = None):
@@ -197,7 +197,7 @@ def decide_particle_propagation(particles, frm,
         chamferMask = BoolFrame(np.zeros((frm.rows, frm.cols), dtype = 'uint8'))
     else:
         chamferMask = pf.chamfer_distance(frm, topplayer, botplayer,
-                                          threshold = chamferThresh) 
+                                          threshold = CHAMFER_THRESH) 
         ### note: motion model found based on last periods frame, which is also where particles S_in come from!
     
     propagation_models, closeBools, modelBools = pf.get_motion_model(particles, chamferMask,
@@ -206,22 +206,11 @@ def decide_particle_propagation(particles, frm,
 
     return propagation_models, closeBools, modelBools
 
-def zero_weight_for_external_particles(mDict, wDict, rows = 1080, cols = 1920):
-    ### quick fix for particle dispersion issue
-    newweights = []
-    for m, w in zip(mDict[0], wDict[0]):
-        x, y = np.asarray(m[:2]).squeeze()
-        if (0 < x < cols) and (0 < y < rows):
-            newweights.append(w)
-        else:
-            newweights.append(0)
-    wDict[0] = newweights
-    return wDict
 
 def update_particles(particles, propagation_models, ballContours):
         
     mDict, wDict = pf.get_means_and_weights(particles, propagation_models, ballContours) ### means_and_weights updates last periods particles, and compares to evidence in this period!
-    wDict = zero_weight_for_external_particles(mDict, wDict)
+    wDict = pf.zero_weight_for_external_particles(mDict, wDict)
     
     S_out, I_out, J_out = pf.resample(mDict, wDict)
     

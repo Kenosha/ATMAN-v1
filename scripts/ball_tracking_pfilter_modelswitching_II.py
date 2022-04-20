@@ -40,7 +40,7 @@ with open(svmPath, 'rb') as f:
 # clf.predict([[1] * 8]) ## test if it works
 
 ######## GET SCHEMA ########
-from ATMANpy.funcs.high_level_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
+from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines
 schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
 schemaRegion = schemaLines.get_court_region()
@@ -48,8 +48,8 @@ schemaFrm = fit_frame_to_lines(schemaLines)
 
 
 ###### DEFINE TRACK PROCEDURE ########
-from ATMANpy.funcs.high_level_funcs import find_homography_225_only, update_homography
-from ATMANpy.funcs.high_level_funcs import find_courtlines, find_netlines
+from ATMANpy.funcs.court_funcs import find_homography_225_only, update_homography
+from ATMANpy.funcs.court_funcs import find_courtlines, find_netlines
 
 def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines):
     if prev_H is None:
@@ -126,7 +126,7 @@ COURT_DILATION = 1.5
 NET_DILATION = 2.5
 ROI_DILATION = 1
 
-from ATMANpy.funcs.high_level_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
+from ATMANpy.funcs.court_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
 from ATMANpy.funcs.player_funcs import find_player_contour
 
 

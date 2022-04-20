@@ -249,6 +249,19 @@ def resample(mDict, wDict):
     
     return sampleList, motherList, contourList
 
+
+def zero_weight_for_external_particles(mDict, wDict, rows = 1080, cols = 1920):
+    ### quick fix for particle dispersion issue
+    newweights = []
+    for m, w in zip(mDict[0], wDict[0]):
+        x, y = np.asarray(m[:2]).squeeze()
+        if (0 < x < cols) and (0 < y < rows):
+            newweights.append(w)
+        else:
+            newweights.append(0)
+    wDict[0] = newweights
+    return wDict
+
 def init_or_append_array(inArr, addList, dtype = 'bool'):
     if inArr is None:
         return np.array([addList], dtype = dtype)

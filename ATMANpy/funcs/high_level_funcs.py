@@ -1,216 +1,219 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 25 16:57:49 2022
+Created on Wed Apr 20 17:15:55 2022
 
 @author: gianl
 """
 
-import numpy as np
 
+import warnings
+warnings.filterwarnings("error", category=RuntimeWarning)
+
+import ATMANpy.funcs.util_funcs as atu
 from ATMANpy.types.Points import Point, SafePoint
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
-from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
+from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
+from ATMANpy.types.Contours import Contour
 
+import cv2 as cv
+import pandas as pd
+import numpy as np
 
-### PARAMETERS ###
-WHITE_PIXEL_THRESHOLD = 150 #this depends heavily on brightness of picture... lines are white, but they might not appear at 255 intensity.
-COURT_LINE_WIDTH = 8 ### according to own rough calcs at 1920 x 1080, and also according to vinyes (2018), court line width is equal to 5 pixels
-INTENSITY_DIFFERENCE_THRESHOLD = 30
+######## GET SCHEMA ########
+from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
+from ATMANpy.funcs.line_funcs import fit_frame_to_lines
+schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
+schemaRegion = schemaLines.get_court_region()
+schemaFrm = fit_frame_to_lines(schemaLines)
 
-MERGE_THRESHOLD = 2 * COURT_LINE_WIDTH 
-MARGIN_TO_CUT_HORIZONTAL = 40
+###### DEFINE TRACK PROCEDURE ########
+from ATMANpy.funcs.court_funcs import find_homography_225_only, update_homography
+from ATMANpy.funcs.court_funcs import find_courtlines, find_netlines
 
-SCHEMA_SIZE = 4 
-SCHEMA_MARGIN = 150
+VIDEO_ID = 'pqxAmUWIoKc'
 
-NET_FACTOR = 0.9
-NET_POINTS_TO_SEARCH = 100
-#####
-
-def find_homography_225_only(gFrm, verbose = False):
-    from ATMANpy.funcs.line_funcs import get_white_lines_fast
-    
-    allBFrm = get_white_lines_fast(gFrm, 
-                                   width_of_line = COURT_LINE_WIDTH,
-                                   int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
-                                   white_thresh = WHITE_PIXEL_THRESHOLD)
-    
-    houghLines = allBFrm.prob_hough(rho = 3, theta = np.pi/180, min_votes = 500, 
-                                    minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
-    
-    if len(houghLines) < 9:
-        return None
-    
-    if verbose: gFrm.zero().to_BGR().put(houghLines).show()
-    
-    from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
-    from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
-    
-    l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
-                                                                gFrm.cols / 3, 2 * gFrm.cols / 3) 
-                      
-    if len(l_v_Lines) < 2 or len(r_v_Lines) < 2:
-        return None
-    
-    l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
-    
-    l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                threshold = MERGE_THRESHOLD)   
-    
-    l_v_Lines, r_v_Lines, h_Lines = filter_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                 margin = MARGIN_TO_CUT_HORIZONTAL)  
-    if verbose: 
-        gFrm.zero().to_BGR().put(r_v_Lines).show()
-        gFrm.zero().to_BGR().put(l_v_Lines).show()
-        gFrm.zero().to_BGR().put(h_Lines).show()
-    
-    if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
-        # print('Fast Homography Algorithm...')
-        from ATMANpy.funcs.line_funcs import get_homography_225
-        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
-        return H, config
+def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines):
+    if prev_H is None:
+        res = find_homography_225_only(gFrm)
+        outFlag = 'Found'
     else:
-        return None
+        # print('Courtlines found, updating homography...')
+        res = update_homography(gFrm, prev_H, prev_config)
+        outFlag = 'Tracked'
+        
+    if not res is None:
+        H, config = res
+        courtLines = find_courtlines(H, schemaLines)
+        netLines = find_netlines(gFrm, courtLines)       
     
-    
-
-
-def find_homography(gFrm, verbose = False):
-    
-    from ATMANpy.funcs.line_funcs import get_white_lines_fast
-    
-    allBFrm = get_white_lines_fast(gFrm, 
-                                   width_of_line = COURT_LINE_WIDTH,
-                                   int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
-                                   white_thresh = WHITE_PIXEL_THRESHOLD)
-    
-    houghLines = allBFrm.prob_hough(rho = 3, theta = np.pi/180, min_votes = 500, 
-                                    minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
-    
-    if len(houghLines) < 4:
-        return None
-    
-    if verbose: gFrm.zero().to_BGR().put(houghLines).show()
-    
-    from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
-    from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
-    
-    l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
-                                                                gFrm.cols / 3, 2 * gFrm.cols / 3) 
-                      
-    if len(l_v_Lines) == 0 and len(r_v_Lines) == 0:
-        return None
-    
-    l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
-    
-    l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                threshold = MERGE_THRESHOLD)   
-    
-    l_v_Lines, r_v_Lines, h_Lines = filter_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                 margin = MARGIN_TO_CUT_HORIZONTAL)  
-     
-    if verbose: 
-        gFrm.zero().to_BGR().put(r_v_Lines).show()
-        gFrm.zero().to_BGR().put(l_v_Lines).show()
-        gFrm.zero().to_BGR().put(h_Lines).show()
-    
-    # from ATMANpy.line_funcs import fit_frame_to_lines
-    # courtFrm = fit_frame_to_lines(schemaLines)
-    if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
-        print('Fast Homography Algorithm...')
-        from ATMANpy.line_funcs import get_homography_225
-        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
-
+        # outFrm = gFrm.to_BGR().put(courtLines, thickness = 3)
+        # outFrm = outFrm.put(netLines, color = (255, 0, 0), thickness = 3)
     else:
-        print('General Homography Algorithm...')
-        from ATMANpy.line_funcs import get_homography 
-        v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
-        H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
-
-    return H, config
-
-def find_courtlines(H, schemaLines):
-    courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
-    return courtLines
-    
-def find_netlines(gFrm, courtLines):
-
-    from ATMANpy.funcs.net_funcs import find_net_points, remove_outlier_net_points
-    relPoints = find_net_points(courtLines, gFrm, 
-                                factor = NET_FACTOR, points_to_search = NET_POINTS_TO_SEARCH)
-    relPoints = remove_outlier_net_points(relPoints)
-    
-    from ATMANpy.funcs.net_funcs import cubic_regress, make_net_cord_lines
-    b_0, b_1 = cubic_regress(relPoints)
-    netLines = make_net_cord_lines(courtLines, b_0, b_1)
-
-    return netLines
-
-#####################
-#####################
-
-    
-from ATMANpy.funcs.line_funcs import linear_regress, calculate_homography, find_brightest_neighbour
-
-def update_homography(gFrm, H, config, white_pixel_threshold = WHITE_PIXEL_THRESHOLD,
-                      points_on_line = 100, acceptable_failure_rate = 0.5,
-                      verbose = False):
-    """
-    The 'Court Tracking' step in Vinyes (2018).
-    Idea: Using the best homography so far, and the best configuration that produced it,
-    we get the four projected court lines that correspond to the config, 
-    then, for each of these court lines,
-        we try to track them by finding the brightest direct neighbour pixels
-            (if we find too few bright neighbours, tracking fails!)
-        and construct a least squares new line.
-    Then intersect these four new lines, get the four updated corner points,
-    and recalculate the homography using the correspondence to the four schema config points.
-    """
-    failure_threshold = acceptable_failure_rate * points_on_line
-    
-    schemaRegion = Region.from_points(*config)
-    courtRegion = schemaRegion.transform('apply_homography', H).transform('round_points')
-
-    newLines = []
-    for aLn in courtRegion:
+        outFlag = 'Not Found'
+        courtLines, netLines = None, None
+        H, config = None, None
         
-        coordList = []
-        lPts = aLn.subdivide(points_on_line)
-        
-        for aPt in lPts:
-            maxPt, maxVal = find_brightest_neighbour(gFrm, aPt)
-            if maxVal > white_pixel_threshold:
-                coordList.append(maxPt.coords)
-        
-        if len(coordList) < failure_threshold:
-            ### failure to track!!!
-            # print(f'Failed to track: {aLn.name}')
-            # gFrm.to_BGR().put(courtRegion, thickness = 2).show()
-            # print(lPts)
-            # print('Lost Tracking...')
-            return None
-        else:
-            b0, b1 = linear_regress(coordList)
-            oldPt_1, oldPt_2 = coordList[0],coordList[-1]
-            
-            newPt_1 = Point((oldPt_1[0], b0 + b1 * oldPt_1[0]))
-            newPt_2 = Point((oldPt_2[0], b0 + b1 * oldPt_2[0]))
-            
-            newLn = Line(newPt_1, newPt_2, name = aLn.name)
+    return courtLines, netLines, H, config, outFlag
 
-            newLines.append(newLn)
+
+######## READ IN AND PREPARE BURN-IN ######
+burnDict = atu.get_folder_struct('burn_in')
+
+try:
+    readPath = burnDict[VIDEO_ID]
+except KeyError:
+    print('Burn-In Data not found.')
     
-    newRegion = Region(newLines).join_corners()
+medFrm = HSVFrame.from_csv(readPath, name = 'median')
+stdFrm = HSVFrame.from_csv(readPath, name = 'std')
 
-    H = calculate_homography(config, newRegion.to_points())
+##### GET THE BURNED IN MASK ########
+NORMALIZED_DEVIATION_THRESHOLD = 4
+BURN_IN_HSV_CHANNEL_WEIGHTS = (1, 50, 1) #interested only in hue and value
+
+from ATMANpy.funcs.player_funcs import get_burn_in_mask
+from functools import partial
+match_specific_burn_in_func = partial(get_burn_in_mask, medFrm, stdFrm,
+                                      normalized_deviation_threshold = NORMALIZED_DEVIATION_THRESHOLD,
+                                      channel_weights = BURN_IN_HSV_CHANNEL_WEIGHTS) ### these are always the same!
+#######################
+
+
+########## GET REGIONS OF INTEREST ON SCHEMA ##########
+
+WIDTH_FACTOR = 2 ### how much of the doubles alley width does a player maximally next to court
+DEPTH_FACTOR = 0.2 ### how much of side length does a player maximally stand behind baseline
+ADD_DEPTH_FACTOR = 1.25 ### top side depth adjustment - player figure is tall, so looks to be outside of ROI.
+# we could adjust this with the camera matrix, but let's do something eyeballed here, for the moment.
+
+from ATMANpy.funcs.player_funcs import get_initial_ROIs
+ROI_lower, ROI_upper = get_initial_ROIs(schemaLines,
+                                         width_factor = WIDTH_FACTOR, 
+                                         depth_factor = DEPTH_FACTOR, 
+                                         add_depth_factor_top = ADD_DEPTH_FACTOR)
+
+def get_projected_ROIs(ROI_lower, ROI_upper, H):
+    projROI_lower = ROI_lower.transform('apply_homography', H).transform('round_points')
+    projROI_upper = ROI_upper.transform('apply_homography', H).transform('round_points')
+    # cFrm.put(projROI_upper, color = (0, 0, 255), thickness = 2).put(projROI_lower, color = (0, 255, 0), thickness = 2).show()
+    return projROI_lower, projROI_upper
+
+schema_specific_roi_projection_func = partial(get_projected_ROIs, ROI_lower, ROI_upper)
+
+
+#### PLAYER DETECTION ####
+verbose = False
+COURT_DILATION = 1.5
+NET_DILATION = 2.5
+ROI_DILATION = 1
+
+from ATMANpy.funcs.court_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
+from ATMANpy.funcs.player_funcs import find_player_contour
+
+
+def find_player(frame, courtLines, netLines, H, roiMask = None, verbose = False):
     
-    return H, config
+    ### get the burned in mask for this specific homography
+    burn_foreMask = match_specific_burn_in_func(frame, H,
+                                    normalized_deviation_threshold = NORMALIZED_DEVIATION_THRESHOLD, 
+                                    channel_weights = BURN_IN_HSV_CHANNEL_WEIGHTS, 
+                                    verbose = verbose)
+    
+    playerRegion = find_player_contour(frame, burn_foreMask, roiMask)
+    
+    return playerRegion
 
 
 
+#%%### BALL DETECTION ####
+
+#### READ IN THE BALL TRACKING SVM ######
+import os
+ballDict = atu.get_folder_struct('ball_svm')
+fitPath = os.path.join(ballDict['main'], VIDEO_ID, 'fitted_svms')
+svm_name = 'svm_dict_2022-04-13'
+
+svmPath = os.path.join(fitPath, svm_name + '.pickle')
+
+import pickle
+
+with open(svmPath, 'rb') as f:
+    svmDict = pickle.load(f)
 
 
+### DEFINE BALL CANDIDATE FINDER ###
+MAX_NUMBER_OF_CONTOURS = 40 # if there are too many contours, likely the camera was zooming or panning.
+                            # this causes many call candidates (due to frame differencing).
+                            # these spurious candidates we don't want in our training data
+                            # also, these frames take ages to load due to labelling.
+
+from ATMANpy.funcs.ball_funcs import get_motion_mask_from_frames, find_ball_candidate_mask, make_feature_frame
+
+def find_ball_contours(gFrm, diffFrames, topplayerRegion, botplayerRegion,
+                       svmDict = svmDict, cFrm = None, hFrm = None):
+    
+    clf, features, mean, std = svmDict['svm'], svmDict['features'], svmDict['mean'], svmDict['std']
+    
+    motMask = get_motion_mask_from_frames(gFrm, diffFrames)
+    intMask = find_ball_candidate_mask(cFrm, motMask, topplayerRegion, botplayerRegion)
+    
+    cnts, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    cnts = [Contour(c) for c in cnts if len(c) > 2] ### need at least three points for a contour
+    
+    if not 0 < len(cnts) < MAX_NUMBER_OF_CONTOURS:
+        return []
+        
+    cntFrm = make_feature_frame(cnts, hFrm, gFrm, intMask).dropna()
+    
+    if len(cntFrm) == 0:
+        return []
+    
+    cntFrm = (cntFrm - mean) / std
+
+    cntFrm['isBall'] = clf.predict(cntFrm[features].values)
+    
+    ballIdx = list(cntFrm[cntFrm.isBall == 1].index)
+    
+    return [c for i, c in enumerate(cnts) if i in ballIdx]
 
 
+#### PARTICLE FILTER ######
+N = 1000
+
+import ATMANpy.funcs.particle_funcs as pf
+
+def initialize_particles(gFrm, courtLines, N = 1000, fps = 25):
+    return pf.initialize_particles(gFrm, courtLines, N = N, fps = fps)
+    
+
+CHAMFER_THRESH = 50
+def decide_particle_propagation(particles, frm, 
+                                topplayer = None, botplayer = None, 
+                                closeHistories = None, modelHistories = None):
+    
+    if topplayer is None or botplayer is None:
+        chamferMask = BoolFrame(np.zeros((frm.rows, frm.cols), dtype = 'uint8'))
+    else:
+        chamferMask = pf.chamfer_distance(frm, topplayer, botplayer,
+                                          threshold = CHAMFER_THRESH) 
+        ### note: motion model found based on last periods frame, which is also where particles S_in come from!
+    
+    propagation_models, closeBools, modelBools = pf.get_motion_model(particles, chamferMask,
+                                                     closeHistories = closeHistories,
+                                                     modelHistories = modelHistories)    
+
+    return propagation_models, closeBools, modelBools
+
+
+def update_particles(particles, propagation_models, ballContours):
+        
+    mDict, wDict = pf.get_means_and_weights(particles, propagation_models, ballContours) ### means_and_weights updates last periods particles, and compares to evidence in this period!
+    wDict = pf.zero_weight_for_external_particles(mDict, wDict)
+    
+    S_out, I_out, J_out = pf.resample(mDict, wDict)
+    
+    # print(f'Evidence Based Filtering Rate: {round(J_out.sum() / len(J_out), 3)}')
+
+    return S_out, I_out
 
 
