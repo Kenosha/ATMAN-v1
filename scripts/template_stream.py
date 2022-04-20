@@ -210,6 +210,7 @@ if __name__ == '__main__':
         latestFrame = BGRFrame(rawArr)    
         frmCache.append(latestFrame)
         if len(frmCache) < 17:
+            frmNum, rawArr = gen.send(None)
             continue
         if len(frmCache) > 17:
             print(f'Cache FUBAR, {len(frmCache)} items') ### this happens if the cache drop at the end fails

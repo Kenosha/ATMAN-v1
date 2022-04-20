@@ -80,10 +80,11 @@ def video_stream(cap, start_frame = None, stop_frame = None, ms_between_frames =
         frame = yield frmNum, frame # take in frame, possibly altered, to show
         # print(frame)
         
-        cv.imshow('frame', frame)
-        if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
-            cv.destroyAllWindows()  
-            yield None
+        if frame is not None:
+            cv.imshow('frame', frame)
+            if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+                cv.destroyAllWindows()  
+                yield None
     
     else:
         cv.destroyAllWindows()
