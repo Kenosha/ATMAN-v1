@@ -180,27 +180,30 @@ def find_ball_contours(gFrm, diffFrames, topplayerRegion, botplayerRegion,
 #### PARTICLE FILTER ######
 N = 1000
 
-import ATMANpy.funcs.particle_funcs as pf
+import ATMANpy.funcs.particle_funcs_vectorized as pf
 
 def initialize_particles(gFrm, courtLines, N = 1000, fps = 25):
     return pf.initialize_particles(gFrm, courtLines, N = N, fps = fps)
     
-
-CHAMFER_THRESH = 50
 def decide_particle_propagation(particles, frm, 
                                 topplayer = None, botplayer = None, 
-                                closeHistories = None, modelHistories = None):
+                                closeHistories = None, modelHistories = None,
+                                chamfer_threshold = None,
+                                normal_propagation = None, close_propagation = None, switch_probability = None):
     
     if topplayer is None or botplayer is None:
         chamferMask = BoolFrame(np.zeros((frm.rows, frm.cols), dtype = 'uint8'))
     else:
         chamferMask = pf.chamfer_distance(frm, topplayer, botplayer,
-                                          threshold = CHAMFER_THRESH) 
+                                          threshold = chamfer_threshold) 
         ### note: motion model found based on last periods frame, which is also where particles S_in come from!
     
     propagation_models, closeBools, modelBools = pf.get_motion_model(particles, chamferMask,
                                                      closeHistories = closeHistories,
-                                                     modelHistories = modelHistories)    
+                                                     modelHistories = modelHistories,
+                                                     normal_propagation = normal_propagation, 
+                                                     close_propagation = close_propagation, 
+                                                     switch_probability = switch_probability)    
 
     return propagation_models, closeBools, modelBools
 
@@ -208,7 +211,6 @@ def decide_particle_propagation(particles, frm,
 def update_particles(particles, propagation_models, ballContours):
         
     mDict, wDict = pf.get_means_and_weights(particles, propagation_models, ballContours) ### means_and_weights updates last periods particles, and compares to evidence in this period!
-    wDict = pf.zero_weight_for_external_particles(mDict, wDict)
     
     S_out, I_out, J_out = pf.resample(mDict, wDict)
     

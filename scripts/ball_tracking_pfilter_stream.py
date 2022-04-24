@@ -185,7 +185,7 @@ def find_ball_contours(gFrm, diffFrames, svmDict, topplayerRegion, botplayerRegi
 
 N = 1000
 
-import ATMANpy.funcs.particle_funcs as pf
+import ATMANpy.funcs.particle_funcs_vectorized as pf
 
 
 CHAMFER_THRESH = 50
@@ -210,7 +210,6 @@ def decide_particle_propagation(particles, frm,
 def update_particles(particles, propagation_models, ballContours):
         
     mDict, wDict = pf.get_means_and_weights(particles, propagation_models, ballContours) ### means_and_weights updates last periods particles, and compares to evidence in this period!
-    wDict = pf.zero_weight_for_external_particles(mDict, wDict)
     
     S_out, I_out, J_out = pf.resample(mDict, wDict)
     
@@ -222,7 +221,7 @@ def update_particles(particles, propagation_models, ballContours):
 
 #############################
 START_FRAME = 11830
-STOP_FRAME = 12000
+STOP_FRAME = 11930
 
 
 H = None
@@ -251,6 +250,7 @@ while True:
     ### without having to re-generate the frames from the video capture
     frmCache.append(latestFrame)
     if len(frmCache) < 17:
+        frmNum, rawArr = gen.send(None)
         continue
     if len(frmCache) > 17:
         print(f'Cache FUBAR, {len(frmCache)} items') ### this happens if the cache drop at the end fails
@@ -292,7 +292,7 @@ while True:
                                 topplayer = topplayerRegion, botplayer = botplayerRegion, 
                                 closeHistories = closeHistories, modelHistories = modelHistories)
         # c) ... display particle propagation
-        print(modelBools.sum())
+        # print(modelBools.sum())
         # primPts = pf.particles_to_points(particles[modelBools], particles_to_produce = 100)
         # normPts = pf.particles_to_points(particles[~modelBools], particles_to_produce = 100)
 
@@ -313,13 +313,16 @@ while True:
         idxHistories, closeHistories, modelHistories = pf.update_histories(idxHistories, closeHistories, modelHistories, 
                                                             particleIdxs, closeBools, modelBools)
         
-        pPts = pf.particles_to_points(particles, particles_to_produce = 100)
+        # pPts = pf.particles_to_points(particles, particles_to_produce = 100)
+        mean, std = pf.particles_to_area(particles, particles_to_produce = N)
+        pPt, radius = Point(mean), round((std[0] ** 2 + std[1] ** 2) ** 0.5)
         
         sendFrm = cFrm.put(topplayerRegion, thickness = 2, color = (0, 0, 255))
         sendFrm = sendFrm.put(botplayerRegion, thickness = 2, color = (0, 0, 255))
         sendFrm = sendFrm.put(ballContours, thickness = 2, color = (255, 0, 0))
-        sendFrm = sendFrm.put(pPts, thickness = 1, color = (0, 255, 0))
-        
+        sendFrm = sendFrm.put(pPt, radius = radius, thickness = 2, color = (0, 255, 0))
+        # sendFrm = sendFrm.put(pPts, thickness = 1, color = (0, 255, 0))
+
         
     elif trackFlag == 'Tracked':
         ### If the court was tracked, we don't change the projected ROI, 
@@ -334,7 +337,7 @@ while True:
         propagation_models, closeBools, modelBools = decide_particle_propagation(particles, gFrm_before, 
                                 topplayer = topplayerRegion, botplayer = botplayerRegion, 
                                 closeHistories = closeHistories, modelHistories = modelHistories)
-        print(modelBools.sum())
+        # print(modelBools.sum())
         # primPts = pf.particles_to_points(particles[modelBools], particles_to_produce = 100)
         # normPts = pf.particles_to_points(particles[~modelBools], particles_to_produce = 100)
 
@@ -351,13 +354,15 @@ while True:
         idxHistories, closeHistories, modelHistories = pf.update_histories(idxHistories, closeHistories, modelHistories, 
                                                             particleIdxs, closeBools, modelBools)
         
-        pPts = pf.particles_to_points(particles, particles_to_produce = 100)
+        # pPts = pf.particles_to_points(particles, particles_to_produce = 100)
+        mean, std = pf.particles_to_area(particles, particles_to_produce = N)
+        pPt, radius = Point(mean), round((std[0] ** 2 + std[1] ** 2) ** 0.5)
         
         sendFrm = cFrm.put(topplayerRegion, thickness = 2, color = (0, 0, 255))
         sendFrm = sendFrm.put(botplayerRegion, thickness = 2, color = (0, 0, 255))
         sendFrm = sendFrm.put(ballContours, thickness = 2, color = (255, 0, 0))
-        sendFrm = sendFrm.put(pPts, thickness = 1, color = (0, 255, 0))
-
+        sendFrm = sendFrm.put(pPt, radius = radius, thickness = 2, color = (0, 255, 0))
+        # sendFrm = sendFrm.put(pPts, thickness = 1, color = (0, 255, 0))
     
     sendArr = sendFrm.array  
     try:
