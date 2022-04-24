@@ -2,3 +2,15 @@
 - Find 3D camera matrix using net post height!
 - Shadow Removal in player tracking (remember that one paper (dang??), they did it!)
 - Player Region prior
+
+- PARTICLE FILTER
+	- speed up particle update cycle
+	- test: has out of bounds been fixed
+	- what is the issue in ball_tracking_simulate at the start, when particles go to frame left?
+		-> only happens in thrust-reversal model
+	- test: mixed prime and primeprime model switching: for fixing the issue above maybe?
+	- implement kitigawa smoothing as per yan xmas kittler
+
+- multiprocess streaming -> we can do those chunks in parallel which have continuous line detection
+	(found or tracked). Once no lines are detected for a few frames, there is a structural break!
+	

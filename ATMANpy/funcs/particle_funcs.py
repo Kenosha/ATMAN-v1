@@ -2,7 +2,7 @@
 """
 Created on Sat Apr 16 16:55:01 2022
 
-Faster, vectorized versions of the particle filter in ball_tracking_pfilter_prototype
+Partially vectorized versions of the particle filter in ball_tracking_pfilter_prototype
 
 @author: gianl
 """
@@ -18,15 +18,15 @@ from ATMANpy.types.Points import Point
 
 # the normal movement model
 A = np.matrix([[1, 0, 1, 0], 
-               [0, 1, 0, 1],
-               [0, 0, 1, 0],
-               [0, 0, 0, 1]])
+                [0, 1, 0, 1],
+                [0, 0, 1, 0],
+                [0, 0, 0, 1]])
 
 # the close-to-player movement model
 A_prime = np.matrix([[1, 0, 0, 0],
-                     [0, 1, 0, 0],
-                     [0, 0, 1, 0],
-                     [0, 0, 0, 1]]) 
+                      [0, 1, 0, 0],
+                      [0, 0, 1, 0],
+                      [0, 0, 0, 1]]) 
 
 # the close-to-player movement model with reversed thrust
 A_primeprime = np.matrix([[1, 0, 0, 0],
@@ -36,7 +36,7 @@ A_primeprime = np.matrix([[1, 0, 0, 0],
 
 # the matrix that turns true state x into obversation z (which is only a location!)
 H = np.matrix([[1, 0, 0, 0],
-               [0, 1, 0, 0]])
+                [0, 1, 0, 0]])
 
 PROCESS_VARIANCE = 100
 OBSERVATION_VARIANCE = 100
@@ -60,6 +60,10 @@ denom = 2 * np.pi * np.linalg.det(weight_cov) ** 0.5
 
 K = Q * H.T * weight_cov_inv
 C = (np.matlib.identity(4) - K * H) * Q
+
+
+#### CHAMFER ###
+CHAMFER_THRESH = 50
 
 
 ########## FUNCTIONS ###########
@@ -131,7 +135,12 @@ def compare_histories(closeArr, modelArr):
 
 
 # chamfer distance
-def chamfer_distance(gFrm, topplayer, botplayer, threshold = 100, verbose = False):
+def chamfer_distance(gFrm, topplayer, botplayer, 
+                     threshold = None, 
+                     verbose = False):
+    if threshold is None:
+        threshold = CHAMFER_THRESH
+    
     pMask = gFrm.within_contour(topplayer) | gFrm.within_contour(botplayer)    
     dist = cv.distanceTransform((~pMask).array, cv.DIST_L2, 3,  dstType=cv.CV_32F)
     dMask = (Frame(dist) < threshold)
@@ -140,7 +149,15 @@ def chamfer_distance(gFrm, topplayer, botplayer, threshold = 100, verbose = Fals
 
 
 ##### define markov process and observation rules #####
-def get_motion_model(S, chamferMask, closeHistories = None, modelHistories = None):
+def get_motion_model(S, chamferMask, closeHistories = None, modelHistories = None,
+                     normal_propagation = None, close_propagation = None, switch_probability = None):
+    if normal_propagation is None:
+        normal_propagation = A
+    if close_propagation is None:
+        close_propagation = A_primeprime
+    if switch_probability is None:
+        switch_probability = P_PRIME
+    
     ### Check the histories for the particle, to see if it would qualify for a model switch
     if closeHistories is None and modelHistories is None:
         propagation_rules = np.ones(len(S), dtype = 'bool') ### if we have no history,
@@ -160,20 +177,20 @@ def get_motion_model(S, chamferMask, closeHistories = None, modelHistories = Non
         if not chamferMask.eval_at(sPt): ### not close to player
             ball_is_close = False
             model_is_prime = False    
-            A_star = A    
+            A_star = normal_propagation   
         else:
             ball_is_close = True
             
             if switchBool: ### particle qualifies for a model switch! 
-                if np.random.rand() < P_PRIME:
-                    A_star = A_primeprime
+                if np.random.rand() < switch_probability:
+                    A_star = close_propagation
                     model_is_prime = True
                 else:
-                    A_star = A
+                    A_star = normal_propagation
                     model_is_prime = False
             else:          ### independent of whether the particle is close or not, 
                            ### it must be moved with the normal model A
-                A_star = A
+                A_star = normal_propagation
                 model_is_prime = False
                          
         As.append(A_star) ### do not turn this into an np.array! appending a matrix to a list
@@ -183,7 +200,9 @@ def get_motion_model(S, chamferMask, closeHistories = None, modelHistories = Non
 
     return As, closeBools, modelBools
 
-def get_means_and_weights(S, As, ballContours):
+def get_means_and_weights(S, As, ballContours,
+                          beta = beta, H = H, K = K,
+                          weight_cov_inv = weight_cov_inv, weight_denominator = denom):
     N = len(S)
     
     ### Baseline Clutter Weights
@@ -206,7 +225,7 @@ def get_means_and_weights(S, As, ballContours):
             updParts = H * A_star * s
             dist = z_coords - updParts.T
             chk = -0.5 * dist * weight_cov_inv * dist.T
-            w = np.exp(chk.item()) / denom
+            w = np.exp(chk.item()) / weight_denominator
             wList.append(w.squeeze())
             
             ### m
@@ -223,7 +242,7 @@ def normalize_weights(wDict):
     return wArr / wArr.sum()
 
 
-def resample(mDict, wDict):
+def resample(mDict, wDict, Q = Q, C = C):
     N = len(wDict[0])
     wArr = normalize_weights(wDict)
     
@@ -299,6 +318,20 @@ def particles_to_points(S, particles_to_produce = None):
     coords = to_draw[:, :2, :]
     points = [Point(round_tup(c.squeeze())) for c in coords]
     return points
+
+
+def particles_to_area(S, particles_to_produce = None):
+    def round_tup(tup):
+        return round(tup[0]), round(tup[1])
+    
+    if not particles_to_produce is None:
+        to_draw = S[:particles_to_produce]
+    else:
+        to_draw = S.copy()
+    coords = to_draw[:, :2, 0]
+    mean, std = np.mean(coords, axis = 0), np.std(coords, axis = 0)
+    
+    return tuple(mean), tuple(std)
 
 def average_particles(S, particles_to_produce = 100):
     bucket_length = len(S) // particles_to_produce
