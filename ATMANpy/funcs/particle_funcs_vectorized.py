@@ -14,6 +14,7 @@ import cv2 as cv
 
 from ATMANpy.types.Frames import Frame
 from ATMANpy.types.Points import Point
+from ATMANpy.types.Contours import Contour
 
 
 # the normal movement model
@@ -61,6 +62,8 @@ weight_denominator = 2 * np.pi * np.linalg.det(weight_cov) ** 0.5
 K = Q @ H.T @ weight_cov_inv
 C = (np.eye(4) - K @ H) @ Q
 
+R_inv = np.linalg.inv(R)
+likelihood_denominator = 2 * np.pi * np.linalg.det(R) ** 0.5
 
 #### CHAMFER ###
 CHAMFER_THRESH = 50
@@ -322,6 +325,130 @@ def update_histories(motherArr, closeArr, modelArr,  ### the histories, so far.
 
     return motherArr, closeArr, modelArr
 
+######### SMOOTHING FUNCTIONS ########
+
+def kitagawa_smooth(stream_features_original):
+    
+##### Let's go backwards.
+## -> u = T - t - 1: Essentially, we now kitagawa-smooth from recent to old.
+## this is easier since we can get the direct parent recursively.
+    
+    from copy import deepcopy
+    stream_features_smooth = deepcopy(stream_features_original)
+    
+    last_frame = sorted(list(stream_features_smooth.keys()))[-1]
+    
+    idxHistory = stream_features_smooth[last_frame]['ballIdxHistory'] ### the final history of each particle
+    
+    T, N = idxHistory.shape
+    
+    ### initialize for last period 
+    k_iT_u = np.arange(start = 0, stop = N) # -> think: u=0
+    
+    for u in range(T):
+        s_i = stream_features_smooth[last_frame - u]['ballParticles']
+        selected_s_i = s_i[k_iT_u] ### select particles. in u = 0, selected_s_i = s_i
+    
+        if not s_i is None:
+            stream_features_smooth[last_frame - u]['ballParticles'] = selected_s_i
+        
+        parentIdxs = idxHistory[u] ## the indices of direct particle parents at time u
+        
+        k_iT_u = parentIdxs[k_iT_u] ### find parents of permuted particles
+
+    return stream_features_smooth
+
+
+# start_features = stream_features_smooth[START_FRAME + 40]
+# S, ballContours = start_features['ballParticles'], start_features['ballContours']
+
+
+# start_features = stream_features_smooth[START_FRAME + 7]
+# S2, ballContours2 = start_features['ballParticles'], start_features['ballContours']
+
+
+def choose_likely_ball_contour(S, ballContours, l_threshold = 1/10,
+                               R_inv = R_inv, 
+                               likelihood_denominator = likelihood_denominator,
+                               verbose = False):
+    if ballContours == []:
+        if verbose: print('No Contours!')
+        return None
+    else:
+        m0_loc = S[:, :2]
+        z_coords = [list(cnt.center().coords) for cnt in ballContours]
+        dist = np.dstack([m0_loc - xy for xy in z_coords])
+    
+        trans_vec_mat_mulStr = 'niz,ij->njz'
+        dist_x_obs_cov_inv = np.einsum(trans_vec_mat_mulStr, dist, R_inv)
+        
+        vec_vec_mulStr = 'njz,njz->nz'
+        likelihood_exp_term = np.einsum(vec_vec_mulStr,dist_x_obs_cov_inv,dist)
+        
+        likelihoods = np.exp(-0.5 * likelihood_exp_term)
+        likelihood = likelihoods.mean(axis = 0) / likelihood_denominator
+        max_likelihood = np.max(likelihood)
+        
+        ### normalise the threshold, so the likelihood denominator cancels out.
+        normalised_threshold = l_threshold / likelihood_denominator
+        
+        if max_likelihood > normalised_threshold:
+            likeliest_idx = np.argmax(likelihood)
+            likeliest_z = ballContours[likeliest_idx]
+            if verbose: print(f'Detected a ball contour with likelihood {max_likelihood}')
+            return likeliest_z
+        else:
+            if verbose: print(f'No ball, best candidate has likelihood {max_likelihood}')
+            return None
+
+def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
+                              frames_before = None, frames_after = None):
+    if frames_before is None:
+        frames_before = 1 ### how many frames before is the contour before from?
+        # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
+            # then time before is 1
+        # if we interpolate a contour at t=3, and cnt_bef is from t=0,
+            # then time before is 3
+    if frames_after is None:
+        frames_after = 1
+        
+    tot_frames = frames_before + frames_after
+        
+    xy_before, majmin_before, theta_before = cnt_before.fit_ellipse()
+    xy_after, majmin_after, theta_after = cnt_after.fit_ellipse()
+    
+    x_before, y_before = xy_before
+    maj_before, min_before = majmin_before
+    
+    x_after, y_after = xy_after
+    maj_after, min_after = majmin_after
+    
+    def weight_avg(bef, aft):
+        ### the chiasm is sic! the further away the frame after is,
+        ### the more weight we give to the frame before, and vice versa.
+        return bef * frames_after / tot_frames + aft * frames_before / tot_frames 
+    
+    x_int, y_int = weight_avg(x_before, x_after), weight_avg(y_before, y_after)
+    maj_int, min_int = weight_avg(maj_before, maj_after), weight_avg(min_before, min_after)
+    theta_int = weight_avg(theta_before, theta_after) / 360 * 2 * np.pi
+
+    ### to go from ellipse to contour: sample points on the ellipse!
+    t = np.linspace(0, 2 * np.pi, num = interpolation_points, endpoint = False)
+    sin_t, cos_t = np.sin(t), np.cos(t) 
+    sin_theta, cos_theta = np.sin(theta_int), np.cos(theta_int) 
+    x = maj_int * cos_theta * cos_t - min_int * sin_theta * sin_t
+    y = maj_int * sin_theta * cos_t + min_int * cos_theta * sin_t
+    
+    coords = np.dstack([x + x_int, y + y_int]) ### add back center points!!
+    # coords.shape # -> (1, num_points, 2)
+    coords = coords.reshape((interpolation_points, 1, 2)) ### this way, they look like contours
+    coords = coords.astype('int32')
+
+    return Contour(coords)
+
+
+########## DRAW FUNCTIONS #########
+
 def particles_to_points(S, particles_to_produce = None):
     def round_tup(tup):
         return round(tup[0]), round(tup[1])
@@ -330,7 +457,7 @@ def particles_to_points(S, particles_to_produce = None):
         to_draw = S[:particles_to_produce]
     else:
         to_draw = S.copy()
-    coords = to_draw[:, :2, :]
+    coords = to_draw[:, :2]
     points = [Point(round_tup(c.squeeze())) for c in coords]
     return points
 
