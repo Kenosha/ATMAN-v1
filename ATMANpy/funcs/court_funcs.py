@@ -117,13 +117,14 @@ def find_homography(gFrm, verbose = False):
     # from ATMANpy.line_funcs import fit_frame_to_lines
     # courtFrm = fit_frame_to_lines(schemaLines)
     if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
-        print('Fast Homography Algorithm...')
-        from ATMANpy.line_funcs import get_homography_225
+        # print('Fast Homography Algorithm...')
+        from ATMANpy.funcs.line_funcs import get_homography_225
         H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
 
     else:
-        print('General Homography Algorithm...')
-        from ATMANpy.line_funcs import get_homography 
+        # print('General Homography Algorithm...')
+        from ATMANpy.funcs.line_funcs import get_homography 
+        print(f'Constellation: Left lines: {len(l_v_Lines)}, right lines: {len(r_v_Lines)}, horizontal lines: {len(h_Lines)}')
         v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
         H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
 

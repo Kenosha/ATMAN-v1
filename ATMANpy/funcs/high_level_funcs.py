@@ -27,14 +27,18 @@ schemaRegion = schemaLines.get_court_region()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
 ###### DEFINE TRACK PROCEDURE ########
-from ATMANpy.funcs.court_funcs import find_homography_225_only, update_homography
+from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only, update_homography
 from ATMANpy.funcs.court_funcs import find_courtlines, find_netlines
 
 VIDEO_ID = 'pqxAmUWIoKc'
 
-def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines):
+def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines,
+                     get_net = True, only_225 = True):
     if prev_H is None:
-        res = find_homography_225_only(gFrm)
+        if only_225:
+            res = find_homography_225_only(gFrm)
+        else:
+            res = find_homography(gFrm)
         outFlag = 'Found'
     else:
         # print('Courtlines found, updating homography...')
@@ -44,7 +48,8 @@ def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines):
     if not res is None:
         H, config = res
         courtLines = find_courtlines(H, schemaLines)
-        netLines = find_netlines(gFrm, courtLines)       
+        if get_net:
+            netLines = find_netlines(gFrm, courtLines)       
     
         # outFrm = gFrm.to_BGR().put(courtLines, thickness = 3)
         # outFrm = outFrm.put(netLines, color = (255, 0, 0), thickness = 3)
@@ -53,7 +58,12 @@ def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines):
         courtLines, netLines = None, None
         H, config = None, None
         
-    return courtLines, netLines, H, config, outFlag
+    if get_net:
+        return courtLines, netLines, H, config, outFlag
+    else:
+        return courtLines, H, config, outFlag
+        
+
 
 
 ######## READ IN AND PREPARE BURN-IN ######
@@ -218,4 +228,69 @@ def update_particles(particles, propagation_models, ballContours):
 
     return S_out, I_out
 
+#%% BALL POST PROCESSING ####
+
+def find_next_item(stream_features, 
+                   startNum = None,
+                   item_to_find = 'ball'):
+    if startNum is None:
+        startNum = min(stream_features.keys())
+    
+    for frmNum, featDict in stream_features.items():
+        if frmNum < startNum:
+            continue
+        
+        if featDict[item_to_find] is None:
+            continue
+        
+        return frmNum, featDict[item_to_find]
+    
+    return None, None ### if no next ball is found.
+
+
+def postprocess_ball_flight(stream_features):
+
+    ### first pass (from back to front): kitagawa smoothing
+    stream_features_smooth = pf.kitagawa_smooth(stream_features)
+    
+    ### second pass: determine if ball contour passes threshold
+    for frmNum, featDict in stream_features_smooth.items():
+        goodContour = pf.choose_likely_ball_contour(featDict['ballParticles'], 
+                                                    featDict['ballContours'],
+                                                    verbose = False)
+        featDict['ballDetected'] = True if goodContour is not None else False
+        featDict['ball'] = goodContour
+        
+    ### third pass: interpolate contours
+    currCtr = None
+    for frmNum, featDict in stream_features_smooth.items():    
+        if featDict['ball'] is not None:
+            currCtr = featDict['ball']
+            last_frame_with_ball = frmNum
+            continue
+        
+        if currCtr is None:
+            continue
+        
+        if featDict['ball'] is None:
+            ### determine the next found ball position
+            next_frame_with_ball, nextCtr = find_next_item(stream_features_smooth, 
+                                                           startNum = frmNum, 
+                                                           item_to_find = 'ball')
+            
+            if not nextCtr is None:
+                time_from_ball = frmNum - last_frame_with_ball
+                time_to_ball = next_frame_with_ball - frmNum
+            
+                itplBall = pf.interpolate_ball_features(currCtr, nextCtr, 
+                                                        frames_before = time_from_ball,
+                                                        frames_after = time_to_ball)
+        
+                featDict['ball'] = itplBall
+                featDict['ballDetected'] = False
+            else:
+                featDict['ball'] = None
+                featDict['ballDetected'] = False
+            
+    return stream_features_smooth
 
