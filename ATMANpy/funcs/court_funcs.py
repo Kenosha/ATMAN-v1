@@ -39,7 +39,7 @@ def find_homography_225_only(gFrm, verbose = False):
                                     minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
     
     if len(houghLines) < 9:
-        return None
+        return None, None
     
     if verbose: gFrm.zero().to_BGR().put(houghLines).show()
     
@@ -50,7 +50,7 @@ def find_homography_225_only(gFrm, verbose = False):
                                                                 gFrm.cols / 3, 2 * gFrm.cols / 3) 
                       
     if len(l_v_Lines) < 2 or len(r_v_Lines) < 2:
-        return None
+        return None, None
     
     l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
     
@@ -70,7 +70,7 @@ def find_homography_225_only(gFrm, verbose = False):
         H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
         return H, config
     else:
-        return None
+        return None, None
     
     
 
@@ -88,7 +88,7 @@ def find_homography(gFrm, verbose = False):
                                     minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
     
     if len(houghLines) < 4:
-        return None
+        return None, None
     
     if verbose: gFrm.zero().to_BGR().put(houghLines).show()
     
@@ -99,7 +99,7 @@ def find_homography(gFrm, verbose = False):
                                                                 gFrm.cols / 3, 2 * gFrm.cols / 3) 
                       
     if len(l_v_Lines) == 0 and len(r_v_Lines) == 0:
-        return None
+        return None, None
     
     l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
     
@@ -189,7 +189,7 @@ def update_homography(gFrm, H, config, white_pixel_threshold = WHITE_PIXEL_THRES
             # gFrm.to_BGR().put(courtRegion, thickness = 2).show()
             # print(lPts)
             # print('Lost Tracking...')
-            return None
+            return None, None
         else:
             b0, b1 = linear_regress(coordList)
             oldPt_1, oldPt_2 = coordList[0],coordList[-1]

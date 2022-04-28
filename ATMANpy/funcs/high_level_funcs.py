@@ -36,17 +36,16 @@ def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines,
                      get_net = True, only_225 = True):
     if prev_H is None:
         if only_225:
-            res = find_homography_225_only(gFrm)
+            H, config = find_homography_225_only(gFrm)
         else:
-            res = find_homography(gFrm)
+            H, config = find_homography(gFrm)
         outFlag = 'Found'
     else:
         # print('Courtlines found, updating homography...')
-        res = update_homography(gFrm, prev_H, prev_config)
+        H, config = update_homography(gFrm, prev_H, prev_config)
         outFlag = 'Tracked'
         
-    if not res is None:
-        H, config = res
+    if not H is None:
         courtLines = find_courtlines(H, schemaLines)
         if get_net:
             netLines = find_netlines(gFrm, courtLines)       
@@ -56,7 +55,6 @@ def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines,
     else:
         outFlag = 'Not Found'
         courtLines, netLines = None, None
-        H, config = None, None
         
     if get_net:
         return courtLines, netLines, H, config, outFlag

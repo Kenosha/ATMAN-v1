@@ -302,6 +302,7 @@ def get_homography(v_Lines, h_Lines, white_BoolFrm,
     hori_combos = list(combinations(h_Lines, 2))
     
     max_score = 0
+    best_homography = None
     best_config = None
     for v1, v2 in vert_combos:
         for h1, h2 in hori_combos:
@@ -397,6 +398,7 @@ def get_homography_225(l_v_Lines, r_v_Lines, h_Lines, white_BoolFrm,
     corresponding_configs = [court_configs[c] for c in corresponding_configs]
     
     max_score = 0
+    best_homography = None
     best_config = None
     for pts_prj, pts_crt in zip(combos_to_check, corresponding_configs):
         H = calculate_homography(pts_crt, pts_prj)
