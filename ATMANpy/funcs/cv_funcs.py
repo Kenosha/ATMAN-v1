@@ -214,19 +214,26 @@ def get_stream_features(cap, start_frame, stop_frame,
     
 
 def replay(cap, stream_features, 
+           start_frame = None, stop_frame = None,
            cache_frame_offset = None,
            drawFunc = None):
     
-    from ATMANpy.types.Frames import BGRFrame
+    if cache_frame_offset is None:
+        cache_frame_offset = 0
     
-    START_FRAME = min(stream_features.keys())
-    STOP_FRAME = max(stream_features.keys())
+    if start_frame is None:
+        start_frame = min(stream_features.keys())
+        
+    if stop_frame is None:
+        stop_frame = max(stream_features.keys())
+    
+    from ATMANpy.types.Frames import BGRFrame
     
     ### init video stream ###
     from ATMANpy.funcs.cv_funcs import video_stream
     gen = video_stream(cap, 
-                       start_frame = START_FRAME - cache_frame_offset, 
-                       stop_frame = STOP_FRAME - cache_frame_offset)
+                       start_frame = start_frame - cache_frame_offset, 
+                       stop_frame = stop_frame - cache_frame_offset)
     frmNum, rawArr = next(gen) ### this is needed to "prime" the generator
     ######
     
