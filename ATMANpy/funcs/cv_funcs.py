@@ -58,7 +58,7 @@ def show_video(cap, start_frame = None, stop_frame = None, ms_between_frames = N
         else:
             break
         
-    cap.release()
+    # cap.release()
     cv.destroyAllWindows()
     
     

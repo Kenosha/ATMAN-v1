@@ -35,7 +35,7 @@ from functools import partial
 VIDEO_ID = 'pqxAmUWIoKc'
 cap = atu.get_video(VIDEO_ID)
 start_frame = 10280
-stop_frame = 20000
+stop_frame = 100000
 
 def get_features_parallel(cap, start_frame, stop_frame, verbose = True):
 
@@ -153,6 +153,9 @@ def get_redo_frames(my_features,
     return to_retry_flat
 
 def redo_features_parallel(cap, frameList, verbose = True):
+    general_homography_flagStr = 'Found (w. gen. H.)'
+    
+    totFrames = len(frameList)
     
     ### do the thorough function -> general homography finding.
     my_courtline_func = partial(track_courtlines, get_net = False, only_225 = False)    
@@ -185,7 +188,7 @@ def redo_features_parallel(cap, frameList, verbose = True):
             courtLines, H, config, trackFlag = task.get()
             line_feature_dict = {'courtLines': courtLines, 
                                  'H': H, 
-                                 'trackFlag': trackFlag}
+                                 'trackFlag': general_homography_flagStr}
             stream_features[num] = deepcopy(line_feature_dict)
             
             if verbose:
@@ -199,7 +202,6 @@ def redo_features_parallel(cap, frameList, verbose = True):
         if frmNum > stop_frame:
             break
 
-    totFrames = len(frameList)
     time_elapsed = time.time() - time_start
     minutes_elapsed = round(time_elapsed / 60, 1)
     print(f'Done with {totFrames} frames. Took {minutes_elapsed} minutes')
@@ -209,40 +211,94 @@ def redo_features_parallel(cap, frameList, verbose = True):
 
 
 redos = get_redo_frames(my_features)
-redone_features = redo_features_parallel(cap, redos)
+redone_features = redo_features_parallel(cap, redos, verbose = False)
 
-len(redos)
+#### combine the newly found courtlines
+
+combined_features = deepcopy(my_features)
+
+for frameNum, featDict in redone_features.items():
+    combined_features[frameNum] = deepcopy(featDict)
+    
+#### find contiguous passages of 'similar-enough' courtlines
+
+def find_contiguous_play_sequences(stream_features, length_threshold = 25):
+    outList = []
+    current_first_frame = None
+    for frameNum, featDict in stream_features.items():
+        tF = featDict['trackFlag']
+        if tF == 'Tracked':
+            current_last_frame = frameNum
+            continue
+        if tF in ['Found', 'Found (w. gen. H.)']:
+            if current_first_frame is None:
+                current_first_frame = frameNum
+                current_last_frame = frameNum
+            else:
+                ### here, we should maybe also check deviation from neighbours?
+                current_last_frame = frameNum
+        if tF == 'Not Found':
+            if current_first_frame is not None:
+                length_of_continuous_stretch = current_last_frame - current_first_frame
+                if length_of_continuous_stretch > length_threshold:
+                    outList.append((current_first_frame, current_last_frame))
+                current_first_frame = None
+                current_last_frame = None
+    return outList
+
+outList = find_contiguous_play_sequences(combined_features)
 
 
-for frm, featDict in redone_features.items():
-    gFrm = featDict['gFrm']
-    cLines = featDict['courtLines']
-    gFrm.to_BGR().put(cLines).show()
+#### Write List to text ####
+import pandas as pd
+outFrm = pd.DataFrame(outList, columns = ['StartFrame', 'StopFrame'])
 
+import os
+ballDict = atu.get_folder_struct('ball_event_hmm')
+savePath = os.path.join(ballDict['main'], VIDEO_ID, 'play_sequences')
 
-frmNum = 17296
+try:
+    os.mkdir(savePath)
+except FileExistsError:
+    print('   Adding to existing play_sequence data')
 
-storedFrm = redone_features[frmNum]['gFrm']
-VIDEO_ID = 'pqxAmUWIoKc'
-cap = atu.get_video(VIDEO_ID)
-gFrm = GreyFrame.from_video(cap, frmNum)  
+import datetime as dt
+timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 
-(storedFrm.array == gFrm.array).all()
+filePath = os.path.join(savePath, f'play_start_stop_{timestamp}.csv')
 
-# gFrm.show()
-# 
+outFrm.to_csv(filePath)   
 
 
     
+#### check if the re-done feature lines deviate strongly from neighbouring lines.
+
+do_replay = False
+
+def draw_lines(frmDict, featDict):
+    cFrm = frmDict['cFrm']
     
+    tF = featDict['trackFlag']
+    courtLines = featDict['courtLines']
     
+    showFrm = cFrm.put(tF, color = (0, 0, 255), size = 2, thickness = 2)
+    if courtLines is not None:
+        showFrm = showFrm.put(courtLines, color = (0, 255, 0), thickness = 2)
+
+    return showFrm
+
+
+if do_replay:
+    #### Replay the stretches of play
+    from ATMANpy.funcs.cv_funcs import replay
     
-    
-    
-    
-    
-    
-    
+    for idx, playTup in enumerate(outList):
+        start, stop = playTup
+        print(f'Sequence of Play: #{idx}. Length: {stop - start}')
+        replay(cap, combined_features, start_frame = start, stop_frame = stop,
+                drawFunc = draw_lines)
+
+
     
     
     
