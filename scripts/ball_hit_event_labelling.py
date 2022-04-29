@@ -103,6 +103,9 @@ print(f'Hits: Done {len(hits_done)} already!')
 
 ######## LABEL A PASSAGE OF PLAY #######
 
+#%% FUNCTIONS ####
+
+
 ##### TODO:
     
 ### separate record_serve and record_hit function.
@@ -116,6 +119,40 @@ print(f'Hits: Done {len(hits_done)} already!')
 
 # with hits, there is no need to record sides at all.
 # only near/far and in/out/net
+
+##### AUXILIARIES ######
+
+eventDict = {'SFR': 'Serve by Far player, Right side',
+             'SFL': 'Serve by Far player, Left side',
+             'SNR': 'Serve by Near player, Right side',
+             'SNL': 'Serve by Near player, Left side',
+             'BIF': 'Bounce Inside Far player half court',
+             'BOF': 'Bounce Outside Far player half court',
+             'BIN': 'Bounce Inside Near player half court',
+             'BON': 'Bounce Outside Near player half court',
+             'HF':  'Hit by Far player',
+             'HN':  'Hit by Near player',
+             'BIFSR': 'Bounce Inside Far player Serve area on the Right',
+             'BIFSL': 'Bounce Inside Far player Serve area on the Left',
+             'BOFS': 'Bounce Outside of Far player Serve area',
+             'BINSR': 'Bounce Inside Near player Serve area on the Right',
+             'BINSL': 'Bounce Inside Near player Serve area on the Left',
+             'BONS': 'Bounce Outside of Near player Serve area',
+             'NET': 'Bounce on NET'}
+
+def invert_binary_symbol(symbol):
+    if symbol == 'N': ### near -> far
+        return 'F'          
+    if symbol == 'F': ### far -> near
+        return 'N'
+    if symbol == 'L': ### left -> right
+        return 'R'
+    if symbol == 'R':
+        return 'L'    
+
+########################
+
+### SERVE FUNCTIONS ####
 
 def serve_toggle(keypress,
                  typeStr = None, goodStr = None, 
@@ -146,36 +183,9 @@ def serve_toggle(keypress,
     
     return typeStr, goodStr, playStr, sideStr
 
-eventDict = {'SFR': 'Serve by Far player, Right side',
-             'SFL': 'Serve by Far player, Left side',
-             'SNR': 'Serve by Near player, Right side',
-             'SNL': 'Serve by Near player, Left side',
-             'BIF': 'Bounce Inside Far player half court',
-             'BOF': 'Bounce Outside Far player half court',
-             'BIN': 'Bounce Inside Near player half court',
-             'BON': 'Bounce Outside Near player half court',
-             'HF':  'Hit by Far player',
-             'HN':  'Hit by Near player',
-             'BIFSR': 'Bounce Inside Far player Serve area on the Right',
-             'BIFSL': 'Bounce Inside Far player Serve area on the Left',
-             'BOFS': 'Bounce Outside of Far player Serve area',
-             'BINSR': 'Bounce Inside Near player Serve area on the Right',
-             'BINSL': 'Bounce Inside Near player Serve area on the Left',
-             'BONS': 'Bounce Outside of Near player Serve area',
-             'NET': 'Bounce on NET'}
-
-def invert_binary_symbol(symbol):
-    if symbol == 'N': ### near -> far
-        return 'F'          
-    if symbol == 'F': ### far -> near
-        return 'N'
-    if symbol == 'L': ### left -> right
-        return 'R'
-    if symbol == 'R':
-        return 'L'    
 
 def serve_encode(typeStr, goodStr, playStr, sideStr, 
-                 remembered_serve = None): ### this allows to feed in a value 
+                 state_variable = None): ### this allows to feed in a value 
                                            ### that makes labelling easier. 
                                            ### here, we save the first serve,
                                            ### every other subsequent event
@@ -183,7 +193,7 @@ def serve_encode(typeStr, goodStr, playStr, sideStr,
                                            ### (i.e: bounce is opposite,
                                            ### second serve is the same.)
     if typeStr == 'S':
-        if remembered_serve is None:
+        if state_variable is None:
             try:
                 event_code = typeStr + playStr + sideStr
             except:
@@ -192,11 +202,11 @@ def serve_encode(typeStr, goodStr, playStr, sideStr,
             else:
                 return event_code
         else:
-            return remembered_serve
+            return state_variable
     
     if typeStr == 'B':
         if goodStr == 'I':
-            if remembered_serve is None:
+            if state_variable is None:
                 try:
                     event_code = typeStr + goodStr + playStr + 'S' + sideStr
                 except:
@@ -205,14 +215,14 @@ def serve_encode(typeStr, goodStr, playStr, sideStr,
                 else:
                      return event_code
             else:
-                _, serveplayStr, servesideStr = remembered_serve # SFR, for instance.
+                _, serveplayStr, servesideStr = state_variable # SFR, for instance.
                 playStr = invert_binary_symbol(serveplayStr)
                 sideStr = invert_binary_symbol(servesideStr)
                 event_code = typeStr + goodStr + playStr + 'S' + sideStr
                 return event_code
         
         if goodStr == 'O':
-            if remembered_serve is None:
+            if state_variable is None:
                 try:
                     event_code = typeStr + goodStr + playStr + 'S'
                 except:
@@ -221,7 +231,7 @@ def serve_encode(typeStr, goodStr, playStr, sideStr,
                 else:
                      return event_code
             else:
-                _, serveplayStr, servesideStr = remembered_serve # SFR, for instance.
+                _, serveplayStr, servesideStr = state_variable # SFR, for instance.
                 playStr = invert_binary_symbol(serveplayStr)
                 event_code = typeStr + goodStr + playStr + 'S'
                 return event_code
@@ -239,7 +249,60 @@ def serve_record_state(event_code, current_state):
     else:
         return current_state
 
-     
+#################################
+
+
+####### HIT FUNCTIONS ###########
+
+def hit_toggle(keypress,
+               typeStr = None, goodStr = None, 
+               playStr = None, sideStr = None):
+
+    ### TOGGLE EVENT TYPE
+    if keypress == ord('1'):
+        typeStr = 'H' ### toggle serve
+    if keypress == ord('2'):
+        typeStr = 'B' ### toggle bounce
+    
+    if keypress == ord('w'):
+        playStr = 'F'
+    if keypress == ord('s'):
+        playStr = 'N'
+    
+    if keypress == ord('z'):
+        goodStr = 'I'
+    if keypress == ord('x'):
+        goodStr = 'O'
+    if keypress == ord('c'):
+        goodStr = 'N'
+    
+    return typeStr, goodStr, playStr, sideStr
+
+
+def hit_encode(typeStr, goodStr, playStr, sideStr,
+               state_variable = None):
+    
+    if typeStr == 'H':
+        try:
+            event_code = typeStr + playStr
+        except:
+            print('Please assign all necessary values for hit!')
+            return None
+        else:
+            return event_code
+
+    if typeStr == 'B':
+        if goodStr in ['I', 'O']:
+            try:
+                event_code = typeStr + goodStr + playStr
+            except:
+                 print('Please assign all necessary values for bounce!')
+                 return None
+            else:
+                 return event_code
+        if goodStr == 'N':
+            return 'NET'
+        
 def put_event_string(frame, event_code, rec_text = None):
     if event_code is not None:
         eventName = eventDict[event_code]
@@ -251,7 +314,7 @@ def put_event_string(frame, event_code, rec_text = None):
     elif 'Inside' in eventName: 
         textColor = (0, 255, 124) ### Green!
     else:
-        textColor = (150,250,255) ### Yellow!
+        textColor = (0,153,153) ### Yellow!
     
     if 'Left' in eventName:
         text_x = 30
@@ -282,7 +345,8 @@ def put_event_string(frame, event_code, rec_text = None):
                color = textColor, thickness = 3)
       
 
-def record_events(cap, start_frame = None, stop_frame = None):
+def record_events(cap, start_frame = None, stop_frame = None,
+                  rec_stateFunc = None, toggleFunc = None, encodeFunc = None):
     ### Idea: record HF and HN simultaneously, with different keys.
     ### Record only apex of hit, but can be two frames if ambiguous
     typeStr = None ### s,h,b for serve, hit and bounce resp.
@@ -350,20 +414,21 @@ def record_events(cap, start_frame = None, stop_frame = None):
                 ### deal with state variable 
                 ### (a variable we want to remember internally, 
                 ### like which side the serve was on)
-                state_variable = serve_record_state(event_code, state_variable)
+                if not rec_stateFunc is None:
+                    state_variable = rec_stateFunc(event_code, state_variable)
                     
             ### DELETE
             if keypress == 8: ### backspace key
                 recorded_event_dict.pop(frameNum, None)
              
             ### DEAL WITH TOGGLES
-            typeStr, goodStr, playStr, sideStr = serve_toggle(keypress, 
-                                                              typeStr = typeStr, 
-                                                              goodStr = goodStr, 
-                                                              playStr = playStr, 
-                                                              sideStr = sideStr)
-            event_code = serve_encode(typeStr, goodStr, playStr, sideStr,
-                                      remembered_serve = state_variable)
+            typeStr, goodStr, playStr, sideStr = toggleFunc(keypress, 
+                                                            typeStr = typeStr, 
+                                                            goodStr = goodStr, 
+                                                            playStr = playStr, 
+                                                            sideStr = sideStr)
+            event_code = encodeFunc(typeStr, goodStr, playStr, sideStr,
+                                    state_variable = state_variable)
             cap.set(cv.CAP_PROP_POS_FRAMES, frameNum) 
 
             
@@ -376,30 +441,93 @@ def record_events(cap, start_frame = None, stop_frame = None):
 
     return breakBool, recorded_event_dict 
 
+#%% MAIN EVENT LOOP #####
 
-serveList = []
-for idx, frame_range in seqFrm.iterrows():
-    
-    frame_tuple = tuple(frame_range)
-    if frame_tuple in serves_done:
-        continue
- 
-    start_frame, stop_frame = frame_tuple
-    
-    breakBool, outDict = record_events(cap, start_frame = start_frame, stop_frame = stop_frame)
-    
-    outFrm = pd.Series(outDict).reset_index()
-    outFrm.columns = ['FrameNum', 'Event']
-    outFrm['Index'] = idx
-    outFrm['StartFrame'] = start_frame
-    outFrm['StopFrame'] = stop_frame 
-    
-    serveList.append(outFrm)
-    
-    if breakBool:
-        break
+label_serves = False
+label_hits = True
 
-serveFrm = pd.concat(serveList, ignore_index = True)    
+##### SERVE EVENT LOOP #####
+
+if label_serves:
+    
+    print('Doing SERVES now....')
+    
+    serveList = []
+    for idx, frame_range in seqFrm.iterrows():
+        
+        frame_tuple = tuple(frame_range)
+        if frame_tuple in serves_done:
+            continue
+     
+        start_frame, stop_frame = frame_tuple
+        
+        breakBool, outDict = record_events(cap, 
+                                           start_frame = start_frame, 
+                                           stop_frame = stop_frame,
+                                           rec_stateFunc = serve_record_state,
+                                           toggleFunc = serve_toggle,
+                                           encodeFunc = serve_encode)
+        
+        outFrm = pd.Series(outDict).reset_index()
+        outFrm.columns = ['FrameNum', 'Event']
+        outFrm['Index'] = idx
+        outFrm['StartFrame'] = start_frame
+        outFrm['StopFrame'] = stop_frame 
+        
+        serveList.append(outFrm)
+        
+        if breakBool:
+            break
+    
+    if len(serveList) > 0:
+        serveFrm = pd.concat(serveList, ignore_index = True)    
+    else:
+        serveFrm = None
+else:
+    serveFrm = None  
+
+##### HIT EVENT LOOP #####
+  
+if label_hits:
+    
+    print('Doing HITS now....')
+    
+    hitList = []
+    for idx, frame_range in seqFrm.iterrows():
+        
+        frame_tuple = tuple(frame_range)
+        if frame_tuple in hits_done:
+            continue
+     
+        start_frame, stop_frame = frame_tuple
+        
+        breakBool, outDict = record_events(cap, 
+                                           start_frame = start_frame, 
+                                           stop_frame = stop_frame,
+                                           rec_stateFunc = None,
+                                           toggleFunc = hit_toggle,
+                                           encodeFunc = hit_encode)
+        
+        outFrm = pd.Series(outDict).reset_index()
+        outFrm.columns = ['FrameNum', 'Event']
+        outFrm['Index'] = idx
+        outFrm['StartFrame'] = start_frame
+        outFrm['StopFrame'] = stop_frame 
+        
+        hitList.append(outFrm)
+        
+        if breakBool:
+            break
+
+    if len(hitList) > 0:
+        hitFrm = pd.concat(hitList, ignore_index = True)    
+    else:
+        hitFrm = None
+else:
+    hitFrm = []
+
+
+
 
 ##### CONCATENATE AND SAVE ######0
 
@@ -408,8 +536,11 @@ timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 servePath = os.path.join(savePath, f'serve_events_{timestamp}.csv')
 hitPath = os.path.join(savePath, f'hit_events_{timestamp}.csv')
 
-if len(serveFrm) > 0:
-    serveFrm.to_csv(servePath)   
+if not serveFrm is None:
+    serveFrm.to_csv(servePath)    
+                   
+if not hitFrm is None:
+    hitFrm.to_csv(hitPath)
     
 
 ######## TEST KEYS ########
