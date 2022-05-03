@@ -112,7 +112,7 @@ print(f'Hits: Done {len(hits_done)} already!')
 # with record serve, 
     #you record first serve and subsequent bounce, and second serve and bounce
 # witrh record hit,
-    #you record all hits and bounces after
+        #you record all hits and bounces after
 
 # the reason is that event recording is much simpler then
 # -> serve bounces are just in or out or net; the serve area can be inferred.
@@ -346,7 +346,8 @@ def put_event_string(frame, event_code, rec_text = None):
       
 
 def record_events(cap, start_frame = None, stop_frame = None,
-                  rec_stateFunc = None, toggleFunc = None, encodeFunc = None):
+                  rec_stateFunc = None, toggleFunc = None, encodeFunc = None,
+                  no_event_sentinel = None):
     ### Idea: record HF and HN simultaneously, with different keys.
     ### Record only apex of hit, but can be two frames if ambiguous
     typeStr = None ### s,h,b for serve, hit and bounce resp.
@@ -436,8 +437,20 @@ def record_events(cap, start_frame = None, stop_frame = None,
         else:
             break
         
+    else: ### if the while loop ends, we record a possible no hit
+            # this is so we can get out of going through all these things twice.
+            # (bob dylan)
+            # (this is because the read-in of prior label sessions does not include
+            # empty event sets for a play sequence, and therefore plays it again.)
+        if not no_event_sentinel is None:
+            if recorded_event_dict == {}:
+                recorded_event_dict[frameNum] = no_event_sentinel
+        
     # cap.release()
     cv.destroyAllWindows()
+                        
+    
+                         
 
     return breakBool, recorded_event_dict 
 
@@ -491,7 +504,7 @@ else:
 if label_hits:
     
     print('Doing HITS now....')
-    
+     
     hitList = []
     for idx, frame_range in seqFrm.iterrows():
         
@@ -506,7 +519,8 @@ if label_hits:
                                            stop_frame = stop_frame,
                                            rec_stateFunc = None,
                                            toggleFunc = hit_toggle,
-                                           encodeFunc = hit_encode)
+                                           encodeFunc = hit_encode,
+                                           no_event_sentinel = 'NOHIT')
         
         outFrm = pd.Series(outDict).reset_index()
         outFrm.columns = ['FrameNum', 'Event']
@@ -525,8 +539,8 @@ if label_hits:
         hitFrm = None
 else:
     hitFrm = []
-
-
+                      
+             
 
 
 ##### CONCATENATE AND SAVE ######0
@@ -541,13 +555,13 @@ if not serveFrm is None:
                    
 if not hitFrm is None:
     hitFrm.to_csv(hitPath)
-    
+        
 
 ######## TEST KEYS ########
 
 # ret, img = cap.read()
 # while(1):
-#     cv.imshow('img',img)
+#     cv.ims                      how('img',img)
 #     k = cv.waitKey(33)
 #     if k==27:    # Esc key to stop
 #         break
