@@ -129,8 +129,10 @@ def random_or_next_stream(cap, ms_between_frames = None, verbose = False):
 def get_stream_features(cap, start_frame, stop_frame, 
                         cache_length = None,
                         init_feat_func = None, init_frame_func = None,
+                        cached_line_func = None,
                         court_line_func = None, court_feature_func = None,
                         draw_func = None,
+                        features_of_interest = None,
                         verbose = True):
     
     if isinstance(cap, str):
@@ -182,14 +184,25 @@ def get_stream_features(cap, start_frame, stop_frame,
         ### prepare frame objects of interest
         frmDict = init_frame_func(frmCache)
         
+        if not cached_line_func is None:
+            cached_lines = cached_line_func(frmNum)
+        else:
+            cached_lines = None
+        
         ### Get the features of interest on the frame
         if not court_line_func is None:
-            featDict = court_line_func(frmDict, featDict)
+            featDict = court_line_func(frmDict, featDict, cached_lines = cached_lines)
         
         if not court_feature_func is None:
             featDict = court_feature_func(frmDict, featDict)
             
-        streamFeatures[frmNum] = deepcopy(featDict)
+            
+        ### extract out stream features of interest
+        if features_of_interest is None:
+            streamFeatures[frmNum] = deepcopy(featDict)
+        else:
+            saveDict = {k: v for k, v in featDict.items() if k in features_of_interest}
+            streamFeatures = deepcopy(saveDict)
     
         if verbose:
             ### Send Frame Back to Generator
@@ -216,6 +229,7 @@ def get_stream_features(cap, start_frame, stop_frame,
 def replay(cap, stream_features, 
            start_frame = None, stop_frame = None,
            cache_frame_offset = None,
+           ms_between_frames = None,
            drawFunc = None):
     
     if cache_frame_offset is None:
@@ -233,7 +247,8 @@ def replay(cap, stream_features,
     from ATMANpy.funcs.cv_funcs import video_stream
     gen = video_stream(cap, 
                        start_frame = start_frame - cache_frame_offset, 
-                       stop_frame = stop_frame - cache_frame_offset)
+                       stop_frame = stop_frame - cache_frame_offset,
+                       ms_between_frames = ms_between_frames)
     frmNum, rawArr = next(gen) ### this is needed to "prime" the generator
     ######
     

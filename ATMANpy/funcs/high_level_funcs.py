@@ -62,6 +62,21 @@ def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines,
         return courtLines, H, config, outFlag
         
 
+def cached_courtlines(frameNum, homFrm, 
+                      schemaLines = schemaLines):
+    
+    try:
+        flat_H = homFrm.loc[frameNum]
+    except KeyError:
+        return None
+    else:
+        flat_H.at[8] = 1
+        H = flat_H.values.reshape((3, 3))
+    
+        courtLines = find_courtlines(H, schemaLines)
+        outFlag = 'Cached'
+            
+        return courtLines, H, outFlag
 
 
 ######## READ IN AND PREPARE BURN-IN ######
@@ -253,11 +268,15 @@ def postprocess_ball_flight(stream_features):
     
     ### second pass: determine if ball contour passes threshold
     for frmNum, featDict in stream_features_smooth.items():
-        goodContour = pf.choose_likely_ball_contour(featDict['ballParticles'], 
-                                                    featDict['ballContours'],
-                                                    verbose = False)
+        if not featDict['ballParticles'] is None:
+            goodContour = pf.choose_likely_ball_contour(featDict['ballParticles'], 
+                                                        featDict['ballContours'],
+                                                        verbose = False)
+        else:
+            goodContour = None
         featDict['ballDetected'] = True if goodContour is not None else False
         featDict['ball'] = goodContour
+        
         
     ### third pass: interpolate contours
     currCtr = None
