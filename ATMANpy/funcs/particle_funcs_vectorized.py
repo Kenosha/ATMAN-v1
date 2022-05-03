@@ -401,8 +401,51 @@ def choose_likely_ball_contour(S, ballContours, l_threshold = 1/10,
             if verbose: print(f'No ball, best candidate has likelihood {max_likelihood}')
             return None
 
+def expand_to_ellipse(myCnt):
+    ### so that we may form an ellipse from both contours,
+    ### we have to have at least five points on the contour
+    outPts = myCnt.points
+    min_x, min_y = outPts.min(axis = (0, 1))
+    max_x, max_y = outPts.max(axis = (0, 1))
+    
+    cand_points = [[max_x, max_y], 
+                   [max_x, min_y], 
+                   [min_x, max_y], 
+                   [min_x, min_y]] ### these points are guaranteed to be at edge
+    
+    while len(outPts) < 5:
+        
+        for pt in cand_points:
+            if [pt] in outPts.tolist():
+                cand_points.remove(pt)
+                continue
+            else:
+                outPts = np.vstack([outPts, [[pt]]])
+                break
+          
+        if len(cand_points) == 0:
+            break
+          
+    return Contour(outPts)
+
+
 def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
                               frames_before = None, frames_after = None):
+    
+    ###### Ensure Ellipticality ####
+    ### so that we may form an ellipse from both contours,
+    ### we have to have at least five points on the contour
+    if len(cnt_before.points) < 5:
+        ell_cnt_before = expand_to_ellipse(cnt_before)
+    else:
+        ell_cnt_before = cnt_before
+    
+    if len(cnt_after.points) < 5:
+        ell_cnt_after = expand_to_ellipse(cnt_after)
+    else:
+        ell_cnt_after = cnt_after
+    
+    #### Sourt out Frame Count for Weighting ###
     if frames_before is None:
         frames_before = 1 ### how many frames before is the contour before from?
         # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
@@ -413,16 +456,20 @@ def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
         frames_after = 1
         
     tot_frames = frames_before + frames_after
-        
-    xy_before, majmin_before, theta_before = cnt_before.fit_ellipse()
-    xy_after, majmin_after, theta_after = cnt_after.fit_ellipse()
+    #########    
+    
+    ###### Fit Ellipse Parameters #####
+    xy_before, majmin_before, theta_before = ell_cnt_before.fit_ellipse()
+    xy_after, majmin_after, theta_after = ell_cnt_after.fit_ellipse()
     
     x_before, y_before = xy_before
     maj_before, min_before = majmin_before
     
     x_after, y_after = xy_after
     maj_after, min_after = majmin_after
+    #####
     
+    ###### Weighted average of ellipse parameters #####
     def weight_avg(bef, aft):
         ### the chiasm is sic! the further away the frame after is,
         ### the more weight we give to the frame before, and vice versa.
@@ -431,7 +478,8 @@ def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
     x_int, y_int = weight_avg(x_before, x_after), weight_avg(y_before, y_after)
     maj_int, min_int = weight_avg(maj_before, maj_after), weight_avg(min_before, min_after)
     theta_int = weight_avg(theta_before, theta_after) / 360 * 2 * np.pi
-
+    ########
+    
     ### to go from ellipse to contour: sample points on the ellipse!
     t = np.linspace(0, 2 * np.pi, num = interpolation_points, endpoint = False)
     sin_t, cos_t = np.sin(t), np.cos(t) 
