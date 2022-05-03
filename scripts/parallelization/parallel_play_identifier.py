@@ -270,7 +270,17 @@ filePath = os.path.join(savePath, f'play_start_stop_{timestamp}.csv')
 outFrm.to_csv(filePath)   
 
 
-    
+#### save the homographies ####
+
+filePath = os.path.join(savePath, f'homographies_{timestamp}.csv')
+
+## this is so we don't have to re-do them once we check these play sequences again.
+homographies = {frmNum: featDict['H'] for frmNum, featDict in combined_features.items() if featDict['H'] is not None}
+homographies = {frmNum: np.ravel(homography) for frmNum, homography in homographies.items()}
+homFrm = pd.DataFrame(homographies).T
+homFrm = homFrm.drop(columns = 8)
+homFrm.to_csv(filePath)
+
 #### check if the re-done feature lines deviate strongly from neighbouring lines.
 
 do_replay = False
@@ -297,6 +307,8 @@ if do_replay:
         print(f'Sequence of Play: #{idx}. Length: {stop - start}')
         replay(cap, combined_features, start_frame = start, stop_frame = stop,
                 drawFunc = draw_lines)
+
+
 
 
     

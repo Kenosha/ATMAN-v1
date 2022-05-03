@@ -192,6 +192,12 @@ FRAME_DIFF_INDICES = [CURR_FRAME_IDX - f for f in reversed(FRAME_DIFF_LIST)] + [
 
 START_FRAME = 11750
 STOP_FRAME = 11920
+# START_FRAME = 10280 
+# STOP_FRAME = 10636 ### this start and end configuration doesn't work
+                     ### because we can not continuously track the lines 
+                     ### or find them with the only_225 algorithm... 
+                     ### when lines are lost, index histories needed for the kitagawa smoothing algorithm
+                     ### are lost, so that smoothing does not work.
 
 ################################
 
@@ -258,71 +264,13 @@ def get_stream_features(START_FRAME, STOP_FRAME, verbose = True,
 
 ##### SMOOTHING ######
 
-def find_next_item(stream_features, 
-                   startNum = None,
-                   item_to_find = 'ball'):
-    if startNum is None:
-        startNum = min(stream_features.keys())
-    
-    for frmNum, featDict in stream_features.items():
-        if frmNum < startNum:
-            continue
-        
-        if featDict[item_to_find] is None:
-            continue
-        
-        return frmNum, featDict[item_to_find]
-
-
-
-VERBOSE = True
+VERBOSE = False
 
 stream_features_original = get_stream_features(START_FRAME, STOP_FRAME,
                                N = 1000, 
                                verbose = VERBOSE)
- 
-def postprocess_ball_flight(stream_features):
 
-    ### first pass (from back to front): kitagawa smoothing
-    stream_features_smooth = pf.kitagawa_smooth(stream_features)
-    
-    ### second pass: determine if ball contour passes threshold
-    for frmNum, featDict in stream_features_smooth.items():
-        goodContour = pf.choose_likely_ball_contour(featDict['ballParticles'], 
-                                                    featDict['ballContours'],
-                                                    verbose = False)
-        featDict['ballDetected'] = True if goodContour is not None else False
-        featDict['ball'] = goodContour
-        
-    ### third pass: interpolate contours
-    currCtr = None
-    for frmNum, featDict in stream_features_smooth.items():    
-        if featDict['ball'] is not None:
-            currCtr = featDict['ball']
-            last_frame_with_ball = frmNum
-            continue
-        
-        if currCtr is None:
-            continue
-        
-        if featDict['ball'] is None:
-            ### determine the next found ball position
-            next_frame_with_ball, nextCtr = find_next_item(stream_features_smooth, 
-                                                           startNum = frmNum, 
-                                                           item_to_find = 'ball')
-            
-            time_from_ball = frmNum - last_frame_with_ball
-            time_to_ball = next_frame_with_ball - frmNum
-        
-            itplBall = pf.interpolate_ball_features(currCtr, nextCtr, 
-                                                    frames_before = time_from_ball,
-                                                    frames_after = time_to_ball)
-    
-            featDict['ball'] = itplBall
-            featDict['ballDetected'] = False
-            
-    return stream_features_smooth
-
+from ATMANpy.funcs.high_level_funcs import postprocess_ball_flight
 stream_features_smooth = postprocess_ball_flight(stream_features_original)
 
 def make_sendframe2(frmDict, featDict):
@@ -380,8 +328,8 @@ def replay(cap, stream_features, cache_frame_offset = CURR_FRAME_IDX,
     
 
 replay(cap, stream_features_original, sendFunc = make_sendframe)
-replay(cap, stream_features_smooth, sendFunc = make_sendframe2)
-        
+replay(cap, stream_features_smooth, sendFunc = make_sendframe)
+replay(cap, stream_features_smooth, sendFunc = make_sendframe2)         
 
 
 # stream_features_original[first_frame]['ballParticles']
