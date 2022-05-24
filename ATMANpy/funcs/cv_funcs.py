@@ -142,13 +142,24 @@ def get_stream_features(cap, start_frame, stop_frame,
     from copy import deepcopy
     from ATMANpy.types.Frames import BGRFrame
     
+    ### CACHING ###
     if cache_length is None:
         cache_length = 1 ### cache holds only the current frame.
-        
+    curr_frame_idx = cache_length // 2 ### the offset with which features are entered.
+                                        ## note that due to caching of past and future frames, 
+                                        ## the video generator is ahead by curr_frame_idx frames, 
+                                        ## so we adjust frmNum (which comes from the video generator) 
+                                        ## by that amount curr_frame_idx.
+    
     if start_frame is not None:
-        start_frame_with_caching = start_frame - cache_length + 1
+        start_frame_with_caching = start_frame - curr_frame_idx
     else:
         start_frame_with_caching = 0
+        
+    if stop_frame is not None:
+        stop_frame_with_caching = stop_frame + curr_frame_idx
+    else:
+        stop_frame_with_caching = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
     
     ### init outputList
     streamFeatures = {}
@@ -163,7 +174,7 @@ def get_stream_features(cap, start_frame, stop_frame,
     from ATMANpy.funcs.cv_funcs import video_stream
     gen = video_stream(cap, 
                        start_frame = start_frame_with_caching, 
-                       stop_frame = stop_frame)
+                       stop_frame = stop_frame_with_caching)
     frmNum, rawArr = next(gen) ### this is needed to "prime" the generator
     ######
     
@@ -185,7 +196,7 @@ def get_stream_features(cap, start_frame, stop_frame,
         frmDict = init_frame_func(frmCache)
         
         if not cached_line_func is None:
-            cached_lines = cached_line_func(frmNum)
+            cached_lines = cached_line_func(frmNum - curr_frame_idx)
         else:
             cached_lines = None
         
@@ -199,10 +210,10 @@ def get_stream_features(cap, start_frame, stop_frame,
             
         ### extract out stream features of interest
         if features_of_interest is None:
-            streamFeatures[frmNum] = deepcopy(featDict)
+            streamFeatures[frmNum - curr_frame_idx] = deepcopy(featDict)
         else:
             saveDict = {k: v for k, v in featDict.items() if k in features_of_interest}
-            streamFeatures = deepcopy(saveDict)
+            streamFeatures[frmNum - curr_frame_idx] = deepcopy(saveDict)
     
         if verbose:
             ### Send Frame Back to Generator
@@ -228,12 +239,8 @@ def get_stream_features(cap, start_frame, stop_frame,
 
 def replay(cap, stream_features, 
            start_frame = None, stop_frame = None,
-           cache_frame_offset = None,
            ms_between_frames = None,
            drawFunc = None):
-    
-    if cache_frame_offset is None:
-        cache_frame_offset = 0
     
     if start_frame is None:
         start_frame = min(stream_features.keys())
@@ -246,8 +253,8 @@ def replay(cap, stream_features,
     ### init video stream ###
     from ATMANpy.funcs.cv_funcs import video_stream
     gen = video_stream(cap, 
-                       start_frame = start_frame - cache_frame_offset, 
-                       stop_frame = stop_frame - cache_frame_offset,
+                       start_frame = start_frame, 
+                       stop_frame = stop_frame,
                        ms_between_frames = ms_between_frames)
     frmNum, rawArr = next(gen) ### this is needed to "prime" the generator
     ######
@@ -255,7 +262,11 @@ def replay(cap, stream_features,
     while True:
         
         cFrm = BGRFrame(rawArr)
-        featDict = stream_features[frmNum + cache_frame_offset]
+        
+        if not stream_features is None:
+            featDict = stream_features[frmNum]
+        else:
+            featDict = {}
         
         ### Send Frame Back to Generator
         if drawFunc is not None:
