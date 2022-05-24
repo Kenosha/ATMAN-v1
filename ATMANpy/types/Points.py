@@ -36,8 +36,8 @@ class Point:
     def __mul__(self, y):
         outCoords = self.coords[0] * y, self.coords[1] * y
         return Point(outCoords)
-    def __div__(self, y):
-        outCoords = self.coords[0] / y, self.coords[1] / y
+    def __floordiv__(self, y):
+        outCoords = self.coords[0] // y, self.coords[1] // y
         return Point(outCoords)
         
     ### METHODS ###

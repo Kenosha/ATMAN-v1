@@ -194,9 +194,10 @@ def get_stream_features(cap, start_frame, stop_frame,
         
         ### prepare frame objects of interest
         frmDict = init_frame_func(frmCache)
+        frmNum_on_display = frmNum - curr_frame_idx
         
         if not cached_line_func is None:
-            cached_lines = cached_line_func(frmNum - curr_frame_idx)
+            cached_lines = cached_line_func(frmNum_on_display)
         else:
             cached_lines = None
         
@@ -210,14 +211,14 @@ def get_stream_features(cap, start_frame, stop_frame,
             
         ### extract out stream features of interest
         if features_of_interest is None:
-            streamFeatures[frmNum - curr_frame_idx] = deepcopy(featDict)
+            streamFeatures[frmNum_on_display] = deepcopy(featDict)
         else:
             saveDict = {k: v for k, v in featDict.items() if k in features_of_interest}
-            streamFeatures[frmNum - curr_frame_idx] = deepcopy(saveDict)
+            streamFeatures[frmNum_on_display] = deepcopy(saveDict)
     
         if verbose:
             ### Send Frame Back to Generator
-            sendFrm = draw_func(frmDict, featDict)
+            sendFrm = draw_func(frmDict, featDict, frameNum = frmNum_on_display)
             sendArr = sendFrm.array  
         else:
             sendArr = None
