@@ -129,6 +129,9 @@ ROI_lower, ROI_upper = get_initial_ROIs(schemaLines,
                                          depth_factor = DEPTH_FACTOR, 
                                          add_depth_factor_top = ADD_DEPTH_FACTOR)
 
+def get_projected_ROI(ROI, H):
+    return ROI.transform('apply_homography', H).transform('round_points')
+
 def get_projected_ROIs(ROI_lower, ROI_upper, H):
     projROI_lower = ROI_lower.transform('apply_homography', H).transform('round_points')
     projROI_upper = ROI_upper.transform('apply_homography', H).transform('round_points')
@@ -148,6 +151,7 @@ from ATMANpy.funcs.court_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
 from ATMANpy.funcs.player_funcs import find_player_contour
 
 
+
 def find_player(frame, courtLines, netLines, H, roiMask = None, remove_shadow = True,
                 verbose = False):
     
@@ -163,6 +167,55 @@ def find_player(frame, courtLines, netLines, H, roiMask = None, remove_shadow = 
                                        shadowMask = burn_shadowMask)
     
     return playerRegion
+
+
+def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
+                        player_tracking_scale_factor = 1.2,
+                        min_bounding_height = 100,
+                        min_bounding_width = 40):
+    
+    if playerContour is None:
+        initial_projROI = get_projected_ROI(initialROI, H)
+    
+    if playerContour is None:
+        roiMask = hFrm.within_region(initial_projROI)
+    else:
+        enclReg = playerContour.enclosing_region()
+        updated_projROI = enclReg.scale_equal(player_tracking_scale_factor)
+        updated_projROI = updated_projROI.enlarge(to_min_height = min_bounding_height, to_min_width = min_bounding_width)
+        roiMask = hFrm.within_region(updated_projROI)
+        
+    return roiMask
+
+
+INITIAL_WIDTH_FACTOR = 1
+INITIAL_DEPTH_FACTOR = 1
+ADDITIONAL_DEPTH_FACTOR = 0.3
+
+from ATMANpy.funcs.player_funcs import get_service_ROIs
+initial_ROI_lower, initial_ROI_upper = get_service_ROIs(schemaLines,
+                                                        width_factor = INITIAL_WIDTH_FACTOR, 
+                                                        depth_factor = INITIAL_DEPTH_FACTOR, 
+                                                        add_depth_factor_bottom = ADDITIONAL_DEPTH_FACTOR)
+
+PLAYER_TRACKING_SCALE_FACTOR = 1.5
+BOT_MIN_BOUNDING_ROI_HEIGHT = 200 ### bounding region has to be 40 pixels wide at least...
+BOT_MIN_BOUNDING_ROI_WIDTH  = 80 ## ... and 100 pixels tall
+TOP_MIN_BOUNDING_ROI_HEIGHT = 150 ## reduce values a bit for top because player is farther away.
+TOP_MIN_BOUNDING_ROI_WIDTH  = 60
+    
+def get_adaptive_ROIs(topPlayer, botPlayer, H, hFrm):
+    top_ROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
+                                  player_tracking_scale_factor = PLAYER_TRACKING_SCALE_FACTOR,
+                                  min_bounding_height = TOP_MIN_BOUNDING_ROI_HEIGHT,
+                                  min_bounding_width = TOP_MIN_BOUNDING_ROI_WIDTH)
+    
+    bot_ROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
+                                  player_tracking_scale_factor = PLAYER_TRACKING_SCALE_FACTOR,
+                                  min_bounding_height = BOT_MIN_BOUNDING_ROI_HEIGHT,
+                                  min_bounding_width = BOT_MIN_BOUNDING_ROI_WIDTH)
+    
+    return top_ROI, bot_ROI
 
 def find_both_players(frame, courtLines, netLines, H, remove_shadow = True,
                       roiMask_top = None, roiMask_bot = None,

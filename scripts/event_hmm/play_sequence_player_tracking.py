@@ -185,10 +185,10 @@ initial_ROI_lower, initial_ROI_upper = get_service_ROIs(schemaLines,
 def get_court_features(frmDict, featDict): ### these two quantities will be used in simulations
     
     PLAYER_TRACKING_SCALE_FACTOR = 0.2
-    BOT_MIN_BOUNDING_ROI_HEIGHT = 40 ### bounding region has to be 40 pixels wide at least...
-    BOT_MIN_BOUNDING_ROI_WIDTH  = 100 ## ... and 100 pixels tall
-    TOP_MIN_BOUNDING_ROI_HEIGHT = 30 ## reduce values a bit for top because player is farther away.
-    TOP_MIN_BOUNDING_ROI_WIDTH  = 80 
+    BOT_MIN_BOUNDING_ROI_HEIGHT = 100 ### bounding region has to be 40 pixels wide at least...
+    BOT_MIN_BOUNDING_ROI_WIDTH  = 40 ## ... and 100 pixels tall
+    TOP_MIN_BOUNDING_ROI_HEIGHT = 80 ## reduce values a bit for top because player is farther away.
+    TOP_MIN_BOUNDING_ROI_WIDTH  = 30 
 
     ### handle the case if the court is not found ---> simply reset all features!
     if featDict['trackFlag'] == 'Not Found':
@@ -308,7 +308,7 @@ featList = []
 for idx, start_stop_frames in video_segments.iterrows():
     start_frame, stop_frame = start_stop_frames
     stream_features_cached = my_stream_func(cap, start_frame, stop_frame,
-                                            cached_line_func = my_cached_line_func, verbose = False)
+                                            cached_line_func = my_cached_line_func, verbose = True)
     featList.append(stream_features_cached)
     # replay(cap, stream_features_cached, drawFunc = make_sendframe)
     

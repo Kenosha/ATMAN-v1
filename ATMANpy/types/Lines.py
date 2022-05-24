@@ -588,9 +588,9 @@ class Region(Lines):
         return Region.from_points(tl, bl, tr, br)
         
     def scale(self, factor):
-        diag = self.p4 - self.p1
-        diag_scaled = diag * factor
-        shift_x, shift_y = diag_scaled.coords
+        diag = self.p4 - self.p1 ### width and the height of the region
+        diag_scaled = diag * (factor - 1) ### the width and heigth the region has to be increased or reduced by.
+        shift_x, shift_y = (diag_scaled // 2).coords ### the amount that each point has to move towards the middle.
         
         p1_new = self.p1.left(shift_x).up(shift_y)
         p2_new = self.p2.right(shift_x).up(shift_y)
@@ -599,6 +599,19 @@ class Region(Lines):
     
         return Region.from_points(p1_new, p2_new, p3_new, p4_new)
     
+    def scale_equal(self, factor):
+        ### as above, but it increases height and weight equally.
+        diag = self.p4 - self.p1 ### width and the height of the region
+        mean_diag = (diag.coords[0] + diag.coords[1]) / 2
+        scale_amount = mean_diag * (factor - 1) ### the amount that each point has to move towards the middle.
+        
+        p1_new = self.p1.left(scale_amount).up(scale_amount)
+        p2_new = self.p2.right(scale_amount).up(scale_amount)
+        p3_new = self.p3.left(scale_amount).down(scale_amount)
+        p4_new = self.p4.right(scale_amount).down(scale_amount)
+    
+        return Region.from_points(p1_new, p2_new, p3_new, p4_new)
+        
     def enlarge(self, to_min_height = None, to_min_width = None):
         diag = self.p4 - self.p1
         width, height = diag.coords
