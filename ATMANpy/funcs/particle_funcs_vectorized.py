@@ -494,6 +494,163 @@ def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
 
     return Contour(coords)
 
+def interpolate_ball_features_smart(cnt_before, cnt_after, 
+                                    interpolation_points = 8,
+                                    speed_before = None, speed_after = None,
+                                    accel_before = None, accel_after = None,
+                                    frames_before = None, frames_after = None,
+                                    acceptable_lambda_difference = 2):
+    
+    ###### Ensure Ellipticality ####
+    ### so that we may form an ellipse from both contours,
+    ### we have to have at least five points on the contour
+    if len(cnt_before.points) < 5:
+        ell_cnt_before = expand_to_ellipse(cnt_before)
+    else:
+        ell_cnt_before = cnt_before
+    
+    if len(cnt_after.points) < 5:
+        ell_cnt_after = expand_to_ellipse(cnt_after)
+    else:
+        ell_cnt_after = cnt_after
+    
+    #### Sourt out Frame Count for Weighting ###
+    if frames_before is None:
+        frames_before = 1 ### how many frames before is the contour before from?
+        # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
+            # then time before is 1
+        # if we interpolate a contour at t=3, and cnt_bef is from t=0,
+            # then time before is 3
+    if frames_after is None:
+        frames_after = 1
+        
+    tot_frames = frames_before + frames_after
+    #########    
+    
+    ###### Fit Ellipse Parameters #####
+    xy_before, majmin_before, theta_before = ell_cnt_before.fit_ellipse()
+    xy_after, majmin_after, theta_after = ell_cnt_after.fit_ellipse()
+    
+    x_before, y_before = xy_before
+    maj_before, min_before = majmin_before
+    
+    x_after, y_after = xy_after
+    maj_after, min_after = majmin_after
+    #####
+    
+    #### Correct speeds for acceleration
+    if accel_before is not None:
+        speed_before_star = speed_before + accel_before ### essentially, the interpolated starting speed ...
+    else:
+        speed_before_star = speed_before
+    
+    if accel_after is not None:
+        speed_after_star = speed_after - accel_after ### ... and this is the interpolated final speed.
+    else:
+        speed_after_star = speed_after
+    
+    #### Solve for Lambda, the switching point! 
+    # see notes, but in principle: solve p_bef + lambda * s_bef = p_aft - (tot_frames - lambda) * s_aft
+    # in principle, this will yield a vector of lambdas. We need a scalar, though. 
+    # If the interpolation model is good, the vector values will be close, and we can average them.
+    # if they aren't the interpolation will not be great. 
+    # another danger: if speed before and after is the same, then lambda is undefined.
+    # the nice thing here: in this case, the value of lambda is irrelevant. 
+    # since the speeds are the same, there is no switching point.
+    
+    ## a) check speed difference
+    speed_diff = (speed_before_star - speed_after_star)
+    if speed_diff.x != 0:
+        l_x = (x_after - x_before - tot_frames * speed_after_star.x) / speed_diff.x
+        
+        ### plausibility check
+        if not 0 < l_x < tot_frames:
+            return interpolate_ball_features(cnt_before, cnt_after, 
+                                             interpolation_points = interpolation_points,
+                                             frames_before = frames_before, frames_after = frames_after)
+    else:
+        l_x = None
+        
+    if speed_diff.y != 0:
+        l_y = (y_after - y_before - tot_frames * speed_after_star.y) / speed_diff.y
+        
+        ### plausibility check
+        if not 0 < l_y < tot_frames:
+            return interpolate_ball_features(cnt_before, cnt_after, 
+                                             interpolation_points = interpolation_points,
+                                             frames_before = frames_before, frames_after = frames_after)
+    else:
+        l_y = None
+    
+    ## b) combine lambdas
+    if l_x is None and l_y is None:
+        l = tot_frames / 2
+    elif l_x is None:
+        l = l_y
+    elif l_y is None:
+        l = l_x
+    else:
+        # weight_x = abs(speed_diff.x)
+        # weight_y = abs(speed_diff.y)
+        # l = (weight_x * l_x + weight_y * l_y) / (weight_x + weight_y)
+        l = (l_x + l_y) / 2
+    
+        ## check plausibility 
+        if abs(l_x - l_y) > acceptable_lambda_difference:
+            return interpolate_ball_features(cnt_before, cnt_after, 
+                                             interpolation_points = interpolation_points,
+                                             frames_before = frames_before, frames_after = frames_after) 
+        
+    
+    print('Interpolating Smart')
+    print(f'   l_x: {l_x}, l_y: {l_y}, l: {l}')
+    print(f'   tot_frames: {tot_frames}')
+    print('____')
+    
+    ##### decide which 'regime' we are in: previous detected ball, or next detected ball.
+    switching_point, switching_prop = l // 1 + 1, l % 1          ### divide integer and decimal, 
+                                                                 ### except add one to the integer.
+                                                                 ### this is because if lambda is 1.5,
+                                                                 ### the appropriate switching point
+                                                                 ### is when frames_before = 2.
+                                                                 
+    ### calculate location (and ellipse parameters) depending on switching point and proportion.
+    if frames_before < switching_point:
+        x_int = x_before + frames_before * speed_before_star.x
+        y_int = y_before + frames_before * speed_before_star.y
+        maj_int, min_int, theta_int = maj_before, min_before, theta_before
+    if frames_before > switching_point:
+        x_int = x_after - frames_after * speed_after_star.x
+        y_int = y_after - frames_after * speed_after_star.y
+        maj_int, min_int, theta_int = maj_after, min_after, theta_after
+    if frames_before == switching_point:
+        x_prev = x_before + (frames_before - 1) * speed_before_star.x
+        y_prev = y_before + (frames_before - 1) * speed_before_star.y
+        
+        prop_add_on_x = switching_prop * speed_before_star.x + (1 - switching_prop) * speed_after_star.x
+        prop_add_on_y = switching_prop * speed_before_star.y + (1 - switching_prop) * speed_after_star.y
+        
+        x_int = x_prev + prop_add_on_x
+        y_int = y_prev + prop_add_on_y
+        
+        maj_int = switching_prop * maj_before + (1 - switching_prop) * maj_after
+        min_int = switching_prop * min_before + (1 - switching_prop) * min_after
+        theta_int = switching_prop * theta_before + (1 - switching_prop) * theta_after
+        
+    
+    ### to go from ellipse to contour: sample points on the ellipse!
+    t = np.linspace(0, 2 * np.pi, num = interpolation_points, endpoint = False)
+    sin_t, cos_t = np.sin(t), np.cos(t) 
+    sin_theta, cos_theta = np.sin(theta_int), np.cos(theta_int) 
+    x = maj_int * cos_theta * cos_t - min_int * sin_theta * sin_t
+    y = maj_int * sin_theta * cos_t + min_int * cos_theta * sin_t
+    
+    coords = np.dstack([x + x_int, y + y_int]) ### add back center points!!
+    # coords.shape # -> (1, num_points, 2)
+    coords = coords.reshape((interpolation_points, 1, 2)) ### this way, they look like contours
+    coords = coords.astype('int32')
+
+    return Contour(coords)
 
 ########## DRAW FUNCTIONS #########
 

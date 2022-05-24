@@ -50,7 +50,7 @@ def init_frameDict(frmCache):
     
     return frameDict
     
-def get_court_lines(frmDict, featDict):
+def get_court_lines(frmDict, featDict, cached_lines = None):
     
     gFrm = frmDict['gFrm']
     H = featDict['H']
@@ -216,7 +216,7 @@ FRAME_DIFF_INDICES = [CURR_FRAME_IDX - f for f in reversed(FRAME_DIFF_LIST)] + [
 
 from functools import partial
 from ATMANpy.funcs.cv_funcs import get_stream_features, replay
-from ATMANpy.funcs.high_level_funcs import postprocess_ball_flight
+from ATMANpy.funcs.high_level_funcs import smoothe_and_choose_ball_contour, smart_interpolate_ball_contours
 
 my_stream_func = partial(get_stream_features, 
                         cache_length = CACHE_LENGTH,
@@ -233,9 +233,10 @@ video_segments = [(11830, 11930)]
 
 for start_frame, stop_frame in video_segments:
     stream_features = my_stream_func(cap, start_frame, stop_frame)
-    stream_features_smooth = postprocess_ball_flight(stream_features)
-    replay(cap, stream_features_smooth, 
-           cache_frame_offset = CURR_FRAME_IDX, drawFunc = draw_replay)
+    stream_features_smooth = smoothe_and_choose_ball_contour(stream_features)
+    stream_features_int = smart_interpolate_ball_contours(stream_features_smooth)
+    # replay(cap, stream_features_int, 
+    #        cache_frame_offset = CURR_FRAME_IDX, drawFunc = draw_replay)
 
 #############
 

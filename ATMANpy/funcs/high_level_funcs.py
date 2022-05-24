@@ -19,6 +19,8 @@ import cv2 as cv
 import pandas as pd
 import numpy as np
 
+from copy import deepcopy
+
 ######## GET SCHEMA ########
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines
@@ -34,7 +36,7 @@ VIDEO_ID = 'pqxAmUWIoKc'
 
 def track_courtlines(gFrm, prev_H, prev_config, schemaLines = schemaLines,
                      get_net = True, only_225 = True):
-    if prev_H is None:
+    if prev_H is None or prev_config is None:
         if only_225:
             H, config = find_homography_225_only(gFrm)
         else:
@@ -94,11 +96,23 @@ stdFrm = HSVFrame.from_csv(readPath, name = 'std')
 NORMALIZED_DEVIATION_THRESHOLD = 4
 BURN_IN_HSV_CHANNEL_WEIGHTS = (1, 50, 1) #interested only in hue and value
 
-from ATMANpy.funcs.player_funcs import get_burn_in_mask
 from functools import partial
+
+from ATMANpy.funcs.player_funcs import get_burn_in_mask
 match_specific_burn_in_func = partial(get_burn_in_mask, medFrm, stdFrm,
                                       normalized_deviation_threshold = NORMALIZED_DEVIATION_THRESHOLD,
                                       channel_weights = BURN_IN_HSV_CHANNEL_WEIGHTS) ### these are always the same!
+
+H_THRESHOLD = 5
+S_THRESHOLD = 10
+V_THRESHOLD_LOWER = 0.75
+V_THRESHOLD_UPPER = 0.97
+from ATMANpy.funcs.player_funcs import get_shadow_mask
+match_specific_shadow_func = partial(get_shadow_mask, medFrm, 
+                                     h_threshold = H_THRESHOLD, s_threshold = S_THRESHOLD, 
+                                     v_threshold_lower = V_THRESHOLD_LOWER, 
+                                     v_threshold_upper = V_THRESHOLD_UPPER)
+
 #######################
 
 
@@ -134,18 +148,41 @@ from ATMANpy.funcs.court_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
 from ATMANpy.funcs.player_funcs import find_player_contour
 
 
-def find_player(frame, courtLines, netLines, H, roiMask = None, verbose = False):
+def find_player(frame, courtLines, netLines, H, roiMask = None, remove_shadow = True,
+                verbose = False):
     
     ### get the burned in mask for this specific homography
-    burn_foreMask = match_specific_burn_in_func(frame, H,
-                                    normalized_deviation_threshold = NORMALIZED_DEVIATION_THRESHOLD, 
-                                    channel_weights = BURN_IN_HSV_CHANNEL_WEIGHTS, 
-                                    verbose = verbose)
+    burn_foreMask = match_specific_burn_in_func(frame, H, verbose = verbose)
     
-    playerRegion = find_player_contour(frame, burn_foreMask, roiMask)
+    if remove_shadow:
+        burn_shadowMask = match_specific_shadow_func(frame, H, verbose = verbose)
+    else:
+        burn_shadowMask = None
+        
+    playerRegion = find_player_contour(frame, burn_foreMask, roiMask, 
+                                       shadowMask = burn_shadowMask)
     
     return playerRegion
 
+def find_both_players(frame, courtLines, netLines, H, remove_shadow = True,
+                      roiMask_top = None, roiMask_bot = None,
+                      verbose = False):
+    
+    ### get the burned in mask for this specific homography
+    burn_foreMask = match_specific_burn_in_func(frame, H, verbose = verbose)
+    
+    if remove_shadow:
+        burn_shadowMask = match_specific_shadow_func(frame, H, verbose = verbose)
+    else:
+        burn_shadowMask = None
+        
+    topPlayer = find_player_contour(frame, burn_foreMask, roiMask_top, 
+                                    shadowMask = burn_shadowMask)
+    
+    botPlayer = find_player_contour(frame, burn_foreMask, roiMask_bot, 
+                                    shadowMask = burn_shadowMask)
+
+    return topPlayer, botPlayer
 
 
 #%%### BALL DETECTION ####
@@ -260,9 +297,52 @@ def find_next_item(stream_features,
     
     return None, None ### if no next ball is found.
 
+def find_next_N_items(stream_features, N = 3,
+                      startNum = None, 
+                      item_to_find = 'ball'):
+    frmNum, item = find_next_item(stream_features, 
+                                  startNum = startNum,
+                                  item_to_find = item_to_find)
+    
+    if not frmNum is None:
+        outList = [item]
+        item_count = 1
+        frame_count = frmNum
+        while item_count < N:
+            item_count += 1
+            frame_count += 1
+            
+            try: 
+                add_item = stream_features[frame_count][item_to_find]
+            except KeyError:
+                add_item = None
+            outList.append(add_item)
+        
+        return frmNum, outList
+    else:
+        return frmNum, [None] * N
 
-def postprocess_ball_flight(stream_features):
+def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3):
+    ### given three subsequent contours, calculate their speed and acceleration per frame
+    try:
+        speed1 = cnt2.center() - cnt1.center()
+    except:
+        speed1 = None
+    
+    try:
+        speed2 = cnt3.center() - cnt2.center()
+    except:
+        speed2 = None
+    
+    try:
+        accel = speed2 - speed1
+    except:
+        accel = None
+        
+    return speed1, speed2, accel
 
+def smoothe_and_choose_ball_contour(stream_features):
+    
     ### first pass (from back to front): kitagawa smoothing
     stream_features_smooth = pf.kitagawa_smooth(stream_features)
     
@@ -277,10 +357,14 @@ def postprocess_ball_flight(stream_features):
         featDict['ballDetected'] = True if goodContour is not None else False
         featDict['ball'] = goodContour
         
+    return stream_features_smooth
         
+def interpolate_ball_contours(stream_features):
+    stream_features_interpolated = deepcopy(stream_features)
+    
     ### third pass: interpolate contours
     currCtr = None
-    for frmNum, featDict in stream_features_smooth.items():    
+    for frmNum, featDict in stream_features_interpolated.items():    
         if featDict['ball'] is not None:
             currCtr = featDict['ball']
             last_frame_with_ball = frmNum
@@ -291,7 +375,7 @@ def postprocess_ball_flight(stream_features):
         
         if featDict['ball'] is None:
             ### determine the next found ball position
-            next_frame_with_ball, nextCtr = find_next_item(stream_features_smooth, 
+            next_frame_with_ball, nextCtr = find_next_item(stream_features_interpolated, 
                                                            startNum = frmNum, 
                                                            item_to_find = 'ball')
             
@@ -309,5 +393,67 @@ def postprocess_ball_flight(stream_features):
                 featDict['ball'] = None
                 featDict['ballDetected'] = False
             
-    return stream_features_smooth
+    return stream_features_interpolated
 
+
+def smart_interpolate_ball_contours(stream_features):
+    stream_features_interpolated = deepcopy(stream_features)
+    
+    ### third pass: interpolate contours
+    currCtr_2 = None ### 2 behind the current contour
+    currCtr_1 = None ### 1 behind the current contour
+    currCtr = None
+    for frmNum, featDict in stream_features_interpolated.items():    
+        # if frmNum == 10330:
+        #     break
+        if featDict['ball'] is not None:
+            ### update trailing cache of contours
+            currCtr_2 = currCtr_1
+            currCtr_1 = currCtr
+            currCtr = featDict['ball']
+            last_frame_with_ball = frmNum
+            
+            _, currSpeed, currAccel = calculate_speeds_and_acceleration(currCtr_2, currCtr_1, currCtr)
+            ### technically, we could cache the speed and half the time it takes 
+            ### to calculate_speeds_and_acceleration, but really it shouldn't be the bottleneck anyway.
+            continue
+        
+        if currCtr is None:
+            continue
+        
+        if featDict['ball'] is None:
+            ### determine the next found ball position
+            next_frame_with_ball, next_three_ctrs = find_next_N_items(stream_features_interpolated, N = 3,
+                                                                      startNum = frmNum, 
+                                                                      item_to_find = 'ball')
+            
+            nextCtr, nextCtr_1, nextCtr_2 = next_three_ctrs
+            
+            ### find speed and acceleration after the next ball
+            if not nextCtr is None:
+                
+                nextSpeed, _, nextAccel = calculate_speeds_and_acceleration(nextCtr, nextCtr_1, nextCtr_2)
+                
+                time_from_ball = frmNum - last_frame_with_ball
+                time_to_ball = next_frame_with_ball - frmNum
+                
+                if currSpeed is not None and nextSpeed is not None:
+                    itplBall = pf.interpolate_ball_features_smart(currCtr, nextCtr,
+                                                                  speed_before = currSpeed, 
+                                                                  speed_after = nextSpeed,
+                                                                  accel_before = currAccel,
+                                                                  accel_after = nextAccel,
+                                                                  frames_before = time_from_ball,
+                                                                  frames_after = time_to_ball)
+                else:
+                    itplBall = pf.interpolate_ball_features(currCtr, nextCtr, 
+                                                            frames_before = time_from_ball,
+                                                            frames_after = time_to_ball)
+        
+                featDict['ball'] = itplBall
+                featDict['ballDetected'] = False
+            else:
+                featDict['ball'] = None
+                featDict['ballDetected'] = False
+            
+    return stream_features_interpolated

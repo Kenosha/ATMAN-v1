@@ -285,7 +285,10 @@ def draw_replay_onlyball(frmDict, featDict):
 
 from functools import partial
 from ATMANpy.funcs.cv_funcs import get_stream_features, replay
-from ATMANpy.funcs.high_level_funcs import postprocess_ball_flight, cached_courtlines
+from ATMANpy.funcs.high_level_funcs import smoothe_and_choose_ball_contour
+from ATMANpy.funcs.high_level_funcs import interpolate_ball_contours, smart_interpolate_ball_contours 
+from ATMANpy.funcs.high_level_funcs import cached_courtlines 
+
 
 features_of_interest = ['ball', 'ballDetected',
                         'playerTop', 'playerBot']
@@ -308,14 +311,34 @@ video_segments = seqFrm.head(1)
 
 for idx, start_stop_frames in video_segments.iterrows():
     start_frame, stop_frame = start_stop_frames
-    stream_features = my_stream_func(cap, start_frame, stop_frame)
-    stream_features_smooth = postprocess_ball_flight(stream_features)
-    replay(cap, stream_features_smooth, 
-            cache_frame_offset = CURR_FRAME_IDX, drawFunc = draw_replay_onlyball,
-            ms_between_frames = 50)
+    stream_features_original = my_stream_func(cap, start_frame, stop_frame)
+    stream_features_smooth = smoothe_and_choose_ball_contour(stream_features_original)
+    stream_features_itpl = interpolate_ball_contours(stream_features_smooth)
+    
+    replay(cap, stream_features_itpl, 
+            cache_frame_offset = CURR_FRAME_IDX, drawFunc = draw_replay,
+            ms_between_frames = 80)
+    
+    stream_features_smart = smart_interpolate_ball_contours(stream_features_smooth)
+    
+    replay(cap, stream_features_smart, 
+        cache_frame_offset = CURR_FRAME_IDX, drawFunc = draw_replay,
+        ms_between_frames = 40)
 
 #############
 
+replay(cap, stream_features_smart, 
+        cache_frame_offset = CURR_FRAME_IDX, drawFunc = draw_replay,
+        ms_between_frames = 500, start_frame = 10320, stop_frame = 10345)
+
+###### ANALYSIS #######
+
+drop_keys = lambda myDict: {k: v for k, v in myDict.items() if k not in ['ball', 'ballDetected']}
+
+
+stream_features_small = {k: v for k, v in stream_features_smooth.items() if 10320 <= k <= 10347}
+# stream_features_small = {k: drop_keys(v) for k, v in stream_features_smooth.items()}
+# stream_features_orig_small = {k: v for k, v in stream_features_original.items() if 10320 <= k <= 10345}
 
 
 # ##### CONCATENATE AND SAVE ######
@@ -334,8 +357,9 @@ for idx, start_stop_frames in video_segments.iterrows():
      
     
  
- 
-
+for frameNum, featDict in stream_features_small.items():
+    if featDict['ballDetected']:
+        print(frameNum)
 
 
 
