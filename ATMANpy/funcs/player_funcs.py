@@ -41,6 +41,32 @@ def get_initial_ROIs(schemaLines,
     return ROI_lower, ROI_upper
 
 
+def get_service_ROIs(schemaLines, 
+                     width_factor = 1, depth_factor = 0.5, add_depth_factor_bottom = 0.5):
+    
+    width_add = width_factor * schemaLines.doubles_alley_width
+    depth_add = depth_factor * schemaLines.side_length
+    
+    bot_court = schemaLines.get_half_region(side = 'Bottom', width = 'Doubles')
+    
+    ### make symmetrical ROIs
+    ROI_lower = Region.from_points(bot_court['Bottom'].leftPt, ### service line
+                                   bot_court['Bottom'].rightPt,  # service line
+                                   bot_court['Bottom'].leftPt.left(width_add).down(depth_add), 
+                                   bot_court['Bottom'].rightPt.right(width_add).down(depth_add))
+    
+    ROI_upper = Region.from_lines(ROI_lower.transform('flip_vertically', schemaLines['Net Line']))
+
+    ### adjust lower ROI
+    depth_add_bottom = add_depth_factor_bottom * schemaLines.side_length
+    
+    top_left, top_right, bot_left, bot_right = ROI_lower.to_points()
+    ROI_lower = Region.from_points(top_left.up(depth_add_bottom), top_right.up(depth_add_bottom), 
+                                   bot_left, bot_right)
+
+    return ROI_lower, ROI_upper
+
+
 def get_initial_ROI_masks(frame, projROI, projCourtLines, which = 'Top'):
     ##### Split regions - upper out, upper in, lower out, lower inside court.
     
@@ -229,6 +255,42 @@ def get_burn_in_mask(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
     if verbose: imgFrm.mask(foregroundMask).show()
     return foregroundMask
     
+def get_shadow_mask(medFrm: Frame, imgFrm: Frame, H,
+                    verbose = False,
+                    h_threshold = 5, s_threshold = 10, 
+                    v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
+                    v_threshold_upper = 0.97):
+    
+    wrpFrm = medFrm.warp(H, cols = imgFrm.cols, rows = imgFrm.rows)
+    if verbose: wrpFrm.show()
+
+    diffFrm = imgFrm - wrpFrm
+
+    ### H channel -> affected only slightly!
+    H_THRESHOLD = 5
+    HBool = diffFrm.H() < H_THRESHOLD
+
+    ### S channel -> affected slightly, but usually lowered!
+    S_THRESHOLD = 10
+    S_is_lowered = (imgFrm.S() < wrpFrm.S())
+    SBool = (diffFrm.S() < S_THRESHOLD) & S_is_lowered
+    
+    ### V channel -> lowered by 10-20% typically, according to cucchiara et al 2001
+    ratioArr = imgFrm.V().array.astype(float) / np.maximum(wrpFrm.V().array.astype(float), 1)
+    ratioFrm = Frame(ratioArr)
+    VBool = (ratioFrm > v_threshold_lower) & (ratioFrm < v_threshold_upper)
+    
+    shadowMask = HBool & SBool & VBool 
+    
+    if verbose: imgFrm.mask(~shadowMask).show()
+    
+    ### close the candidate shadows, since shadows of a player are contiguous.
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
+    shadowMask = shadowMask.close(kernel)
+    
+    if verbose: imgFrm.mask(~shadowMask).show()
+    
+    return shadowMask
     
 
 def find_player_with_burn_in(hFrm: HSVFrame, burninMask: BoolFrame, 
@@ -288,10 +350,14 @@ def find_player_with_burn_in(hFrm: HSVFrame, burninMask: BoolFrame,
     return largestRegion
 
     
-def find_player_only_burn_in(hFrm, burninMask, roiMask, playerROI = None, verbose = False):
+def find_player_only_burn_in(hFrm, burninMask, roiMask, shadowMask = None, 
+                             verbose = False):
     SIZE_THRESHOLD = 0
     
     roi_burninMask = burninMask & roiMask
+    
+    if shadowMask is not None:
+        roi_burninMask = roi_burninMask & ~shadowMask
     
     regList = roi_burninMask.to_grey().connected_regions(size_threshold = SIZE_THRESHOLD)
     
@@ -300,10 +366,14 @@ def find_player_only_burn_in(hFrm, burninMask, roiMask, playerROI = None, verbos
         if verbose: hFrm.put(largestRegion).show()
         return largestRegion
         
-def find_player_contour(hFrm, burninMask, roiMask, playerROI = None, verbose = False):
+def find_player_contour(hFrm, burninMask, roiMask, shadowMask = None, 
+                        verbose = False):
     
     roi_burninMask = burninMask & roiMask
     
+    if shadowMask is not None:
+        roi_burninMask = roi_burninMask & ~shadowMask
+        
     cntList, _ = roi_burninMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     
     if len(cntList) > 0:

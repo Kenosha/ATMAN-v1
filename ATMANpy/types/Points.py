@@ -25,6 +25,21 @@ class Point:
         object.__setattr__(self, 'y', self.coords[1])
         #############################  
         
+    ### ARITHMETIC ###
+     
+    def __add__(self, y):
+        outCoords = self.coords[0] + y.coords[0], self.coords[1] + y.coords[1] 
+        return Point(outCoords)
+    def __sub__(self, y):
+        outCoords = self.coords[0] - y.coords[0], self.coords[1] - y.coords[1] 
+        return Point(outCoords)
+    def __mul__(self, y):
+        outCoords = self.coords[0] * y, self.coords[1] * y
+        return Point(outCoords)
+    def __div__(self, y):
+        outCoords = self.coords[0] / y, self.coords[1] / y
+        return Point(outCoords)
+        
     ### METHODS ###
     def up(self, points):
         return Point((self.x, max(self.y - points, 0)))

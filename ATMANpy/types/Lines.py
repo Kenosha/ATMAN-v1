@@ -587,6 +587,45 @@ class Region(Lines):
         
         return Region.from_points(tl, bl, tr, br)
         
+    def scale(self, factor):
+        diag = self.p4 - self.p1
+        diag_scaled = diag * factor
+        shift_x, shift_y = diag_scaled.coords
+        
+        p1_new = self.p1.left(shift_x).up(shift_y)
+        p2_new = self.p2.right(shift_x).up(shift_y)
+        p3_new = self.p3.left(shift_x).down(shift_y)
+        p4_new = self.p4.right(shift_x).down(shift_y)
+    
+        return Region.from_points(p1_new, p2_new, p3_new, p4_new)
+    
+    def enlarge(self, to_min_height = None, to_min_width = None):
+        diag = self.p4 - self.p1
+        width, height = diag.coords
+        
+        p1, p2, p3, p4 = self.p1, self.p2, self.p3, self.p4
+        
+        if to_min_height is not None:
+            add_on_both_sides = (to_min_height - height) // 2 ### floor div so we keep an integer
+            
+            if add_on_both_sides > 0:
+                p1 = p1.up(add_on_both_sides)
+                p2 = p2.up(add_on_both_sides)
+                p3 = p3.down(add_on_both_sides)
+                p4 = p4.down(add_on_both_sides)
+        
+        if to_min_width is not None:
+            add_on_both_sides = (to_min_width - width) // 2 ### floor div so we keep an integer
+            
+            if add_on_both_sides > 0:
+                p1 = p1.left(add_on_both_sides)
+                p2 = p2.right(add_on_both_sides)
+                p3 = p3.left(add_on_both_sides)
+                p4 = p4.right(add_on_both_sides)
+                
+        return Region.from_points(p1, p2, p3, p4) 
+    
+    
     def get_homography(self, othRegion):
         from ATMANpy.line_funcs import calculate_homography
         return calculate_homography(self.points, othRegion.points)
