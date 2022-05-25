@@ -50,6 +50,18 @@ class Contour:
         # rotAngle: theta, the rotation angle of the rectangle.
         return cv.fitEllipse(self.points)
 
+    def compress(self, target_number_of_points):
+                
+        current_number_of_points = self.points.shape[0]
+        
+        if current_number_of_points <= target_number_of_points:
+            return self
+        else:
+            sampleIndices = np.linspace(0, current_number_of_points, num = target_number_of_points, 
+                                        dtype = int, endpoint = False)
+            samplePoints = self.points[sampleIndices]
+            
+            return Contour(samplePoints)
 
 
 
