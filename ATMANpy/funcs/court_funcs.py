@@ -45,15 +45,17 @@ def find_homography_225_only(gFrm, verbose = False):
     
     from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
     from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
+    from ATMANpy.funcs.line_funcs import keep_only_central_horizontal_lines
     
     l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
-                                                                gFrm.cols / 3, 2 * gFrm.cols / 3) 
-                      
+                                                                2 * gFrm.cols / 5, 3 * gFrm.cols / 5) 
+    h_Lines = keep_only_central_horizontal_lines(h_Lines, gFrm.cols / 3, 2 * gFrm.cols / 3)  
+    
     if len(l_v_Lines) < 2 or len(r_v_Lines) < 2:
         return None, None
     
     l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
-    
+
     l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
                                                                 threshold = MERGE_THRESHOLD)   
     
@@ -73,8 +75,6 @@ def find_homography_225_only(gFrm, verbose = False):
         return None, None
     
     
-
-
 def find_homography(gFrm, verbose = False):
     
     from ATMANpy.funcs.line_funcs import get_white_lines_fast
@@ -94,10 +94,13 @@ def find_homography(gFrm, verbose = False):
     
     from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
     from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
+    from ATMANpy.funcs.line_funcs import keep_only_central_horizontal_lines
     
     l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
-                                                                gFrm.cols / 3, 2 * gFrm.cols / 3) 
-                      
+                                                                2 * gFrm.cols / 5, 3 * gFrm.cols / 5) 
+    h_Lines = keep_only_central_horizontal_lines(h_Lines, gFrm.cols / 3, 2 * gFrm.cols / 3)                  
+    
+    
     if len(l_v_Lines) == 0 and len(r_v_Lines) == 0:
         return None, None
     

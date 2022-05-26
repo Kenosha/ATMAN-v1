@@ -139,6 +139,22 @@ def split_court_line_candidates(aLines, left_thresh: int, right_thresh: int):
 
     return Lines(left_vert_list), Lines(right_vert_list), Lines(horizontal_list)
 
+def keep_only_central_horizontal_lines(hLines, left_thresh: int, right_thresh: int):
+    ### this step is added because the merge criterion for hoorizontal lines,
+    ### while being fast due to sorting and not requiring every line to be compared with every other,
+    ### fails 
+    
+    def keep_criterion(line):
+        left_within = left_thresh < line.left_point().x < right_thresh
+        right_within = left_thresh < line.right_point().x < right_thresh
+        return left_within | right_within
+        
+    keepList = []
+    for line in hLines:
+        if keep_criterion(line):
+            keepList.append(line)
+    
+    return Lines(keepList)
 
 def merge_horizontal_lines(aLn, bLn, threshold = 10):
     
