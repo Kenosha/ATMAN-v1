@@ -370,10 +370,14 @@ def kitagawa_smooth(stream_features_original):
 def choose_likely_ball_contour(S, ballContours, l_threshold = 1/10,
                                R_inv = R_inv, 
                                likelihood_denominator = likelihood_denominator,
+                               return_likelihood = False,
                                verbose = False):
     if ballContours == []:
         if verbose: print('No Contours!')
-        return None
+        if return_likelihood:
+            return None, None, None
+        else:
+            return None
     else:
         m0_loc = S[:, :2]
         z_coords = [list(cnt.center().coords) for cnt in ballContours]
@@ -396,10 +400,16 @@ def choose_likely_ball_contour(S, ballContours, l_threshold = 1/10,
             likeliest_idx = np.argmax(likelihood)
             likeliest_z = ballContours[likeliest_idx]
             if verbose: print(f'Detected a ball contour with likelihood {max_likelihood}')
-            return likeliest_z
+            if return_likelihood:
+                return likeliest_z, max_likelihood, normalised_threshold
+            else:
+                return likeliest_z
         else:
             if verbose: print(f'No ball, best candidate has likelihood {max_likelihood}')
-            return None
+            if return_likelihood:
+                return None, max_likelihood, normalised_threshold
+            else:
+                return None
 
 def expand_to_ellipse(myCnt):
     ### so that we may form an ellipse from both contours,
@@ -413,7 +423,11 @@ def expand_to_ellipse(myCnt):
                    [min_x, max_y], 
                    [min_x, min_y]] ### these points are guaranteed to be at edge
     
-    while len(outPts) < 5:
+    add_points_emergency = [[max_x + 1, (min_y + max_y) // 2],
+                            [(min_x + max_x) // 2, max_y + 1]]
+    ### these are not in the contour by definition. we add them if we can't reach the required number of points.
+    
+    while len(outPts) < 6:
         
         for pt in cand_points:
             if [pt] in outPts.tolist():
@@ -426,6 +440,11 @@ def expand_to_ellipse(myCnt):
         if len(cand_points) == 0:
             break
           
+    if len(outPts) == 4:
+        outPts = np.vstack([outPts, [[add_points_emergency[0]]]])
+    if len(outPts) == 5:
+        outPts = np.vstack([outPts, [[add_points_emergency[1]]]])
+            
     return Contour(outPts)
 
 
@@ -435,12 +454,12 @@ def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
     ###### Ensure Ellipticality ####
     ### so that we may form an ellipse from both contours,
     ### we have to have at least five points on the contour
-    if len(cnt_before.points) < 5:
+    if len(cnt_before.points) < 6:
         ell_cnt_before = expand_to_ellipse(cnt_before)
     else:
         ell_cnt_before = cnt_before
     
-    if len(cnt_after.points) < 5:
+    if len(cnt_after.points) < 6:
         ell_cnt_after = expand_to_ellipse(cnt_after)
     else:
         ell_cnt_after = cnt_after
@@ -477,21 +496,24 @@ def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
     
     x_int, y_int = weight_avg(x_before, x_after), weight_avg(y_before, y_after)
     maj_int, min_int = weight_avg(maj_before, maj_after), weight_avg(min_before, min_after)
-    theta_int = weight_avg(theta_before, theta_after) / 360 * 2 * np.pi
-    ########
+    theta_int = weight_avg(theta_before, theta_after)
     
+    semimaj_int = maj_int / 2
+    semimin_int = min_int / 2
+    theta_rad_int = theta_int / 180 * np.pi
+
     ### to go from ellipse to contour: sample points on the ellipse!
     t = np.linspace(0, 2 * np.pi, num = interpolation_points, endpoint = False)
     sin_t, cos_t = np.sin(t), np.cos(t) 
-    sin_theta, cos_theta = np.sin(theta_int), np.cos(theta_int) 
-    x = maj_int * cos_theta * cos_t - min_int * sin_theta * sin_t
-    y = maj_int * sin_theta * cos_t + min_int * cos_theta * sin_t
+    sin_theta, cos_theta = np.sin(theta_rad_int), np.cos(theta_rad_int) 
+    x = semimaj_int * cos_theta * cos_t - semimin_int * sin_theta * sin_t
+    y = semimaj_int * sin_theta * cos_t + semimin_int * cos_theta * sin_t
     
     coords = np.dstack([x + x_int, y + y_int]) ### add back center points!!
     # coords.shape # -> (1, num_points, 2)
     coords = coords.reshape((interpolation_points, 1, 2)) ### this way, they look like contours
     coords = coords.astype('int32')
-
+    
     return Contour(coords)
 
 def interpolate_ball_features_smart(cnt_before, cnt_after, 
@@ -499,7 +521,8 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
                                     speed_before = None, speed_after = None,
                                     accel_before = None, accel_after = None,
                                     frames_before = None, frames_after = None,
-                                    acceptable_lambda_difference = 2):
+                                    acceptable_lambda_difference = 2,
+                                    verbose = False):
     
     ###### Ensure Ellipticality ####
     ### so that we may form an ellipse from both contours,
@@ -602,10 +625,11 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
                                              frames_before = frames_before, frames_after = frames_after) 
         
     
-    print('Interpolating Smart')
-    print(f'   l_x: {l_x}, l_y: {l_y}, l: {l}')
-    print(f'   tot_frames: {tot_frames}')
-    print('____')
+    if verbose:
+        print('Interpolating Smart')
+        print(f'   l_x: {l_x}, l_y: {l_y}, l: {l}')
+        print(f'   tot_frames: {tot_frames}')
+        print('____')
     
     ##### decide which 'regime' we are in: previous detected ball, or next detected ball.
     switching_point, switching_prop = l // 1 + 1, l % 1          ### divide integer and decimal, 
@@ -636,14 +660,17 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
         maj_int = switching_prop * maj_before + (1 - switching_prop) * maj_after
         min_int = switching_prop * min_before + (1 - switching_prop) * min_after
         theta_int = switching_prop * theta_before + (1 - switching_prop) * theta_after
-        
     
+    semimaj_int = maj_int / 2
+    semimin_int = min_int / 2
+    theta_rad_int = theta_int / 180 * np.pi
+
     ### to go from ellipse to contour: sample points on the ellipse!
     t = np.linspace(0, 2 * np.pi, num = interpolation_points, endpoint = False)
     sin_t, cos_t = np.sin(t), np.cos(t) 
-    sin_theta, cos_theta = np.sin(theta_int), np.cos(theta_int) 
-    x = maj_int * cos_theta * cos_t - min_int * sin_theta * sin_t
-    y = maj_int * sin_theta * cos_t + min_int * cos_theta * sin_t
+    sin_theta, cos_theta = np.sin(theta_rad_int), np.cos(theta_rad_int) 
+    x = semimaj_int * cos_theta * cos_t - semimin_int * sin_theta * sin_t
+    y = semimaj_int * sin_theta * cos_t + semimin_int * cos_theta * sin_t
     
     coords = np.dstack([x + x_int, y + y_int]) ### add back center points!!
     # coords.shape # -> (1, num_points, 2)
@@ -651,6 +678,202 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
     coords = coords.astype('int32')
 
     return Contour(coords)
+
+def interpolate_ball_features_circle(cnt_before, cnt_after, interpolation_points = 6,
+                                     frames_before = None, frames_after = None):
+    
+    #### Sourt out Frame Count for Weighting ###
+    if frames_before is None:
+        frames_before = 1 ### how many frames before is the contour before from?
+        # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
+            # then time before is 1
+        # if we interpolate a contour at t=3, and cnt_bef is from t=0,
+            # then time before is 3
+    if frames_after is None:
+        frames_after = 1
+        
+    tot_frames = frames_before + frames_after
+    #########    
+    
+    ###### Fit Circle Parameters #####
+    xy_before, area_before = cnt_before.center(), cnt_before.area()
+    xy_after, area_after = cnt_after.center(), cnt_after.area()
+    
+    x_before, y_before = xy_before.coords
+    x_after, y_after = xy_after.coords
+    #####
+    
+    ###### Weighted average of ellipse parameters #####
+    def weight_avg(bef, aft):
+        ### the chiasm is sic! the further away the frame after is,
+        ### the more weight we give to the frame before, and vice versa.
+        return bef * frames_after / tot_frames + aft * frames_before / tot_frames 
+    
+    x_int, y_int = weight_avg(x_before, x_after), weight_avg(y_before, y_after)
+    area_int = weight_avg(area_before, area_after)
+
+    BALL_MIN_RADIUS = 3
+    r_int = int(max((area_int / np.pi) ** 0.5, BALL_MIN_RADIUS))
+    
+    ### to go from ellipse to contour: sample points on the ellipse!
+    t = np.linspace(0, 2 * np.pi, num = interpolation_points, endpoint = False)
+    sin_t, cos_t = np.sin(t), np.cos(t) 
+    x = x_int + r_int * cos_t
+    y = y_int + r_int * sin_t
+    
+    coords = np.dstack([x, y]) ### add back center points!!
+    # coords.shape # -> (1, num_points, 2)
+    coords = coords.reshape((interpolation_points, 1, 2)) ### this way, they look like contours
+    coords = coords.astype('int32')
+    
+    return Contour(coords)
+
+def interpolate_ball_features_smart_circle(cnt_before, cnt_after, 
+                                           interpolation_points = 6,
+                                           speed_before = None, speed_after = None,
+                                           accel_before = None, accel_after = None,
+                                           frames_before = None, frames_after = None,
+                                           acceptable_lambda_difference = 3,
+                                           verbose = False):
+    
+    #### Sourt out Frame Count for Weighting ###
+    if frames_before is None:
+        frames_before = 1 ### how many frames before is the contour before from?
+        # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
+            # then time before is 1
+        # if we interpolate a contour at t=3, and cnt_bef is from t=0,
+            # then time before is 3
+    if frames_after is None:
+        frames_after = 1
+        
+    tot_frames = frames_before + frames_after
+    #########    
+    
+    ###### Fit Circle Parameters #####
+    xy_before, area_before = cnt_before.center(), cnt_before.area()
+    xy_after, area_after = cnt_after.center(), cnt_after.area()
+    
+    x_before, y_before = xy_before.coords
+    x_after, y_after = xy_after.coords
+    #####
+    
+    #### Correct speeds for acceleration
+    if accel_before is not None:
+        speed_before_star = speed_before + accel_before ### essentially, the interpolated starting speed ...
+    else:
+        speed_before_star = speed_before
+    
+    if accel_after is not None:
+        speed_after_star = speed_after - accel_after ### ... and this is the interpolated final speed.
+    else:
+        speed_after_star = speed_after
+    
+    #### Solve for Lambda, the switching point! 
+    # see notes, but in principle: solve p_bef + lambda * s_bef = p_aft - (tot_frames - lambda) * s_aft
+    # in principle, this will yield a vector of lambdas. We need a scalar, though. 
+    # If the interpolation model is good, the vector values will be close, and we can average them.
+    # if they aren't the interpolation will not be great. 
+    # another danger: if speed before and after is the same, then lambda is undefined.
+    # the nice thing here: in this case, the value of lambda is irrelevant. 
+    # since the speeds are the same, there is no switching point.
+    
+    ## a) check speed difference
+    speed_diff = (speed_before_star - speed_after_star)
+    if speed_diff.x != 0:
+        l_x = (x_after - x_before - tot_frames * speed_after_star.x) / speed_diff.x
+        
+        ### plausibility check
+        if not 0 <= l_x <= tot_frames:
+            if verbose: print(f'l_x {l_x} out of scope ({tot_frames})')
+            return interpolate_ball_features_circle(cnt_before, cnt_after, 
+                                             interpolation_points = interpolation_points,
+                                             frames_before = frames_before, frames_after = frames_after)
+    else:
+        l_x = None
+        
+    if speed_diff.y != 0:
+        l_y = (y_after - y_before - tot_frames * speed_after_star.y) / speed_diff.y
+        
+        ### plausibility check
+        if not 0 <= l_y <= tot_frames:
+            if verbose: print(f'l_y {l_y} out of scope ({tot_frames})')
+            return interpolate_ball_features_circle(cnt_before, cnt_after, 
+                                             interpolation_points = interpolation_points,
+                                             frames_before = frames_before, frames_after = frames_after)
+    else:
+        l_y = None
+    
+    ## b) combine lambdas
+    if l_x is None and l_y is None:
+        l = tot_frames / 2
+    elif l_x is None:
+        l = l_y
+    elif l_y is None:
+        l = l_x
+    else:
+        # weight_x = abs(speed_diff.x)
+        # weight_y = abs(speed_diff.y)
+        # l = (weight_x * l_x + weight_y * l_y) / (weight_x + weight_y)
+        l = (l_x + l_y) / 2
+    
+        ## check plausibility 
+        if abs(l_x - l_y) > acceptable_lambda_difference:
+            if verbose: print(f'Difference between l_x ({l_x}) and l_y ({l_y}) too large.')
+            return interpolate_ball_features_circle(cnt_before, cnt_after, 
+                                                    interpolation_points = interpolation_points,
+                                                    frames_before = frames_before, frames_after = frames_after) 
+        
+    
+    if verbose:
+        print('Interpolating Smart')
+        print(f'   l_x: {l_x}, l_y: {l_y}, l: {l}')
+        print(f'   tot_frames: {tot_frames}')
+        print('____')
+    
+    ##### decide which 'regime' we are in: previous detected ball, or next detected ball.
+    switching_point, switching_prop = l // 1 + 1, l % 1          ### divide integer and decimal, 
+                                                                 ### except add one to the integer.
+                                                                 ### this is because if lambda is 1.5,
+                                                                 ### the appropriate switching point
+                                                                 ### is when frames_before = 2.
+                                                                 
+    ### calculate location (and ellipse parameters) depending on switching point and proportion.
+    if frames_before < switching_point:
+        x_int = x_before + frames_before * speed_before_star.x
+        y_int = y_before + frames_before * speed_before_star.y
+        area_int = area_before
+    if frames_before > switching_point:
+        x_int = x_after - frames_after * speed_after_star.x
+        y_int = y_after - frames_after * speed_after_star.y
+        area_int = area_after
+    if frames_before == switching_point:
+        x_prev = x_before + (frames_before - 1) * speed_before_star.x
+        y_prev = y_before + (frames_before - 1) * speed_before_star.y
+        
+        prop_add_on_x = switching_prop * speed_before_star.x + (1 - switching_prop) * speed_after_star.x
+        prop_add_on_y = switching_prop * speed_before_star.y + (1 - switching_prop) * speed_after_star.y
+        
+        x_int = x_prev + prop_add_on_x
+        y_int = y_prev + prop_add_on_y
+        
+        area_int = switching_prop * area_before + (1 - switching_prop) * area_after
+        
+    BALL_MIN_RADIUS = 3
+    r_int = int(max((area_int / np.pi) ** 0.5, BALL_MIN_RADIUS))
+        
+    ### to go from ellipse to contour: sample points on the ellipse!
+    t = np.linspace(0, 2 * np.pi, num = interpolation_points, endpoint = False)
+    sin_t, cos_t = np.sin(t), np.cos(t) 
+    x = x_int + r_int * cos_t
+    y = y_int + r_int * sin_t
+    
+    coords = np.dstack([x, y]) ### add back center points!!
+    # coords.shape # -> (1, num_points, 2)
+    coords = coords.reshape((interpolation_points, 1, 2)) ### this way, they look like contours
+    coords = coords.astype('int32')
+
+    return Contour(coords)
+
 
 ########## DRAW FUNCTIONS #########
 
