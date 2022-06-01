@@ -127,6 +127,7 @@ def random_or_next_stream(cap, ms_between_frames = None, verbose = False):
 
     
 def get_stream_features(cap, start_frame, stop_frame, 
+                        existing_features = None,
                         cache_length = None,
                         init_feat_func = None, init_frame_func = None,
                         cached_line_func = None,
@@ -165,7 +166,7 @@ def get_stream_features(cap, start_frame, stop_frame,
     streamFeatures = {}
     
     #### init feature dictionary
-    featDict = init_feat_func()
+    featDict = None
     
     #### init cache ###
     frmCache = []
@@ -196,14 +197,21 @@ def get_stream_features(cap, start_frame, stop_frame,
         frmDict = init_frame_func(frmCache)
         frmNum_on_display = frmNum - curr_frame_idx
         
-        if not cached_line_func is None:
-            cached_lines = cached_line_func(frmNum_on_display)
+        ### initialize the feature dictionary with possible stored features
+        if existing_features is not None:
+            try:
+                stored_featDict = existing_features[frmNum_on_display]
+            except KeyError:
+                stored_featDict = None
         else:
-            cached_lines = None
+            stored_featDict = None
+            
+        featDict = init_feat_func(current_featDict = featDict, 
+                                  stored_featDict = stored_featDict)
         
         ### Get the features of interest on the frame
         if not court_line_func is None:
-            featDict = court_line_func(frmDict, featDict, cached_lines = cached_lines)
+            featDict = court_line_func(frmDict, featDict)
         
         if not court_feature_func is None:
             featDict = court_feature_func(frmDict, featDict)
@@ -271,7 +279,7 @@ def replay(cap, stream_features,
         
         ### Send Frame Back to Generator
         if drawFunc is not None:
-            sendFrm = drawFunc({'cFrm': cFrm}, featDict)
+            sendFrm = drawFunc({'cFrm': cFrm}, featDict, frameNum = frmNum)
             sendArr = sendFrm.array  
         else:
             sendArr = None

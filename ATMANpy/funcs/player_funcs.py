@@ -382,8 +382,43 @@ def find_player_contour(hFrm, burninMask, roiMask, shadowMask = None,
             showFrm = HSVFrame(cv.drawContours(hFrm.array.copy(), [largestContour], -1, (0, 255, 0), thickness = 2))
             showFrm.show()
         return Contour(largestContour)
+
+def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame):
+    LOWER_BOUND_WEIGHT = 0.1
+    if cnt_reference is None:
+        return 1
+    else:
+        cntMask_interest = frame.within_contour(cnt_interest) 
+        cntMask_reference = frame.within_contour(cnt_reference)
+        
+        ovlp_sum = (cntMask_interest & cntMask_reference).sum(axes = (0, 1))
+        refn_sum = cntMask_reference.sum(axes = (0, 1))
+        
+        return max(ovlp_sum / refn_sum, LOWER_BOUND_WEIGHT)
     
+
+def find_player_contour_with_overlap(hFrm, burninMask, roiMask, playerContour_prev, shadowMask = None, 
+                                     verbose = False):
+    from functools import partial
     
+    roi_burninMask = burninMask & roiMask
+    
+    if shadowMask is not None:
+        roi_burninMask = roi_burninMask & ~shadowMask
+        
+    cntList, _ = roi_burninMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    
+    if len(cntList) > 0:
+        weight_func = partial(calculate_contour_overlap_factor, 
+                              frame = hFrm, cnt_reference = playerContour_prev)
+        
+        cntList = [Contour(c) for c in cntList]
+        
+        largest_weighted_contour = sorted(cntList, key = lambda c: c.area() * weight_func(c))[-1]
+
+        return largest_weighted_contour
+    
+        
     
     
     

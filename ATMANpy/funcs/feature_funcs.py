@@ -13,6 +13,8 @@ import pandas as pd
 import ATMANpy.funcs.util_funcs as atu 
 from ATMANpy.types.Contours import Contour
 
+##### Saving ################
+
 def extract_contour_values(contour, compression = None):
     MISSING_SENTINEL_VALUE = 9999 ### if an integer is missing, we add this value. 
                                     # can't be np.nan, because np.nan is not an integer.
@@ -27,6 +29,12 @@ def extract_contour_values(contour, compression = None):
 
 def extract_homography_values(homography):
     return np.ravel(homography)[:8]
+
+def extract_particle_values(particleArr):
+    # uniqueParticles = np.unique(particleArr, axis = 0) ### we don't do this, 
+                                                         ### because the number of repetitions matters!
+    return np.ravel(particleArr.astype(int))
+                                                         
 
 def save_feature_frame(featFrm, featureName, videoName):
         
@@ -48,16 +56,18 @@ def save_feature_frame(featFrm, featureName, videoName):
     featFrm.to_csv(filePath)   
     
 
-
 def save_contours(stream_features, featureName, videoName, compression = None):
     myFeature = {frmNum: extract_contour_values(featDict[featureName], compression = compression) for frmNum, featDict in stream_features.items() if featDict[featureName] is not None}
     featFrm = pd.DataFrame(myFeature).T ### in rows: frame number. 
                                         ### in columns, the feature component (x and y values of each point, e.g.)
                                         ### in cells, the values for the feature components
-    featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
-    featFrm.columns = featLabels
-    
-    save_feature_frame(featFrm, featureName, videoName)
+    if not featFrm.empty:
+        featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
+        featFrm.columns = featLabels
+        
+        save_feature_frame(featFrm, featureName, videoName)
+    else:
+        print(f'   {featureName}: nothing to save!')
 
 
 def save_homographies(stream_features, videoName):
@@ -70,8 +80,20 @@ def save_homographies(stream_features, videoName):
     
     save_feature_frame(featFrm, 'H', videoName)
 
-#%% Loading 
+def save_particles(stream_features, featureName, videoName):
+    myFeature = {frmNum: extract_particle_values(featDict[featureName]) for frmNum, featDict in stream_features.items() if featDict[featureName] is not None}
+    featFrm = pd.DataFrame(myFeature).T ### in rows: frame number. 
+                                        ### in columns, the feature component (x and y values of each point, e.g.)
+                                        ### in cells, the values for the feature components
+    number_of_particles = int(len(featFrm.columns) / 4)
+    featLabels = np.ravel([[f'x_{idx}', f'y_{idx}', f'dx_{idx}', f'dy_{idx}'] for idx in range(number_of_particles)])
+    featFrm.columns = featLabels
+    
+    save_feature_frame(featFrm, featureName, videoName)
+    
+    
 
+###### Loading #############
 
 def read_feature_frame(featureName, videoName):
        
@@ -86,7 +108,7 @@ def read_feature_frame(featureName, videoName):
         frmList.append(myFrm)
         
     featFrm = pd.concat(frmList)
-    featFrm = featFrm.drop_duplicates()
+    featFrm = featFrm[~featFrm.reset_index().duplicated().values] ### drop exact duplicates (including the index = frame number)
 
     if not featFrm.index.duplicated().any():
         print(f'Feature merger for {featureName} successful.')
@@ -108,21 +130,27 @@ def single_feature_to_object(singlefeatSeries):
     x_vals = [v for k, v in singlefeatDict.items() if k.startswith('x') if not v == MISSING_SENTINEL_VALUE]
     y_vals = [v for k, v in singlefeatDict.items() if k.startswith('y') if not v == MISSING_SENTINEL_VALUE]
     z_vals = [v for k, v in singlefeatDict.items() if k.startswith('z') if not v == MISSING_SENTINEL_VALUE]
+    dx_vals = [v for k, v in singlefeatDict.items() if k.startswith('dx') if not v == MISSING_SENTINEL_VALUE]
+    dy_vals = [v for k, v in singlefeatDict.items() if k.startswith('dy') if not v == MISSING_SENTINEL_VALUE]
     
-    if z_vals is not []:
+    if z_vals == []:
         ### this means we have a bunch of points, (with x and y values), 
-        ### and therefore a CONTOUR!
-        assert len(x_vals) == len(y_vals)
-        num_points = len(x_vals)
-        myPoints = np.dstack([x_vals, y_vals]).reshape((num_points, 1, 2)) ### bring them into shape
-        return Contour(myPoints)
+        if dx_vals == [] and dy_vals == []:
+            ### we have no speed info, therefore a CONTOUR!
+            assert len(x_vals) == len(y_vals)
+            num_points = len(x_vals)
+            myPoints = np.dstack([x_vals, y_vals]).reshape((num_points, 1, 2)) ### bring them into shape
+            return Contour(myPoints)
+        else:
+            assert len(x_vals) == len(y_vals) == len(dx_vals) == len(dy_vals)
+            return np.array([x_vals, y_vals, dx_vals, dy_vals])
     else:
         ### this means we have x, y and z -> a HOMOGRAPHY!
         assert len(x_vals) == len(y_vals) == 3
         assert len(z_vals) == 2
         
         z_vals = [*z_vals, 1]
-        myH = np.dstack([x_vals, y_vals, z_vals])
+        myH = np.array([x_vals, y_vals, z_vals])
         
         return myH
        
@@ -146,7 +174,7 @@ def load_stored_features(videoName, featnameList = None):
                                                         ### for which we have at least one feature.
         
     ### keep unique frames. These will be our dictionary keys!
-    indexList = list(set(indexList))
+    indexList = sorted(list(set(indexList)))
     
     stream_features = {}
     for idx in indexList:
@@ -162,3 +190,22 @@ def load_stored_features(videoName, featnameList = None):
                 
     return stream_features
 
+def split_joint_features(stream_features):
+    featList = []
+    
+    currFeat = {}
+    
+    lastFrame = None
+    for k in stream_features:
+        
+        if lastFrame is None:
+            currFeat[k] = stream_features[k]
+        else:
+            if k == lastFrame + 1:
+                currFeat[k] = stream_features[k]
+            else:
+                featList.append(currFeat)
+                currFeat = {}
+        lastFrame = k
+
+    return featList

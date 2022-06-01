@@ -179,7 +179,20 @@ def find_ball_candidate_mask(cFrm, motMask, topPlayerContour, botPlayerContour):
         ### Dilated player mask
         dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 10))
         return frm.within_contour(cnt).dilate(dil_kernel)
-    playerMask = cntMask(cFrm, topPlayerContour) | cntMask(cFrm, botPlayerContour)
+    
+    if not topPlayerContour is None:
+        topMask = cntMask(cFrm, topPlayerContour)
+    else:
+        topMask = BoolFrame(cFrm.to_grey().zero().array)
+        print('Lost Top Player Tracking!')
+        
+    if not botPlayerContour is None:
+        botMask = cntMask(cFrm, botPlayerContour)
+    else:
+        botMask = BoolFrame(cFrm.to_grey().zero().array)
+        print('Lost Bottom Player Tracking!')
+    
+    playerMask = topMask | botMask
     # cFrm.mask(playerMask).show()
     
     ### Opened Motion Mask

@@ -315,9 +315,7 @@ for idx, start_stop_frames in video_segments.iterrows():
     stream_features_smooth = smoothe_and_choose_ball_contour(stream_features_original)
     stream_features_itpl = interpolate_ball_contours(stream_features_smooth)
     
-    replay(cap, stream_features_itpl, 
-            cache_frame_offset = CURR_FRAME_IDX, drawFunc = draw_replay,
-            ms_between_frames = 80)
+    replay(cap, stream_features_smooth, drawFunc = draw_replay, ms_between_frames = 80)
     
     stream_features_smart = smart_interpolate_ball_contours(stream_features_smooth)
     

@@ -148,11 +148,11 @@ NET_DILATION = 2.5
 ROI_DILATION = 1
 
 from ATMANpy.funcs.court_funcs import COURT_LINE_WIDTH, WHITE_PIXEL_THRESHOLD
-from ATMANpy.funcs.player_funcs import find_player_contour
+from ATMANpy.funcs.player_funcs import find_player_contour, find_player_contour_with_overlap
 
 
 
-def find_player(frame, courtLines, netLines, H, roiMask = None, remove_shadow = True,
+def find_player(frame, courtLines, H, roiMask = None, remove_shadow = True,
                 verbose = False):
     
     ### get the burned in mask for this specific homography
@@ -217,7 +217,7 @@ def get_adaptive_ROIs(topPlayer, botPlayer, H, hFrm):
     
     return top_ROI, bot_ROI
 
-def find_both_players(frame, courtLines, netLines, H, remove_shadow = True,
+def find_both_players(frame, courtLines, H, remove_shadow = True,
                       roiMask_top = None, roiMask_bot = None,
                       verbose = False):
     
@@ -236,6 +236,53 @@ def find_both_players(frame, courtLines, netLines, H, remove_shadow = True,
                                     shadowMask = burn_shadowMask)
 
     return topPlayer, botPlayer
+
+
+def find_both_players_smart(frame, courtLines, H, remove_shadow = True,
+                            playerTop_prev = None, playerBot_prev = None,
+                            roiMask_top = None, roiMask_bot = None,
+                            verbose = False):
+    
+    ### get the burned in mask for this specific homography
+    burn_foreMask = match_specific_burn_in_func(frame, H, verbose = verbose)
+    
+    if remove_shadow:
+        burn_shadowMask = match_specific_shadow_func(frame, H, verbose = verbose)
+    else:
+        burn_shadowMask = None
+        
+    topPlayer = find_player_contour_with_overlap(frame, burn_foreMask, roiMask_top, playerTop_prev,
+                                                 shadowMask = burn_shadowMask)
+    
+    botPlayer = find_player_contour_with_overlap(frame, burn_foreMask, roiMask_bot, playerBot_prev,
+                                                 shadowMask = burn_shadowMask)
+
+    return topPlayer, botPlayer
+
+
+
+def detendrilize_player(frame, playerCnt_bef, playerCnt_aft, kernel = (5, 5)):
+
+    if playerCnt_bef is None:
+        return playerCnt_aft
+    
+    playerMask_bef = frame.within_contour(playerCnt_bef)
+    playerMask_aft = frame.within_contour(playerCnt_aft)
+    
+    diffBool = playerMask_aft & ~playerMask_bef
+
+    tendrilBool = diffBool.open(kernel) ### whatever survives this opening is a tendril, or an 
+                                        ### unnatural increase in the surface of the player.
+                                        ### SADLY, THE OPENING STEP IS QUITE INEFFECTIVE.....
+                                        ### NO MATTER THE KERNEL SIZE, IT DOESN'T REMOVE MUCH BEYOND NOISE.
+                                        
+    newMask = playerMask_aft & ~tendrilBool
+    
+    newContours = newMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    
+    assert len(newContours) == 1
+    return Contour(newContours[0])
+
 
 
 #%%### BALL DETECTION ####
@@ -295,7 +342,7 @@ N = 1000
 
 import ATMANpy.funcs.particle_funcs_vectorized as pf
 
-def initialize_particles(gFrm, courtLines, N = 1000, fps = 25):
+def initialize_particles(gFrm, courtLines, N = N, fps = 25):
     return pf.initialize_particles(gFrm, courtLines, N = N, fps = fps)
     
 def decide_particle_propagation(particles, frm, 
@@ -350,6 +397,26 @@ def find_next_item(stream_features,
     
     return None, None ### if no next ball is found.
 
+def find_last_item(stream_features, 
+                   startNum = None,
+                   item_to_find = 'ball'):
+    if startNum is None:
+        startNum = max(stream_features.keys())
+    
+    for frmNum in sorted(list(stream_features.keys()), reverse = True):
+                    
+        if frmNum > startNum:
+            continue
+        
+        featDict = stream_features[frmNum]      
+               
+        if featDict[item_to_find] is None:
+            continue
+        
+        return frmNum, featDict[item_to_find]
+    
+    return None, None ### if no next ball is found.
+
 def find_next_N_items(stream_features, N = 3,
                       startNum = None, 
                       item_to_find = 'ball'):
@@ -374,6 +441,33 @@ def find_next_N_items(stream_features, N = 3,
         return frmNum, outList
     else:
         return frmNum, [None] * N
+    
+def find_last_N_items(stream_features, N = 3,
+                      startNum = None, 
+                      item_to_find = 'ball'):
+    frmNum, item = find_last_item(stream_features, 
+                                  startNum = startNum,
+                                  item_to_find = item_to_find)
+    
+    if not frmNum is None:
+        outList = [item]
+        item_count = 1
+        frame_count = frmNum
+        while item_count < N:
+            item_count += 1
+            frame_count -= 1
+            
+            try: 
+                add_item = stream_features[frame_count][item_to_find]
+            except KeyError:
+                add_item = None
+            outList.append(add_item)
+        
+        return frmNum, outList
+    else:
+        return frmNum, [None] * N
+    
+
 
 def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3):
     ### given three subsequent contours, calculate their speed and acceleration per frame
@@ -396,6 +490,8 @@ def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3):
 
 def smoothe_and_choose_ball_contour(stream_features):
     
+    LIKELIHOOD_THRESHOLD = 10 ** (-10)
+    
     ### first pass (from back to front): kitagawa smoothing
     stream_features_smooth = pf.kitagawa_smooth(stream_features)
     
@@ -404,7 +500,9 @@ def smoothe_and_choose_ball_contour(stream_features):
         if not featDict['ballParticles'] is None:
             goodContour = pf.choose_likely_ball_contour(featDict['ballParticles'], 
                                                         featDict['ballContours'],
-                                                        verbose = False)
+                                                        verbose = False,
+                                                        return_likelihood = False,
+                                                        l_threshold = LIKELIHOOD_THRESHOLD)
         else:
             goodContour = None
         featDict['ballDetected'] = True if goodContour is not None else False
@@ -412,6 +510,31 @@ def smoothe_and_choose_ball_contour(stream_features):
         
     return stream_features_smooth
         
+def smoothe_and_choose_ball_contour_with_likelihood(stream_features):
+    
+    LIKELIHOOD_THRESHOLD = 10 ** (-10)
+    
+    ### first pass (from back to front): kitagawa smoothing
+    stream_features_smooth = pf.kitagawa_smooth(stream_features)
+    
+    ### second pass: determine if ball contour passes threshold
+    for frmNum, featDict in stream_features_smooth.items():
+        if not featDict['ballParticles'] is None:
+            goodContour, max_likelihood, threshold = pf.choose_likely_ball_contour(featDict['ballParticles'], 
+                                                                                  featDict['ballContours'],
+                                                                                  verbose = False,
+                                                                                  return_likelihood = True,
+                                                                                  l_threshold = LIKELIHOOD_THRESHOLD)
+        else:
+            goodContour, max_likelihood, threshold = None, None, None
+        
+        featDict['ballDetected'] = True if goodContour is not None else False
+        featDict['ball'] = goodContour
+        featDict['ballLikelihood'] = max_likelihood
+        featDict['ballThreshold'] = threshold
+        
+    return stream_features_smooth
+
 def interpolate_ball_contours(stream_features):
     stream_features_interpolated = deepcopy(stream_features)
     
@@ -449,32 +572,24 @@ def interpolate_ball_contours(stream_features):
     return stream_features_interpolated
 
 
-def smart_interpolate_ball_contours(stream_features):
+def smart_interpolate_ball_contours(stream_features, verbose = False):
     stream_features_interpolated = deepcopy(stream_features)
     
-    ### third pass: interpolate contours
-    currCtr_2 = None ### 2 behind the current contour
-    currCtr_1 = None ### 1 behind the current contour
-    currCtr = None
     for frmNum, featDict in stream_features_interpolated.items():    
-        # if frmNum == 10330:
-        #     break
-        if featDict['ball'] is not None:
-            ### update trailing cache of contours
-            currCtr_2 = currCtr_1
-            currCtr_1 = currCtr
-            currCtr = featDict['ball']
-            last_frame_with_ball = frmNum
-            
-            _, currSpeed, currAccel = calculate_speeds_and_acceleration(currCtr_2, currCtr_1, currCtr)
-            ### technically, we could cache the speed and half the time it takes 
-            ### to calculate_speeds_and_acceleration, but really it shouldn't be the bottleneck anyway.
-            continue
         
-        if currCtr is None:
-            continue
         
         if featDict['ball'] is None:
+            
+            ### determine the last found ball position
+            last_frame_with_ball, last_three_ctrs = find_last_N_items(stream_features_interpolated, N = 3,
+                                                                      startNum = frmNum, 
+                                                                      item_to_find = 'ball')
+            
+            currCtr, currCtr_1, currCtr_2 = last_three_ctrs
+                
+            if currCtr is None:
+                continue
+                
             ### determine the next found ball position
             next_frame_with_ball, next_three_ctrs = find_next_N_items(stream_features_interpolated, N = 3,
                                                                       startNum = frmNum, 
@@ -485,28 +600,35 @@ def smart_interpolate_ball_contours(stream_features):
             ### find speed and acceleration after the next ball
             if not nextCtr is None:
                 
+                _, currSpeed, currAccel = calculate_speeds_and_acceleration(currCtr_2, currCtr_1, currCtr)
+                
                 nextSpeed, _, nextAccel = calculate_speeds_and_acceleration(nextCtr, nextCtr_1, nextCtr_2)
                 
                 time_from_ball = frmNum - last_frame_with_ball
                 time_to_ball = next_frame_with_ball - frmNum
                 
                 if currSpeed is not None and nextSpeed is not None:
-                    itplBall = pf.interpolate_ball_features_smart(currCtr, nextCtr,
-                                                                  speed_before = currSpeed, 
-                                                                  speed_after = nextSpeed,
-                                                                  accel_before = currAccel,
-                                                                  accel_after = nextAccel,
-                                                                  frames_before = time_from_ball,
-                                                                  frames_after = time_to_ball)
+                    itplBall = pf.interpolate_ball_features_smart_circle(currCtr, nextCtr,
+                                                                         speed_before = currSpeed, 
+                                                                         speed_after = nextSpeed,
+                                                                         accel_before = currAccel,
+                                                                         accel_after = nextAccel,
+                                                                         frames_before = time_from_ball,
+                                                                         frames_after = time_to_ball,
+                                                                         verbose = verbose)
                 else:
-                    itplBall = pf.interpolate_ball_features(currCtr, nextCtr, 
-                                                            frames_before = time_from_ball,
-                                                            frames_after = time_to_ball)
+                    itplBall = pf.interpolate_ball_features_circle(currCtr, nextCtr, 
+                                                                   frames_before = time_from_ball,
+                                                                   frames_after = time_to_ball)
         
                 featDict['ball'] = itplBall
-                featDict['ballDetected'] = False
+                # featDict['ballDetected'] = False
             else:
                 featDict['ball'] = None
-                featDict['ballDetected'] = False
+                # featDict['ballDetected'] = False
+
             
     return stream_features_interpolated
+
+
+
