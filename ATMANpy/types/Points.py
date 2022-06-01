@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+0# -*- coding: utf-8 -*-
 """
 Created on Fri Mar 11 17:30:35 2022
 
@@ -26,20 +26,32 @@ class Point:
         #############################  
         
     ### ARITHMETIC ###
-     
+    @staticmethod      
+    def get_operant(op):
+        try: 
+            op_x, op_y = op.coords
+        except:
+            op_x, op_y = op, op
+        finally:
+            return op_x, op_y    
+    
     def __add__(self, y):
-        outCoords = self.coords[0] + y.coords[0], self.coords[1] + y.coords[1] 
+        op_x, op_y = Point.get_operant(y)
+        outCoords = self.coords[0] + op_x, self.coords[1] + op_y
         return Point(outCoords)
     def __sub__(self, y):
-        outCoords = self.coords[0] - y.coords[0], self.coords[1] - y.coords[1] 
+        op_x, op_y = Point.get_operant(y)
+        outCoords = self.coords[0] - op_x, self.coords[1] - op_y
         return Point(outCoords)
     def __mul__(self, y):
-        outCoords = self.coords[0] * y, self.coords[1] * y
+        op_x, op_y = Point.get_operant(y)
+        outCoords = self.coords[0] * op_x, self.coords[1] * op_y
         return Point(outCoords)
     def __floordiv__(self, y):
-        outCoords = self.coords[0] // y, self.coords[1] // y
+        op_x, op_y = Point.get_operant(y)
+        outCoords = self.coords[0] // op_x, self.coords[1] // op_y
         return Point(outCoords)
-        
+    
     ### METHODS ###
     def up(self, points):
         return Point((self.x, max(self.y - points, 0)))
@@ -143,6 +155,21 @@ class Point:
     
     def round_point(self):
         return Point(self.round_coords(), value = self.value)
+        
+    def within(self, myReg):
+        tl, tr, bl, br = myReg.to_points()
+        if self.is_right(tl) and self.is_below(tl) and self.is_left(br) and self.is_above(br):
+            return True
+        else:
+            return False
+        
+    def bind_below(self, bound):
+        x, y = self.coords
+        return Point((max(x, bound), max(y, bound)))
+    
+    def bind_above(self, bound):
+        x, y = self.coords
+        return Point((min(x, bound), min(y, bound)))
         
     
 @dataclass(frozen = True)

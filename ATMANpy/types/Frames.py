@@ -257,7 +257,16 @@ class Frame:
                                          contour_retrieval_mode, contour_approx_mode)
         return cts, hierarchy
         
-    
+    def warp(self, H, cols = None, rows = None):
+        InstClass = self.__class__
+        self_copy = self.array.copy()
+        
+        if cols is None:
+            cols = self.cols
+        if rows is None:
+            rows = self.rows
+        wrpArr = cv.warpPerspective(self_copy, H, (cols, rows))
+        return InstClass(wrpArr)
     ###############
 
 @dataclass(frozen = True)
@@ -565,14 +574,6 @@ class BGRFrame(Frame):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
         return BGRFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
     
-    def warp(self, H, cols = None, rows = None):
-        if cols is None:
-            cols = self.cols
-        if rows is None:
-            rows = self.rows
-        wrpArr = cv.warpPerspective(self.array, H, (cols, rows))
-        return BGRFrame(wrpArr)
-        
     ###############
     
 
@@ -651,14 +652,6 @@ class HSVFrame(Frame):
     def mask(self, boolFrm):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
         return HSVFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
-    
-    def warp(self, H, cols = None, rows = None):
-        if cols is None:
-            cols = self.cols
-        if rows is None:
-            rows = self.rows
-        wrpArr = cv.warpPerspective(self.array, H, (cols, rows))
-        return HSVFrame(wrpArr)
         
     ###############
     

@@ -640,7 +640,7 @@ class Region(Lines):
     
     
     def get_homography(self, othRegion):
-        from ATMANpy.line_funcs import calculate_homography
+        from ATMANpy.funcs.line_funcs import calculate_homography
         return calculate_homography(self.points, othRegion.points)
         
         
