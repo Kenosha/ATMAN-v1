@@ -66,7 +66,10 @@ class Point:
         return Point((self.x + points, self.y))
     
     def distance_to(self, aPt):
-        return ((self.x - aPt.x) ** 2 + (self.y - aPt.y) ** 2) ** 0.5
+        x_dist_64 = int(self.x - aPt.x) ### to prevent overflow when squaring.
+        y_dist_64 = int(self.y - aPt.y) ### to prevent overflow when squaring.
+        res = (x_dist_64 ** 2 + y_dist_64 ** 2) ** 0.5
+        return res
     
     def conform_to(self, image):
         # force the point to be in bounds
