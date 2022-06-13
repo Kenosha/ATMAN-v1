@@ -28,3 +28,16 @@ def get_folder_struct(source, verbose = True):
 
 ####### video read in
 
+
+
+##### 
+
+
+from functools import reduce
+def compose(*funcs):    
+    def binary_compose(f, g):
+        return lambda x : f(g(x))            
+    return reduce(binary_compose, funcs, lambda x: x)
+
+
+

@@ -72,7 +72,6 @@ def get_point_bounds(pointArr,
 
 def stream_features_median_corner_regions(sf, how_many_unilateral = 8):
     
-    
     tlArr, trArr, blArr, brArr = get_point_arrays(sf)
     
     assert tlArr.shape[0] == trArr.shape[0] == blArr.shape[0] == brArr.shape[0]
@@ -317,39 +316,6 @@ def detect_movement_contours(sf, verbose = False):
         
     return out_sf
 
-
-def draw_mov_contours(frmDict, featDict, frameNum = None):
-
-    cFrm = frmDict['cFrm']
-
-    selectedBall = featDict['ball']
-    playerTop = featDict['playerTop']
-    playerBot = featDict['playerBot']
-    
-    ballDetected = featDict['ballDetected']
-    # ballParticles = featDict['ballParticles']
-    
-    movContours = featDict['movContours']
-    
-    sendFrm = cFrm
-    
-    if frameNum is not None:
-        sendFrm = sendFrm.put(str(int(frameNum)), thickness = 2, color = (0, 255, 255), where = (1800, 50))
-    
-    sendFrm = sendFrm.put(playerTop, thickness = 2, color = (0, 0, 255))
-    sendFrm = sendFrm.put(playerBot, thickness = 2, color = (0, 0, 255))
-    # sendFrm = sendFrm.put(ballContours, thickness = 2, color = (255, 0, 0))
-    
-    sendFrm = sendFrm.put(movContours, thickness = 2, color = (255, 0, 0))
-    
-    if selectedBall is not None:
-        if ballDetected:
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 0))
-        else: ### ball is interpolated!
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 255))
-        
-    return sendFrm
-
 def calculate_contiguous_movement(sf):
 
     out_sf = deepcopy(sf)    
@@ -379,44 +345,10 @@ def calculate_contiguous_movement(sf):
         else:
             current_movement_index = 0
             
-        featDict['curr_movInt'] = current_movement_index 
+        featDict['movInt'] = current_movement_index 
     
     return out_sf
     
-
-def draw_mov_contours_with_mov_int(frmDict, featDict, frameNum = None):
-
-    cFrm = frmDict['cFrm']
-
-    selectedBall = featDict['ball']
-    playerTop = featDict['playerTop']
-    playerBot = featDict['playerBot']
-    
-    ballDetected = featDict['ballDetected']
-    # ballParticles = featDict['ballParticles']
-    
-    movContours = featDict['movContours']
-    movInt = featDict['curr_movInt']
-    
-    sendFrm = cFrm
-    
-    if frameNum is not None:
-        sendFrm = sendFrm.put(str(int(frameNum)), thickness = 2, color = (0, 255, 255), where = (1800, 50))
-    
-    sendFrm = sendFrm.put(playerTop, thickness = 2, color = (0, 0, 255))
-    sendFrm = sendFrm.put(playerBot, thickness = 2, color = (0, 0, 255))
-    # sendFrm = sendFrm.put(ballContours, thickness = 2, color = (255, 0, 0))
-    
-    sendFrm = sendFrm.put(movContours, thickness = 2, color = (255, 0, 0))
-    sendFrm = sendFrm.put(f'Consec. Count: {str(movInt)}', thickness = 2)
-    
-    if selectedBall is not None:
-        if ballDetected:
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 0))
-        else: ### ball is interpolated!
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 255))
-        
-    return sendFrm    
 
 def drop_movement_frames(sf, verbose = False):
     
@@ -431,7 +363,7 @@ def drop_movement_frames(sf, verbose = False):
     
     for frmNum, featDict in sf.items():
         
-        current_movement_index = featDict['curr_movInt']
+        current_movement_index = featDict['movInt']
         
         ### SELECT FRAME FOR REMOVAL ###
         if current_movement_index > 0:
@@ -444,7 +376,7 @@ def drop_movement_frames(sf, verbose = False):
                 stop_idx = - KEEP_FIRST_AND_LAST_X_FRAMES
                 current_frames_to_toss = current_frames_to_toss[start_idx:stop_idx]
             
-                print(current_frames_to_toss)
+                if verbose: print(f'Tossing: {current_frames_to_toss}...')
                 frames_to_toss.append(current_frames_to_toss)
             
             current_frames_to_toss = []

@@ -74,8 +74,8 @@ def save_homographies(stream_features, videoName):
     myFeature = {frmNum: extract_homography_values(featDict['H']) for frmNum, featDict in stream_features.items() if featDict['H'] is not None}
     featFrm = pd.DataFrame(myFeature).T ### in rows: frame number. 
                                         ### in columns, the feature component (x and y values of each point, e.g.)
-                                        ### in cells, the values for the feature components
-    featLabels = np.ravel([[f'x_{idx}', f'y_{idx}', f'z_{idx}'] for idx in range(3)])[:8]
+                                        ### in cells, the values for the feature components         
+    featLabels = [f'{dim}_{idx}' for dim in ['x', 'y', 'z'] for idx in range(3)][:8]
     featFrm.columns = featLabels
     
     save_feature_frame(featFrm, 'H', videoName)
@@ -95,7 +95,7 @@ def save_particles(stream_features, featureName, videoName):
 
 ###### Loading #############
 
-def read_feature_frame(featureName, videoName):
+def read_feature_frame(featureName, videoName, keep_which = 'last'):
        
     import os
     featDict = atu.get_folder_struct('features_stored')
@@ -113,8 +113,8 @@ def read_feature_frame(featureName, videoName):
     if not featFrm.index.duplicated().any():
         print(f'Feature merger for {featureName} successful.')
     else:
-        featFrm = featFrm[~featFrm.index.duplicated(keep = 'last')]
-        print(f'Feature merger for {featureName} unsuccessful due to duplicated frames with ambiguous values. Kept the last occurence, arbitrarily.')
+        featFrm = featFrm[~featFrm.index.duplicated(keep = keep_which)]
+        print(f'Feature merger for {featureName} unsuccessful due to duplicated frames with ambiguous values. Kept the {keep_which} occurence, arbitrarily.')
         
     return featFrm
 
@@ -154,7 +154,7 @@ def single_feature_to_object(singlefeatSeries):
         
         return myH
        
-def load_stored_features(videoName, featnameList = None):
+def load_stored_features(videoName, featnameList = None, keep_which = 'last'):
     
     ### if no list is given, read all available features
     if featnameList is None: 
@@ -168,7 +168,7 @@ def load_stored_features(videoName, featnameList = None):
     frameDict = {}
     indexList = []
     for featName in featnameList:
-        featureFrame = read_feature_frame(featName, videoName)
+        featureFrame = read_feature_frame(featName, videoName, keep_which = keep_which)
         frameDict[featName] = featureFrame
         indexList.extend(featureFrame.index.to_list())  ### construct the set of all frames (indices)
                                                         ### for which we have at least one feature.
@@ -190,22 +190,62 @@ def load_stored_features(videoName, featnameList = None):
                 
     return stream_features
 
-def split_joint_features(stream_features):
+# def split_joint_features(stream_features, min_feature_length = 0):
+#     featList = []
+    
+#     currFeat = {}
+    
+#     lastFrame = None
+#     for k in stream_features:
+        
+#         if lastFrame is None:
+#             currFeat[k] = stream_features[k]
+#         else:
+#             if k == lastFrame + 1:
+#                 currFeat[k] = stream_features[k]
+#             else:
+#                 if len(currFeat) > min_feature_length:
+#                     featList.append(currFeat)
+#                 currFeat = {}
+#         lastFrame = k
+
+#     return featList
+
+
+def split_joint_features(stream_features, min_feature_length = 0):
     featList = []
     
-    currFeat = {}
+    ks = list(stream_features.keys())
+    prevFrame, frames = ks[0], ks[1:]
     
-    lastFrame = None
-    for k in stream_features:
-        
-        if lastFrame is None:
-            currFeat[k] = stream_features[k]
-        else:
-            if k == lastFrame + 1:
-                currFeat[k] = stream_features[k]
-            else:
-                featList.append(currFeat)
-                currFeat = {}
-        lastFrame = k
+    currFeat = {prevFrame: stream_features[prevFrame]} ### initialize with the first element.
 
+    for k in frames:
+        
+        if k > prevFrame + 1: ### if there is a gap between last and current frame
+            if len(currFeat) > min_feature_length: ### if the current accumulated sf is large enough
+                featList.append(currFeat)    
+            currFeat = {}
+        
+        currFeat[k] = stream_features[k]
+        prevFrame = k
+    
+    ### finally, add in the remaining features (if long enough)
+    if len(currFeat) > min_feature_length: 
+        featList.append(currFeat)    
+    
     return featList
+        
+
+def join_split_features(splitList):
+    return {k: v for sf in splitList for k, v in sf.items()}
+    
+
+def filter_features_by_play_sequence_frame(stream_features, seqFrame):
+    ### seqFrame -> two columns: start_frame and stop_frame    
+    stream_features_filtered = {}
+    for idx, start, stop in seqFrame.to_records():
+        for frame in range(start, stop + 1):
+            stream_features_filtered[frame] = stream_features[frame]
+    return stream_features_filtered
+
