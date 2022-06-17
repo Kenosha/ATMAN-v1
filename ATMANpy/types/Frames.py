@@ -8,6 +8,7 @@ Created on Fri Mar 11 17:30:35 2022
 import os
 import cv2 as cv
 import numpy as np
+import pandas as pd
 from dataclasses import dataclass
 
 from ATMANpy.funcs.type_funcs import typecheck, arraycheck
@@ -267,6 +268,14 @@ class Frame:
             rows = self.rows
         wrpArr = cv.warpPerspective(self_copy, H, (cols, rows))
         return InstClass(wrpArr)
+    
+    def dim(self, dimming_factor):
+        InstClass = self.__class__
+        self_copy = self.array.copy()
+        
+        dimArr = (self_copy * dimming_factor)
+        return InstClass(dimArr.astype('uint8'))
+    
     ###############
 
 @dataclass(frozen = True)
@@ -447,6 +456,20 @@ class GreyFrame(Frame):
         grad_norm = (grad * 255 / grad.max()).astype(np.uint8)
         return GreyFrame(grad_norm)
     
+    def sobel_x(self):
+        self_copy = self.array.copy()
+        grad = cv.Sobel(self_copy, cv.CV_64F, 1, 0)
+        grad = np.abs(grad)
+        grad_norm = (grad * 255 / grad.max()).astype(np.uint8)
+        return GreyFrame(grad_norm)
+    
+    def sobel_y(self):
+        self_copy = self.array.copy()
+        grad = cv.Sobel(self_copy, cv.CV_64F, 0, 1)
+        grad = np.abs(grad)
+        grad_norm = (grad * 255 / grad.max()).astype(np.uint8)
+        return GreyFrame(grad_norm)
+    
     def sobel_dirs(self, toward_high_intensity = True):
         ### how: atan or atan2
         # - atan: calculate arctan of quotient, losing info if x is negative
@@ -507,6 +530,14 @@ class GreyFrame(Frame):
                 regionList.append(myRegion)
                 
         return regionList
+    
+    
+    def hist(self, normalize = False):
+        histData = cv.calcHist([self.array], [0], None, [256], [0, 256])
+        histSer = pd.DataFrame(histData, dtype = 'int64').squeeze()
+        if normalize:
+            histSer = histSer / histSer.sum()
+        return histSer
     ###############
 
 @dataclass(frozen = True)
@@ -574,8 +605,26 @@ class BGRFrame(Frame):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
         return BGRFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
     
+    def hist(self, channels, normalize = False):
+        channelDict = {'B': 0, 'G': 1, 'R': 2}
+        
+        ### figure out channels
+        chnList = []
+        binList = []
+        rngList = []
+        for c in channels:
+            chnList.append(channelDict[c])
+            binList.append(256)
+            rngList.extend([0, 256])
+            
+        histData = cv.calcHist([self.array], chnList, None, binList, rngList)
+        histFrm = pd.DataFrame(histData, dtype = 'int64')
+        if normalize:
+            histFrm = histFrm / histFrm.sum().sum()
+        return histFrm.squeeze()
     ###############
     
+
 
 @dataclass(frozen = True)
 class HSVFrame(Frame):
@@ -653,6 +702,23 @@ class HSVFrame(Frame):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
         return HSVFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
         
+    def hist(self, channels, normalize = False):
+        channelDict = {'H': 0, 'S': 1, 'V': 2}
+        
+        ### figure out channels
+        chnList = []
+        binList = []
+        rngList = []
+        for c in channels:
+            chnList.append(channelDict[c])
+            binList.append(256)
+            rngList.extend([0, 256])
+            
+        histData = cv.calcHist([self.array], chnList, None, binList, rngList)
+        histFrm = pd.DataFrame(histData, dtype = 'int64')
+        if normalize:
+            histFrm = histFrm / histFrm.sum().sum()
+        return histFrm.squeeze()
     ###############
     
 

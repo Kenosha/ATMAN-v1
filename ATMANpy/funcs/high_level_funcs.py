@@ -103,6 +103,15 @@ match_specific_burn_in_func = partial(get_burn_in_mask, medFrm, stdFrm,
                                       normalized_deviation_threshold = NORMALIZED_DEVIATION_THRESHOLD,
                                       channel_weights = BURN_IN_HSV_CHANNEL_WEIGHTS) ### these are always the same!
 
+MINIMUM_PROPORTION = 0.0125
+MINIMUM_STEP_GAIN = 0.002
+from ATMANpy.funcs.player_funcs import get_burn_in_mask_iterative
+match_specific_iterative_burn_in_func = partial(get_burn_in_mask_iterative, medFrm, stdFrm,
+                                                minimum_proportion = MINIMUM_PROPORTION,
+                                                minimum_step_gain = MINIMUM_STEP_GAIN) ### these are always the same!
+
+
+
 H_THRESHOLD = 5
 S_THRESHOLD = 10
 V_THRESHOLD_LOWER = 0.75
@@ -172,7 +181,8 @@ def find_player(frame, courtLines, H, roiMask = None, remove_shadow = True,
 def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
                         player_tracking_scale_factor = 1.2,
                         min_bounding_height = 100,
-                        min_bounding_width = 40):
+                        min_bounding_width = 40,
+                        halfcourtLine = None, keep_below_or_above = None):
     
     if playerContour is None:
         initial_projROI = get_projected_ROI(initialROI, H)
@@ -184,6 +194,23 @@ def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
         updated_projROI = enclReg.scale_equal(player_tracking_scale_factor)
         updated_projROI = updated_projROI.enlarge(to_min_height = min_bounding_height, to_min_width = min_bounding_width)
         roiMask = hFrm.within_region(updated_projROI)
+        
+    # if not halfcourtROI is None:
+    #     ### to prevent adaptive ROIs to spill over into the other player's court
+    #     ### we can impose a half court mask
+    #     proj_halfcourtROI = get_projected_ROI(halfcourtROI, H)
+    #     halfcourtMask = hFrm.within_region(proj_halfcourtROI)
+    #     roiMask = roiMask & halfcourtMask
+        
+    if not halfcourtLine is None:
+        ### to prevent adaptive ROIs to spill over into the other player's court
+        ### we can impose a half court mask
+        if not keep_below_or_above in ['below', 'above']:
+            raise Exception('When specifying halfcourt boundary in player selection, specify whether to keep everything above or below.')
+        else:
+            proj_halfcourtLine = halfcourtLine.apply_homography(H).round_points()
+            halfMask = getattr(hFrm, keep_below_or_above)(proj_halfcourtLine)
+            roiMask = roiMask & halfMask
         
     return roiMask
 
@@ -198,6 +225,11 @@ initial_ROI_lower, initial_ROI_upper = get_service_ROIs(schemaLines,
                                                         depth_factor = INITIAL_DEPTH_FACTOR, 
                                                         add_depth_factor_bottom = ADDITIONAL_DEPTH_FACTOR)
 
+from ATMANpy.funcs.player_funcs import get_half_court_Lines
+# halfcourt_lower, halfcourt_upper = get_half_court_ROIs(schemaLines)
+halfLine_lower, halfLine_upper = get_half_court_Lines(schemaLines)
+
+
 PLAYER_TRACKING_SCALE_FACTOR = 1.5
 BOT_MIN_BOUNDING_ROI_HEIGHT = 200 ### bounding region has to be 40 pixels wide at least...
 BOT_MIN_BOUNDING_ROI_WIDTH  = 80 ## ... and 100 pixels tall
@@ -208,12 +240,14 @@ def get_adaptive_ROIs(topPlayer, botPlayer, H, hFrm):
     top_ROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
                                   player_tracking_scale_factor = PLAYER_TRACKING_SCALE_FACTOR,
                                   min_bounding_height = TOP_MIN_BOUNDING_ROI_HEIGHT,
-                                  min_bounding_width = TOP_MIN_BOUNDING_ROI_WIDTH)
+                                  min_bounding_width = TOP_MIN_BOUNDING_ROI_WIDTH,
+                                  halfcourtLine = halfLine_upper, keep_below_or_above = 'above')
     
     bot_ROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
                                   player_tracking_scale_factor = PLAYER_TRACKING_SCALE_FACTOR,
                                   min_bounding_height = BOT_MIN_BOUNDING_ROI_HEIGHT,
-                                  min_bounding_width = BOT_MIN_BOUNDING_ROI_WIDTH)
+                                  min_bounding_width = BOT_MIN_BOUNDING_ROI_WIDTH,
+                                  halfcourtLine = halfLine_lower, keep_below_or_above = 'below')
     
     return top_ROI, bot_ROI
 
@@ -241,10 +275,14 @@ def find_both_players(frame, courtLines, H, remove_shadow = True,
 def find_both_players_smart(frame, courtLines, H, remove_shadow = True,
                             playerTop_prev = None, playerBot_prev = None,
                             roiMask_top = None, roiMask_bot = None,
+                            iterative_burn_in = False,
                             verbose = False):
     
     ### get the burned in mask for this specific homography
-    burn_foreMask = match_specific_burn_in_func(frame, H, verbose = verbose)
+    if iterative_burn_in:
+        burn_foreMask = match_specific_iterative_burn_in_func(frame, H, verbose = verbose)
+    else:
+        burn_foreMask = match_specific_burn_in_func(frame, H, verbose = verbose)
     
     if remove_shadow:
         burn_shadowMask = match_specific_shadow_func(frame, H, verbose = verbose)

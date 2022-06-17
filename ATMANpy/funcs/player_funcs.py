@@ -66,6 +66,43 @@ def get_service_ROIs(schemaLines,
 
     return ROI_lower, ROI_upper
 
+def get_half_court_ROIs(schemaLines, width_factor = 3, depth_factor = 3, overlap_factor = 0.2):
+    ### two rois that give simply split the screen in the middle (with some overlap)
+    # so that we can use these to limit the adaptive player ROIs.
+    # This is to prevent that (by some fluke) the 
+    
+    width_add = width_factor * schemaLines.doubles_alley_width
+    depth_add = depth_factor * schemaLines.side_length
+
+    
+    bot_court = schemaLines.get_half_region(side = 'Bottom', width = 'Doubles')
+    
+    ### make symmetrical ROIs
+    ROI_lower = Region.from_points(bot_court['Top'].leftPt.left(width_add), ### service line
+                                   bot_court['Top'].rightPt.right(width_add),  # service line
+                                   bot_court['Bottom'].leftPt.left(width_add).down(depth_add), 
+                                   bot_court['Bottom'].rightPt.right(width_add).down(depth_add))
+    
+    ROI_upper = Region.from_lines(ROI_lower.transform('flip_vertically', schemaLines['Net Line']))
+
+    ### Slight overlap for the bottom player -> he can appear to be in top court!
+    overl_app = overlap_factor * schemaLines.side_length
+    
+    top_left, top_right, bot_left, bot_right = ROI_lower.to_points()
+    ROI_lower = Region.from_points(top_left.up(overl_app), top_right.up(overl_app), 
+                                   bot_left, bot_right)
+
+    return ROI_lower, ROI_upper
+
+def get_half_court_Lines(schemaLines, overlap_factor = 0.2):
+    ### Slight overlap for the bottom player -> he can appear to be in top court!
+    overlap_addon = round(overlap_factor * schemaLines.side_length)
+    
+    top_halfLine = schemaLines['Net Line']
+    bot_halfLine = schemaLines['Net Line'].up(overlap_addon)
+    
+    return bot_halfLine, top_halfLine
+    
 
 def get_initial_ROI_masks(frame, projROI, projCourtLines, which = 'Top'):
     ##### Split regions - upper out, upper in, lower out, lower inside court.
@@ -228,6 +265,7 @@ def get_burn_in_mask(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
         except AttributeError:
             pass
     
+    
     # H_inv = np.linalg.inv(H)
     wrpFrm = medFrm.warp(H, cols = imgFrm.cols, rows = imgFrm.rows)
     if verbose: wrpFrm.show()
@@ -244,9 +282,15 @@ def get_burn_in_mask(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
     ### Adding a blur stage!
     normdiffFrm = normdiffFrm.gaussian_blur((21, 21))
     
+    ### Threshold the normalized difference frame
     backgroundMask = normdiffFrm < [c * normalized_deviation_threshold for c in channel_weights]
     backgroundMask = backgroundMask.all_channels()
     foregroundMask = ~backgroundMask
+    
+    if verbose:
+        pixel_count = (foregroundMask.rows * foregroundMask.cols)
+        proportion_foreground = (foregroundMask.sum((0, 1)) / 255) / pixel_count
+        print(proportion_foreground)
     
     ### Adding a closing stage
     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (10, 18))
@@ -254,6 +298,130 @@ def get_burn_in_mask(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
     
     if verbose: imgFrm.mask(foregroundMask).show()
     return foregroundMask
+
+
+def find_best_expansion(histFrm, previous_expansion = None):
+    """
+    A function that finds the most parsimonious way to select as much
+    probability mass as possible from a histogram frame.
+    
+    
+    Parameters
+    ----------
+    histFrm : pd.DataFrame
+        The histogram frame. Two dimensional -> has H and V channels of normdiffFrm, usually.
+    current_expansion : tuple
+        The current slice (x, y) into the histogram frame
+    Returns
+    -------
+    a new expansion
+    """
+    if previous_expansion is None:
+        x, y = 0, 0
+    else:
+        x, y = previous_expansion
+    
+    additional_mass_from_x = histFrm.loc[x+1,y].sum()
+    additional_mass_from_y = histFrm.loc[x,y + 1].sum()
+    if additional_mass_from_x > additional_mass_from_y:
+        return (x + 1, y)
+    else:
+        return (x, y + 1)
+    
+def stop_criterion(histFrm, previous_expansion, current_expansion,
+                   minimum_proportion = 0.01, minimum_step_gain = 0.015,
+                   verbose = False):    
+
+    x_prev, y_prev = previous_expansion
+    x_curr, y_curr = current_expansion
+    
+    previous_mass = histFrm.loc[:x_prev, :y_prev].sum().sum()
+    current_mass = histFrm.loc[:x_curr, :y_curr].sum().sum()
+    
+    if current_mass - previous_mass < minimum_step_gain:
+        if verbose: print(f'Stopping due to step size: {current_mass - previous_mass} < {minimum_step_gain}')
+        return True
+    
+    if current_mass < minimum_proportion:
+        if verbose: print(f'Stopping due small remaining mass: {minimum_proportion}')
+        return True
+    
+    return False
+    
+
+def get_burn_in_mask_iterative(medFrm: Frame, stdFrm: Frame, imgFrm: Frame, H,
+                               minimum_proportion = 0.01, minimum_step_gain = 0.015,
+                               verbose = False):
+    """
+    medFrm and stdFrm are the standard deviations of the court color, 
+    projected onto the court schema during burn in.
+    They are basically what is produced and saved by the burn in script
+    """
+    if not type(medFrm) == type(stdFrm):
+        raise Exception('Median and Stan. Dev. Frames have to be of same type!')
+    
+    if isinstance(medFrm, HSVFrame):
+        try:
+            imgFrm = imgFrm.to_HSV()
+        except AttributeError:
+            pass
+    elif isinstance(medFrm, BGRFrame):
+        try:
+            imgFrm = imgFrm.to_BGR()
+        except AttributeError:
+            pass
+    
+    
+    # H_inv = np.linalg.inv(H)
+    wrpFrm = medFrm.warp(H, cols = imgFrm.cols, rows = imgFrm.rows)
+    if verbose: wrpFrm.show()
+    
+    stdwrpFrm = stdFrm.warp(H, cols = imgFrm.cols, rows = imgFrm.rows)
+    if verbose: stdwrpFrm.show()
+    
+    ### Background Differencing ###
+    normdiffFrm = (imgFrm - wrpFrm) / stdwrpFrm.clip_lo(1)
+    
+    ### exclude everything_outside wrpFrms scope. this way, it will not bleed into the frame if we gaussian blur.
+    normdiffFrm = normdiffFrm.mask((wrpFrm > 0).any_channel())
+    
+    ### Adding a blur stage!
+    normdiffFrm = normdiffFrm.gaussian_blur((21, 21))
+    
+    ### Iterative discovery of best background parameters
+    histFrm = normdiffFrm.hist(['H', 'V'], normalize = True)
+    
+    previous_expansion = (0, 0)
+    current_expansion = find_best_expansion(histFrm, 
+                                            previous_expansion = previous_expansion)
+    while not stop_criterion(histFrm, previous_expansion, current_expansion,
+                             minimum_proportion = minimum_proportion, 
+                             minimum_step_gain = minimum_step_gain,
+                             verbose = verbose):
+        
+        previous_expansion = current_expansion
+        current_expansion = find_best_expansion(histFrm, 
+                                                previous_expansion = previous_expansion)
+    else:
+        best_expansion = previous_expansion ### since the current expansion triggered the stop criterion.
+    
+    best_h, best_v = best_expansion
+    
+    backgroundMask = (normdiffFrm.H() <= best_h) & (normdiffFrm.V() <= best_v)
+    foregroundMask = ~backgroundMask
+    
+    if verbose:
+        pixel_count = (foregroundMask.rows * foregroundMask.cols)
+        proportion_foreground = (foregroundMask.sum((0, 1)) / 255) / pixel_count
+        print(proportion_foreground)
+    
+    ### Adding a closing stage
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (10, 18))
+    foregroundMask = foregroundMask.close(kernel)
+    
+    if verbose: imgFrm.mask(foregroundMask).show()
+    return foregroundMask
+
     
 def get_shadow_mask(medFrm: Frame, imgFrm: Frame, H,
                     verbose = False,
@@ -369,18 +537,21 @@ def find_player_only_burn_in(hFrm, burninMask, roiMask, shadowMask = None,
 def find_player_contour(hFrm, burninMask, roiMask, shadowMask = None, 
                         verbose = False):
     
+    MIN_PLAYER_SIZE = 50 ### minimum size of player, in pixels.
+    
     roi_burninMask = burninMask & roiMask
     
     if shadowMask is not None:
         roi_burninMask = roi_burninMask & ~shadowMask
         
     cntList, _ = roi_burninMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    cntList = [Contour(cnt) for cnt in cntList]
+    cntList = [cnt for cnt in cntList if cnt.area() > MIN_PLAYER_SIZE]
     
     if len(cntList) > 0:
-        largestContour = sorted(cntList, key = lambda c: cv.contourArea(c))[-1]
+        largestContour = sorted(cntList, key = lambda c: c.area())[-1]
         if verbose: 
-            showFrm = HSVFrame(cv.drawContours(hFrm.array.copy(), [largestContour], -1, (0, 255, 0), thickness = 2))
-            showFrm.show()
+            hFrm.put(largestContour).show()
         return Contour(largestContour)
 
 def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame):
@@ -399,6 +570,9 @@ def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame):
 
 def find_player_contour_with_overlap(hFrm, burninMask, roiMask, playerContour_prev, shadowMask = None, 
                                      verbose = False):
+    
+    MIN_PLAYER_SIZE = 50 ### minimum size of player, in pixels.
+    
     from functools import partial
     
     roi_burninMask = burninMask & roiMask
@@ -415,8 +589,9 @@ def find_player_contour_with_overlap(hFrm, burninMask, roiMask, playerContour_pr
         cntList = [Contour(c) for c in cntList]
         
         largest_weighted_contour = sorted(cntList, key = lambda c: c.area() * weight_func(c))[-1]
+        if largest_weighted_contour.area() > MIN_PLAYER_SIZE:
+            return largest_weighted_contour
 
-        return largest_weighted_contour
     
         
     
