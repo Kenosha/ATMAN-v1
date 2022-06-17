@@ -26,7 +26,9 @@ def draw(featList, add_text = None):
     BALL_COLOR = (0, 255, 255)
     LINE_COLOR = (255, 0, 0)
     TEXT_COLOR = (0, 255, 0)
-    OTHER_COLOR = (255, 255, 0)
+    OTHER_COLOR = (255, 0, 255)
+    
+    SECONDARY_COLOR = (255, 255, 0)
     
     FRAME_NUM_LOC = (1800, 50)
     OTHER_TXT_LOC = (50, 50)
@@ -95,7 +97,9 @@ def draw(featList, add_text = None):
                 continue
             
             ### DEAL WITH FEATURE ###
-            if featStr.startswith('player'):
+            if 'secondary' in featStr:
+                sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = SECONDARY_COLOR)
+            elif featStr.startswith('player'):
                 sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = PLAYER_COLOR)
             elif featStr == 'ball':
                 sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = BALL_COLOR)

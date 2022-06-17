@@ -215,7 +215,7 @@ def load_stored_features(videoName, featnameList = None, keep_which = 'last'):
 def split_joint_features(stream_features, min_feature_length = 0):
     featList = []
     
-    ks = list(stream_features.keys())
+    ks = sorted(list(stream_features.keys()))
     prevFrame, frames = ks[0], ks[1:]
     
     currFeat = {prevFrame: stream_features[prevFrame]} ### initialize with the first element.
@@ -246,6 +246,38 @@ def filter_features_by_play_sequence_frame(stream_features, seqFrame):
     stream_features_filtered = {}
     for idx, start, stop in seqFrame.to_records():
         for frame in range(start, stop + 1):
-            stream_features_filtered[frame] = stream_features[frame]
+            try:
+                stream_features_filtered[frame] = stream_features[frame]
+            except KeyError:
+                pass
     return stream_features_filtered
 
+def save_contiguous_play_sequences(split_sfs, VIDEO_ID):
+    outList = []
+    for sf in split_sfs:
+        ks = list(sf.keys())
+        start_frame, end_frame = min(ks), max(ks)
+    
+        outList.append((start_frame, end_frame))
+        
+    #### Write List to text ####
+    import pandas as pd
+    outFrm = pd.DataFrame(outList, columns = ['StartFrame', 'StopFrame'])
+    
+    import os
+    ballDict = atu.get_folder_struct('ball_event_hmm')
+    savePath = os.path.join(ballDict['main'], VIDEO_ID, 'play_sequences')
+    
+    try:
+        os.mkdir(savePath)
+    except FileExistsError:
+        print('   Adding to existing play_sequence data')
+    
+    import datetime as dt
+    timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+    
+    filePath = os.path.join(savePath, f'play_start_stop_{timestamp}.csv')
+    
+    outFrm.to_csv(filePath)   
+    
+    return outFrm
