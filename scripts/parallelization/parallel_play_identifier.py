@@ -220,66 +220,37 @@ combined_features = deepcopy(my_features)
 for frameNum, featDict in redone_features.items():
     combined_features[frameNum] = deepcopy(featDict)
     
-#### find contiguous passages of 'similar-enough' courtlines
+orig_features = {k: FD for k, FD in combined_features.items() if FD['trackFlag'] != 'Not Found'}
 
-def find_contiguous_play_sequences(stream_features, length_threshold = 25):
-    outList = []
-    current_first_frame = None
-    for frameNum, featDict in stream_features.items():
-        tF = featDict['trackFlag']
-        if tF == 'Tracked':
-            current_last_frame = frameNum
-            continue
-        if tF in ['Found', 'Found (w. gen. H.)']:
-            if current_first_frame is None:
-                current_first_frame = frameNum
-                current_last_frame = frameNum
-            else:
-                ### here, we should maybe also check deviation from neighbours?
-                current_last_frame = frameNum
-        if tF == 'Not Found':
-            if current_first_frame is not None:
-                length_of_continuous_stretch = current_last_frame - current_first_frame
-                if length_of_continuous_stretch > length_threshold:
-                    outList.append((current_first_frame, current_last_frame))
-                current_first_frame = None
-                current_last_frame = None
-    return outList
+### PLUG HOLES IN HOMOGRAPHIES ####
+from ATMANpy.funcs.sf_postprocess_funcs import plug_hole_in_homographies
+from ATMANpy.funcs.feature_funcs import split_joint_features, save_contiguous_play_sequences
 
-outList = find_contiguous_play_sequences(combined_features)
+plugged_features = plug_hole_in_homographies(orig_features, cap)    
+# sfList_orig = split_joint_features(orig_features)
+sfList = split_joint_features(plugged_features)
 
+### NORMALIZE HOMOGRAPHIES ###
+# a) build a function to normalize the homographies where they are weird.
+from ATMANpy.funcs.sf_postprocess_funcs import stream_features_median_corner_regions
+from ATMANpy.funcs.sf_postprocess_funcs import stream_features_correct_homography
+from ATMANpy.funcs.util_funcs import compose
+corrFunc = compose(stream_features_correct_homography, stream_features_median_corner_regions) 
 
-#### Write List to text ####
-import pandas as pd
-outFrm = pd.DataFrame(outList, columns = ['StartFrame', 'StopFrame'])
+# b) apply the function to the split features
+from ATMANpy.funcs.feature_funcs import split_joint_features, join_split_features
+sfList = [corrFunc(sf) for sf in sfList]
+homographies_correct = join_split_features(sfList)
 
-import os
-ballDict = atu.get_folder_struct('ball_event_hmm')
-savePath = os.path.join(ballDict['main'], VIDEO_ID, 'play_sequences')
-
-try:
-    os.mkdir(savePath)
-except FileExistsError:
-    print('   Adding to existing play_sequence data')
-
-import datetime as dt
-timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-
-filePath = os.path.join(savePath, f'play_start_stop_{timestamp}.csv')
-
-outFrm.to_csv(filePath)   
-
+# len(sfList_orig)
+# len(sfList)
+seqFrm = save_contiguous_play_sequences(sfList, VIDEO_ID)
 
 #### save the homographies ####
 
-filePath = os.path.join(savePath, f'homographies_{timestamp}.csv')
+from ATMANpy.funcs.feature_funcs import save_homographies
 
-## this is so we don't have to re-do them once we check these play sequences again.
-homographies = {frmNum: featDict['H'] for frmNum, featDict in combined_features.items() if featDict['H'] is not None}
-homographies = {frmNum: np.ravel(homography) for frmNum, homography in homographies.items()}
-homFrm = pd.DataFrame(homographies).T
-homFrm = homFrm.drop(columns = 8)
-homFrm.to_csv(filePath)
+save_homographies(homographies_correct, VIDEO_ID)
 
 #### check if the re-done feature lines deviate strongly from neighbouring lines.
 
@@ -302,7 +273,7 @@ if do_replay:
     #### Replay the stretches of play
     from ATMANpy.funcs.cv_funcs import replay
     
-    for idx, playTup in enumerate(outList):
+    for idx, playTup in seqFrm.iterrows():
         start, stop = playTup
         print(f'Sequence of Play: #{idx}. Length: {stop - start}')
         replay(cap, combined_features, start_frame = start, stop_frame = stop,

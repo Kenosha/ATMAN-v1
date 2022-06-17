@@ -311,22 +311,47 @@ def draw_replay_onlyball(frmDict, featDict):
 
 #%% STREAM AND EXTRACT BALL FEATURES
 
+### LOAD HOMOGRAPHIES ###
 from ATMANpy.funcs.feature_funcs import load_stored_features
-from ATMANpy.funcs.feature_funcs import save_contours, save_homographies, save_particles
-
-featnameList = ['H'] ### load homographies
+featnameList = ['H'] 
 homographies_loaded = load_stored_features(VIDEO_ID, featnameList = featnameList)
 
+### PLUG HOLES IN HOMOGRAPHIES ####
+from ATMANpy.funcs.sf_postprocess_funcs import plug_hole_in_homographies
+homographies_plugged = plug_hole_in_homographies(homographies_loaded, cap)
+# need to do the same for seqFrm!
+### DONE! Holes are now plugged in the parallel_play_identifier script
+
+
+### NORMALIZE HOMOGRAPHIES ###
+# a) build a function to normalize the homographies where they are weird.
+from ATMANpy.funcs.sf_postprocess_funcs import stream_features_median_corner_regions
+from ATMANpy.funcs.sf_postprocess_funcs import stream_features_correct_homography
+from ATMANpy.funcs.util_funcs import compose
+corrFunc = compose(stream_features_correct_homography, stream_features_median_corner_regions) 
+
+### -> if we don't also do the same for the segments, the whole thing is useless!
+
+# b) apply the function to the split features
+from ATMANpy.funcs.feature_funcs import split_joint_features, join_split_features
+homographies_correct = join_split_features([corrFunc(sf) for sf in split_joint_features(homographies_plugged)])
+
+assert len(homographies_plugged) == len(homographies_correct)
+
+# c) save the normalized homographies
+from ATMANpy.funcs.feature_funcs import save_homographies
+save_homographies(homographies_correct, VIDEO_ID) ### we save these because we normalized H
+
+
+#### BUILD STREAM FEATURES FUNCTION ####
 from functools import partial
 from ATMANpy.funcs.cv_funcs import get_stream_features, replay
 from ATMANpy.funcs.high_level_funcs import smoothe_and_choose_ball_contour
 from ATMANpy.funcs.high_level_funcs import interpolate_ball_contours, smart_interpolate_ball_contours 
 from ATMANpy.funcs.high_level_funcs import smoothe_and_choose_ball_contour_with_likelihood
 
-import time
-
 my_stream_func = partial(get_stream_features, 
-                         existing_features = homographies_loaded,
+                         existing_features = homographies_correct,
                          cache_length = CACHE_LENGTH,
                          init_feat_func = init_featDict, 
                          init_frame_func = init_frameDict,
@@ -335,10 +360,11 @@ my_stream_func = partial(get_stream_features,
                          draw_func = make_sendframe,
                          verbose = False)
 
+#### CREATE THE FEATURES ###
+import time
+from ATMANpy.funcs.feature_funcs import save_contours, save_particles
 
-
-#### Simulation 
-video_segments = seqFrm.loc[42:]
+video_segments = seqFrm
 
 for idx, start_stop_frames in video_segments.iterrows():
     print(f'Doing {idx}...')
@@ -347,8 +373,8 @@ for idx, start_stop_frames in video_segments.iterrows():
     start_frame, stop_frame = start_stop_frames
     stream_features_original = my_stream_func(cap, start_frame, stop_frame, verbose = False)
     stream_features_smooth = smoothe_and_choose_ball_contour(stream_features_original)
-    replay(cap, stream_features_smooth, drawFunc = draw_replay,
-           ms_between_frames = 30)
+    # replay(cap, stream_features_smooth, drawFunc = draw_replay,
+    #        ms_between_frames = 30)
      
     save_contours(stream_features_smooth, 'ball', VIDEO_ID, compression = 6)
     save_contours(stream_features_smooth, 'playerTop', VIDEO_ID, compression = 24)
