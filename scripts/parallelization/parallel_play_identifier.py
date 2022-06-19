@@ -33,6 +33,7 @@ from functools import partial
 
 
 VIDEO_ID = 'pqxAmUWIoKc'
+STORE_NAME = '10to100'
 cap = atu.get_video(VIDEO_ID)
 start_frame = 10280
 stop_frame = 100000
@@ -244,13 +245,13 @@ homographies_correct = join_split_features(sfList)
 
 # len(sfList_orig)
 # len(sfList)
-seqFrm = save_contiguous_play_sequences(sfList, VIDEO_ID)
+seqFrm = save_contiguous_play_sequences(sfList, VIDEO_ID, STORE_NAME)
 
 #### save the homographies ####
 
 from ATMANpy.funcs.feature_funcs import save_homographies
 
-save_homographies(homographies_correct, VIDEO_ID)
+save_homographies(homographies_correct, VIDEO_ID, STORE_NAME)
 
 #### check if the re-done feature lines deviate strongly from neighbouring lines.
 

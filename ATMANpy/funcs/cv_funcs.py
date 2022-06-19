@@ -7,6 +7,7 @@ Utility Functions
 @author: gianl
 """
 
+import numpy as np
 import cv2 as cv
 import ATMANpy.funcs.util_funcs as atu
 
@@ -28,6 +29,26 @@ def get_frame(cap, frame_num):
     ret, frame = cap.read()
     
     return frame
+
+def get_frames(cap, start_frame, stop_frame, color_space = 'bgr'):
+    
+    outFrames = []
+    cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
+    frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
+    
+    while cap.isOpened() and (start_frame <= frmNum < stop_frame):
+        
+        frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
+        ret, frame = cap.read()
+        
+        if color_space == 'hsv':
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        if color_space == 'grey':
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2GREY)
+            
+        outFrames.append(frame)
+        
+    return np.array(outFrames)
 
 def show_video(cap, start_frame = None, stop_frame = None, ms_between_frames = None,
                frame_counter = False):
@@ -60,7 +81,6 @@ def show_video(cap, start_frame = None, stop_frame = None, ms_between_frames = N
         
     # cap.release()
     cv.destroyAllWindows()
-    
     
 def video_stream(cap, start_frame = None, stop_frame = None, ms_between_frames = None):
     if ms_between_frames is None:
@@ -125,6 +145,105 @@ def random_or_next_stream(cap, ms_between_frames = None, verbose = False):
                 cv.destroyAllWindows()  
 
 
+def get_stream_features_from_generator(gen,
+                                       existing_features = None,
+                                       cache_length = None,
+                                       init_feat_func = None, init_frame_func = None,
+                                       cached_line_func = None,
+                                       court_line_func = None, court_feature_func = None,
+                                       draw_func = None,
+                                       features_of_interest = None,
+                                       verbose = True):
+    
+     ### CACHING ###
+    if cache_length is None:
+        cache_length = 1 ### cache holds only the current frame.
+    curr_frame_idx = cache_length // 2 ### the offset with which features are entered.
+                                        ## note that due to caching of past and future frames, 
+                                        ## the video generator is ahead by curr_frame_idx frames, 
+                                        ## so we adjust frmNum (which comes from the video generator) 
+                                        ## by that amount curr_frame_idx.
+    
+    ### init outputList
+    streamFeatures = {}
+    
+    #### init feature dictionary
+    featDict = None
+    
+    #### init cache ###
+    frmCache = []
+    
+    from ATMANpy.types.Frames import BGRFrame
+    from copy import deepcopy
+    
+    frmNum, rawArr = next(gen) ### this is needed to "prime" the generator
+    ######
+    
+    while True:
+        
+        ### prepare and feed the cache ###
+        # cache frames, so we can frame difference 
+        # without having to re-generate the frames from the video capture
+        latestFrame = BGRFrame(rawArr)    
+        frmCache.append(latestFrame)
+        if len(frmCache) < cache_length:
+            frmNum, rawArr = gen.send(None)
+            continue
+        if len(frmCache) > cache_length:
+            print(f'Cache FUBAR, {len(frmCache)} items') ### this happens if the cache drop at the end fails
+            break
+        
+        ### prepare frame objects of interest
+        frmDict = init_frame_func(frmCache)
+        frmNum_on_display = frmNum - curr_frame_idx
+        
+        ### initialize the feature dictionary with possible stored features
+        if existing_features is not None:
+            try:
+                stored_featDict = existing_features[frmNum_on_display]
+            except KeyError:
+                stored_featDict = None
+        else:
+            stored_featDict = None
+            
+        featDict = init_feat_func(current_featDict = featDict, 
+                                  stored_featDict = stored_featDict)
+        
+        ### Get the features of interest on the frame
+        if not court_line_func is None:
+            featDict = court_line_func(frmDict, featDict)
+        
+        if not court_feature_func is None:
+            featDict = court_feature_func(frmDict, featDict)
+            
+            
+        ### extract out stream features of interest
+        if features_of_interest is None:
+            streamFeatures[frmNum_on_display] = deepcopy(featDict)
+        else:
+            saveDict = {k: v for k, v in featDict.items() if k in features_of_interest}
+            streamFeatures[frmNum_on_display] = deepcopy(saveDict)
+    
+        if verbose:
+            ### Send Frame Back to Generator
+            sendFrm = draw_func(frmDict, featDict, frameNum = frmNum_on_display)
+            sendArr = sendFrm.array  
+        else:
+            sendArr = None
+            
+        try:
+            frmNum, rawArr = gen.send(sendArr)
+        except:
+            cv.destroyAllWindows()
+            break 
+        
+        ### drop oldest element from cache ### 
+        frmCache = frmCache[1:] # drop oldest item
+        
+    else:
+        cv.destroyAllWindows()
+
+    return streamFeatures
     
 def get_stream_features(cap, start_frame, stop_frame, 
                         existing_features = None,
@@ -138,7 +257,7 @@ def get_stream_features(cap, start_frame, stop_frame,
     
     if isinstance(cap, str):
         cap = atu.get_video(cap) ### this is needed for multiprocessing
-                                        # video captures can not be pickled, therefore, we create it inside of the function
+            # video captures can not be pickled, therefore, we create it inside of the function
      
     from copy import deepcopy
     from ATMANpy.types.Frames import BGRFrame
