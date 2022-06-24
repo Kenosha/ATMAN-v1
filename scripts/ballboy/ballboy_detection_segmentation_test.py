@@ -171,9 +171,6 @@ def get_matching_split_sfs(orig_sf, split_sfs):
     
     return outList
     
-def 
-
-
 
 # for sf in corrList:
 

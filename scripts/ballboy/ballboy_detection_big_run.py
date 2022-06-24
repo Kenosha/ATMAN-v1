@@ -45,7 +45,7 @@ except KeyError:
     print('Data not found.')
     
 playseqPath = os.path.join(readPath, 'play_sequences')    
-start_stop_timestamp = '2022-05-26-16-02-20'
+start_stop_timestamp = '2022-06-16-23-29-17'
 file = f'play_start_stop_{start_stop_timestamp}.csv'
 
 seqFrm = pd.read_csv(os.path.join(playseqPath, file), index_col = 0)
