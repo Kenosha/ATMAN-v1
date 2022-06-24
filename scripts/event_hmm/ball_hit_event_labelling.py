@@ -38,7 +38,7 @@ try:
 except KeyError:
     print('Data not found.')
     
-playseqPath = os.path.join(readPath, 'play_sequences')    
+playseqPath = os.path.join(readPath, 'relabel_sequences')    
 
 frmList = []
 for file in os.listdir(playseqPath):
@@ -53,7 +53,7 @@ seqFrm = pd.concat(frmList, ignore_index = True)
 
 import os
 evtDict = atu.get_folder_struct('ball_event_hmm')
-savePath = os.path.join(evtDict['main'], VIDEO_ID, 'labelled_sequences')
+savePath = os.path.join(evtDict['main'], VIDEO_ID, 'labelled_sequences_corrections')
 
 try:
     os.mkdir(savePath)
@@ -138,7 +138,14 @@ eventDict = {'SFR': 'Serve by Far player, Right side',
              'BINSR': 'Bounce Inside Near player Serve area on the Right',
              'BINSL': 'Bounce Inside Near player Serve area on the Left',
              'BONS': 'Bounce Outside of Near player Serve area',
-             'NET': 'Bounce on NET'}
+             'NET': 'Bounce on NET',
+             'CORD': 'Bounce on NET CORD'} ### new!
+
+# assert 1 == 2, """
+#                 Man! I added the Net Cord as an event. 
+#                 This way, NET always ends the point. 
+#                 Work this into the encodings below, if needed!
+#               """
 
 def invert_binary_symbol(symbol):
     if symbol == 'N': ### near -> far
@@ -180,6 +187,8 @@ def serve_toggle(keypress,
         goodStr = 'O'
     if keypress == ord('c'):
         goodStr = 'N'
+    if keypress == ord('v'):
+        goodStr = 'C'
     
     return typeStr, goodStr, playStr, sideStr
 
@@ -238,6 +247,9 @@ def serve_encode(typeStr, goodStr, playStr, sideStr,
             
         if goodStr == 'N':
             return 'NET'
+        
+        if goodStr == 'C':
+            return 'CORD'
      
     
 def serve_record_state(event_code, current_state):
@@ -275,6 +287,8 @@ def hit_toggle(keypress,
         goodStr = 'O'
     if keypress == ord('c'):
         goodStr = 'N'
+    if keypress == ord('v'):
+        goodStr = 'C'
     
     return typeStr, goodStr, playStr, sideStr
 
@@ -302,6 +316,8 @@ def hit_encode(typeStr, goodStr, playStr, sideStr,
                  return event_code
         if goodStr == 'N':
             return 'NET'
+        if goodStr == 'C':
+            return 'CORD'
         
 def put_event_string(frame, event_code, rec_text = None):
     if event_code is not None:
@@ -456,7 +472,7 @@ def record_events(cap, start_frame = None, stop_frame = None,
 
 #%% MAIN EVENT LOOP #####
 
-label_serves = False
+label_serves = True
 label_hits = True
 
 ##### SERVE EVENT LOOP #####
@@ -507,7 +523,7 @@ if label_hits:
      
     hitList = []
     for idx, frame_range in seqFrm.iterrows():
-        
+            
         frame_tuple = tuple(frame_range)
         if frame_tuple in hits_done:
             continue
@@ -544,6 +560,15 @@ else:
 
 
 ##### CONCATENATE AND SAVE ######0
+
+# # since we're relabelling things, and our infrastructure is not optimal...
+# ad_hoc_index_add = 136
+# serveFrm['Index'] += ad_hoc_index_add
+# hitFrm['Index'] += ad_hoc_index_add
+
+import os
+evtDict = atu.get_folder_struct('ball_event_hmm')
+savePath = os.path.join(evtDict['main'], VIDEO_ID, 'labelled_sequences_corrections')
 
 import datetime as dt
 timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
