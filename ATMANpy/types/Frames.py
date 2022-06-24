@@ -562,7 +562,11 @@ class BGRFrame(Frame):
     ### CONSTRUCTORS ###
     @staticmethod
     def from_video(cap, frame_num, name = 'frame'):
-        return BGRFrame(get_frame(cap, frame_num))
+        if isinstance(cap, cv.VideoCapture):
+            return BGRFrame(get_frame(cap, frame_num))
+        else:
+            assert cap.color_space == 'bgr', f'Trying to create a bgrframe using a {cap.color_space} Frames object.'
+            return cap[frame_num] ### in this case, cap is likely a multiframe object!
     
     @staticmethod
     def from_csv(readpath, name = 'frame'):

@@ -119,12 +119,16 @@ class Line:
         return self.leftPt.distance_to(self.rightPt)
 
     def slope(self):
-        try:
-            slp = (self.rightPt.y - self.leftPt.y) / (self.rightPt.x - self.leftPt.x)
-        except:
-            slp = None
-        finally:
-            return slp
+        denom = (self.rightPt.x - self.leftPt.x)
+        if denom == 0:
+            return None
+        else:
+            try:
+                slp = (self.rightPt.y - self.leftPt.y) / denom
+            except:
+                slp = None
+            finally:
+                return slp
             
     def intercept(self):
         slp = self.slope()

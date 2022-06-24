@@ -528,7 +528,7 @@ def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3):
 
 def smoothe_and_choose_ball_contour(stream_features):
     
-    LIKELIHOOD_THRESHOLD = 10 ** (-10)
+    LIKELIHOOD_THRESHOLD = 10 ** (-15)
     
     ### first pass (from back to front): kitagawa smoothing
     stream_features_smooth = pf.kitagawa_smooth(stream_features)

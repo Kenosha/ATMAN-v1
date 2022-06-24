@@ -46,15 +46,28 @@ class Frames:
         
         ####
     
-    def __getitem__(self, item):
-        if type(item) is slice:
-            return self.frames[item] ### might potentially also return another Frames object?
+    def __getitem__(self, frmItem):
+        ### Note! We can only address items by their frame number!
+        
+        if type(frmItem) is slice:
+            arrSlice = slice(frmItem.start - self.start_frame, 
+                             frmItem.stop - self.start_frame, 
+                             frmItem.step - self.start_frame)
+            return self.frames[arrSlice] ### might potentially also return another Frames object?
         else:
             myType = self.colorMap[self.color_space]
-            return myType(self.frames[item])
+            arrItem = frmItem - self.start_frame
+            return myType(self.frames[arrItem])
      
     def __iter__(self):
         return self.frames.__iter__()
+    
+    @staticmethod
+    def from_sf(video_id, sf, color_space = 'bgr'):
+        ks = sorted(sf.keys())
+        start, stop = ks[0], ks[-1]
+        return Frames(video_id, start, stop, color_space)
+        
     
     def to_generator(self):
         frame_counter = self.start_frame
@@ -63,7 +76,7 @@ class Frames:
             frame_counter += 1
             
     def size(self, unit = 'GB'):
-        divisor = self.unitDict[unit]
+        divisor = self.unitMap[unit]
         return self.frames.size / divisor
         
     

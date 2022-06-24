@@ -224,7 +224,8 @@ def diff_frames(frames, offsetList):
     return np.stack(outList, axis = -1)
      
 
-def detect_movement_contours(sf, verbose = False):
+def detect_movement_contours(sf, cap = cap, save_all = True,
+                             verbose = False):
         
     out_sf = deepcopy(sf)
     
@@ -246,13 +247,14 @@ def detect_movement_contours(sf, verbose = False):
         featDict = out_sf[frmNum]
         
         cFrm = BGRFrame.from_video(cap, frmNum)
-        hFrm = HSVFrame.from_video(cap, frmNum)
+        hFrm = cFrm.to_HSV()
         
         H = featDict['H']
         courtLines = find_courtlines(H, schemaLines)
         playerTop = featDict['playerTop']
         playerBot = featDict['playerBot']
         ball = featDict['ball']
+        scoreBoard = featDict['scoreBoard']
         
         motionMask_warped = BoolFrame((joint_diff[idx] * 255).astype('uint8'))
         motionMask = motionMask_warped.warp(H, cols = cFrm.cols, rows = cFrm.rows)
@@ -265,7 +267,10 @@ def detect_movement_contours(sf, verbose = False):
         def cntMask(frm, cnt, kernelsize = (20, 10)):
             ### Dilated player mask
             dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, kernelsize)
-            return frm.within_contour(cnt).dilate(dil_kernel)
+            try:
+                return frm.within_contour(cnt).dilate(dil_kernel)
+            except:
+                return frm.within_region(cnt).dilate(dil_kernel) 
         
         if not playerTop is None:
             topMask = cntMask(cFrm, playerTop, kernelsize = (23, 11))
@@ -285,9 +290,16 @@ def detect_movement_contours(sf, verbose = False):
             ballMask = BoolFrame(cFrm.to_grey().zero().array)
             # print('Lost Ball Tracking!')
         
+        if not scoreBoard is None:
+            scoreMask = cntMask(cFrm, scoreBoard, kernelsize = (10, 10))
+        else:
+            scoreMask = BoolFrame(cFrm.to_grey().zero().array)
+            # print('Lost Scoreboard Tracking!')
+        
+        
         # ballMask.show()
         
-        motionMask2 = motionMask & ~courtlineMask & ~topMask & ~botMask & ~ballMask
+        motionMask2 = motionMask & ~courtlineMask & ~topMask & ~botMask & ~ballMask & ~scoreMask
         # if verbose: motionMask2.show()
         
         # ### Adding a blur stage!
@@ -312,8 +324,16 @@ def detect_movement_contours(sf, verbose = False):
         
         myCts = [Contour(ct) for ct in cts]
         
-        featDict['movContours'] = myCts
-        
+        if save_all:
+            featDict['movContours'] = myCts
+        else:
+            sortCts = sorted(myCts, key = lambda el: el.area())
+            try:
+                largestCnt = sortCts[-1]
+            except:
+                largestCnt = None
+            featDict['movContours'] = largestCnt
+            
     return out_sf
 
 def calculate_contiguous_movement(sf):
@@ -328,20 +348,23 @@ def calculate_contiguous_movement(sf):
     
     for frmNum, featDict in out_sf.items():
         
-        cFrm = BGRFrame.from_video(cap, frmNum)
-        H = featDict['H']
-        courtLines = find_courtlines(H, schemaLines)
-        
         myCts = featDict['movContours']
-        myCts = [ct for ct in myCts if ct.area() > AREA_THRESHOLD]
-        # myCts.sort(key = lambda el: el.area())
-        # try:
-        #     largestCnt = myCts[-1].area()
-        # except:
-        #     largestCnt = 'None'
+        
+        if isinstance(myCts, Contour):
+            myCts = [myCts]
+        
+        if not myCts is None:
+            myCts = [ct for ct in myCts if ct.area() > AREA_THRESHOLD]
+            # myCts.sort(key = lambda el: el.area())
+            # try:
+            #     largestCnt = myCts[-1].area()
+            # except:
+            #     largestCnt = 'None'
 
-        if myCts != []:
-            current_movement_index += 1
+            if myCts != []:
+                current_movement_index += 1
+            else:
+                current_movement_index = 0
         else:
             current_movement_index = 0
             

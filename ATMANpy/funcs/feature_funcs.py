@@ -155,8 +155,8 @@ def single_feature_to_object(singlefeatSeries):
         if dx_vals == [] and dy_vals == []:
             ### we have no speed info, therefore a CONTOUR!
             assert len(x_vals) == len(y_vals)
-            num_points = len(x_vals)
-            if num_points <= 4:
+            num_points = len(x_vals) ### problem with this -> missing values are removed!
+            if len(singlefeatDict) / 2 <= 4:
                 ### -> have a region!
                 myPoints = [Point((x, y)) for x, y in zip(x_vals, y_vals)]
                 return Region.from_points(*myPoints)
@@ -282,7 +282,7 @@ def save_contiguous_play_sequences(split_sfs, video_id, store_name):
         print(f'    Creating new store path for {store_name}')
         os.mkdir(savePath)
     except FileExistsError:
-        print('     Adding to existing data for {store_name}')
+        print(f'    Adding to existing data for {store_name}')
     
     import datetime as dt
     timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
@@ -321,10 +321,28 @@ import time
 from ATMANpy.types.MultiFrames import Frames
 import psutil
 
-def save_features_parallel(video_id, seqFrm, my_stream_func, num_workers = None,
+def segment_to_stream_func_argument(segment, video_id):
+    ### idea: turn a video segment of any kind, e.g.
+        # tuple of start and stop frames
+        # stream feature
+    # into an argument for the stream function that is to be applied in parallel
+    
+    try:
+        start, stop = segment
+    except:
+        frames = Frames.from_sf(video_id, segment)
+        print(f'Starting on segment from {frames.start_frame} to {frames.stop_frame}')
+        return (segment, frames)
+    else:
+        frames = Frames(video_id, start, stop, 'bgr')
+        print(f'Starting on segment from {frames.start_frame} to {frames.stop_frame}')
+        return (frames, )
+
+def save_features_parallel(video_id, inList, my_stream_func, num_workers = None,
                            verbose = False):
     
-    video_segments = seqFrm.values.tolist()
+    from copy import deepcopy
+    video_segments = deepcopy(inList) 
     
     time_start = time.time()
     
@@ -344,6 +362,7 @@ def save_features_parallel(video_id, seqFrm, my_stream_func, num_workers = None,
     necessary_to_launch = [jobs_are_open, memory_is_fine, cpu_is_fine]
 
     # c) message string to print
+    messageStr = ''
     previous_messageStr = ''
 
     while video_segments != []:
@@ -351,18 +370,13 @@ def save_features_parallel(video_id, seqFrm, my_stream_func, num_workers = None,
         if all(necessary_to_launch):
 
             ### Collect the next segment in the queue
-            start_stop_frames, video_segments = video_segments[0], video_segments[1:]
+            video_segment, video_segments = video_segments[0], video_segments[1:]
             
             ### get the multiframe, serially! (so videoCapture does not block) ###
-            start, stop = start_stop_frames
-            segFrames = Frames(video_id, start, stop, 'bgr')
-            
-            ### Print Message
-            messageStr = f'Starting on segment from {start} to {stop}'
-            print(messageStr)
+            parfunc_arg = segment_to_stream_func_argument(video_segment, video_id)
             
             ### Pass the segment to the worker.
-            task = pool.apply_async(my_stream_func, (segFrames,))
+            task = pool.apply_async(my_stream_func, parfunc_arg)
             pending.append(task)
         else:
             
@@ -398,10 +412,6 @@ def save_features_parallel(video_id, seqFrm, my_stream_func, num_workers = None,
     time_elapsed = time.time() - time_start
     minutes_elapsed = round(time_elapsed / 60, 1)
     print(f'Done with {len(video_segments)} segments. Took {minutes_elapsed} minutes')
-
-
-
-# gives a single float value
 
 
 

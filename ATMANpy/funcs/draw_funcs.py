@@ -29,6 +29,7 @@ def draw(featList, add_text = None):
     OTHER_COLOR = (255, 0, 255)
     
     SECONDARY_COLOR = (255, 255, 0)
+    INTERPOLATED_BALL_COLOR = (0, 180, 255)
     
     FRAME_NUM_LOC = (1800, 50)
     OTHER_TXT_LOC = (50, 50)
@@ -102,7 +103,15 @@ def draw(featList, add_text = None):
             elif featStr.startswith('player'):
                 sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = PLAYER_COLOR)
             elif featStr == 'ball':
-                sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = BALL_COLOR)
+                try:
+                    detectBool = featDict['ballDetected'] 
+                except:
+                    ball_color = BALL_COLOR
+                else:
+                    ball_color = BALL_COLOR if detectBool else INTERPOLATED_BALL_COLOR
+                
+                sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = ball_color)
+                    
             elif featStr == 'courtLines':
                 sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = LINE_COLOR)
             else:
