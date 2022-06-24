@@ -29,11 +29,11 @@ cap = atu.get_video(VIDEO_ID)
 ################
 
 ### STORENAME ###
-STORE_NAME = '10to100_faster'
+STORE_NAME = '10to100_lowerlikelihood'
 
 ###### GET SEQUENCES #####
 from ATMANpy.funcs.feature_funcs import read_play_sequences
-seqFrm = read_play_sequences(VIDEO_ID, STORE_NAME, keep_which = 'last')
+seqFrm = read_play_sequences(VIDEO_ID, STORE_NAME, keep_which = 'first')
 
 ######## GET SCHEMA ########
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
@@ -281,8 +281,55 @@ import time
 
 #### CREATE THE PARALLEL FUNCTION ###
 
+
+
 from ATMANpy.funcs.feature_funcs import save_features_parallel
 
+doList = cacheFrm.values.tolist()
+
 if __name__ == '__main__':
-    save_features_parallel(VIDEO_ID, cacheFrm, my_stream_func, num_workers = 10)
+    save_features_parallel(VIDEO_ID, doList, my_stream_func, num_workers = 8)
+
+
+#%% Correct sequences in which no player or scoreboard is found 
+### -> in these, the parallelization failed due to a weird bug.
+
+# from ATMANpy.funcs.feature_funcs import load_stored_features, split_joint_features
+
+# featnameList = ['ball', 'playerTop', 'playerBot', 'scoreBoard']
+# stream_features = load_stored_features(VIDEO_ID, STORE_NAME)
+
+# # loadList = split_joint_features(stream_features_uncorrected, min_feature_length = ACCEPTABLE_LENGTH_OF_SEGMENT)
+# sfList = split_joint_features(stream_features, min_feature_length = 0)
+
+# print(f'Read in {len(sfList)} segments')
+
+# def check_if_all_none(sf, which = featnameList):
+
+#     for k in sf:
+#         for feat in which:
+#             if sf[k][feat] is not None:
+#                 return False
+#             else:
+#                 continue
+#     return True
+            
+# all_none = np.array([check_if_all_none(sf) for sf in sfList])
+
+# noneIdxs = np.argwhere(all_none).flatten()
+
+# for idx in noneIdxs:
+#     start, stop = doList[idx]
+
+#     print(f'Redoing element {idx}, consisting of {stop - start} frames')
+#     replay(cap, sfList[idx], drawFunc = drawFunc)
+
+#     idxFrames = Frames(VIDEO_ID, start, stop, 'bgr')
+#     my_stream_func(idxFrames)
+
+
+    
+    
+    
+    
 

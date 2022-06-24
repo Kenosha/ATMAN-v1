@@ -28,21 +28,15 @@ VIDEO_ID = 'pqxAmUWIoKc'
 cap = atu.get_video(VIDEO_ID)
 ################
 
+STORE_NAME = '10to100'
+
 
 ########## READ-IN PASSAGES OF PLAY ##########
 
-evtDict = atu.get_folder_struct('ball_event_hmm')
+###### GET SEQUENCES #####
+from ATMANpy.funcs.feature_funcs import read_play_sequences
+seqFrm = read_play_sequences(VIDEO_ID, STORE_NAME, keep_which = 'last')
 
-try:
-    readPath = evtDict[VIDEO_ID]
-except KeyError:
-    print('Data not found.')
-    
-playseqPath = os.path.join(readPath, 'play_sequences')    
-start_stop_timestamp = '2022-05-26-16-02-20'
-file = f'play_start_stop_{start_stop_timestamp}.csv'
-
-seqFrm = pd.read_csv(os.path.join(playseqPath, file), index_col = 0)
 
 # frmList = []
 # for file in os.listdir(playseqPath):
@@ -70,6 +64,7 @@ schemaFrm = fit_frame_to_lines(schemaLines)
 
 import ATMANpy.funcs.high_level_funcs as hlf
 import ATMANpy.funcs.particle_funcs_vectorized as pf ### in the best case, we ONLY import from hlf
+from ATMANpy.funcs.scoreboard_funcs import find_scoreboard
 
 def init_featDict(current_featDict = None, stored_featDict = None):
 
@@ -155,8 +150,32 @@ def get_court_features(frmDict, featDict): ### these two quantities will be used
     
     outDict = featDict.copy() 
     
+    ### Find Scoreboard
+    SOBEL_THRESHOLD = 30
+    SLOPE_THRESHOLD = 0.0001
+    MERGE_LINES = False
+    MIN_LINE_LENGTH = 10
+    MIN_LINES = 1
+    
+    scoreReg = find_scoreboard(gFrm, 
+                               sobel_threshold = SOBEL_THRESHOLD, 
+                               slope_threshold = SLOPE_THRESHOLD,
+                               merge_lines = MERGE_LINES,
+                               min_line_length_after_merge = MIN_LINE_LENGTH, 
+                               min_lines = MIN_LINES)
+    outDict['scoreBoard'] = scoreReg
+    
+    # print(scoreReg)
+    if not scoreReg is None:
+        scoreMask = gFrm.within_region(scoreReg)
+    
     ### Player ROIs
     roiMask_top, roiMask_bot = hlf.get_adaptive_ROIs(playerTop, playerBot, H, hFrm)
+    
+    if not scoreReg is None:
+        roiMask_bot = roiMask_bot & ~scoreMask ### adjust for scoreboard
+        # roiMask_top = roiMask_top & ~scoreMask ### in a general setting, both sides need to be excluded.
+    
     outDict['roiMask_bot'], outDict['roiMask_top'] = roiMask_bot, roiMask_top
 
     ### Based on previous frame (and previous players, if they exist...)
@@ -178,6 +197,7 @@ def get_court_features(frmDict, featDict): ### these two quantities will be used
 
     ### Players with adaptive ROIs.
     playerTop, playerBot = hlf.find_both_players_smart(hFrm, courtLines, H, remove_shadow = True,
+                                                       iterative_burn_in = True,
                                                        playerTop_prev = playerTop, playerBot_prev = playerBot,
                                                        roiMask_top = roiMask_top, roiMask_bot = roiMask_bot)
     outDict['playerTop'], outDict['playerBot'] = playerTop, playerBot
@@ -198,115 +218,6 @@ def get_court_features(frmDict, featDict): ### these two quantities will be used
     outDict['ballModelHistory'] = ballModelHistory
     
     return outDict
-  
-
-#%%### DRAW FUNCTIONS #####  
-def make_sendframe(frmDict, featDict, frameNum = None):
-    
-    cFrm = frmDict['cFrm']
-    
-    sendFrm = cFrm
-    
-    if frameNum is not None:
-        sendFrm = sendFrm.put(str(int(frameNum)), thickness = 2, color = (0, 255, 255), where = (1800, 50))
-
-    particles = featDict['ballParticles']
-    playerTop = featDict['playerTop']
-    playerBot = featDict['playerBot']
-    ballContours = featDict['ballContours']
-    
-    pPts = pf.particles_to_points(particles, particles_to_produce = 100)
-    
-    sendFrm = sendFrm.put(playerTop, thickness = 2, color = (0, 0, 255))
-    sendFrm = sendFrm.put(playerBot, thickness = 2, color = (0, 0, 255))
-    sendFrm = sendFrm.put(ballContours, thickness = 2, color = (255, 0, 0))
-    sendFrm = sendFrm.put(pPts, thickness = 1, color = (0, 255, 0))
-
-    return sendFrm
-
-def draw_replay(frmDict, featDict, frameNum = None):
-    
-    cFrm = frmDict['cFrm']
-
-    courtLines = featDict['courtLines']
-    netLines = featDict['netLines']
-    
-    selectedBall = featDict['ball']
-    detectedBall = featDict['ballDetected']
-    playerTop = featDict['playerTop']
-    playerBot = featDict['playerBot']
-    ballContours = featDict['ballContours']
-    
-    try:
-        ballLikelihood = featDict['ballLikelihood']
-        ballThreshold = featDict['ballThreshold']
-    except:
-        pass
-    
-    sendFrm = cFrm
-    
-    if frameNum is not None:
-        sendFrm = sendFrm.put(str(int(frameNum)), thickness = 2, color = (0, 255, 255), where = (1800, 50))
-    
-    sendFrm = sendFrm.put(courtLines, thickness = 2, color = (255, 255, 0))
-    sendFrm = sendFrm.put(netLines, thickness = 2, color = (100, 100, 0))
-    
-    sendFrm = sendFrm.put(playerTop, thickness = 2, color = (0, 0, 255))
-    sendFrm = sendFrm.put(playerBot, thickness = 2, color = (0, 0, 255))
-    sendFrm = sendFrm.put(ballContours, thickness = 2, color = (255, 0, 0))
-    
-    try:
-        sendFrm = sendFrm.put(str(100 * ballLikelihood), thickness = 2, color = (0, 255, 255), where = (1800, 700))
-        sendFrm = sendFrm.put(str(100 * ballThreshold), thickness = 2, color = (0, 255, 255), where = (1800, 750))
-    except:
-        pass
-    
-    if selectedBall is not None:
-        if detectedBall: ### we have identified the contour as ball!
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 0))
-        else: ### 
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 255))
-    
-    return sendFrm
-
-
-def draw_replay_onlyball(frmDict, featDict):
-    
-    cFrm = frmDict['cFrm']
-
-    selectedBall = featDict['ball']
-    detectedBall = featDict['ballDetected']
-    ballContours = featDict['ballContours']
-    ballParticles = featDict['ballParticles']
-    
-    try:
-        ballLikelihood = featDict['ballLikelihood']
-        ballThreshold = featDict['ballThreshold']
-    except:
-        pass
-    
-    sendFrm = cFrm
-    
-    try:
-        sendFrm = sendFrm.put(str(round(1000000 * ballLikelihood, 40)), thickness = 2, color = (0, 255, 255), where = (1300, 700))
-        sendFrm = sendFrm.put(str(round(1000000 * ballThreshold, 40)), thickness = 2, color = (0, 255, 255), where = (1300, 750))
-    except:
-        pass
-    
-    
-    sendFrm = sendFrm.put(ballContours, thickness = 2, color = (255, 0, 0))
-    if not ballParticles is None:
-        pPts = pf.particles_to_points(ballParticles, particles_to_produce = 200)
-        sendFrm = sendFrm.put(pPts, thickness = 1, color = (0, 0, 255))
-    
-    if selectedBall is not None:
-        if detectedBall: ### we have identified the contour as ball!
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 0))
-        else: ### 
-            sendFrm = sendFrm.put(selectedBall, thickness = 2, color = (0, 255, 255))
-    
-    return sendFrm
-
 
 
 #%% STREAM AND EXTRACT BALL FEATURES
@@ -314,33 +225,36 @@ def draw_replay_onlyball(frmDict, featDict):
 ### LOAD HOMOGRAPHIES ###
 from ATMANpy.funcs.feature_funcs import load_stored_features
 featnameList = ['H'] 
-homographies_loaded = load_stored_features(VIDEO_ID, featnameList = featnameList)
+homographies_loaded = load_stored_features(VIDEO_ID, STORE_NAME, featnameList = featnameList)
 
-### PLUG HOLES IN HOMOGRAPHIES ####
-from ATMANpy.funcs.sf_postprocess_funcs import plug_hole_in_homographies
-homographies_plugged = plug_hole_in_homographies(homographies_loaded, cap)
-# need to do the same for seqFrm!
-### DONE! Holes are now plugged in the parallel_play_identifier script
+# ### PLUG HOLES IN HOMOGRAPHIES ####
+# from ATMANpy.funcs.sf_postprocess_funcs import plug_hole_in_homographies
+# homographies_plugged = plug_hole_in_homographies(homographies_loaded, cap)
+# # need to do the same for seqFrm!
+# ### DONE! Holes are now plugged in the parallel_play_identifier script
 
 
-### NORMALIZE HOMOGRAPHIES ###
-# a) build a function to normalize the homographies where they are weird.
-from ATMANpy.funcs.sf_postprocess_funcs import stream_features_median_corner_regions
-from ATMANpy.funcs.sf_postprocess_funcs import stream_features_correct_homography
-from ATMANpy.funcs.util_funcs import compose
-corrFunc = compose(stream_features_correct_homography, stream_features_median_corner_regions) 
+# ### NORMALIZE HOMOGRAPHIES ###
+# # a) build a function to normalize the homographies where they are weird.
+# from ATMANpy.funcs.sf_postprocess_funcs import stream_features_median_corner_regions
+# from ATMANpy.funcs.sf_postprocess_funcs import stream_features_correct_homography
+# from ATMANpy.funcs.util_funcs import compose
+# corrFunc = compose(stream_features_correct_homography, stream_features_median_corner_regions) 
 
 ### -> if we don't also do the same for the segments, the whole thing is useless!
 
-# b) apply the function to the split features
-from ATMANpy.funcs.feature_funcs import split_joint_features, join_split_features
-homographies_correct = join_split_features([corrFunc(sf) for sf in split_joint_features(homographies_plugged)])
+# # b) apply the function to the split features
+# from ATMANpy.funcs.feature_funcs import split_joint_features, join_split_features
+# homographies_correct = join_split_features([corrFunc(sf) for sf in split_joint_features(homographies_plugged)])
 
-assert len(homographies_plugged) == len(homographies_correct)
+# assert len(homographies_plugged) == len(homographies_correct)
 
-# c) save the normalized homographies
-from ATMANpy.funcs.feature_funcs import save_homographies
-save_homographies(homographies_correct, VIDEO_ID) ### we save these because we normalized H
+# # c) save the normalized homographies
+# from ATMANpy.funcs.feature_funcs import save_homographies
+# save_homographies(homographies_correct, VIDEO_ID) ### we save these because we normalized H
+
+### This part is now done in the homography creation directly!
+
 
 
 #### BUILD STREAM FEATURES FUNCTION ####
@@ -350,19 +264,25 @@ from ATMANpy.funcs.high_level_funcs import smoothe_and_choose_ball_contour
 from ATMANpy.funcs.high_level_funcs import interpolate_ball_contours, smart_interpolate_ball_contours 
 from ATMANpy.funcs.high_level_funcs import smoothe_and_choose_ball_contour_with_likelihood
 
+
+### BUILT THE DRAW FUNCTION ####
+from ATMANpy.funcs.draw_funcs import draw
+drawList = ['frmNum', 'playerTop', 'playerBot', 'courtLines', 'ball', 'scoreBoard']
+drawFunc = draw(drawList)
+
 my_stream_func = partial(get_stream_features, 
-                         existing_features = homographies_correct,
+                         existing_features = homographies_loaded,
                          cache_length = CACHE_LENGTH,
                          init_feat_func = init_featDict, 
                          init_frame_func = init_frameDict,
                          court_line_func = get_court_lines, 
                          court_feature_func = get_court_features,
-                         draw_func = make_sendframe,
+                         draw_func = drawFunc,
                          verbose = False)
 
 #### CREATE THE FEATURES ###
 import time
-from ATMANpy.funcs.feature_funcs import save_contours, save_particles
+from ATMANpy.funcs.feature_funcs import save_contours, save_particles, save_region
 
 video_segments = seqFrm
 
@@ -373,12 +293,13 @@ for idx, start_stop_frames in video_segments.iterrows():
     start_frame, stop_frame = start_stop_frames
     stream_features_original = my_stream_func(cap, start_frame, stop_frame, verbose = False)
     stream_features_smooth = smoothe_and_choose_ball_contour(stream_features_original)
-    # replay(cap, stream_features_smooth, drawFunc = draw_replay,
-    #        ms_between_frames = 30)
+    # replay(cap, stream_features_smooth, drawFunc = drawFunc,
+    #         ms_between_frames = 30)
      
-    save_contours(stream_features_smooth, 'ball', VIDEO_ID, compression = 6)
-    save_contours(stream_features_smooth, 'playerTop', VIDEO_ID, compression = 24)
-    save_contours(stream_features_smooth, 'playerBot', VIDEO_ID, compression = 24)
+    save_contours(stream_features_smooth, 'ball', VIDEO_ID, STORE_NAME, compression = 6)
+    save_contours(stream_features_smooth, 'playerTop', VIDEO_ID, STORE_NAME, compression = 24)
+    save_contours(stream_features_smooth, 'playerBot', VIDEO_ID, STORE_NAME, compression = 24)
+    save_region(stream_features_smooth, 'scoreBoard', VIDEO_ID, STORE_NAME)
     
     end_time = time.time()
     time_elapsed = round((end_time - start_time) / 60, 1)
