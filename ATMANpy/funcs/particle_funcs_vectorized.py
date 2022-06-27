@@ -56,14 +56,18 @@ P_PRIME = 0.3
 weight_cov = R + H @ Q @ H.T
 weight_cov_inv = np.linalg.inv(weight_cov)
 
-weight_denominator = 2 * np.pi * np.linalg.det(weight_cov) ** 0.5
+weight_denominator = 2 * np.pi * np.linalg.det(weight_cov) ** 0.5 ### not quite correct! 
+                                                                  # pi must be raised to the power of number of dimensions, 
+                                                                  # and then also be square-rooted. 
 # HA = H * A
 
 K = Q @ H.T @ weight_cov_inv
 C = (np.eye(4) - K @ H) @ Q
 
 R_inv = np.linalg.inv(R)
-likelihood_denominator = 2 * np.pi * np.linalg.det(R) ** 0.5
+likelihood_denominator = 2 * np.pi * np.linalg.det(R) ** 0.5 ### not quite correct! 
+                                                             # pi must be raised to the power of number of dimensions, 
+                                                             # and then also be square-rooted. 
 
 #### CHAMFER ###
 CHAMFER_THRESH = 50
