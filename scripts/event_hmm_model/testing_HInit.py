@@ -52,7 +52,7 @@ def segment_one_word(word):
     
     return out_word
 
-def find_transition_matrix(word):
+def find_transition_occurences(word):
     
     out_word = word.copy()
     
@@ -75,34 +75,38 @@ def find_transition_matrix(word):
         i, j = from_to_pair
         transMat[i, j] = number_of_transitions
     
-    ### Normalize Transition Matrix
-    non_terminal_states = transMat[:-1, :] ### only calculate normalization for non-exit rows to avoid division by zero.
-    rowSum = non_terminal_states.sum(axis = 1)
+    return transMat
     
-    probMat = non_terminal_states / rowSum[:, np.newaxis] ### normalize by row sum
+def find_transition_matrix(words):
     
-    ### it can happen that the row sum is zero -> if the state is never occupied.
-    probMat = np.nan_to_num(probMat)    
+    sequences = words.index.get_level_values('IndexSF').unique()
+
+    transMats = np.array([find_transition_occurences(words.loc[idx]) for idx in sequences])    
+    all_transMat = transMats.sum(axis = 0)
     
-    ### Add in row for exit state
-    probMat = np.vstack([probMat, [0] * (NUM_STATES + 2)])
+    rowSum = all_transMat.sum(axis = 1)
+    A = all_transMat / rowSum[:, np.newaxis] ### normalize by row sum
     
-    return probMat
+    ### it can happen that the row sum is zero -> if the state is never occupied non-terminally
+    ### always happens with the exit state, btw -> there are no transitions away from it.
+    A = np.nan_to_num(A)    
+    
+    return A 
     
 def get_parameters(words):
-    sequences = words.index.get_level_values('IndexSF').unique()
-    As = np.array([find_transition_matrix(words.loc[idx]) for idx in sequences])
-    A = As.mean(axis = 0)
+    A = find_transition_matrix(words)
     
     avgs = words.groupby('IndexSF').apply(lambda x: x.groupby('State').mean())
     covs = words.groupby('IndexSF').apply(lambda x: x.groupby('State').cov())
     
-    avg = avgs.groupby('State').mean()
-    cov = covs.groupby(['State', 'Var']).mean()
+    avg = avgs.groupby('State', sort=True).mean() ### State we want sorted, from left-to-right
+    cov = covs.groupby(['State', 'Var'], sort=False).mean() ### to prevent the variable names to be sorted
+    
+    ### now, to ensure that state is also sorted here... 
+    # cov = cov.sort_index(level = 'State') ## buggy: also sorts Var...
+    cov = pd.concat([cov.loc[[state]] for state in avg.index.get_level_values('State').unique()])
     
     return A, avg, cov
-
-
 
 def calculate_emission_densities(words, avg, cov):
     """
@@ -221,7 +225,7 @@ def viterbi_segment(densFrm, A):
     return outFrm, sum(max_vals)
  
 def stop_condition(log_likelihood, prev_log_likelihood, 
-                   num_iterations, max_iterations = 20):
+                   num_iterations, min_iterations = 20, max_iterations = 100):
     try:
         round_likelihood = round(log_likelihood, 2)
     except:
@@ -231,18 +235,45 @@ def stop_condition(log_likelihood, prev_log_likelihood,
     if num_iterations > max_iterations:
         print(f'    ...Stopping: {max_iterations} iterations exceeded.')
         return True
+    elif num_iterations < min_iterations:
+        print('    ...Doing!')
+        return False ### don't stop!
     else:
         if log_likelihood is None or prev_log_likelihood is None:
-            print(f'    ...Doing!')
+            print('    ...Doing!')
             return False ### don't stop!
         if log_likelihood >= prev_log_likelihood:
-            print(f'    ...Doing!')
+            print('    ...Doing!')
             return False ### don't stop, we're getting better!
         else:
-            print(f'    ...Stopping: Convergence achieved.')
+            print('    ...Stopping: Convergence achieved.')
             return True
-
-    
+ 
+def stop_condition(curr_log_likelihood, prev_log_likelihood, 
+                   num_iterations, 
+                   relative_change_threshold = 0.0001, max_iterations = 100):
+    try:
+        round_likelihood = round(curr_log_likelihood, 2)
+    except:
+        round_likelihood = None
+        
+    print(f'Iteration {num_iterations}. Current likelihood: {round_likelihood}...')
+    if num_iterations > max_iterations:
+        print(f'    ...Stopping: {max_iterations} iterations exceeded.')
+        return True
+    else:
+        if num_iterations is None or prev_log_likelihood is None:
+            return False ### don't stop!
+        else:
+            diff_likelihood = abs(curr_log_likelihood - prev_log_likelihood)
+            
+            if diff_likelihood / num_iterations < relative_change_threshold:
+                print('    ...Stopping: Convergence achieved.')
+                return True
+            else:
+                return False
+               
+np.seterr(over = 'raise')
 
 NUM_STATES = 3 ### the emitting states
 
@@ -254,22 +285,42 @@ word_instances.columns.name = 'Var'
 
 words = word_instances.groupby('IndexSF', group_keys = False).apply(segment_one_word)
 
-log_likelihood = None
-prev_log_likelihood = None
-num_iterations = 1
-while not stop_condition(log_likelihood, prev_log_likelihood, num_iterations):
+def HInit(words):
+    words = words.copy()
     
-    A, avg, cov = get_parameters(words)
-    words.index = words.index.droplevel('State') ### we drop the states -> they will now be recalculated.
-    densFrm = calculate_emission_densities(words, avg, cov)
+    curr_log_likelihood = None
+    prev_log_likelihood = None
+    best_log_likelihood = None
+    num_iterations = 1
+    while not stop_condition(curr_log_likelihood, prev_log_likelihood, num_iterations):
+        
+        prev_log_likelihood = curr_log_likelihood
+        
+        ### Recalculate parameters
+        A, avg, cov = get_parameters(words)
     
-    prev_log_likelihood = log_likelihood
-    state_sequences, log_likelihood = viterbi_segment(densFrm, A)    
+        words.index = words.index.droplevel('State') ### we drop the states -> they will now be recalculated.
+        densFrm = calculate_emission_densities(words, avg, cov)
+        
+        state_sequences, curr_log_likelihood = viterbi_segment(densFrm, A)    
+        words.index = pd.MultiIndex.from_frame(state_sequences)
+    
+        ### Save the parameters of the best iteration so far
+        if best_log_likelihood is None:
+            best_A, best_avg, best_cov = A, avg, cov
+            best_log_likelihood = curr_log_likelihood
+        else:
+            if curr_log_likelihood > best_log_likelihood:
+                best_A, best_avg, best_cov = A, avg, cov
+                best_log_likelihood = curr_log_likelihood
+    
+        num_iterations += 1
+    
+    else:
+        print(f'Best Likelihood: {round(best_log_likelihood, 2)}')
+        return best_A, best_avg, best_cov 
 
-    words.index = pd.MultiIndex.from_frame(state_sequences)
-
-    num_iterations += 1
-
+HInit(words)
 
 #############
 
