@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 
 
-def get_word_data(dataFrm, wordStr):
+def get_word_data(dataFrm, wordStr, extend_word = None):
     
     ### Prep Word Data
     word_instances = dataFrm[dataFrm.Event == wordStr].drop(columns = 'Event')
@@ -18,7 +18,90 @@ def get_word_data(dataFrm, wordStr):
     
     return word_instances
          
-def calculate_emission_densities(words, avg, cov):
+def get_contiguous_frame_indices(frameList):
+    ### for a list of frames, returns a list of equal length containing indices,
+    ### where contiguous frames have a common index -> essentially, this demarcates words 
+    
+    curr_frame, frames = frameList[0], frameList[1:]
+    curr_index = 0 ### this is the first index for f
+    
+    outList = [curr_index] 
+    for frame in frames:
+        if frame > curr_frame + 1:
+            curr_index += 1
+        outList.append(curr_index)    
+        curr_frame = frame
+    
+    return outList
+
+def get_word_data(dataFrm, wordStr, extend_word = None):
+    
+    word_instances = dataFrm[dataFrm.Event == wordStr].drop(columns = 'Event')
+    
+    wordList = []
+    seq = 0
+    for seq in word_instances.IndexSF.unique(): ### we do this within sequence, just to be very safe.
+        seq_words = word_instances[word_instances.IndexSF == seq]
+        seq_words['IndexWord'] = get_contiguous_frame_indices(seq_words.index) 
+
+        ### extend the words by a number of frames, if needed
+        ### This part is so ugly because we want to be absolutely sure that
+            # 1) extended word frames exist
+            # 2) extended words are still contiguous
+        if extend_word is not None:
+            extend_all_words_in_sequence_list = []
+            seq_whole = dataFrm[dataFrm.IndexSF == seq]
+            for word_index in seq_words['IndexWord'].unique():
+                single_word = seq_words[seq_words.IndexWord == word_index] 
+                wordmin, wordmax = single_word.index.min(), single_word.index.max()
+                
+                extend_one_word_List = []
+                ### add the earlier frames
+                for extend_counter in range(1, extend_word + 1):
+                    try:
+                        extendSer = seq_whole.loc[wordmin - extend_counter]
+                    except:
+                        break ### if the frame before does not exist, we can stop looking for prev frames.
+                    else:
+                        extend_one_word_List.append(extendSer)
+                ### add the later frames
+                for extend_counter in range(1, extend_word + 1):
+                    try:
+                        extendSer = seq_whole.loc[wordmax + extend_counter]
+                    except:
+                        break ### if the frame before does not exist, we can stop looking for prev frames.
+                    else:
+                        extend_one_word_List.append(extendSer)
+                
+                word_extension_frame = pd.concat(extend_one_word_List, axis = 1).T
+                word_extension_frame = word_extension_frame.drop(columns = 'Event')
+                word_extension_frame['IndexWord'] = word_index
+        
+                extend_all_words_in_sequence_list.append(word_extension_frame)
+            
+            ext_words = pd.concat([*extend_all_words_in_sequence_list, seq_words])
+        
+            wordList.append(ext_words)
+            
+        else:
+            wordList.append(seq_words)
+     
+    word_instances = pd.concat(wordList)
+    word_instances.index.name = 'Frame'
+    ### right now, IndexWord identifies words uniquely WITHIN each sequence.
+    ### for simplicity: construct a one-dimensional, joint index identifying each word uniquely.
+    ### this avoids having to find unique values of two columns, for instance...
+    word_instances['IndexWord'] = word_instances['IndexSF'].astype(str) + '_' + word_instances['IndexWord'].astype(str)
+    word_instances = word_instances.drop(columns = 'IndexSF')
+    word_instances = word_instances.reset_index().set_index(['IndexWord', 'Frame']).sort_index()
+    word_instances = word_instances.astype(float)
+    word_instances.columns.name = 'Var'
+        
+    return word_instances
+            
+            
+
+def calculate_emission_densities(words, avg, cov, density_floor = None):
     """
     for each frame in each word occurence, we need the likelihood
     of said frame being emitted when in any of the HMM states.
@@ -38,8 +121,13 @@ def calculate_emission_densities(words, avg, cov):
     invArr = []
     detArr = []
     for mat in covArr:
-        invArr.append(np.linalg.inv(mat))
-        detArr.append(np.linalg.det(mat))
+        if any(np.linalg.eigvals(mat) <= 0): ### check for positive semidefiniteness
+            print('Covariance matrix singular!')
+            raise np.linalg.LinAlgError
+        else:
+            invArr.append(np.linalg.inv(mat))
+            detArr.append(np.linalg.det(mat))
+            
     invArr = np.array(invArr) ### shape: num_states, num_vars, num_vars
     detArr = np.array(detArr) ### shape: num_states
     
@@ -59,6 +147,9 @@ def calculate_emission_densities(words, avg, cov):
     density = numerator / denominator[np.newaxis, :] ### shape: num_obs, num_states
     
     densityFrm = pd.DataFrame(density, index = words.index, columns = states)
+    
+    if density_floor is not None:
+        densityFrm = densityFrm.clip(lower = density_floor)
     
     return densityFrm
     

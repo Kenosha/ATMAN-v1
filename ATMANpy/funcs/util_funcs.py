@@ -39,5 +39,10 @@ def compose(*funcs):
         return lambda x : f(g(x))            
     return reduce(binary_compose, funcs, lambda x: x)
 
+import pandas as pd
+def prepend_index_level(df, idx_name, idx_value):
+    return pd.concat({idx_value: df}, names = [idx_name])
+    
+
 
 

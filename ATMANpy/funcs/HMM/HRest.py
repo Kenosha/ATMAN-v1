@@ -8,7 +8,6 @@ Created on Thu Jul  7 15:34:32 2022
 import numpy as np
 import pandas as pd
 
-
 ######## LOG ARITHMETIC #########
 ###### (after Mann, 2006) #######
 #################################
@@ -41,6 +40,9 @@ def elnproduct(eln_x, eln_y):
 ##############################
 #### LOG BAUM WELCH ALGO #####
 ##############################
+
+
+WORD_ID_COL = 'IndexWord'
 
 
 def log_forward(seqArr, A):
@@ -272,9 +274,10 @@ def join_entry_emit_and_exit_to_A(entryArr, emitArr, exitArr):
     return A
 
 def HRest(words, 
-          initial_A = None, initial_avg = None, initial_cov = None):
-    
-    RELATIVE_CHANGE_THRESHOLD = 10 ** -12
+          initial_A = None, initial_avg = None, initial_cov = None,
+          stop_iteration_threshold = 10 ** -8,
+          min_iterations = 15, max_iterations = 50,
+          density_floor = 10 ** -100):
     
     from ATMANpy.funcs.HMM.utils import stop_condition, calculate_emission_densities
     
@@ -288,18 +291,28 @@ def HRest(words,
     curr_log_likelihood = None
     prev_log_likelihood = None
     best_log_likelihood = None
+    
+    best_A, best_avg, best_cov = A, avg, cov
+    
     num_iterations = 1
     
     while not stop_condition(curr_log_likelihood, prev_log_likelihood, num_iterations,
-                             relative_change_threshold = RELATIVE_CHANGE_THRESHOLD):
+                             relative_change_threshold = stop_iteration_threshold,
+                             min_iterations = min_iterations, max_iterations = max_iterations):
         
         ###### ITERATION SPECIFIC INITIALIZATION ######
         ### a) save previous log likelihood
         prev_log_likelihood = curr_log_likelihood
         
         ### b) observation specific quantities
-        densFrm = calculate_emission_densities(words, avg, cov)
-        obsIdxs = words.index.get_level_values('IndexSF').unique()
+        try:
+            densFrm = calculate_emission_densities(words, avg, cov, density_floor = density_floor)
+        except np.linalg.LinAlgError:
+            lklStr = round(best_log_likelihood, 2) if best_log_likelihood is not None else None
+            print(f'Best Likelihood: {lklStr}')
+            return best_A, best_avg, best_cov 
+ 
+        obsIdxs = words.index.get_level_values(WORD_ID_COL).unique()
         avgArr = avg.values
         
         ### c) Accumulators
@@ -377,6 +390,7 @@ def HRest(words,
         num_iterations += 1
         
     else:
-        print(f'Best Likelihood: {round(best_log_likelihood, 2)}')
+        lklStr = round(best_log_likelihood, 2) if best_log_likelihood is not None else None
+        print(f'Best Likelihood: {lklStr}')
         return best_A, best_avg, best_cov 
 
