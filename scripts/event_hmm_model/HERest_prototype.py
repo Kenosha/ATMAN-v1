@@ -29,38 +29,38 @@ all_words = dataFrm.Event.unique()
 seqIdxs = dataFrm.IndexSF.unique()
 print(f'Available Sequences: {len(seqIdxs)}')
 
-how_many = 30
+how_many_words_min = 4
+how_many_words_rel = 0.1
+extend_word = 1
 
-def choose_random_sample(dataFrm, how_many, min_num_frames = 3):
-    seqIdxs = dataFrm.IndexSF.unique()
+def choose_random_sample_words(dataFrm):
+    all_words = dataFrm.Event.unique()
     
-    word_sequence_idxs = np.random.choice(seqIdxs, size = how_many, replace = False)
-    word_training_sample = dataFrm[dataFrm.IndexSF.isin(word_sequence_idxs)]
+    from ATMANpy.funcs.HMM.utils import get_word_data
+    from ATMANpy.funcs.util_funcs import prepend_index_level
+    
+    sampleList = []
+    for wordStr in all_words:
+        word_dataFrm = get_word_data(dataFrm, wordStr, extend_word = extend_word)
 
-    ### check the training sample for completeness
+        words_available = word_dataFrm.index.get_level_values('IndexWord').unique()
+        number_of_words = len(words_available)
         
-    # 1) has all words
-    sample_words = word_training_sample.Event.unique()
+        how_many_words = max(how_many_words_min, round(how_many_words_rel * number_of_words))
+        
+        assert number_of_words >= how_many_words, f'Need more training data for {wordStr}!'
+
+        word_choice_idxs = np.random.choice(words_available, size = how_many_words, replace = False)
+
+        word_choice_data = word_dataFrm.loc[word_choice_idxs]
+        
+        word_choice_data = prepend_index_level(word_choice_data, 'Event', wordStr)
+
+        sampleList.append(word_choice_data)
     
-    if not set(sample_words) == set(all_words): 
-        print(f'Missing {[w for w in all_words if w not in sample_words]}...')
-        return choose_random_sample(dataFrm, how_many, min_num_frames = min_num_frames)
+    return pd.concat(sampleList)
 
-    # 2) exceeds minimum length for all words
-    event_frames = word_training_sample.groupby('Event').IndexSF.count()
-    too_few_frames = event_frames[event_frames < min_num_frames]
-    if not len(too_few_frames) == 0:
-        print(f'Too few frames for {list(too_few_frames.index)}')
-        return choose_random_sample(dataFrm, how_many, min_num_frames = min_num_frames)
-
-    return word_training_sample
-
-word_training_sample = choose_random_sample(dataFrm, how_many)
-
-
-sample_frames = word_training_sample.groupby('Event').count()['IndexSF']
-too_few_frames = sample_frames[sample_frames < 3].index
-assert len(too_few_frames) == 0, f'Too few frames for states: {too_few_frames}' ### need at least 2 frames for all words
+word_training_sample = choose_random_sample_words(dataFrm)
 
 #### Assign a number of states to each word ####
 
@@ -68,9 +68,6 @@ assert len(too_few_frames) == 0, f'Too few frames for states: {too_few_frames}' 
 event_to_num_states = lambda wordStr: 1 if wordStr == 'None' else 3
 
 #### Begin with the single word functions HInit and HRest
-
-from ATMANpy.funcs.HMM.utils import get_word_data
- 
 
 np.seterr('ignore')
 
@@ -96,17 +93,15 @@ for wordStr in all_words:
 
     print(f'Doing {wordStr}...')
     
-    words = get_word_data(word_training_sample, wordStr, extend_word = extend_word)
+    words = word_training_sample.loc[wordStr]
     num_words = len(words.index.get_level_values("IndexWord").unique())
     num_frames = len(words)
     print(f'Number of words to train on: {num_words}, occupying {num_frames} frames')
     
     from ATMANpy.funcs.HMM.HInit import HInit
     from ATMANpy.funcs.HMM.HRest import HRest
-    
-    if num_frames < abs_min_threshold: 
-        raise Exception(f'{wordStr}: fewer frames than variables -> collinearity danger!')                         
-    elif num_words < train_threshold:  ### in this case, we initialize the parameters 
+                   
+    if num_words < train_threshold:  ### in this case, we initialize the parameters 
                                         # with even segmentation and global variance
         A, avg, cov = HInit(words, num_states = num_states,
                             min_iterations = 0, max_iterations = 1, cov_global = True)
@@ -153,14 +148,29 @@ from ATMANpy.funcs.HMM.HRest import weighted_emission_cov_numerator, weighted_em
 
 from ATMANpy.funcs.HMM.HRest import join_entry_emit_and_exit_to_A
 
-embd_sequence_idxs = [idx for idx in seqIdxs if idx not in word_sequence_idxs]
-embedded_training_sample = dataFrm[dataFrm.IndexSF.isin(embd_sequence_idxs)]
 
-for i, sequenceIdx in enumerate(embd_sequence_idxs):
+### Initialize Accumulators
+## Initialize Accumulators for gamma, which will feature in many denominators
+gammaAccumulator = {word: 0 for word in all_words}
+gammaAccumulator_entry = {word: 0 for word in all_words}
+
+## Initialize Accumulators for mean and standard deviation numerators
+meanAccumulator = {word: 0 for word in all_words}
+covAccumulator = {word: 0 for word in all_words}
+
+## Initialize Accumulators for xi, the numerator in transition probabilities
+xientryAccumulator = {word: 0 for word in all_words}
+xiemitAccumulator = {word: 0 for word in all_words}
+xiexitAccumulator = {word: 0 for word in all_words}
+
+## Initialize Accumulator for log-likelihood
+lklAccumulator = {word: 0 for word in all_words}
+
+for i, sequenceIdx in enumerate(seqIdxs):
     
-    print(f'Embedded re-estimation of sequence {i} out of {len(embd_sequence_idxs)}...')
+    print(f'Embedded re-estimation of sequence {i} out of {len(seqIdxs)}...')
     
-    words, eventSeq = get_sequence_data_and_transcription(embedded_training_sample, sequenceIdx)
+    words, eventSeq = get_sequence_data_and_transcription(dataFrm, sequenceIdx)
     
     seqDict = get_sequence_densities(paramDict, eventSeq, words)
     
@@ -168,23 +178,6 @@ for i, sequenceIdx in enumerate(embd_sequence_idxs):
     elnbs = get_backward_probs(paramDict, eventSeq, seqDict)
     
     eln_gammas, model_probability = log_gammas_and_model_prob(elnas, elnbs)
-    
-    ### c) Accumulators
-    ## Initialize Accumulators for gamma, which will feature in many denominators
-    gammaAccumulator = {word: 0 for word in all_words}
-    gammaAccumulator_entry = {word: 0 for word in all_words}
-    
-    ## Initialize Accumulators for mean and standard deviation numerators
-    meanAccumulator = {word: 0 for word in all_words}
-    covAccumulator = {word: 0 for word in all_words}
-    
-    ## Initialize Accumulators for xi, the numerator in transition probabilities
-    xientryAccumulator = {word: 0 for word in all_words}
-    xiemitAccumulator = {word: 0 for word in all_words}
-    xiexitAccumulator = {word: 0 for word in all_words}
-    
-    ## Initialize Accumulator for log-likelihood
-    lklAccumulator = {word: 0 for word in all_words}
     
     ### calculate gamma
     elngammas, model_probability = log_gammas_and_model_prob(elnas, elnbs)
