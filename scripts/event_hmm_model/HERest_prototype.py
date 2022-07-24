@@ -1,0 +1,272 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jul  7 22:30:11 2022
+
+@author: gianl
+"""
+
+
+import os
+import pandas as pd
+import numpy as np
+
+from ATMANpy.funcs.util_funcs import get_folder_struct
+
+
+VIDEO_ID = 'pqxAmUWIoKc'
+DATA_SET = 'events_final.csv'
+
+hmmPath = get_folder_struct('ball_event_hmm')[VIDEO_ID]
+dataPath = os.path.join(hmmPath, 'hmm_data_final')
+dataFile = os.path.join(dataPath, DATA_SET)
+
+dataFrm = pd.read_csv(dataFile, index_col = 0).drop(columns = 'SeqStatus')
+dataFrm.index.name = 'Frame'
+dataFrm = dataFrm[~dataFrm.Event.isna()]
+all_words = dataFrm.Event.unique()
+
+#### Choose a subset of sequences for single word initialization and baum-welch training
+seqIdxs = dataFrm.IndexSF.unique()
+print(f'Available Sequences: {len(seqIdxs)}')
+
+how_many = 30
+
+def choose_random_sample(dataFrm, how_many, min_num_frames = 3):
+    seqIdxs = dataFrm.IndexSF.unique()
+    
+    word_sequence_idxs = np.random.choice(seqIdxs, size = how_many, replace = False)
+    word_training_sample = dataFrm[dataFrm.IndexSF.isin(word_sequence_idxs)]
+
+    ### check the training sample for completeness
+        
+    # 1) has all words
+    sample_words = word_training_sample.Event.unique()
+    
+    if not set(sample_words) == set(all_words): 
+        print(f'Missing {[w for w in all_words if w not in sample_words]}...')
+        return choose_random_sample(dataFrm, how_many, min_num_frames = min_num_frames)
+
+    # 2) exceeds minimum length for all words
+    event_frames = word_training_sample.groupby('Event').IndexSF.count()
+    too_few_frames = event_frames[event_frames < min_num_frames]
+    if not len(too_few_frames) == 0:
+        print(f'Too few frames for {list(too_few_frames.index)}')
+        return choose_random_sample(dataFrm, how_many, min_num_frames = min_num_frames)
+
+    return word_training_sample
+
+word_training_sample = choose_random_sample(dataFrm, how_many)
+
+
+sample_frames = word_training_sample.groupby('Event').count()['IndexSF']
+too_few_frames = sample_frames[sample_frames < 3].index
+assert len(too_few_frames) == 0, f'Too few frames for states: {too_few_frames}' ### need at least 2 frames for all words
+
+#### Assign a number of states to each word ####
+
+# -> for the moment, assume they're all three state hmms, except None, which is one state.
+event_to_num_states = lambda wordStr: 1 if wordStr == 'None' else 3
+
+#### Begin with the single word functions HInit and HRest
+
+from ATMANpy.funcs.HMM.utils import get_word_data
+ 
+
+np.seterr('ignore')
+
+initDict = {}
+restDict = {}
+for wordStr in all_words:
+
+    abs_min_threshold = 3 # how many frames do we need to train
+    train_threshold = 7 # how many words do we need to train    
+                         # number of variables is six, so we need at least seven words.
+
+    stop_iteration_threshold_init = 10 ** -10   
+    stop_iteration_threshold_rest = 10 ** -7
+    min_iterations = 15 
+    max_iterations = 50
+    
+    extend_word = 1
+    num_states = event_to_num_states(wordStr)
+    density_floor = 10 ** -100
+    rel_gini_weight = 0
+    variance_floor = 0.01 ### minimum variance allowed is variance_floor x 100% of the global variance 
+    cov_global = False
+
+    print(f'Doing {wordStr}...')
+    
+    words = get_word_data(word_training_sample, wordStr, extend_word = extend_word)
+    num_words = len(words.index.get_level_values("IndexWord").unique())
+    num_frames = len(words)
+    print(f'Number of words to train on: {num_words}, occupying {num_frames} frames')
+    
+    from ATMANpy.funcs.HMM.HInit import HInit
+    from ATMANpy.funcs.HMM.HRest import HRest
+    
+    if num_frames < abs_min_threshold: 
+        raise Exception(f'{wordStr}: fewer frames than variables -> collinearity danger!')                         
+    elif num_words < train_threshold:  ### in this case, we initialize the parameters 
+                                        # with even segmentation and global variance
+        A, avg, cov = HInit(words, num_states = num_states,
+                            min_iterations = 0, max_iterations = 1, cov_global = True)
+        ### this is one iteration of HInit, i.e, a even-segmentation initialization.
+        initDict[wordStr] = {'A': A, 'avg': avg, 'cov': cov}
+        restDict[wordStr] = {'A': A, 'avg': avg, 'cov': cov}
+    
+    else:
+        initial_A, initial_avg, initial_cov = HInit(words, num_states = num_states, 
+                                                    stop_iteration_threshold = stop_iteration_threshold_init,
+                                                    min_iterations = min_iterations, 
+                                                    max_iterations = max_iterations,
+                                                    density_floor = density_floor)
+        
+        initDict[wordStr] = {'A': initial_A, 'avg': initial_avg, 'cov': initial_cov}
+        print('')
+        
+        A, avg, cov = HRest(words, 
+                            initial_A = initial_A, initial_avg = initial_avg, initial_cov = initial_cov,
+                            stop_iteration_threshold = stop_iteration_threshold_rest,
+                            min_iterations = min_iterations, max_iterations = max_iterations,
+                            density_floor = density_floor)
+        
+        restDict[wordStr] = {'A': A, 'avg': avg, 'cov': cov}
+        
+        print('... Done!')
+        print('______________')
+    
+#%% HERest
+
+from copy import deepcopy
+paramDict = deepcopy(restDict)
+
+from ATMANpy.funcs.HMM.HERest import get_sequence_data_and_transcription, get_sequence_densities
+from ATMANpy.funcs.HMM.HERest import get_forward_probs, get_backward_probs
+
+from ATMANpy.funcs.HMM.HERest import eexp, eln, elnproduct, elnsum, LOGZERO
+from ATMANpy.funcs.HMM.HERest import log_gammas_and_model_prob
+
+from ATMANpy.funcs.HMM.HERest import log_xi_entry_numerator, log_xi_emit_numerator, log_xi_exit_numerator 
+
+from ATMANpy.funcs.HMM.HRest import weighted_denominator
+from ATMANpy.funcs.HMM.HRest import weighted_emission_cov_numerator, weighted_emission_mean_numerator
+
+from ATMANpy.funcs.HMM.HRest import join_entry_emit_and_exit_to_A
+
+embd_sequence_idxs = [idx for idx in seqIdxs if idx not in word_sequence_idxs]
+embedded_training_sample = dataFrm[dataFrm.IndexSF.isin(embd_sequence_idxs)]
+
+for i, sequenceIdx in enumerate(embd_sequence_idxs):
+    
+    print(f'Embedded re-estimation of sequence {i} out of {len(embd_sequence_idxs)}...')
+    
+    words, eventSeq = get_sequence_data_and_transcription(embedded_training_sample, sequenceIdx)
+    
+    seqDict = get_sequence_densities(paramDict, eventSeq, words)
+    
+    elnas = get_forward_probs(paramDict, eventSeq, seqDict)
+    elnbs = get_backward_probs(paramDict, eventSeq, seqDict)
+    
+    eln_gammas, model_probability = log_gammas_and_model_prob(elnas, elnbs)
+    
+    ### c) Accumulators
+    ## Initialize Accumulators for gamma, which will feature in many denominators
+    gammaAccumulator = {word: 0 for word in all_words}
+    gammaAccumulator_entry = {word: 0 for word in all_words}
+    
+    ## Initialize Accumulators for mean and standard deviation numerators
+    meanAccumulator = {word: 0 for word in all_words}
+    covAccumulator = {word: 0 for word in all_words}
+    
+    ## Initialize Accumulators for xi, the numerator in transition probabilities
+    xientryAccumulator = {word: 0 for word in all_words}
+    xiemitAccumulator = {word: 0 for word in all_words}
+    xiexitAccumulator = {word: 0 for word in all_words}
+    
+    ## Initialize Accumulator for log-likelihood
+    lklAccumulator = {word: 0 for word in all_words}
+    
+    ### calculate gamma
+    elngammas, model_probability = log_gammas_and_model_prob(elnas, elnbs)
+    
+    for idx, word in enumerate(eventSeq):
+            
+        elnaArr, elnbArr, seqArr = elnas[idx], elnbs[idx], seqDict[word]
+        HMM = paramDict[word]
+        A, avg, cov = HMM['A'], HMM['avg'], HMM['cov']
+        avgArr = avg.values
+        wordArr = words.values
+        
+        ### calculate emission accumulators
+        elngammaArr = elngammas[idx][:, 1:-1] ### gammas for this index, for emitting states
+        gammaAccumulator[word] += weighted_denominator(elngammaArr)
+        meanAccumulator[word] += weighted_emission_mean_numerator(elngammaArr, wordArr)
+        covAccumulator[word] += weighted_emission_cov_numerator(elngammaArr, wordArr, avgArr)
+        
+        ### calculate gamma accumulators for entry states (to normalize accumulator for entry xi)
+        elngammaArr_entry = elngammas[idx][:, 0]
+        gammaAccumulator_entry[word] += weighted_denominator(elngammaArr_entry)
+        
+        ### calculate xi numerators
+        log_xi_entry_num = log_xi_entry_numerator(elnaArr, elnbArr, seqArr, A)
+        log_xi_emit_num = log_xi_emit_numerator(elnaArr, elnbArr, seqArr, A)
+        log_xi_exit_num = log_xi_exit_numerator(elnaArr, elnbArr, seqArr, A)
+        
+        ### divide by model probability
+        log_xi_entry = elnproduct(log_xi_entry_num, -model_probability)
+        log_xi_emit = elnproduct(log_xi_emit_num, -model_probability)
+        log_xi_exit = elnproduct(log_xi_exit_num, -model_probability)
+        
+        ### calculate transition accumulators
+        transition_entry_numerator = eexp(log_xi_entry).sum(axis = 0)
+        transition_emit_numerator = eexp(log_xi_emit).sum(axis = 0)
+        transition_exit_numerator = eexp(log_xi_exit).sum(axis = 0)
+        
+        xientryAccumulator[word] += transition_entry_numerator
+        xiemitAccumulator[word] += transition_emit_numerator 
+        xiexitAccumulator[word] += transition_exit_numerator
+    
+print('Embedded re-estimation done! Recalculating parameters...')
+    
+for word in all_words:
+    
+    ####### CALCULATE ITERATION RESULTS #####
+    upd_avgArr = np.einsum('iv, i -> iv', meanAccumulator[word], 1 / gammaAccumulator[word])
+    upd_covArr = np.einsum('ivw, i -> ivw', covAccumulator[word], 1 / gammaAccumulator[word])
+    upd_entryArr = np.einsum('i,  -> i', xientryAccumulator[word], 1 / gammaAccumulator_entry[word])
+    upd_emitArr = np.einsum('ij, i -> ij', xiemitAccumulator[word], 1 / gammaAccumulator[word])
+    upd_exitArr = np.einsum('i, i -> i', xiexitAccumulator[word], 1 / gammaAccumulator[word])
+    
+    ##### UPDATE THE HMM PARAMETERS #####
+    HMM = paramDict[word]
+    A, avg, cov = HMM['A'], HMM['avg'], HMM['cov']
+    
+    ### bring them into shape so we get our target objects ....
+    # ... avg
+    avg = pd.DataFrame(upd_avgArr, index = avg.index, columns = avg.columns)
+    
+    # ... cov
+    states = cov.index.get_level_values('State').unique()
+    cov = pd.concat([pd.DataFrame(upd_covArr[stateIdx], 
+                                  index = cov.loc[[stateVal]].index, 
+                                  columns = cov.columns) for stateIdx, stateVal in enumerate(states)])
+
+    # ... A
+    A = join_entry_emit_and_exit_to_A(upd_entryArr, upd_emitArr, upd_exitArr)
+
+    paramDict[word] = {'A': A, 'avg': avg, 'cov': cov}
+    
+    
+
+        
+        
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

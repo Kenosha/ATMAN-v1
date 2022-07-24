@@ -166,7 +166,7 @@ def stop_condition(curr_log_likelihood, prev_log_likelihood,
     if num_iterations < min_iterations:
         # print(f'    ...Minimum of {min_iterations} not reached!')
         return False
-    elif num_iterations > max_iterations:
+    elif num_iterations >= max_iterations:
         print(f'    ...Stopping: {max_iterations} iterations exceeded.')
         return True
     else:

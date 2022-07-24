@@ -118,7 +118,7 @@ def find_transition_matrix(words, num_states = 3):
     
 #     return A, avg, cov
 
-def get_parameters(words, num_states, variance_floor = None, cov_how = None):
+def get_parameters(words, num_states, variance_floor = None, cov_global = False):
     A = find_transition_matrix(words, num_states = num_states)
     
     denominator = words.groupby('State').count()
@@ -132,8 +132,12 @@ def get_parameters(words, num_states, variance_floor = None, cov_how = None):
         
     cov_numerator = dist.groupby('State').apply(cov_by_state)
     
-    cov = cov_numerator / denominator
-    
+    if not cov_global:
+        cov = cov_numerator / denominator
+    else:
+        cov = cov_by_state(dist) / words.count()
+        cov = pd.concat([prepend_index_level(cov, 'State', state) for state in range(1, num_states + 1)])
+
     return A, avg, cov
     
 
@@ -212,7 +216,8 @@ def viterbi_segment(densFrm, A):
 def HInit(words, num_states = 3,
           stop_iteration_threshold = 10 ** -8,
           min_iterations = 15, max_iterations = 100,
-          density_floor = 10 ** -100):
+          density_floor = 10 ** -100,
+          cov_global = False):
         
     from ATMANpy.funcs.HMM.utils import stop_condition, calculate_emission_densities
     
@@ -221,7 +226,7 @@ def HInit(words, num_states = 3,
     state_distro = words.index.get_level_values('State').value_counts().sort_index()
 
     ### Calculate parameters
-    A, avg, cov = get_parameters(words, num_states = num_states)
+    A, avg, cov = get_parameters(words, num_states = num_states, cov_global = cov_global)
     
     best_A, best_avg, best_cov = A, avg, cov    
     best_state_distro = state_distro
@@ -231,7 +236,8 @@ def HInit(words, num_states = 3,
     best_log_likelihood = None
     num_iterations = 1
     while not stop_condition(curr_log_likelihood, prev_log_likelihood, num_iterations,
-                             relative_change_threshold = stop_iteration_threshold):
+                             relative_change_threshold = stop_iteration_threshold,
+                             min_iterations = min_iterations, max_iterations = max_iterations):
         
         prev_log_likelihood = curr_log_likelihood
         
@@ -253,7 +259,7 @@ def HInit(words, num_states = 3,
         state_distro = words.index.get_level_values('State').value_counts().sort_index()
         
         ### Recalculate parameters
-        A, avg, cov = get_parameters(words, num_states = num_states)
+        A, avg, cov = get_parameters(words, num_states = num_states, cov_global = cov_global)
         
         ### Save the parameters of the best iteration so far
         if best_log_likelihood is None:
