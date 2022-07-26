@@ -180,3 +180,46 @@ def stop_condition(curr_log_likelihood, prev_log_likelihood,
             else:
                 return False
          
+def choose_random_sample_words(dataFrm, how_many_words_min = 4, how_many_words_rel = 0.1, extend_word = 1):
+    all_words = dataFrm.Event.unique()
+    
+    from ATMANpy.funcs.HMM.utils import get_word_data
+    from ATMANpy.funcs.util_funcs import prepend_index_level
+    
+    sampleList = []
+    for wordStr in all_words:
+        word_dataFrm = get_word_data(dataFrm, wordStr, extend_word = extend_word)
+
+        words_available = word_dataFrm.index.get_level_values('IndexWord').unique()
+        number_of_words = len(words_available)
+        
+        how_many_words = max(how_many_words_min, round(how_many_words_rel * number_of_words))
+        
+        assert number_of_words >= how_many_words, f'Need more training data for {wordStr}!'
+
+        word_choice_idxs = np.random.choice(words_available, size = how_many_words, replace = False)
+
+        word_choice_data = word_dataFrm.loc[word_choice_idxs]
+        
+        word_choice_data = prepend_index_level(word_choice_data, 'Event', wordStr)
+
+        sampleList.append(word_choice_data)
+    
+    return pd.concat(sampleList)
+
+
+def split_into_training_and_testing(dataFrm, relative_split = 0.8):
+    all_words = dataFrm.Event.unique()
+    
+    sequenceIdxs = dataFrm.IndexSF.unique()
+    num_training = round(relative_split * len(sequenceIdxs))
+    
+    training_sample_is_complete = False
+    while not training_sample_is_complete:
+        training_sample = np.random.choice(sequenceIdxs, size = num_training, replace = False)
+        trainFrm = dataFrm[dataFrm.IndexSF.isin(training_sample)]
+        testFrm = dataFrm[~dataFrm.IndexSF.isin(training_sample)]
+
+        training_sample_is_complete = set(all_words) == set(trainFrm.Event.unique())
+
+    return trainFrm, testFrm
