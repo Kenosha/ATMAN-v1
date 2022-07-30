@@ -54,10 +54,7 @@ def token_pass_single_word(hmmDict, word, density_floor = 10 ** -100):
         
 
 def token_pass_sequence(hmmDict, words, density_floor = 10 ** -100):
-      
-    num_words = len(words)
-    non_initial_words = len(words) - 1
-    
+     
     ### Get some HMM-specific data
     D = {}
     for wordStr, hmm in hmmDict.items():
@@ -73,10 +70,10 @@ def token_pass_sequence(hmmDict, words, density_floor = 10 ** -100):
         # log_density_initial, log_densities = log_densArr[0], log_densArr[1:]
         
         D[wordStr] = {'log_A_init': log_transitions_from_initial,
-                             'log_A_emit': log_transitions_within_states,
-                             'log_A_exit': log_transition_to_exit,
-                             'log_dens': log_densArr,
-                             'states': len(avg)}
+                      'log_A_emit': log_transitions_within_states,
+                      'log_A_exit': log_transition_to_exit,
+                      'log_dens': log_densArr,
+                      'states': len(avg)}
     
     ### Initialize a list of WLRs
     WLRs = []

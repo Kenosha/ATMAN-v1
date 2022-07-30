@@ -223,3 +223,107 @@ def split_into_training_and_testing(dataFrm, relative_split = 0.8):
         training_sample_is_complete = set(all_words) == set(trainFrm.Event.unique())
 
     return trainFrm, testFrm
+
+
+def save_hmm_params(hmmDict, model_name, video_id):
+    
+    import os
+    from ATMANpy.funcs.util_funcs import get_folder_struct
+    
+    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
+    hmmDir = os.path.join(videodataDir, 'saved_models')
+    
+    modDir = os.path.join(hmmDir, model_name)
+    
+    try:
+        os.mkdir(modDir)
+    except:
+        pass
+    
+    for event, params in hmmDict.items():
+        
+        eventDir = os.path.join(modDir, event)
+            
+        try:
+            os.mkdir(eventDir)
+        except:
+            pass
+            
+        A, avg, cov = params['A'], params['avg'], params['cov']
+    
+        ### Saving Transition Matrix
+        APath = os.path.join(eventDir, 'A.csv')
+        np.savetxt(APath, A, delimiter = ',')
+        
+        ### Saving Averages
+        avgPath = os.path.join(eventDir, 'avg.csv')
+        avg.to_csv(avgPath)
+        
+        ### Saving Covariance
+        covPath = os.path.join(eventDir, 'cov.csv')
+        cov.to_csv(covPath)    
+    
+def read_hmm_params(model_name, video_id):
+    import os
+    from ATMANpy.funcs.util_funcs import get_folder_struct
+    
+    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
+    hmmDir = os.path.join(videodataDir, 'saved_models')
+    
+    modelDir = os.path.join(hmmDir, model_name)
+    
+    outDict = {}
+    for param in os.listdir(modelDir):
+        if not param.endswith('.csv'):
+            paramDir = os.path.join(modelDir, param)
+    
+            ### Read Transition Matrix
+            ADir = os.path.join(paramDir, 'A.csv')
+            A = np.loadtxt(ADir, delimiter = ',')
+            
+            ### Read Averages
+            avgPath = os.path.join(paramDir, 'avg.csv')
+            avg = pd.read_csv(avgPath, index_col = 0)
+            avg.columns.name = 'Var'
+            
+            ### Read Covariance
+            covPath = os.path.join(paramDir, 'cov.csv')
+            cov = pd.read_csv(covPath, index_col = [0, 1])
+            cov.columns.name = 'Var'
+    
+            entryDict = {'A': A, 'avg': avg, 'cov': cov}
+            outDict[param] = entryDict
+        
+    return outDict
+
+def save_train_test(train_data, test_data, model_name, video_id):
+    import os
+    from ATMANpy.funcs.util_funcs import get_folder_struct
+    
+    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
+    hmmDir = os.path.join(videodataDir, 'saved_models')
+    modDir = os.path.join(hmmDir, model_name)
+    
+    trainPath = os.path.join(modDir, 'train_data.csv') 
+    train_data.to_csv(trainPath)
+    
+    testPath = os.path.join(modDir, 'test_data.csv')
+    test_data.to_csv(testPath)
+    
+def read_train_test(model_name, video_id):
+    import os
+    from ATMANpy.funcs.util_funcs import get_folder_struct
+    
+    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
+    hmmDir = os.path.join(videodataDir, 'saved_models')
+    modDir = os.path.join(hmmDir, model_name)
+    
+    trainPath = os.path.join(modDir, 'train_data.csv') 
+    train_data = pd.read_csv(trainPath, index_col = 0)
+    
+    testPath = os.path.join(modDir, 'test_data.csv')
+    test_data = pd.read_csv(testPath, index_col = 0)
+
+    return train_data, test_data
+
+

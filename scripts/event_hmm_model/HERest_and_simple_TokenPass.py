@@ -33,8 +33,9 @@ dataFrm.index.name = 'Frame'
 dataFrm = dataFrm[~dataFrm.Event.isna()]
 all_words = dataFrm.Event.unique()
 
+RELATIVE_SPLIT = 0.85
 from ATMANpy.funcs.HMM.utils import split_into_training_and_testing
-train_data, test_data = split_into_training_and_testing(dataFrm, relative_split = 0.8)
+train_data, test_data = split_into_training_and_testing(dataFrm, relative_split = RELATIVE_SPLIT)
 
 ####################################################
 ###### Initialize HMMs using HInit and HRest #######
@@ -74,6 +75,17 @@ print('')
 print('EMBEDDED RE-ESTIMATION DONE!')        
 print('____________________________')
 
+
+### Save HMM Parameters
+
+model_name = f'embedded_cyc{NUM_CYCLES}_nrel{round(RELATIVE_SPLIT * 100)}'
+
+from ATMANpy.funcs.HMM.utils import save_hmm_params, save_train_test
+save_hmm_params(hmmDict, model_name, VIDEO_ID)
+save_train_test(train_data, test_data, model_name, VIDEO_ID)
+
+
+#%% Testing Inference
 
 #### Token Passing Algorithm - One Word
 from ATMANpy.funcs.HMM.utils import get_word_data
@@ -121,7 +133,7 @@ STORE_NAME = '10to100_ok2'
 #################
 
 ### GET STREAM FEATURES ###
-from ATMANpy.funcs.feature_funcs import load_stored_features, split_joint_features
+from ATMANpy.funcs.feature_funcs import load_stored_features
 stream_features = load_stored_features(VIDEO_ID, STORE_NAME)
 
 ### ENRICH STREAM FEATURES WITH INFERENCE ###
