@@ -2,5 +2,5 @@ all ::= None <point> None
 point ::= <serve_fault_down> | <serve_fault_up>
 serve_fault_down ::= <serve_down> BONS | <serve_down> NET
 serve_fault_up ::= <serve_up> BOFS | <serve_up> NET
-serve_down ::= SFL | SFR
-serve_up ::= SNL | SNR
+serve_down ::= SFL FLIGHT_DOWN | SFR FLIGHT_DOWN 
+serve_up ::= SNL FLIGHT_UP | SNR FLIGHT_UP
