@@ -44,6 +44,8 @@ randseqIdx = np.random.choice(test_data.IndexSF.unique())
 randSeq = test_data[test_data.IndexSF == randseqIdx]
 WORDS = randSeq.drop(columns = ['Event', 'IndexSF'])
 
+#%%
+
 WLRDICT = {key: {} for key in WORDS.index}
 
 @dataclass
@@ -164,10 +166,14 @@ class Link:
         self.token_value = np.log(0)
         self.token_id = -1 
         self.emitting_model = None
-        self.wlrDict = WLRDICT  ### assign a common storage for a word link records
+        self.WLRs = WLRDICT  ### assign a common storage for a word link records
         
     # def set_WLRs(self, wlrDict):
     #     self.wlrDict = wlrDict ### assign a common storage for a word link records
+    
+    # def set_WLRs(self, WLRs):
+    #     ### list of word link records, coming from the superordinate model shell
+    #     self.WLRs = WLRs
     
     def set_filter_tokens(self, model, model_name):
         model_exit_token_value, model_exit_token_id = model.get_exit_token()
@@ -179,7 +185,7 @@ class Link:
     def record_decisions(self, t):
         
         ### make new wlr entry
-        wlrs_at_t = self.wlrDict[t]
+        wlrs_at_t = self.WLRs[t]
         if wlrs_at_t == {}:
             new_key = 0
         else:
@@ -227,10 +233,10 @@ class ModelShell:
     
     name: str
     num: int
-    # model: None # SubSyntaxModel | HMM | None
     
     def __post_init__(self):
-        self.model = None
+        self.model = None # SubSyntaxModel | HMM | None
+        self.WLRs = {key: {} for key in WORDS.index} ### one WLR container for every model shell.
     
     def inject_token(self, token_value, token_id):
         if self.model is None: ### 'wakes up' the shell if a pos. prob. token is passed in
@@ -238,7 +244,7 @@ class ModelShell:
                 if self.name.startswith('<') and self.name.endswith('>'): ### SSM
                     symbol = self.name.strip('<>')
                     expression = GRAMMAR[symbol]
-                    self.model = SubSyntaxModel.from_grammar_rule(expression)
+                    self.model = SubSyntaxModel.from_grammar_rule(expression, self.WLRs)
                 else: ### HMM
                     hmmDict = HMMs[self.name]
                     self.model = HMM(**hmmDict)
@@ -288,7 +294,7 @@ class SubSyntaxModel:
         self.isTerminal = False ### sub syntax models consist of other sub syntax models or HMMs
 
     @staticmethod
-    def from_grammar_rule(ruleStr):
+    def from_grammar_rule(ruleStr, WLRs):
         possible_sequences = [elem.strip(' ') for elem in ruleStr.split('|')]
         
         ### first pass over sequence strings, to instantiate unique models
@@ -371,7 +377,8 @@ class SubSyntaxModel:
             same_succ_links = [link for link in half_links if link.succ == succMods]
             precMods = [link.prec for link in same_succ_links if not link.prec is None] ## None succ -> entry link
             
-            fullLink = Link(precMods, succMods)
+            fullLink = Link(precMods, succMods) ### pass in the superordinate list of WLRs
+            # fullLink.set_WLRs(WLRs)
             links.append(fullLink)   
             
         ### split up links into entry, intermediate, and exit link
@@ -391,29 +398,125 @@ class SubSyntaxModel:
 
     def propagate_entry_tokens(self, t):
         print('TO ENTRY:')
-        for link in [self.entry_link, *self.intm_links]:
+        for link in [self.entry_link, *self.intm_links, self.exit_link]:
             print(link)
             link.push_token_to_entry(t)
             
     def propagate_exit_tokens(self, t):
         print('FROM EXIT:')
-        for link in [*self.intm_links, self.exit_link]:
+        for link in [self.entry_link, *self.intm_links, self.exit_link]:
             print(link)
             link.pull_token_from_exit(t)
  
+    
+def work_back_WLR_links(modShell):
+    
+    last_token_id = modShell.model.exit_link.token_id
+    # WLRs = modShell.WLRs
+    
+    word_sequence = []
+    
+    while last_token_id not in [-1, 0]:
+        t, num = last_token_id.split('_') ### a token id consists of time and an identifying number
+        t, num = int(t), int(num)
+        
+        WLR = WLRDICT[t][num]
+        exiting_model, period_exited = WLR['emitting_model'], WLR['t']
+    
+        if not (exiting_model.startswith('<') and exiting_model.endswith('>')):
+            word_sequence.append((exiting_model, period_exited))
+    
+        last_token_id = WLR['token_id']
+
+    return word_sequence
 
 
-t = WORDS.index[0]
+start = min(WORDS.index)
+stop = max(WORDS.index)
+
 
 allMod = ModelShell('<all>', 0)
 allMod.inject_token(np.log(1), 0)
-
 for t in WORDS.index:
     allMod.propagate_entry_tokens(t)
-    
     allMod.propagate_exit_tokens(t)
 
-allMod.model.exit_link.token_id
+inferred_sequence = work_back_WLR_links(allMod)
+
+from ATMANpy.funcs.util_funcs import get_video        
+from ATMANpy.funcs.cv_funcs import show_video, get_frame, show
+
+cap = get_video(VIDEO_ID)
+show_video(cap, start_frame = start, stop_frame = stop)
+     
+show(get_frame(cap, 89201))  
+
+modShell = allMod 
+
+#%%
+start = min(WORDS.index)
+stop = max(WORDS.index)
+
+
+allMod = ModelShell('<all>', 0)
+allMod.inject_token(np.log(1), 0)
+for t in WORDS.index[:-1]:
+    allMod.propagate_entry_tokens(t)
+    allMod.propagate_exit_tokens(t)
+
+t = stop
+noneHMM = allMod.model.exit_link.prec[0].model
+noneHMM.exit_token_id
+
+allMod.propagate_entry_tokens(t)
+
+noneHMM.exit_token_id
+
+exitLink = allMod.model.exit_link
+exitLink.token_id
+
+
+allMod = ModelShell('<all>', 0)
+allMod.inject_token(np.log(1), 0)
+for t in WORDS.index:
+    allMod.propagate_entry_tokens(t)
+    allMod.propagate_exit_tokens(t)
+
+last_token_id = allMod.model.exit_link.token_id
+
+t, num = last_token_id.split('_') ### a token id consists of time and an identifying number
+t, num = int(t), int(num)
+
+WLR = allMod.WLRs[t][num]
+
+
+
+
+
+
+inferred_sequence = work_back_WLR_links(allMod)
+
+allMod = ModelShell('<point>', 0)
+allMod.inject_token(np.log(1), 0)
+for t in WORDS.index:
+    allMod.propagate_entry_tokens(t)
+    allMod.propagate_exit_tokens(t)
+
+modShell = allMod
+
+inferred_sequence = work_back_WLR_links(allMod)
+
+
+
+
+from ATMANpy.funcs.util_funcs import get_video        
+from ATMANpy.funcs.cv_funcs import show_video, get_frame, show
+
+cap = get_video(VIDEO_ID)
+show_video(cap, start_frame = start, stop_frame = stop)
+        
+show(get_frame(cap, 53680))
+
 
 # symbolStr = 'all'
 # ruleStr = GRAMMAR[symbolStr]
