@@ -1,0 +1,6 @@
+all ::= <point> | None <point> | <point> None | None <point> None
+point ::= <serve_fault_down> | <serve_fault_up>
+serve_fault_down ::= <serve_down> BONS | <serve_down> NET
+serve_fault_up ::= <serve_up> BOFS | <serve_up> NET
+serve_down ::= SFL | SFR
+serve_up ::= SNL | SNR
