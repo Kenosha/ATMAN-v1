@@ -225,13 +225,12 @@ def split_into_training_and_testing(dataFrm, relative_split = 0.8):
     return trainFrm, testFrm
 
 
-def save_hmm_params(hmmDict, model_name, video_id):
+def save_hmm_params(hmmDict, model_name):
     
     import os
     from ATMANpy.funcs.util_funcs import get_folder_struct
     
-    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
-    hmmDir = os.path.join(videodataDir, 'saved_models')
+    hmmDir = get_folder_struct('ball_event_hmm')['saved_models']
     
     modDir = os.path.join(hmmDir, model_name)
     
@@ -263,12 +262,11 @@ def save_hmm_params(hmmDict, model_name, video_id):
         covPath = os.path.join(eventDir, 'cov.csv')
         cov.to_csv(covPath)    
     
-def read_hmm_params(model_name, video_id):
+def read_hmm_params(model_name):
     import os
     from ATMANpy.funcs.util_funcs import get_folder_struct
     
-    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
-    hmmDir = os.path.join(videodataDir, 'saved_models')
+    hmmDir = get_folder_struct('ball_event_hmm')['saved_models']
     
     modelDir = os.path.join(hmmDir, model_name)
     
@@ -296,12 +294,11 @@ def read_hmm_params(model_name, video_id):
         
     return outDict
 
-def save_train_test(train_data, test_data, model_name, video_id):
+def save_train_test(train_data, test_data, model_name):
     import os
     from ATMANpy.funcs.util_funcs import get_folder_struct
     
-    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
-    hmmDir = os.path.join(videodataDir, 'saved_models')
+    hmmDir = get_folder_struct('ball_event_hmm')['saved_models']
     modDir = os.path.join(hmmDir, model_name)
     
     trainPath = os.path.join(modDir, 'train_data.csv') 
@@ -310,12 +307,11 @@ def save_train_test(train_data, test_data, model_name, video_id):
     testPath = os.path.join(modDir, 'test_data.csv')
     test_data.to_csv(testPath)
     
-def read_train_test(model_name, video_id):
+def read_train_test(model_name):
     import os
     from ATMANpy.funcs.util_funcs import get_folder_struct
     
-    videodataDir = get_folder_struct('ball_event_hmm')[video_id]
-    hmmDir = os.path.join(videodataDir, 'saved_models')
+    hmmDir = get_folder_struct('ball_event_hmm')['saved_models']
     modDir = os.path.join(hmmDir, model_name)
     
     trainPath = os.path.join(modDir, 'train_data.csv') 
