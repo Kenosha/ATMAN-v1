@@ -1,0 +1,8 @@
+all ::= <any> <all> | <any>
+any ::= <bounce> | <serve> | <flight> | <hit> | None
+
+bounce ::= BIF | BIFSL | BIFSR | BIN | BINSL | BINSR | BOF | BOFS | BON | BONS 
+net ::= CORD | NET
+serve ::= SFL | SFR | SNL | SNR
+flight ::= FLIGHT_DOWN | FLIGHT_UP
+hit ::= HF | HN

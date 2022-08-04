@@ -321,10 +321,12 @@ class ModelShell:
         half_links = []
         for precMod in prec_models:
             same_prec_links = [link for link in binary_links if link.prec == precMod]
-            succList = [link.succ for link in same_prec_links if not link.succ is None] ## None succ -> exit link
-            
-            halfLink = HalfLink(precMod, succList)
-            half_links.append(halfLink)
+            succList = [link.succ for link in same_prec_links] ## None succ -> exit link
+            if precMod is None:
+                entry_link = Link([], succList)
+            else:
+                halfLink = HalfLink(precMod, succList)
+                half_links.append(halfLink)
         
         #### fourth pass over succeeding model lists of half links, to create full links
         succ_model_lists = []
@@ -334,18 +336,22 @@ class ModelShell:
                 succ_model_lists.append(succMods)
          
         # group half links by succeeding models
-        links = []
+        exit_link_precs = []
+        intm_links = []
         for succMods in succ_model_lists:
+            
             same_succ_links = [link for link in half_links if link.succ == succMods]
-            precMods = [link.prec for link in same_succ_links if not link.prec is None] ## None succ -> entry link
+            precMods = [link.prec for link in same_succ_links] ## None succ -> entry link
             
-            fullLink = Link(precMods, succMods) 
-            links.append(fullLink)   
-            
-        ### split up links into entry, intermediate, and exit link
-        entry_link = [l for l in links if l.prec == []][0]
-        exit_link = [l for l in links if l.succ == []][0]
-        intm_links = [l for l in links if l not in [entry_link, exit_link]]
+            if None in succMods: ### separate exit link from intermediate links
+                exit_link_precs.extend(precMods) ### if None is in possible successors, all common precs are before exit.
+                succMods.remove(None) ### then, to keep only intermediate material, remove None
+        
+            if not succMods == []:
+                fullLink = Link(precMods, succMods) 
+                intm_links.append(fullLink)   
+        
+        exit_link = Link(exit_link_precs, [])
             
         return SubSyntaxModel(entry_link, intm_links, exit_link)
 
