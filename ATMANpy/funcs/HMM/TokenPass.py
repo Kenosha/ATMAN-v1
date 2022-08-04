@@ -55,33 +55,26 @@ class HMM:
     
     def get_exit_token(self):
         return self.exit_token_value, self.exit_token_id
-        
+            
     def step_tokens_into_hmm(self, t):
         ### token value: scalar
         ### token id: scalar
-        ### log_density: vector S
-        
-        log_density = self.get_density_at(t)
         
         ####### TRANSITION INTO HMM ###########
-        entry_token_values = self.entry_token_value + self.log_A_init + log_density
+        entry_token_values = self.entry_token_value + self.log_A_init
         entry_token_ids = [self.entry_token_id] * self.states
             
         return entry_token_values, entry_token_ids
         
     def step_tokens_within_hmm(self, t):
-        ### log_density: vector S
-        
-        log_density = self.get_density_at(t)
-        
+
         ####### TRANSITION WITHIN HMM #########
 
         ### broadcast these to SxS
         token_values_brd = self.token_values[:, np.newaxis] #### shape: S_from, S_to
-        log_dens_values_brd = log_density[np.newaxis, :] ### shape: S_from, S_to
 
         ### calculate token values
-        emit_token_values_brd = token_values_brd + self.log_A_emit + log_dens_values_brd
+        emit_token_values_brd = token_values_brd + self.log_A_emit
         emit_token_values = emit_token_values_brd.max(axis = 0) ### in every column, find maximum
         emit_token_indices = emit_token_values_brd.argmax(axis = 0)
         emit_token_ids = self.token_ids[emit_token_indices]
@@ -100,27 +93,34 @@ class HMM:
         return exit_token_value, exit_token_ids
     
     def set_step_tokens(self, t):
+        ### t - epsilon: COMPARE TRANSITION INTO WITH WHAT IS ALREADY WITHIN
         entry_token_values, entry_token_ids = self.step_tokens_into_hmm(t) 
+        emit_token_values, emit_token_ids = self.token_values, self.token_ids
         
-        emit_token_values, emit_token_ids = self.step_tokens_within_hmm(t) 
-        
-        ### COMPARE TRANSITION INTO AND WITHIN
         entry_likelier = entry_token_values > emit_token_values ### by state, is it likelier
                                                                 ### to come from outside?
         
         new_token_values = np.where(entry_likelier, entry_token_values, emit_token_values)
         new_token_ids = np.where(entry_likelier, entry_token_ids, emit_token_ids)
 
-        ### Set emission token values
-        self.token_values = new_token_values
+        ### t: EMIT OBSERVATIONS (and add log_density to likelihood)
+        self.token_values = new_token_values + self.get_density_at(t)
         self.token_ids = new_token_ids
-            
-        ### Set exit token values
+
+        ### t + epsilon: STEP TOKENS FROM WITHIN HMM
+        # a) into emitting states
+        emit_token_values, emit_token_ids = self.step_tokens_within_hmm(t) 
+        
+        # b) into exit
         exit_token_value, exit_token_ids = self.step_tokens_out_of_hmm()
+        
+        ### Re-set all token values after t
+        self.token_values = emit_token_values
+        self.token_ids = emit_token_ids
+        
         self.exit_token_value = exit_token_value
         self.exit_token_id = exit_token_ids
         
-        ### Re-Set entry token values
         self.entry_token_value = np.log(0)
         self.entry_token_id = -1
     
@@ -351,8 +351,9 @@ class ModelShell:
 
 
     def inject_token(self, token_value, token_id):
-        if self.model is None: ### 'wakes up' the shell if a pos. prob. token is passed in
-            if token_value > np.log(0):
+        if token_value > np.log(0):
+        
+            if self.model is None: ### 'wakes up' the shell if a pos. prob. token is passed in
                 if self.name.startswith('<') and self.name.endswith('>'): ### SSM
                     symbol = self.name.strip('<>')
                     expression = self.grammar[symbol]
@@ -362,8 +363,11 @@ class ModelShell:
                     self.model = HMM(**hmmDict)
                     self.model.init_log_density(self.sequence_data)
         
-        if self.model is not None: ### once we have a model, set entry tokens inside them
-            self.model.set_entry_token(token_value, token_id) 
+            if self.model is not None: ### once we have a model, set entry tokens inside them
+                print(f'Setting: {self}')
+                self.model.set_entry_token(token_value, token_id) 
+                print(f'New token value: {token_value}')
+                print('_____________')
         
     def propagate_entry_tokens(self, t):
         self.model.propagate_entry_tokens(t)
@@ -383,7 +387,7 @@ def read_grammar(grammarStr):
     grammarPath = os.path.join(grammarDir, grammarFile)
     
     with open(grammarPath) as f:
-        lines = [line.strip() for line in f]
+        lines = [line.strip() for line in f if line.strip() != '']
 
     grammarDict = {}
     for l in lines:
@@ -408,7 +412,7 @@ def work_back_WLR_links(modShell, WLRs):
         exiting_model, period_exited = WLR['emitting_model'], WLR['t']
     
         if not (exiting_model.startswith('<') and exiting_model.endswith('>')):
-            word_sequence.append((exiting_model, period_exited))
+            word_sequence.append((period_exited, exiting_model))
     
         last_token_id = WLR['token_id']
 

@@ -1,0 +1,50 @@
+all ::= None <point> None
+point ::= <point_up> | <point_down>
+
+point_up ::= <serve_ace_up> | <serve_fault_up> | <serve_let_up> | <serve_good_up> <rally_down_up>
+point_down ::= <serve_ace_down> | <serve_fault_down> | <serve_let_down> | <serve_good_down> <rally_up_down>
+
+hit_up ::= HN FLIGHT_UP | HN FLIGHT_UP CORD FLIGHT_UP
+hit_down ::= HF FLIGHT_DOWN | HF FLIGHT_DOWN CORD FLIGHT_DOWN
+
+hit_good_up ::= <hit_up> BIF FLIGHT_UP
+hit_good_down ::= <hit_down> BIN FLIGHT_DOWN | <hit_down>
+
+hit_returnable_up ::= <hit_good_up> | <hit_up>
+hit_returnable_down ::= <hit_good_down> | <hit_down>
+
+hit_fault_up ::= <hit_up> BOF FLIGHT_UP | <hit_up> NET | <hit_up> 
+hit_fault_down ::= <hit_down> BON FLIGHT_DOWN | <hit_down> NET | <hit_down>
+
+hit_winner_up ::= <hit_good_up> BIF FLIGHT_UP | <hit_good_up> BOF FLIGHT_UP | <hit_good_up>
+hit_winner_down ::=  <hit_good_down> BIN FLIGHT_DOWN | <hit_good_down> BON FLIGHT_DOWN | <hit_good_down>
+
+trade_up_down ::= <hit_returnable_up> <hit_returnable_down> 
+trade_down_up ::= <hit_returnable_down> <hit_returnable_up>
+
+ue_up_down ::= <hit_returnable_up> <hit_fault_down> | <hit_fault_up>
+ue_down_up ::= <hit_returnable_down> <hit_fault_up> | <hit_fault_down>
+
+winner_up_down ::= <hit_returnable_up> <hit_winner_down> | <hit_winner_up>
+winner_down_up ::= <hit_returnable_down> <hit_winner_up> | <hit_winner_down>
+
+rally_up_down ::= <trade_up_down> <rally_up_down> | <ue_up_down> | <winner_up_down>
+rally_down_up ::= <trade_down_up> <rally_down_up> | <ue_down_up> | <winner_down_up>
+
+serve_up ::= SNL FLIGHT_UP | SNR FLIGHT_UP
+serve_down ::= SFL FLIGHT_DOWN | SFR FLIGHT_DOWN 
+
+serve_good_up ::= SNL FLIGHT_UP BIFSR FLIGHT_UP | SNR FLIGHT_UP BIFSL FLIGHT_UP  
+serve_good_down ::= SFL FLIGHT_DOWN BINSR FLIGHT_DOWN | SFR FLIGHT_DOWN BINSL FLIGHT_DOWN
+
+serve_ace_up ::= <serve_good_up> BIF FLIGHT_UP | <serve_good_up> BOF FLIGHT_UP | <serve_good_up>
+serve_ace_down ::= <serve_good_down> BIN FLIGHT_DOWN | <serve_good_down> BON FLIGHT_DOWN | <serve_good_down>
+
+serve_fault_up ::= <serve_up> NET | <serve_up> BOFS | <serve_up> CORD FLIGHT_UP BOFS
+serve_fault_down ::= <serve_down> NET | <serve_down> BONS | <serve_down> CORD FLIGHT_DOWN BONS
+
+serve_let_up ::= SNL FLIGHT_UP CORD FLIGHT_UP BIFSR FLIGHT_UP | SNR FLIGHT_UP CORD FLIGHT_UP BIFSL FLIGHT_UP
+serve_let_down ::= SFL FLIGHT_DOWN CORD FLIGHT_DOWN BINSR FLIGHT_DOWN | SFR FLIGHT_DOWN CORD FLIGHT_DOWN BINSL FLIGHT_DOWN 
+
+three_trades_up_down ::= <trade_up_down> <trade_up_down> <trade_up_down>
+three_trades_down_up ::= <trade_down_up> <trade_down_up> <trade_down_up>
