@@ -517,7 +517,27 @@ class CourtLines(Lines):
         hori_scale = self[horiLine].length() / 10.97 ### 36 foot in metres
         vert_scale = self[vertLine].length() / 6.4
         return hori_scale, vert_scale
+    
+    def pixel_in_foot(self):
+        return self['Bottom Baseline'].length() / 36
 
+    def get_3D_corner_points(self):
+        tp, bt = self['Top Baseline'], self['Bottom Baseline']
+        points = [tp.leftPt, tp.rightPt, bt.leftPt, bt.rightPt]
+        coords_3D = [[*pt.coords, 0] for pt in points]
+        return coords_3D
+    
+    def get_3D_net_points(self):
+        FOOT_HEIGHT_AT_POST = 3.5
+        FOOT_HEIGHT_AT_CENTER = 3
+        
+        scale_factor = self.pixel_in_foot()
+        net = self['Net Line']
+        l, c, r = net.leftPt, net.weak_intersect(self['Bottom Center Line']), net.rightPt 
+        coords_3D = [[*l.coords, FOOT_HEIGHT_AT_POST * scale_factor],
+                     [*c.coords, FOOT_HEIGHT_AT_CENTER * scale_factor],
+                     [*r.coords, FOOT_HEIGHT_AT_POST * scale_factor]]
+        return coords_3D
 
     
 @dataclass(frozen = True)

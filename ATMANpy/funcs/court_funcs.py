@@ -150,6 +150,57 @@ def find_netlines(gFrm, courtLines):
 
     return netLines
 
+def calibrate_camera(gFrm, schemaLines, H):
+    courtLines = find_courtlines(H, schemaLines)
+    netLines = find_netlines(gFrm, courtLines)
+    
+    # b) gather points in world and on image
+    court_points_3D = schemaLines.get_3D_corner_points()
+    net_points_3D = schemaLines.get_3D_net_points()
+    court_points_3D = [p for p in court_points_3D]
+    net_points_3D = [p for p in net_points_3D]
+    
+    court_points_2D = courtLines.get_court_region().to_points()
+    court_points_2D = [np.array(p.coords, dtype = np.float32) for p in court_points_2D]
+        
+    net_l = netLines['Left Net']
+    net_r = netLines['Right Net']
+    net_points_2D = [net_l.leftPt, net_l.rightPt, net_r.rightPt]
+    net_points_2D = [np.array(p.coords, dtype = np.float32) for p in net_points_2D]
+
+    objpoints = np.array([*court_points_3D, *net_points_3D], dtype = np.float32)
+    imgpoints =  np.array([*court_points_2D, *net_points_2D], dtype = np.float32)
+
+    # c) create matrix A
+    def make_A_entry(objpoint, imgpoint):
+        u, v = imgpoint
+        objpoint_homog = np.append(objpoint, 1)
+        
+        u_entry = np.hstack([objpoint_homog, np.zeros(4), - u * objpoint_homog])
+        v_entry = np.hstack([np.zeros(4), objpoint_homog, - v * objpoint_homog]) 
+        
+        entry = np.vstack([u_entry, v_entry])
+    
+        return entry
+    
+    def make_A(objpoints, imgpoints):
+        entryList = []
+        for objP, imgP in zip(objpoints, imgpoints):
+            entry = make_A_entry(objP, imgP)
+            entryList.append(entry)
+        return np.vstack(entryList)    
+        
+    A = make_A(objpoints, imgpoints)
+    
+    # d) Find Projection Matrix
+    vals, vecs = np.linalg.eig(A.T @ A)
+    smallest_value_index = vals.argmin()
+    
+    p = vecs[smallest_value_index]
+    P = p.reshape(3, 4)
+
+    return P
+
 #####################
 #####################
 
