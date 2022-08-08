@@ -370,10 +370,7 @@ class ModelShell:
                     self.model.init_log_density(self.sequence_data)
         
             if self.model is not None: ### once we have a model, set entry tokens inside them
-                print(f'Setting: {self}')
                 self.model.set_entry_token(token_value, token_id) 
-                print(f'New token value: {token_value}')
-                print('_____________')
         
     def propagate_entry_tokens(self, t):
         self.model.propagate_entry_tokens(t)

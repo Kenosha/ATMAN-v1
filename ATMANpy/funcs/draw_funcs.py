@@ -72,6 +72,9 @@ def draw(featList, add_text = None):
                 else:
                     print(f'Feature {featStr} not found, will not be drawn.')
                     continue
+                
+            if feat is None:
+                continue
                
             ### DEAL WITH BOOLS ###
             if isinstance(feat, bool):
@@ -82,10 +85,18 @@ def draw(featList, add_text = None):
                 
             ### DEAL WITH INT AND STR ###
             if isinstance(feat, int):
-                ### turn an integer to a string
-                ### note that this will trigger the isinstance(feat, str) below!
-                feat = f'{featStr}: {feat}' 
-            
+                dont_add_text = ['size']
+                
+                putBool = True
+                for string in dont_add_text:
+                    if string in featStr.lower():
+                        putBool = False
+    
+                if putBool:
+                    ### turn an integer to a string
+                    ### note that this will trigger the isinstance(feat, str) below!
+                    feat = f'{featStr}: {feat}' 
+                
             if isinstance(feat, str):
                 
                 ### figure out the location of text: begings in OTHER_TEXT_LOC, then goes down.
@@ -103,14 +114,27 @@ def draw(featList, add_text = None):
             elif featStr.startswith('player'):
                 sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = PLAYER_COLOR)
             elif featStr == 'ball':
+                  
                 try:
-                    detectBool = featDict['ballDetected'] 
+                    ball_color = featDict['ballColor']
                 except:
-                    ball_color = BALL_COLOR
+                    try:
+                        detectBool = featDict['ballDetected'] 
+                    except:
+                        ball_color = BALL_COLOR
+                    else:
+                        ball_color = BALL_COLOR if detectBool else INTERPOLATED_BALL_COLOR
+                    
+                try:
+                    sizeInt = featDict['ballSize']
+                except:
+                    radius = None
+                    thickness = THICKNESS
                 else:
-                    ball_color = BALL_COLOR if detectBool else INTERPOLATED_BALL_COLOR
-                
-                sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = ball_color)
+                    radius = sizeInt
+                    thickness = sizeInt
+                  
+                sendFrm = sendFrm.put(feat, thickness = thickness, color = ball_color, radius = radius)
                     
             elif featStr == 'courtLines':
                 sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = LINE_COLOR)

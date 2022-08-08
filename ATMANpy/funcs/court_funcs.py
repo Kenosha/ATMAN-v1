@@ -150,7 +150,16 @@ def find_netlines(gFrm, courtLines):
 
     return netLines
 
-def calibrate_camera(gFrm, schemaLines, H):
+def calibrate_camera(gFrm, schemaLines, H, 
+                     add_coords_world = None, add_coords_image = None,
+                     verbose = False):
+    ### Based on youtube: Camera Calibration by Shree Nayar. 
+    
+    if add_coords_world is None:
+        add_coords_world = []
+    if add_coords_image is None:
+        add_coords_image = []
+        
     courtLines = find_courtlines(H, schemaLines)
     netLines = find_netlines(gFrm, courtLines)
     
@@ -168,8 +177,19 @@ def calibrate_camera(gFrm, schemaLines, H):
     net_points_2D = [net_l.leftPt, net_l.rightPt, net_r.rightPt]
     net_points_2D = [np.array(p.coords, dtype = np.float32) for p in net_points_2D]
 
-    objpoints = np.array([*court_points_3D, *net_points_3D], dtype = np.float32)
-    imgpoints =  np.array([*court_points_2D, *net_points_2D], dtype = np.float32)
+    objpoints = np.array([*court_points_3D, *net_points_3D, *add_coords_world], dtype = np.float32)
+    imgpoints =  np.array([*court_points_2D, *net_points_2D, *add_coords_image], dtype = np.float32)
+
+    if verbose:
+        from ATMANpy.types.Points import Point
+        from ATMANpy.funcs.line_funcs import fit_frame_to_lines
+        schemaFrm = fit_frame_to_lines(schemaLines)
+        for objP, imgP in zip(objpoints, imgpoints):
+            pt_3D = Point(tuple(objP[:2]))
+            pt_2D = Point(tuple(imgP))
+            
+            schemaFrm.to_BGR().put(pt_3D, thickness = 2, radius = 4).show()
+            gFrm.to_BGR().put(pt_2D, thickness = 2, radius = 4).show()
 
     # c) create matrix A
     def make_A_entry(objpoint, imgpoint):
@@ -196,11 +216,30 @@ def calibrate_camera(gFrm, schemaLines, H):
     vals, vecs = np.linalg.eig(A.T @ A)
     smallest_value_index = vals.argmin()
     
-    p = vecs[smallest_value_index]
+    p = vecs[:, smallest_value_index]
     P = p.reshape(3, 4)
 
-    return P
+    if verbose:
+        ### check
+        print(f'True Value: {court_points_2D[0]}')
+        proj = P @ np.array([*court_points_3D[0], 1])
+        proj = proj[:2] / proj[2]
+        print(proj)
+        print('______')
 
+    return P
+   
+def make_P_cond_inv(P, cond_val, cond_dim):
+    #### get P, conditional on the height (or longitude or latitude) of the object observed
+    unknown_cols = [d for d in range(3) if d != cond_dim]
+    projection_for_unknowns = P[:, unknown_cols] ### 2 x 3 matrix -> how do x and y (world) contribute to u and v (pixels)
+    
+    conditional_column = P[:, cond_dim] * cond_val + P[:,3] ### go from 2 x 3 to 1 x 3 -> join known effect of z on u and v with constant P[:,3]
+    conditional_column = conditional_column[:, np.newaxis]
+    
+    P_cond = np.append(projection_for_unknowns, conditional_column, axis = 1)
+    return np.linalg.inv(P_cond) ### this takes us from a point on the image plane to a point in 3D, at height z
+    
 #####################
 #####################
 

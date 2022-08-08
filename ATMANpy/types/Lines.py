@@ -221,6 +221,9 @@ class Line:
             return Line(self.leftPt, bLn.rightPt)
         elif self.leftPt == bLn.rightPt:
             return Line(bLn.leftPt, self.rightPt)
+        
+    def center(self):
+        return (self.leftPt + self.rightPt) // 2
 
 @dataclass(frozen = True)
 class Lines:
@@ -592,7 +595,16 @@ class Region(Lines):
             raise Exception("Construction of Region with Lines: Needs lines with four unique points!")
         else:
             return Region.from_points(p1, p2, p3, p4)
-            
+       
+    @staticmethod
+    def from_center(centerPt: Point, radius = 10):
+        p1 = centerPt.up(radius).left(radius)
+        p2 = centerPt.down(radius).left(radius)
+        p3 = centerPt.up(radius).right(radius)
+        p4 = centerPt.down(radius).right(radius)
+        
+        return Region.from_points(p1, p2, p3, p4)
+        
     def to_points(self):
         t, b = self['Top'], self['Bottom']
         return t.leftPt, t.rightPt, b.leftPt, b.rightPt

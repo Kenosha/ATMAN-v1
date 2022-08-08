@@ -16,7 +16,13 @@ def show(frame, name = 'frame'):
     cv.waitKey(0)
     #closing all open windows  
     cv.destroyAllWindows()  
+    
+def show_continuous(frame, name = 'frame', ms_between_frames = 30):
+    cv.imshow('frame', frame)
+    if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+        cv.destroyAllWindows()  
 
+    
 def get_frame(cap, frame_num):
     
     total_frames = cap.get(cv.CAP_PROP_FRAME_COUNT)  ### total number of frames
