@@ -109,6 +109,15 @@ def save_region(stream_features, featureName, videoName, storeName):
         save_feature_frame(featFrm, featureName, videoName, storeName)
     else:
         print(f'   {featureName}: nothing to save!')
+        
+def save_events(stream_features, featureName, videoName, storeName):
+    myFeature = {frmNum: featDict[featureName] for frmNum, featDict in stream_features.items() if featDict[featureName] is not None}
+    featSer = pd.Series(myFeature, name = 'x_0')
+    
+    if not featSer.empty:
+        save_feature_frame(featSer, featureName, videoName, storeName)
+    else:
+        print(f'   {featureName}: nothing to save!')
 
 ###### Loading #############
 
@@ -150,7 +159,14 @@ def single_feature_to_object(singlefeatSeries):
     dx_vals = [v for k, v in singlefeatDict.items() if k.startswith('dx') if not v == MISSING_SENTINEL_VALUE]
     dy_vals = [v for k, v in singlefeatDict.items() if k.startswith('dy') if not v == MISSING_SENTINEL_VALUE]
     
-    if z_vals == []:
+    if y_vals == []:
+        ### this means we have scalars --> array of values, or single value.
+        valArr = singlefeatSeries.values
+        if len(valArr) == 1:
+            return valArr[0]
+        else:
+            return valArr
+    elif z_vals == []:
         ### this means we have a bunch of points, (with x and y values), 
         if dx_vals == [] and dy_vals == []:
             ### we have no speed info, therefore a CONTOUR!

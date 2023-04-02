@@ -46,6 +46,41 @@ def make_projection_matrices(cap, stream_features, schemaLines):
         projDict[frame] = P
     
     return projDict
+
+def make_internal_external_matrices(projDict):
+        
+    def decomposeP(P, normalize_K = True):
+        import numpy as np
+        M = P[0:3,0:3]
+        Q = np.eye(3)[::-1]
+        P_b = Q @ M @ M.T @ Q
+        K = Q @ np.linalg.cholesky(P_b) @ Q
+        if normalize_K: K = K / K[2,2]
+        A = np.linalg.inv(K) @ M
+        l = (1/np.linalg.det(A)) ** (1/3)
+        R = l * A
+        t = l * np.linalg.inv(K) @ P[0:3,3]
+        return K, R, t
+
+    def find_intrinsic_extrinsic_M(P, normalize_K = True):
+            
+        K, R, t = decomposeP(P, normalize_K = normalize_K)
+        
+        M_int = np.append(K, np.zeros((3, 1)), axis = 1)
+        M_ext = np.append(R, t[:, np.newaxis], axis = 1)
+        M_ext = np.append(M_ext, np.array([[0, 0, 0, 1]]), axis = 0)
+        
+        return M_int, M_ext
+    
+    ### DECOMPOSE PROJECTION MATRIX ON EACH FRAME ###
+    decompDict = {}
+    
+    for frame, P in projDict.items():
+        decompDict[frame] = find_intrinsic_extrinsic_M(P)
+    
+    return decompDict
+    
+    
         
 def find_player_positions_3D(projDict, stream_features):
     frames = list(projDict.keys())
@@ -85,7 +120,7 @@ def find_player_positions_3D(projDict, stream_features):
     
     return players_3D
 
-def find_ball_positions_3D(word_inference_frame, projDict):
+def find_known_ball_positions_3D(word_inference_frame, projDict):
     
     ball_3D = word_inference_frame[['x_3D', 'y_3D', 'z_3D']]
     frames = word_inference_frame.index
@@ -117,7 +152,10 @@ def find_ball_positions_3D(word_inference_frame, projDict):
         ball_3D.at[frame, 'x_3D'] = x_3D
         ball_3D.at[frame, 'y_3D'] = y_3D
         ball_3D.at[frame, 'z_3D'] = z_3D
-        
+    
+    return ball_3D
+
+def interpolate_ball_positions_3D(ball_3D):
     ### INTERPOLATE BALL POSITION ###
     # where we have not imposed one dimension, we interpolate between the events where we did find one.
     
@@ -145,7 +183,7 @@ def count_consecutive(evt, evtList):
             i += 1
         else:
             return i, other
-    raise Exception
+    return i, None
     
 
 def narrow_down_instantaneous_events(expanded_events):
@@ -183,17 +221,19 @@ def narrow_down_instantaneous_events(expanded_events):
                 
     return narrow_expanded_events
         
-
-def merge_words_and_inference(words, inferred_events):
-    fs_frm = min(words.index)
-    
-    expanded_events = expand_inferred_sequence(inferred_events, word_beginning_frame = fs_frm)
-    narrow_events = narrow_down_instantaneous_events(expanded_events)
+def merge_words_and_event_features(words, event_features):
+    narrow_events = narrow_down_instantaneous_events(event_features)
     event_series = pd.Series(narrow_events, name = 'Events')
     
     inf_words = pd.concat([words, event_series], axis = 1)
     
     return inf_words
+    
+def merge_words_and_inference(words, inferred_events):
+    fs_frm = min(words.index)
+    expanded_events = expand_inferred_sequence(inferred_events, word_beginning_frame = fs_frm)
+    return merge_words_and_event_features(words, expanded_events)
+    
 
 
 def init_spatial_dimensions(inf_words):            
