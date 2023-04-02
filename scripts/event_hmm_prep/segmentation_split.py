@@ -72,6 +72,8 @@ def show_index(idx):
 lab_idx = 8
 labFrm[labFrm.Index == lab_idx]
 show_index(8)
+
+
 ### -> this is a play sequence was split in two by ballboy segmentation.
 ### thus, we labelled it as if it was one sequence 
 ### (since at the time of labelling we did not have ballboy segmentation).

@@ -236,15 +236,14 @@ class ModelShell:
     
     def __post_init__(self):
         self.model = None # SubSyntaxModel | HMM | None
-        self.WLRs = {key: {} for key in WORDS.index} ### one WLR container for every model shell.
-    
+
     def inject_token(self, token_value, token_id):
         if self.model is None: ### 'wakes up' the shell if a pos. prob. token is passed in
             if token_value > np.log(0):
                 if self.name.startswith('<') and self.name.endswith('>'): ### SSM
                     symbol = self.name.strip('<>')
                     expression = GRAMMAR[symbol]
-                    self.model = SubSyntaxModel.from_grammar_rule(expression, self.WLRs)
+                    self.model = SubSyntaxModel.from_grammar_rule(expression)
                 else: ### HMM
                     hmmDict = HMMs[self.name]
                     self.model = HMM(**hmmDict)
@@ -294,7 +293,7 @@ class SubSyntaxModel:
         self.isTerminal = False ### sub syntax models consist of other sub syntax models or HMMs
 
     @staticmethod
-    def from_grammar_rule(ruleStr, WLRs):
+    def from_grammar_rule(ruleStr):
         possible_sequences = [elem.strip(' ') for elem in ruleStr.split('|')]
         
         ### first pass over sequence strings, to instantiate unique models
@@ -452,79 +451,3 @@ show_video(cap, start_frame = start, stop_frame = stop)
 show(get_frame(cap, 89201))  
 
 modShell = allMod 
-
-#%%
-start = min(WORDS.index)
-stop = max(WORDS.index)
-
-
-allMod = ModelShell('<all>', 0)
-allMod.inject_token(np.log(1), 0)
-for t in WORDS.index[:-1]:
-    allMod.propagate_entry_tokens(t)
-    allMod.propagate_exit_tokens(t)
-
-t = stop
-noneHMM = allMod.model.exit_link.prec[0].model
-noneHMM.exit_token_id
-
-allMod.propagate_entry_tokens(t)
-
-noneHMM.exit_token_id
-
-exitLink = allMod.model.exit_link
-exitLink.token_id
-
-
-allMod = ModelShell('<all>', 0)
-allMod.inject_token(np.log(1), 0)
-for t in WORDS.index:
-    allMod.propagate_entry_tokens(t)
-    allMod.propagate_exit_tokens(t)
-
-last_token_id = allMod.model.exit_link.token_id
-
-t, num = last_token_id.split('_') ### a token id consists of time and an identifying number
-t, num = int(t), int(num)
-
-WLR = allMod.WLRs[t][num]
-
-
-
-
-
-
-inferred_sequence = work_back_WLR_links(allMod)
-
-allMod = ModelShell('<point>', 0)
-allMod.inject_token(np.log(1), 0)
-for t in WORDS.index:
-    allMod.propagate_entry_tokens(t)
-    allMod.propagate_exit_tokens(t)
-
-modShell = allMod
-
-inferred_sequence = work_back_WLR_links(allMod)
-
-
-
-
-from ATMANpy.funcs.util_funcs import get_video        
-from ATMANpy.funcs.cv_funcs import show_video, get_frame, show
-
-cap = get_video(VIDEO_ID)
-show_video(cap, start_frame = start, stop_frame = stop)
-        
-show(get_frame(cap, 53680))
-
-
-# symbolStr = 'all'
-# ruleStr = GRAMMAR[symbolStr]
-
-
-# SSM = SubSyntaxModel.from_grammar_rule(ruleStr)
-
-
-# SSM.set_entry_token(np.log(1), 0)
-# SSM.propagate_entry_tokens(0)
-

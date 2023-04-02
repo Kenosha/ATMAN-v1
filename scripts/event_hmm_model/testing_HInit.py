@@ -10,6 +10,8 @@ import pandas as pd
 import numpy as np
 
 from ATMANpy.funcs.util_funcs import get_folder_struct
+        
+np.seterr(over = 'raise')
 
 
 VIDEO_ID = 'pqxAmUWIoKc'
@@ -22,6 +24,8 @@ dataFile = os.path.join(dataPath, DATA_SET)
 dataFrm = pd.read_csv(dataFile, index_col = 0).drop(columns = 'SeqStatus')
 dataFrm.index.name = 'Frame'
 
+
+NUM_STATES = 3
 #### Begin with the single word functions HInit and HRest
 
 def segment_one_word(word):
@@ -272,21 +276,16 @@ def stop_condition(curr_log_likelihood, prev_log_likelihood,
                 return True
             else:
                 return False
-               
-np.seterr(over = 'raise')
-
-NUM_STATES = 3 ### the emitting states
-
-example_word = 'SFL'
-
-word_instances = dataFrm[dataFrm.Event == example_word].drop(columns = 'Event')
-word_instances = word_instances.reset_index().set_index(['IndexSF', 'Frame'])
-word_instances.columns.name = 'Var'
-
-words = word_instances.groupby('IndexSF', group_keys = False).apply(segment_one_word)
-
-def HInit(words):
-    words = words.copy()
+       
+def HInit(dataFrm, wordStr):
+        
+    ### Prep Word Data
+    word_instances = dataFrm[dataFrm.Event == wordStr].drop(columns = 'Event')
+    word_instances = word_instances.reset_index().set_index(['IndexSF', 'Frame'])
+    word_instances.columns.name = 'Var'
+    
+    ### Initialize a segmentation by evenly distributing word across states
+    words = word_instances.groupby('IndexSF', group_keys = False).apply(segment_one_word)
     
     curr_log_likelihood = None
     prev_log_likelihood = None
@@ -320,7 +319,9 @@ def HInit(words):
         print(f'Best Likelihood: {round(best_log_likelihood, 2)}')
         return best_A, best_avg, best_cov 
 
-HInit(words)
+
+example_word = 'SFL'
+HInit(dataFrm, example_word)
 
 #############
 

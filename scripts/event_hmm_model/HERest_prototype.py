@@ -87,8 +87,6 @@ for wordStr in all_words:
     extend_word = 1
     num_states = event_to_num_states(wordStr)
     density_floor = 10 ** -100
-    rel_gini_weight = 0
-    variance_floor = 0.01 ### minimum variance allowed is variance_floor x 100% of the global variance 
     cov_global = False
 
     print(f'Doing {wordStr}...')
@@ -148,107 +146,112 @@ from ATMANpy.funcs.HMM.HRest import weighted_emission_cov_numerator, weighted_em
 
 from ATMANpy.funcs.HMM.HRest import join_entry_emit_and_exit_to_A
 
+NUM_CYCLES = 4
 
-### Initialize Accumulators
-## Initialize Accumulators for gamma, which will feature in many denominators
-gammaAccumulator = {word: 0 for word in all_words}
-gammaAccumulator_entry = {word: 0 for word in all_words}
-
-## Initialize Accumulators for mean and standard deviation numerators
-meanAccumulator = {word: 0 for word in all_words}
-covAccumulator = {word: 0 for word in all_words}
-
-## Initialize Accumulators for xi, the numerator in transition probabilities
-xientryAccumulator = {word: 0 for word in all_words}
-xiemitAccumulator = {word: 0 for word in all_words}
-xiexitAccumulator = {word: 0 for word in all_words}
-
-## Initialize Accumulator for log-likelihood
-lklAccumulator = {word: 0 for word in all_words}
-
-for i, sequenceIdx in enumerate(seqIdxs):
+for cycleNum in range(1, NUM_CYCLES + 1):
+    ### Initialize Accumulators
+    ## Initialize Accumulators for gamma, which will feature in many denominators
+    gammaAccumulator = {word: 0 for word in all_words}
+    gammaAccumulator_entry = {word: 0 for word in all_words}
     
-    print(f'Embedded re-estimation of sequence {i} out of {len(seqIdxs)}...')
+    ## Initialize Accumulators for mean and standard deviation numerators
+    meanAccumulator = {word: 0 for word in all_words}
+    covAccumulator = {word: 0 for word in all_words}
     
-    words, eventSeq = get_sequence_data_and_transcription(dataFrm, sequenceIdx)
+    ## Initialize Accumulators for xi, the numerator in transition probabilities
+    xientryAccumulator = {word: 0 for word in all_words}
+    xiemitAccumulator = {word: 0 for word in all_words}
+    xiexitAccumulator = {word: 0 for word in all_words}
     
-    seqDict = get_sequence_densities(paramDict, eventSeq, words)
+    ## Initialize Accumulator for log-likelihood
+    lklAccumulator = 0
     
-    elnas = get_forward_probs(paramDict, eventSeq, seqDict)
-    elnbs = get_backward_probs(paramDict, eventSeq, seqDict)
-    
-    eln_gammas, model_probability = log_gammas_and_model_prob(elnas, elnbs)
-    
-    ### calculate gamma
-    elngammas, model_probability = log_gammas_and_model_prob(elnas, elnbs)
-    
-    for idx, word in enumerate(eventSeq):
+    for i, sequenceIdx in enumerate(seqIdxs):
+        
+        if i % 10 == 0:
+            print(f'Embedded re-estimation of sequence {i} out of {len(seqIdxs)}...')
+        
+        words, eventSeq = get_sequence_data_and_transcription(dataFrm, sequenceIdx)
+        
+        seqDict = get_sequence_densities(paramDict, eventSeq, words)
+        
+        elnas = get_forward_probs(paramDict, eventSeq, seqDict)
+        elnbs = get_backward_probs(paramDict, eventSeq, seqDict)
+        
+        eln_gammas, model_probability = log_gammas_and_model_prob(elnas, elnbs)
+        
+        for idx, word in enumerate(eventSeq):
+                
+            elnaArr, elnbArr, seqArr = elnas[idx], elnbs[idx], seqDict[word]
+            HMM = paramDict[word]
+            A, avg, cov = HMM['A'], HMM['avg'], HMM['cov']
+            avgArr = avg.values
+            wordArr = words.values
             
-        elnaArr, elnbArr, seqArr = elnas[idx], elnbs[idx], seqDict[word]
+            ### calculate emission accumulators
+            elngammaArr = eln_gammas[idx][:, 1:-1] ### gammas for this index, for emitting states
+            gammaAccumulator[word] += weighted_denominator(elngammaArr)
+            meanAccumulator[word] += weighted_emission_mean_numerator(elngammaArr, wordArr)
+            covAccumulator[word] += weighted_emission_cov_numerator(elngammaArr, wordArr, avgArr)
+            
+            ### calculate gamma accumulators for entry states (to normalize accumulator for entry xi)
+            elngammaArr_entry = eln_gammas[idx][:, 0]
+            gammaAccumulator_entry[word] += weighted_denominator(elngammaArr_entry)
+            
+            ### calculate xi numerators
+            log_xi_entry_num = log_xi_entry_numerator(elnaArr, elnbArr, seqArr, A)
+            log_xi_emit_num = log_xi_emit_numerator(elnaArr, elnbArr, seqArr, A)
+            log_xi_exit_num = log_xi_exit_numerator(elnaArr, elnbArr, seqArr, A)
+            
+            ### divide by model probability
+            log_xi_entry = elnproduct(log_xi_entry_num, -model_probability)
+            log_xi_emit = elnproduct(log_xi_emit_num, -model_probability)
+            log_xi_exit = elnproduct(log_xi_exit_num, -model_probability)
+            
+            ### calculate transition accumulators
+            transition_entry_numerator = eexp(log_xi_entry).sum(axis = 0)
+            transition_emit_numerator = eexp(log_xi_emit).sum(axis = 0)
+            transition_exit_numerator = eexp(log_xi_exit).sum(axis = 0)
+            
+            xientryAccumulator[word] += transition_entry_numerator
+            xiemitAccumulator[word] += transition_emit_numerator 
+            xiexitAccumulator[word] += transition_exit_numerator
+    
+        ### accumulate likelihood 
+        lklAccumulator = elnproduct(lklAccumulator, model_probability)
+        
+    
+    print(f'Embedded re-estimation cycle {cycleNum} done! Total Likelihood: {lklAccumulator}')
+        
+    for word in all_words:
+        
+        ####### CALCULATE ITERATION RESULTS #####
+        upd_avgArr = np.einsum('iv, i -> iv', meanAccumulator[word], 1 / gammaAccumulator[word])
+        upd_covArr = np.einsum('ivw, i -> ivw', covAccumulator[word], 1 / gammaAccumulator[word])
+        upd_entryArr = np.einsum('i,  -> i', xientryAccumulator[word], 1 / gammaAccumulator_entry[word])
+        upd_emitArr = np.einsum('ij, i -> ij', xiemitAccumulator[word], 1 / gammaAccumulator[word])
+        upd_exitArr = np.einsum('i, i -> i', xiexitAccumulator[word], 1 / gammaAccumulator[word])
+        
+        ##### UPDATE THE HMM PARAMETERS #####
         HMM = paramDict[word]
         A, avg, cov = HMM['A'], HMM['avg'], HMM['cov']
-        avgArr = avg.values
-        wordArr = words.values
         
-        ### calculate emission accumulators
-        elngammaArr = elngammas[idx][:, 1:-1] ### gammas for this index, for emitting states
-        gammaAccumulator[word] += weighted_denominator(elngammaArr)
-        meanAccumulator[word] += weighted_emission_mean_numerator(elngammaArr, wordArr)
-        covAccumulator[word] += weighted_emission_cov_numerator(elngammaArr, wordArr, avgArr)
+        ### bring them into shape so we get our target objects ....
+        # ... avg
+        avg = pd.DataFrame(upd_avgArr, index = avg.index, columns = avg.columns)
         
-        ### calculate gamma accumulators for entry states (to normalize accumulator for entry xi)
-        elngammaArr_entry = elngammas[idx][:, 0]
-        gammaAccumulator_entry[word] += weighted_denominator(elngammaArr_entry)
+        # ... cov
+        states = cov.index.get_level_values('State').unique()
+        cov = pd.concat([pd.DataFrame(upd_covArr[stateIdx], 
+                                      index = cov.loc[[stateVal]].index, 
+                                      columns = cov.columns) for stateIdx, stateVal in enumerate(states)])
+    
+        # ... A
+        A = join_entry_emit_and_exit_to_A(upd_entryArr, upd_emitArr, upd_exitArr)
+    
+        paramDict[word] = {'A': A, 'avg': avg, 'cov': cov}
         
-        ### calculate xi numerators
-        log_xi_entry_num = log_xi_entry_numerator(elnaArr, elnbArr, seqArr, A)
-        log_xi_emit_num = log_xi_emit_numerator(elnaArr, elnbArr, seqArr, A)
-        log_xi_exit_num = log_xi_exit_numerator(elnaArr, elnbArr, seqArr, A)
         
-        ### divide by model probability
-        log_xi_entry = elnproduct(log_xi_entry_num, -model_probability)
-        log_xi_emit = elnproduct(log_xi_emit_num, -model_probability)
-        log_xi_exit = elnproduct(log_xi_exit_num, -model_probability)
-        
-        ### calculate transition accumulators
-        transition_entry_numerator = eexp(log_xi_entry).sum(axis = 0)
-        transition_emit_numerator = eexp(log_xi_emit).sum(axis = 0)
-        transition_exit_numerator = eexp(log_xi_exit).sum(axis = 0)
-        
-        xientryAccumulator[word] += transition_entry_numerator
-        xiemitAccumulator[word] += transition_emit_numerator 
-        xiexitAccumulator[word] += transition_exit_numerator
-    
-print('Embedded re-estimation done! Recalculating parameters...')
-    
-for word in all_words:
-    
-    ####### CALCULATE ITERATION RESULTS #####
-    upd_avgArr = np.einsum('iv, i -> iv', meanAccumulator[word], 1 / gammaAccumulator[word])
-    upd_covArr = np.einsum('ivw, i -> ivw', covAccumulator[word], 1 / gammaAccumulator[word])
-    upd_entryArr = np.einsum('i,  -> i', xientryAccumulator[word], 1 / gammaAccumulator_entry[word])
-    upd_emitArr = np.einsum('ij, i -> ij', xiemitAccumulator[word], 1 / gammaAccumulator[word])
-    upd_exitArr = np.einsum('i, i -> i', xiexitAccumulator[word], 1 / gammaAccumulator[word])
-    
-    ##### UPDATE THE HMM PARAMETERS #####
-    HMM = paramDict[word]
-    A, avg, cov = HMM['A'], HMM['avg'], HMM['cov']
-    
-    ### bring them into shape so we get our target objects ....
-    # ... avg
-    avg = pd.DataFrame(upd_avgArr, index = avg.index, columns = avg.columns)
-    
-    # ... cov
-    states = cov.index.get_level_values('State').unique()
-    cov = pd.concat([pd.DataFrame(upd_covArr[stateIdx], 
-                                  index = cov.loc[[stateVal]].index, 
-                                  columns = cov.columns) for stateIdx, stateVal in enumerate(states)])
-
-    # ... A
-    A = join_entry_emit_and_exit_to_A(upd_entryArr, upd_emitArr, upd_exitArr)
-
-    paramDict[word] = {'A': A, 'avg': avg, 'cov': cov}
-    
     
 
         

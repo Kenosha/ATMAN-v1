@@ -35,7 +35,7 @@ cap = atu.get_video(VIDEO_ID)
 
 
 ### STORENAME ###
-STORE_NAME = '10to100_problematic'
+STORE_NAME = '10to100_ok2'
 
 ###### GET SEQUENCES #####
 from ATMANpy.funcs.feature_funcs import read_play_sequences
@@ -80,7 +80,7 @@ for idx, sf in enumerate(loadList):
     # ### interpolate ball positions
     # sf_itpl = smart_interpolate_ball_contours(sf, verbose = False)
     
-    replay(cap, sf, drawFunc = drawFunc, ms_between_frames = 70)
+    replay(cap, sf, drawFunc = drawFunc, ms_between_frames = 40)
     
     messageStr = """
     Press

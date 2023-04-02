@@ -392,13 +392,6 @@ ball_speed = calc_speed(dist_euclid)
 ### MAKE 3D STREAM FEATURES
 
 height_to_size = lambda height: max(2, min(round(height / 25), 4))
-    
-def calc_speed(dist_euclid, frames_per_second = 25, pixel_per_foot = 8):
-    ### dist_euclid: distance in pixel across one frame
-    foot_per_second = dist_euclid * frames_per_second / pixel_per_foot
-    meter_per_second = foot_per_second * 0.3048
-    kilometer_per_hour = meter_per_second * 3600 / 1000
-    return kilometer_per_hour
 
 from ATMANpy.types.Points import Point
 from ATMANpy.types.Lines import Region
