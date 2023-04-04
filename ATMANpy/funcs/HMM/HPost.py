@@ -73,12 +73,36 @@ def make_internal_external_matrices(projDict):
         return M_int, M_ext
     
     ### DECOMPOSE PROJECTION MATRIX ON EACH FRAME ###
-    decompDict = {}
+    internalDict = {}
+    externalDict = {}
     
     for frame, P in projDict.items():
-        decompDict[frame] = find_intrinsic_extrinsic_M(P)
+        internalDict[frame], externalDict[frame] = find_intrinsic_extrinsic_M(P)
     
-    return decompDict
+    return internalDict, externalDict
+    
+def interpolate_matrices(matrixDict):
+    outDict = {}
+    
+    available_keys = [frame for frame in matrixDict if not np.isnan(matrixDict[frame]).any()]
+    
+    from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
+
+    for frame in matrixDict:
+        if frame in available_keys:
+            outDict[frame] = matrixDict[frame]
+        else:
+            ls_frame, nx_frame = find_last_and_next_list_member(frame, available_keys)
+            
+            if nx_frame is None:
+                outDict[frame] = matrixDict[ls_frame]
+            elif ls_frame is None:
+                outDict[frame] = matrixDict[nx_frame]
+            else:
+                dist = (frame - ls_frame) / (nx_frame - ls_frame)
+                outDict[frame] = matrixDict[ls_frame] * (1 - dist) + matrixDict[nx_frame] * dist
+        
+    return outDict
     
     
         

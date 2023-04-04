@@ -42,7 +42,43 @@ def compose(*funcs):
 import pandas as pd
 def prepend_index_level(df, idx_name, idx_value):
     return pd.concat({idx_value: df}, names = [idx_name])
+
+def find_last_and_next_list_member(number_of_interest, 
+                                   available_values):
+    """
+    This function takes a number and a list of values and returns 
+    the greatest value smaller than the number in the list of values, and
+    the smaller value greater than the number in the list of values.
+    Very useful for interpolation
     
+    Parameters
+    ----------
+    number_of_interest : integer
+        The number to find the last occurence before and the first occurence after of.
+    available_values : list of integers
+        List of values that are available (for example, not missing in a dictionary)
+
+    Returns
+    -------
+    ls_member, nx_member -> two integers, see above
+
+    """
+
+    if number_of_interest in available_values:
+        return number_of_interest, number_of_interest
+    else:
+        try:
+            ls_member = max([f for f in available_values if f < number_of_interest])
+        except ValueError: ### occurs if max([]) --> no f smaller than frame.
+            ls_member = None
+        
+        try:
+            nx_member = min([f for f in available_values if f > number_of_interest])
+        except:
+            nx_member = None
+
+        return ls_member, nx_member
+
 
 
 
