@@ -116,7 +116,7 @@ schemaFrm = fit_frame_to_lines(schemaLines)
     
 ### CHOOSE A SEQUENCE ###
 test_data.IndexSF.unique()
-TEST_SEQUENCE = 104
+TEST_SEQUENCE = 94
 #########################
 
 ## PREPARE 3D FEATURES ##
@@ -148,41 +148,23 @@ ball_3D = HPost.interpolate_ball_positions_3D(ball_3D)
 features_3D = HPost.make_3D_features(inf_words, ball_3D, players_3D)
 ########################
 
-#### VISUALIZE #########
-frame_min, frame_max = min(words.index), max(words.index)
-show_video(cap, 
-           start_frame = frame_min, stop_frame = frame_max,
-           ms_between_frames = 50)
-
-for frame in features_3D.keys():
-    
-    backgroundFrm = schemaFrm.to_BGR()
-    frmDict = {'cFrm': backgroundFrm}
-    featDict = features_3D[frame]
-    
-    drawFunc = draw(['ball', 'playerTop', 'playerBot', 
-                     'goodBounces', 'badBounces',
-                     'ballSpeed', 'stroke']) ### takes frmDict and featDict, returns show frame
-    
-    showFrm = drawFunc(frmDict, featDict)
-    
-    show_continuous(showFrm.array, ms_between_frames = 75)
-    
-cv.destroyAllWindows()
-    
 #%% Smarter Interpolation of Ball in Flight
 
 # Idea: Ball is on a ray for each frame between points where the ball location is known
 # Additionally, we know that the ball, projected onto the ground, has to be on the line between
 # the two known ball locations --> no sidespin!
 # With this, we should be able to identify the ball height.
-ball_3D = HPost.find_known_ball_positions_3D(inf_words, projDict)
+ball_3D_smart = HPost.find_known_ball_positions_3D(inf_words, projDict)
 
-decompDict = HPost.make_internal_external_matrices(projDict)
+internalDict, externalDict = HPost.make_internal_external_matrices(projDict)
 #### many of these are nan... we could do a two-pass thing: 
     # on the first pass: find the internal params by averaging over what is not nan (since they should never change )
     # on the second pass: divide proj matrix by average.
     ### but now i see that usually, only external matrix is nan... weird.
+    
+internalDict = HPost.interpolate_matrices(internalDict)
+externalDict = HPost.interpolate_matrices(externalDict)
+
     
 def get_camera_ray_params(somePt, M_int):
     ### this could potentially be improved by exploiting that M_int[0,1] is NOT zero, 
@@ -204,12 +186,6 @@ def get_camera_ray_params(somePt, M_int):
     intercept = np.zeros(3)
     return slope, intercept
     
-from ATMANpy.types.Points import Point
-
-somePt = Point((inf_words.loc[frame, 'x'], inf_words.loc[frame, 'y']))
-
-m_c, b_c = get_camera_ray_params(somePt, M_int)
-
 def get_world_ray_params(m_c, M_ext):
     R, t = M_ext[:-1, :-1], M_ext[:-1:, -1]
     
@@ -217,6 +193,109 @@ def get_world_ray_params(m_c, M_ext):
     intercept = - R.T @ t
 
     return slope, intercept
+
+def calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt):
+    x1, y1 = lsPt['x_3D'], lsPt['y_3D']
+    xn, yn = nxPt['x_3D'], nxPt['y_3D']
+
+    m1, m2 = m_w[0], m_w[1]
+    b1, b2 = b_w[0], b_w[1]
+
+    num = y1 - m2/m1*x1 + m2/m1*b1 - b2
+    den = m2/m1*(xn-x1) - (yn-y1)
+    
+    lmbd = num/den
+    
+    return lmbd
+
+def calculate_interpolated_point(m_w, b_w, lsPt, nxPt):
+    lmbd = calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)
+    
+    x1, y1 = lsPt['x_3D'], lsPt['y_3D']
+    xn, yn = nxPt['x_3D'], nxPt['y_3D']
+    
+    m1, m2 = m_w[0], m_w[1]
+    b1, b2 = b_w[0], b_w[1]
+    
+    x = x1 + lmbd * (xn - x1)
+    y = y1 + lmbd * (yn - y1)
+    
+    z_c = (x - b1) / m1 ### this is still in camera coords!
+    # z_c = (y - b2) / m2 ### also possible, results should be pretty much the same.
+    z = z_c * m_w[2] + b_w[2]
+    
+    return x, y, z
+
+from ATMANpy.types.Points import Point
+from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
+
+known_frames = ball_3D_smart.dropna().index
+for frame, row in ball_3D_smart.iterrows():
+    if not frame in known_frames:
+        ### here, we need to interpolate!
+        ls_frame, nx_frame = find_last_and_next_list_member(frame, known_frames)
+        if ls_frame is not None and nx_frame is not None:
+            ### if both last and next position are known, we can interpolate
+            lsPt = ball_3D_smart.loc[ls_frame]
+            nxPt = ball_3D_smart.loc[nx_frame]
+            
+            ### now, use the internal and external camera matrices on the frame in question...
+            M_int, M_ext = internalDict[frame], externalDict[frame]
+            ball_data = inf_words.loc[frame]
+            ballPt = Point((ball_data['x'], ball_data['y']))
+            
+            ### ...to derive the ray on which the ball has to lie
+            m_c, b_c = get_camera_ray_params(ballPt, M_int)
+            m_w, b_w = get_world_ray_params(m_c, M_ext)
+        
+            ### together with knowledge about the last and the next point that is known, 
+            ### we can interpolate!
+            print(calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt))
+            
+            ball_3D_smart.loc[frame] = calculate_interpolated_point(m_w, b_w, lsPt, nxPt)
+                
+ball_3D_smart = HPost.interpolate_ball_positions_3D(ball_3D_smart) ### just for backward and forward interpolation    
+
+features_3D_smart = HPost.make_3D_features(inf_words, ball_3D_smart, players_3D)
+
+#%% #### VISUALIZE #########
+frame_min, frame_max = min(words.index), max(words.index)
+show_video(cap, 
+           start_frame = frame_min, stop_frame = frame_max,
+           ms_between_frames = 50)
+
+for frame in features_3D.keys():
+    
+    backgroundFrm = schemaFrm.to_BGR()
+    frmDict = {'cFrm': backgroundFrm}
+    featDict = features_3D[frame]
+    
+    drawFunc = draw(['ball', 'playerTop', 'playerBot', 
+                     'goodBounces', 'badBounces',
+                     'ballSpeed', 'stroke']) ### takes frmDict and featDict, returns show frame
+    
+    showFrm = drawFunc(frmDict, featDict)
+    
+    show_continuous(showFrm.array, ms_between_frames = 75)
+    
+cv.destroyAllWindows()
+
+for frame in features_3D_smart.keys():
+    
+    backgroundFrm = schemaFrm.to_BGR()
+    frmDict = {'cFrm': backgroundFrm}
+    featDict = features_3D[frame]
+    
+    drawFunc = draw(['ball', 'playerTop', 'playerBot', 
+                     'goodBounces', 'badBounces',
+                     'ballSpeed', 'stroke']) ### takes frmDict and featDict, returns show frame
+    
+    showFrm = drawFunc(frmDict, featDict)
+    
+    show_continuous(showFrm.array, ms_between_frames = 75)
+    
+cv.destroyAllWindows()
+    
 
 #%% Smarter Interpolation of Ball in Flight -- Testing
 
