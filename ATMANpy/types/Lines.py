@@ -81,6 +81,9 @@ class Line:
     def is_horizontal(self):
         return abs(self.rightPt.x - self.leftPt.x) > abs(self.rightPt.y - self.leftPt.y)
     
+    def is_vertical(self):
+        return not self.is_horizontal()
+    
     def is_weakly_left(self, x_of_int: int):
         return self.left_point().is_left(x_of_int)
     def is_weakly_right(self, x_of_int: int):
@@ -412,6 +415,8 @@ class CourtLines(Lines):
         service_box_length = 21
         service_box_width = singles_width / 2
         net_beyond_line = 3
+        baseline_width = 0.5 # 1/3: the minimum baseline width is a third of a foot
+        otherline_width = 0.25 # 1/6: the minimum width of other lines is a sixth of a foot
     
         scale_minimum = 2 ### minimum scale, so we have integers
     
@@ -423,7 +428,9 @@ class CourtLines(Lines):
                    'singles_width': scale * singles_width,
                    'service_box_length': scale * service_box_length,
                    'service_box_width': scale * service_box_width,
-                   'net_beyond_line': scale * net_beyond_line}
+                   'net_beyond_line': scale * net_beyond_line,
+                   'baseline_width': scale * baseline_width,
+                   'otherline_width': scale * otherline_width}
         
         if force_dimensions:
             outDict = {k: round(v) for k, v in outDict.items()}
@@ -476,6 +483,10 @@ class CourtLines(Lines):
                                 force_dimensions = force_dimensions)
         
         return courtLines
+    
+    def see_dimensions(self):
+        return CourtLines.get_dimensions(size = self.size, 
+                                         force_dimensions = self.force_dimensions)
     
     def add_singles_netline(self):
         netLine = self['Top Baseline'].down(self.side_length)
