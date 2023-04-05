@@ -26,7 +26,6 @@ class Scene:
         ### yields a point-cloud representation of the objects in the scene, 
         # with points stored in rastArr_all and their colors stored in colArr_all
         
-        
         rastArr_all = []
         colArr_all = []
         for shape3D in self.shapes:
@@ -118,33 +117,109 @@ class Camera:
         mask_pxArr, mask_clArr = sort_pxArr[fs_mask], sort_clArr[fs_mask]
         
         ### 4) Pluck every point onto a frame with the correct value, and show it!
-        rows, cols = self.sensor_dims[1], self.sensor_dims[0]
+        rows, cols = self.sensor_dims[1], self.sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
         snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
 
         for pixel, color in zip(mask_pxArr, mask_clArr):
             u, v = pixel
-            snapArr[u, v] = color
+            snapArr[v, u] = color ### note the switch here: u are columns, v are rows, so indexing inverts! 
         
         snapFrm = BGRFrame(snapArr)
         
         return snapFrm
     
-from ATMANpy.types.Shapes3D import Ball3D, Lines3D, Region3D, Regions3D
+@dataclass(frozen = True)
+class View:
+    ### a View combines a camera and a scene: 
+        # here, we store the Scene's rasterization, 
+        # but also the camera projection of it, and the distance vector of all objects to the camera.
+    
+    ptArr: np.array ### points in 3D space
+    clArr: np.array ### colors
+    pxArr: np.array ### points in 2D space -> 3D points projected onto screen
+    dsArr: np.array ### distance of objects to camera
+    
+    @staticmethod
+    def make(myCamera, myScene, resolution = 10, do_sort = True, do_filter = True):
+        
+        ### 1) Project Point Cloud in 3D onto 2D Sensor
+        ptArr, clArr = myScene.rasterize(resolution)
+        pxArr = myCamera.project_points(ptArr).astype(int)
+        
+        ### 2) For every point, get distance from Pinhole
+        dsArr = ((ptArr - myCamera.get_t()) ** 2).sum(axis = 1) ** 0.5
+        aView = View(ptArr, clArr, pxArr, dsArr)
+        
+        if do_sort:
+            ### 3) Sort view by distance from pinhole
+            aView = aView.sort_by_distance()
+        
+        if do_filter:
+            ### 4) Filter out duplicate pixel
+            aView = aView.filter_duplicates()
+        
+        return aView
 
+    def sort_by_distance(self):
+        ### 2) For every point, get distance from Pinhole, and sort vectors by it!
+        sort_idxs = np.argsort(self.dsArr)
+        return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], self.pxArr[sort_idxs], self.dsArr[sort_idxs])
+        
+    def filter_duplicates(self, verbose = False):
+        def mask_firstocc_with_unique(a):
+            mask = np.zeros(len(a), dtype=bool)
+            mask[np.unique(a, return_index=True, axis = 0)[1]] = True
+            return mask
+        
+        fs_mask = mask_firstocc_with_unique(self.pxArr)
+        
+        if verbose:     
+            keep_pct = round(fs_mask.sum() / len(fs_mask) * 100)
+            print(f'Keeping {keep_pct}% of points!')
+        
+        return View(self.ptArr[fs_mask], self.clArr[fs_mask], self.pxArr[fs_mask], self.dsArr[fs_mask])
 
-myScn = Scene.make() 
+    def snap(self, sensor_dims = (1920, 1080)):
+        
+        ### 4) Pluck every point onto a frame with the correct value, and show it!
+        rows, cols = sensor_dims[1], sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
+        snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
 
-courtRegions3D = Regions3D.make_court()
-myBall = Ball3D((30, 30, 30))
+        for pixel, color in zip(self.pxArr, self.clArr):
+            u, v = pixel
+            snapArr[v, u] = color ### note the switch here: u are columns, v are rows, so indexing inverts! 
+        
+        snapFrm = BGRFrame(snapArr)
+        
+        return snapFrm
+        
+    def combine(self, otherView):
+        ptArr = np.concatenate([self.ptArr, otherView.ptArr], axis = 0)
+        clArr = np.concatenate([self.clArr, otherView.clArr], axis = 0)
+        pxArr = np.concatenate([self.pxArr, otherView.pxArr], axis = 0)
+        dsArr = np.concatenate([self.dsArr, otherView.dsArr], axis = 0)
+        
+        return View(ptArr, clArr, pxArr, dsArr)#.sort_by_distance()#.filter_duplicates()
 
+    
+# from ATMANpy.types.Shapes3D import Ball3D, Lines3D, Region3D, Regions3D
 
-myScn = myScn.put(myBall).put(courtRegions3D['Top Baseline'])
+# emptyScn = Scene.make() 
+# courtRegions3D = Regions3D.make_court()
+# myBall = Ball3D((30, 30, 30))
+# myNet = Regions3D.make_singles_net()
 
-ptArr, clArr = myScn.rasterize(10)
+# backScn = emptyScn.put(courtRegions3D).put(myNet)
+# ballScn = emptyScn.put(myBall)
 
-myCam = Camera.calibrated_AO_behind()
+# myCam = Camera.calibrated_AO_behind()
 
-prArr = myCam.project_points(ptArr)
+# backView = View.make(myCam, backScn)
+# frntView = View.make(myCam, ballScn)
 
-snapFrm = myCam.snap_scene(myScn, resolution = 10)
-snapFrm.show()
+# backView.snap().show()
+# frntView.snap().show()
+
+# bothView = backView.combine(frntView)
+# bothView.show()
+

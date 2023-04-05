@@ -148,14 +148,15 @@ class Ball3D:
     """
     A sphere: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
     """   
-    _DEFAULT_RADIUS = 0.108  ### what is the correct default radius? 
+    _SCALE = 8 ### TODO: this should be a global variable, since it is the same scale as in courtLines...
+    _RADIUS_IN_FEET = 0.108  ### what is the correct default radius? 
                               ## should be the tennis ball in the usual coord system of court lines.
                               ## ball radius in feet (2.6 inch diameter -> 1.3 inch radius = 0.108 ft.)
     _DEFAULT_COLOR = (79, 255, 223) ### color of tennis ball in BGR
     
     coords: tuple
     
-    radius: Optional[float] = _DEFAULT_RADIUS
+    radius: Optional[float] = _SCALE * _RADIUS_IN_FEET
     color: Optional[tuple] = _DEFAULT_COLOR
     name: str = 'Ball'
     
@@ -377,7 +378,8 @@ class Region3D():
         return len(self.lineList)
     
     @staticmethod
-    def from_points(p1: Point3D, p2: Point3D, p3: Point3D, p4: Point3D, name = 'Region3D'):
+    def from_points(p1: Point3D, p2: Point3D, p3: Point3D, p4: Point3D, 
+                    name = 'Region3D', color = _DEFAULT_COLOR):
         # is_rectangle = p3 is None and p4 is None
         # if is_rectangle:
         #     p3 = Point((p1.x, p2.y))
@@ -402,10 +404,11 @@ class Region3D():
         #     if centroid is None:
         #         centroid = lt.down(h/2).right(w/2)
         
-        return Region3D(regLines, name = name)
+        return Region3D(regLines, name = name, color = color)
     
     @staticmethod
-    def from_line(aLn, width, dim = 'x', name = 'Region3D'):
+    def from_line(aLn, width, dim = 'x', 
+                  name = 'Region3D', color = _DEFAULT_COLOR):
         ### basically thicken a line to yield a region!
         ### the width dimension 'dim' is the dimension along which the thickness is introduced!
         if dim == 'x':
@@ -413,19 +416,19 @@ class Region3D():
                                         aLn.leftPt.right(width/2),
                                         aLn.rightPt.left(width/2),
                                         aLn.rightPt.right(width/2),
-                                        name = name)
+                                        name = name, color = color)
         if dim == 'y':
             return Region3D.from_points(aLn.leftPt.front(width/2),
                                         aLn.leftPt.back(width/2),
                                         aLn.rightPt.front(width/2),
                                         aLn.rightPt.back(width/2),
-                                        name = name)
+                                        name = name, color = color)
         if dim == 'z':
             return Region3D.from_points(aLn.leftPt.up(width/2),
                                         aLn.leftPt.down(width/2),
                                         aLn.rightPt.up(width/2),
                                         aLn.rightPt.down(width/2),
-                                        name = name)
+                                        name = name, color = color)
     
     def rasterize(self, resolution):
         ### resolution -> points in a area of 1 sq. unit size 
@@ -455,10 +458,14 @@ class Regions3D():
     """
     A list of regions, i.e. a set of planes that make some composite shape.
     """
-    regList: List[Region3D]
-    name: str = 'Regions3D'
-
+    _DEFAULT_COLOR = (255, 255, 255)
+    _NET_COLOR = (212, 127, 255) ### a nice aquamarine
     
+    regList: List[Region3D]
+    
+    name: str = 'Regions3D'
+    color: Optional[tuple] = _DEFAULT_COLOR
+
     def __iter__(self):
         return iter(self.regList)
     
@@ -482,12 +489,12 @@ class Regions3D():
         return len(self.regList)
 
     @staticmethod
-    def from_lines(aLns, width, dim = 'x', name = 'Regions3D'):
+    def from_lines(aLns, width, dim = 'x', name = 'Regions3D', color = _DEFAULT_COLOR):
         return Regions3D([Region3D.from_line(aLn, width, dim = dim) for aLn in aLns], 
-                         name = name)
+                         name = name, color = color)
 
     @staticmethod
-    def make_court():
+    def make_court(color = _DEFAULT_COLOR):
         courtLines = CourtLines.make()
         courtDims = courtLines.see_dimensions()
         
@@ -511,5 +518,32 @@ class Regions3D():
             
             courtRegions3D.append(Region3D.from_line(cLn, width = width, dim = dim, name = cLn.name))
             
-        return Regions3D(courtRegions3D, name = 'CourtLines3D')    
+        return Regions3D(courtRegions3D, name = 'CourtLines3D', color = color)    
+    
+    @staticmethod
+    def make_singles_net(color = _NET_COLOR):
+        courtLines = CourtLines.make()
+        courtDims = courtLines.see_dimensions()
+        
+        netLn = Line3D.from_line(courtLines.add_singles_netline()['Net Line'], z = 0)
+        lPt, cPt, rPt = netLn.subdivide(3)
+        left_netLn = Line3D(lPt, cPt, name = 'Bottom')
+        right_netLn = Line3D(cPt, rPt, name = 'Bottom')
+        
+        lPt_up, cPt_up, rPt_up = [lPt.up(courtLines.net_height_post), 
+                                  cPt.up(courtLines.net_height_middle), 
+                                  rPt.up(courtLines.net_height_post)]
+        leftReg = Region3D.from_points(lPt_up, cPt_up, lPt, cPt)
+        rightReg = Region3D.from_points(cPt_up, rPt_up, cPt, rPt)
+        
+        return Regions3D([leftReg, rightReg], name = 'Net3D', color = color)
+        
+        
+    def rasterize(self, resolution):
+        return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
+        
+        
+        
+        
+        
     

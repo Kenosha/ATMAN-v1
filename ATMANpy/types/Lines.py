@@ -415,6 +415,8 @@ class CourtLines(Lines):
         service_box_length = 21
         service_box_width = singles_width / 2
         net_beyond_line = 3
+        net_height_post = 3.5
+        net_height_middle = 3
         baseline_width = 0.5 # 1/3: the minimum baseline width is a third of a foot
         otherline_width = 0.25 # 1/6: the minimum width of other lines is a sixth of a foot
     
@@ -422,13 +424,16 @@ class CourtLines(Lines):
     
         scale = size * scale_minimum
         
-        outDict = {'court_width': scale * court_width,
+        outDict = {'scale': scale,
+                   'court_width': scale * court_width,
                    'side_length': scale * side_length,
                    'doubles_alley_width': scale * doubles_alley_width,
                    'singles_width': scale * singles_width,
                    'service_box_length': scale * service_box_length,
                    'service_box_width': scale * service_box_width,
                    'net_beyond_line': scale * net_beyond_line,
+                   'net_height_post': scale * net_height_post,
+                   'net_height_middle': scale * net_height_middle,
                    'baseline_width': scale * baseline_width,
                    'otherline_width': scale * otherline_width}
         
