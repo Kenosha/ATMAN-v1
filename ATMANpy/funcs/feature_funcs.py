@@ -50,8 +50,8 @@ def save_feature_frame(featFrm, featureName, videoName, storeName):
     savePath = os.path.join(storePath, featureName)
     
     try:
-        print(f'    Creating new {featureName} data')
         os.mkdir(savePath)
+        print(f'    Creating new {featureName} data')
     except FileExistsError:
         print(f'    Adding to existing {featureName} data')
         

@@ -52,8 +52,6 @@ inferred_features = load_stored_features(VIDEO_ID, STORE_NAME,
 
 test_data_to_do = test_data[~test_data.index.isin(inferred_features)]
 sequences_to_do = test_data_to_do.IndexSF.unique()
-# to_infer = [sequences_to_do[-1]] ### just do one at a time
-
 
 ### ENRICH STREAM FEATURES WITH INFERENCE ###
 from ATMANpy.funcs.HMM.HPost import expand_inferred_sequence
@@ -104,18 +102,16 @@ if len(sequences_to_do) > 0:
 
 #%% READ EXISTENT 3D FEATURES
 
+INTERPOLATION_TYPE = 'linear' # linear or smart
+EVENT_SOURCE = 'ground' # ground or inference
+
 from ATMANpy.funcs.feature_funcs import read_feature_frame
 
 try:
-    ball_3D = read_feature_frame('3D_Ball', VIDEO_ID, STORE_NAME)
+    ball_3D = read_feature_frame(f'3D_Ball_{INTERPOLATION_TYPE}_{EVENT_SOURCE}', VIDEO_ID, STORE_NAME)
 except FileNotFoundError:
     ball_3D = pd.DataFrame()
 
-try:
-    ball_3D_smart = read_feature_frame('3D_Ball_smart', VIDEO_ID, STORE_NAME)
-except FileNotFoundError:
-    ball_3D_smart = pd.DataFrame()
-    
 try:
     players_3D = read_feature_frame('3D_players', VIDEO_ID, STORE_NAME)
 except FileNotFoundError:
@@ -124,6 +120,7 @@ except FileNotFoundError:
 #%% CREATE 3D FEATURES
 
 from ATMANpy.funcs.feature_funcs import save_feature_frame
+import ATMANpy.funcs.HMM.HPost as HPost
 
 ######## GET SCHEMA ########
 from ATMANpy.types.Lines import CourtLines
@@ -138,67 +135,86 @@ for test_sequence in test_data.IndexSF.unique():
 #########################
     
     ## PREPARE 3D FEATURES ##
-    testSeq = test_data[test_data.IndexSF == test_sequence]
-    words = testSeq.drop(columns = ['Event', 'IndexSF'])
+    seq_data = test_data[test_data.IndexSF == test_sequence] ### Event, here is what was actually marked!
+    test_sequence_features = {frame: featDict for frame, featDict in stream_features.items() if frame in seq_data.index}
     
+    if EVENT_SOURCE == 'inference':
+        seq_data_hidden = seq_data.drop(columns = ['Event', 'IndexSF']) ### Drop it, and merge in inference 
+        event_features = {frame: featDict['grammatic_event'] for frame, featDict in test_sequence_features.items()}
+        seq_data = HPost.merge_words_and_event_features(seq_data_hidden, event_features)
+
     ## UNDERSTAND IF THE FEATURES HAVE ALREADY BEEN CREATED
-    players_done = words.index.isin(players_3D.index).all()
-    ball_done = words.index.isin(ball_3D.index).all()
-    ball_smart_done = words.index.isin(ball_3D_smart.index).all()
+    players_done = seq_data.index.isin(players_3D.index).all()
+    ball_done = seq_data.index.isin(ball_3D.index).all()
     
-    if players_done and ball_done and ball_smart_done:
+    if players_done and ball_done:
+        print(f'Found in stored 3D features: {test_sequence}...')
         continue
     else:
         print(f'Post Processing Sequence Number: {test_sequence}...')
     
-    ### GET TEST SEQUENCE STREAM FEATURES, EVENTS
-    test_sequence_features = {frame: featDict for frame, featDict in stream_features.items() if frame in words.index}
-    event_features = {frame: featDict['grammatic_event'] for frame, featDict in test_sequence_features.items()}
-    
     ### POST PROCESS FEATURES
-    import ATMANpy.funcs.HMM.HPost as HPost
-
     projDict = HPost.make_projection_matrices(cap, test_sequence_features, schemaLines)
     
-    players_3D = HPost.find_player_positions_3D(projDict, test_sequence_features)
-    save_feature_frame(players_3D, '3D_players', VIDEO_ID, STORE_NAME)
+    if not players_done:
+        ## 1) Players -> independent of whether we use ground truth events or inferred events!
+        players_3D = HPost.find_player_positions_3D(projDict, test_sequence_features)
+        save_feature_frame(players_3D, '3D_players', VIDEO_ID, STORE_NAME)
     
-    inf_words = HPost.merge_words_and_event_features(words, event_features)
-    inf_words = HPost.init_spatial_dimensions(inf_words)
-    inf_words = HPost.impose_serve(inf_words, schemaLines)
-    inf_words = HPost.impose_net(inf_words, schemaLines)
-    inf_words = HPost.impose_bounce(inf_words, bounce_height = 0.2)
-    inf_words = HPost.impose_hit(inf_words, players_3D)
-    ball_2D = inf_words[['x', 'y']]
+    if not ball_done:
+        ## 2) Ball
+        process_data = HPost.init_spatial_dimensions(seq_data)
+        process_data = HPost.impose_serve(process_data, schemaLines)
+        process_data = HPost.impose_net(process_data, schemaLines)
+        process_data = HPost.impose_bounce(process_data, bounce_height = 0.2)
+        process_data = HPost.impose_hit(process_data, players_3D)
+        ball_2D = process_data[['x', 'y']]
+        
+        if INTERPOLATION_TYPE == 'linear':
+            ball_3D = HPost.find_known_ball_positions_3D(process_data, projDict)
+            ball_3D = HPost.interpolate_ball_positions_3D(ball_3D)
+            
+        elif INTERPOLATION_TYPE == 'smart':
+            ### Smarter Interpolation of Ball in Flight
+            # Idea: Ball is on a ray for each frame between points where the ball location is known
+            # Additionally, we know that the ball, projected onto the ground, has to be on the line between
+            # the two known ball locations --> no sidespin!
+            # With this, we should be able to identify the ball height.
+            ball_3D = HPost.find_known_ball_positions_3D(process_data, projDict)
+            
+            ### Get Camera Internals and Externals
+            internalDict, externalDict = HPost.make_internal_external_matrices(projDict)
+            internalDict = HPost.interpolate_matrices(internalDict)
+            externalDict = HPost.interpolate_matrices(externalDict)
+            
+            ### Do interpolation
+            ball_3D = HPost.interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, externalDict)
+            
+        save_feature_frame(ball_3D, f'3D_Ball_{INTERPOLATION_TYPE}_{EVENT_SOURCE}', VIDEO_ID, STORE_NAME)
     
-    ball_3D = HPost.find_known_ball_positions_3D(inf_words, projDict)
-    ball_3D = HPost.interpolate_ball_positions_3D(ball_3D)
-    
-    save_feature_frame(ball_3D, '3D_Ball', VIDEO_ID, STORE_NAME)
-    
-    # features_3D = HPost.make_3D_features(inf_words, ball_3D, players_3D)
 
-    ### Smarter Interpolation of Ball in Flight
-    
-    # Idea: Ball is on a ray for each frame between points where the ball location is known
-    # Additionally, we know that the ball, projected onto the ground, has to be on the line between
-    # the two known ball locations --> no sidespin!
-    # With this, we should be able to identify the ball height.
-    ball_3D_smart = HPost.find_known_ball_positions_3D(inf_words, projDict)
-    
-    ### Get Camera Internals and Externals
-    internalDict, externalDict = HPost.make_internal_external_matrices(projDict)
-    internalDict = HPost.interpolate_matrices(internalDict)
-    externalDict = HPost.interpolate_matrices(externalDict)
-    
-    ### Do interpolation
-    ball_3D_smart = HPost.interpolate_ball_positions_3D_smart(ball_3D_smart, ball_2D, internalDict, externalDict)
-    
-    save_feature_frame(ball_3D_smart, '3D_Ball_smart', VIDEO_ID, STORE_NAME)
-    
-    # features_3D_smart = HPost.make_3D_features(inf_words, ball_3D_smart, players_3D)
+#%% #### VISUALIZE GROUND v. INFERENCE #########
 
-#%% #### VISUALIZE #########
+### RE-READ EVERYTHING WITH GOOD NAMES, BOTH GROUND AND INFERENCE
+
+INTERPOLATION_TYPE = 'linear'
+
+from ATMANpy.funcs.feature_funcs import read_feature_frame
+
+try:
+    ball_3D_ground = read_feature_frame(f'3D_Ball_{INTERPOLATION_TYPE}_ground', VIDEO_ID, STORE_NAME)
+except FileNotFoundError:
+    ball_3D_ground = pd.DataFrame()
+
+try:
+    ball_3D_infer = read_feature_frame(f'3D_Ball_{INTERPOLATION_TYPE}_inference', VIDEO_ID, STORE_NAME)
+except FileNotFoundError:
+    ball_3D_infer = pd.DataFrame()
+
+try:
+    players_3D = read_feature_frame('3D_players', VIDEO_ID, STORE_NAME)
+except FileNotFoundError:
+    players_3D = pd.DataFrame()
 
 import cv2 as cv
 
@@ -207,34 +223,32 @@ SHOW_SEQUENCE = 108
 
 ### GET TEST SEQUENCE STREAM FEATURES, EVENTS
 
-seq_data_true = test_data[test_data.IndexSF == SHOW_SEQUENCE] ### Event, here is what was actually marked!
-seq_data_hidden = seq_data_true.drop(columns = ['Event', 'IndexSF']) ### Drop it, and merge in inference 
+seq_data_ground = test_data[test_data.IndexSF == SHOW_SEQUENCE] ### Event, here is what was actually marked!
+seq_data_hidden = seq_data_ground.drop(columns = ['Event', 'IndexSF']) ### Drop it, and merge in inference 
 
-test_sequence_features = {frame: featDict for frame, featDict in stream_features.items() if frame in words.index}
+test_sequence_features = {frame: featDict for frame, featDict in stream_features.items() if frame in seq_data_ground.index}
 event_features = {frame: featDict['grammatic_event'] for frame, featDict in test_sequence_features.items()}
 seq_data_infer = HPost.merge_words_and_event_features(seq_data_hidden, event_features)
 
+ball_3D_infer_show = ball_3D_infer[ball_3D_infer.index.isin(seq_data_infer.index)]
+ball_3D_ground_show = ball_3D_ground[ball_3D_ground.index.isin(seq_data_ground.index)]
 players_3D_show = players_3D[players_3D.index.isin(seq_data_infer.index)]
-ball_3D_show = ball_3D[ball_3D.index.isin(seq_data_infer.index)]
-ball_3D_smart_show = ball_3D_smart[ball_3D_smart.index.isin(seq_data_infer.index)]
 
-features_3D_true = HPost.make_3D_features(seq_data_true, ball_3D_show, players_3D_show)
-features_3D_infer = HPost.make_3D_features(seq_data_infer, ball_3D_show, players_3D_show)
-# features_3D_smart = HPost.make_3D_features(show_data, ball_3D_smart_show, players_3D_show)
-
+features_3D_ground = HPost.make_3D_features(seq_data_ground, ball_3D_ground_show, players_3D_show)
+features_3D_infer = HPost.make_3D_features(seq_data_infer, ball_3D_infer_show, players_3D_show)
 
 ### Show Video
-frame_min, frame_max = min(words.index), max(words.index)
+frame_min, frame_max = min(seq_data_ground.index), max(seq_data_ground.index)
 show_video(cap, 
            start_frame = frame_min, stop_frame = frame_max,
            ms_between_frames = 50)
 
 ### Show Ground Truth Events in Testing Data
-for frame in features_3D_true.keys():
+for frame in features_3D_ground.keys():
     
     backgroundFrm = schemaFrm.to_BGR()
     frmDict = {'cFrm': backgroundFrm}
-    featDict = features_3D_true[frame]
+    featDict = features_3D_ground[frame]
     
     drawFunc = draw(['ball', 'playerTop', 'playerBot', 
                      'goodBounces', 'badBounces',

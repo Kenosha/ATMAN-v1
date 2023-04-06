@@ -412,6 +412,7 @@ def impose_bounce(inf_words, bounce_height = 0.2):
     return inf_words
 
 def impose_hit(inf_words, player_positions):
+    inf_player_positions = player_positions.loc[inf_words.index]
     
     ### Use the fact that the ball is hit slightly in front of player!
     how_far_in_front = 8 ### this corresponds to one foot
@@ -419,8 +420,8 @@ def impose_hit(inf_words, player_positions):
     hit_far_cond = inf_words.Event == 'HF'
     hit_near_cond = inf_words.Event == 'HN'
     
-    hypothetical_ball_top = player_positions.top_y_3D + how_far_in_front
-    hypothetical_ball_bot = player_positions.bot_y_3D - how_far_in_front
+    hypothetical_ball_top = inf_player_positions.top_y_3D + how_far_in_front
+    hypothetical_ball_bot = inf_player_positions.bot_y_3D - how_far_in_front
 
     preset_values = inf_words['y_3D']
     imposed_values = np.where(hit_far_cond, hypothetical_ball_top, 
