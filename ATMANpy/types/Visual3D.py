@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 from ATMANpy.types.Frames import BGRFrame
-from ATMANpy.types.Shapes3D import Regions3D
+from ATMANpy.types.ShapesTennis3D import Court, Net
 
 @dataclass(frozen = True)
 class Scene:
@@ -22,8 +22,8 @@ class Scene:
     
     @staticmethod
     def make_court():
-        courtRegions3D = Regions3D.make_court()
-        net3D = Regions3D.make_singles_net()
+        courtRegions3D = Court.make()
+        net3D = Net.make_singles()
 
         return Scene.make_empty().put(courtRegions3D).put(net3D)
     
