@@ -27,28 +27,36 @@ class Scene:
 
         return Scene.make_empty().put(courtRegions3D).put(net3D)
     
+    def is_empty(self):
+        return len(self.shapes) == 0
+    
     def put(self, someShape):
-        return Scene([*self.shapes, someShape])
+        if someShape is None:
+            return self
+        else:
+            return Scene([*self.shapes, someShape])
     
     def rasterize(self, resolution):
         ### yields a point-cloud representation of the objects in the scene, 
         # with points stored in rastArr_all and their colors stored in colArr_all
-        
-        rastArr_all = []
-        colArr_all = []
-        for shape3D in self.shapes:
-            rastArr = shape3D.rasterize(resolution)
+        if self.is_empty():
+            return None, None
+        else:
+            rastArr_all = []
+            colArr_all = []
+            for shape3D in self.shapes:
+                rastArr = shape3D.rasterize(resolution)
+                
+                colTup = shape3D.color
+                colArr = np.tile(np.array(colTup), (len(rastArr), 1)) ### make same shape as rastArr
+                
+                rastArr_all.append(rastArr)
+                colArr_all.append(colArr)
+                
+            rastArr_all = np.concatenate(rastArr_all)
+            colArr_all = np.concatenate(colArr_all)
             
-            colTup = shape3D.color
-            colArr = np.tile(np.array(colTup), (len(rastArr), 1)) ### make same shape as rastArr
-            
-            rastArr_all.append(rastArr)
-            colArr_all.append(colArr)
-            
-        rastArr_all = np.concatenate(rastArr_all)
-        colArr_all = np.concatenate(colArr_all)
-        
-        return rastArr_all, colArr_all
+            return rastArr_all, colArr_all
     
 
 @dataclass(frozen = True)
@@ -148,25 +156,34 @@ class View:
     dsArr: np.array ### distance of objects to camera
     
     @staticmethod
+    def make_empty():
+        return View(np.zeros((0, 3)), 
+                    np.zeros((0, 3)), 
+                    np.zeros((0, 2), dtype = int),  ### pixels need to be integer!
+                    np.zeros(0))
+    
+    @staticmethod
     def make(myCamera, myScene, resolution = 10, do_sort = True, do_filter = True):
-        
-        ### 1) Project Point Cloud in 3D onto 2D Sensor
-        ptArr, clArr = myScene.rasterize(resolution)
-        pxArr = myCamera.project_points(ptArr).astype(int)
-        
-        ### 2) For every point, get distance from Pinhole
-        dsArr = ((ptArr - myCamera.get_t()) ** 2).sum(axis = 1) ** 0.5
-        aView = View(ptArr, clArr, pxArr, dsArr)
-        
-        if do_sort:
-            ### 3) Sort view by distance from pinhole
-            aView = aView.sort_by_distance()
-        
-        if do_filter:
-            ### 4) Filter out duplicate pixel
-            aView = aView.filter_duplicates()
-        
-        return aView
+        if myScene.is_empty(): 
+            return View.make_empty()
+        else:
+            ### 1) Project Point Cloud in 3D onto 2D Sensor
+            ptArr, clArr = myScene.rasterize(resolution)
+            pxArr = myCamera.project_points(ptArr).astype(int)
+            
+            ### 2) For every point, get distance from Pinhole
+            dsArr = ((ptArr - myCamera.get_t()) ** 2).sum(axis = 1) ** 0.5
+            aView = View(ptArr, clArr, pxArr, dsArr)
+            
+            if do_sort:
+                ### 3) Sort view by distance from pinhole
+                aView = aView.sort_by_distance()
+            
+            if do_filter:
+                ### 4) Filter out duplicate pixel
+                aView = aView.filter_duplicates()
+            
+            return aView
 
     def sort_by_distance(self):
         ### 2) For every point, get distance from Pinhole, and sort vectors by it!
