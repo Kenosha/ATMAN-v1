@@ -179,6 +179,8 @@ def find_known_ball_positions_3D(word_inference_frame, projDict):
     
     return ball_3D
 
+#%% BALL INTERPOLATION #########
+
 def interpolate_ball_positions_3D(ball_3D):
     ### INTERPOLATE BALL POSITION ###
     # where we have not imposed one dimension, we interpolate between the events where we did find one.
@@ -187,6 +189,107 @@ def interpolate_ball_positions_3D(ball_3D):
     ball_3D = ball_3D.round().astype(int)
     
     return ball_3D
+
+
+def get_camera_ray_params(somePt, M_int):
+    ### this could potentially be improved by exploiting that M_int[0,1] is NOT zero, 
+    ### as it usually is in the pinhole camera model.
+    
+    u, v = somePt.coords
+    o_x, o_y = M_int[0, 2], M_int[1, 2]
+    f_x, f_y = M_int[0, 0], M_int[1, 1]
+    z_norm = M_int[2, 2]
+    
+    coeff_x_c = (z_norm * (u - o_x)) / f_x
+    coeff_y_c = (z_norm * (v - o_y)) / f_y
+    coeff_z_c = 1       ### since z_c is distance from camera aperture in camera coordinates, 
+                        # and we need a parameter for the line, we choose z_c for convenience. 
+                        # Note: z_c > 0 -> line_parameter > 0
+    
+    slope = np.array([coeff_x_c, coeff_y_c, coeff_z_c])
+
+    intercept = np.zeros(3)
+    return slope, intercept
+    
+def get_world_ray_params(m_c, M_ext):
+    R, t = M_ext[:-1, :-1], M_ext[:-1:, -1]
+    
+    slope = R.T @ m_c
+    intercept = - R.T @ t
+
+    return slope, intercept
+
+def calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt):
+    x1, y1 = lsPt['x_3D'], lsPt['y_3D']
+    xn, yn = nxPt['x_3D'], nxPt['y_3D']
+
+    m1, m2 = m_w[0], m_w[1]
+    b1, b2 = b_w[0], b_w[1]
+
+    num = y1 - m2/m1*x1 + m2/m1*b1 - b2
+    den = m2/m1*(xn-x1) - (yn-y1)
+    
+    lmbd = num/den
+    
+    return lmbd
+
+def calculate_interpolated_point(m_w, b_w, lsPt, nxPt):
+    lmbd = calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)
+    
+    x1, y1 = lsPt['x_3D'], lsPt['y_3D']
+    xn, yn = nxPt['x_3D'], nxPt['y_3D']
+    
+    m1, m2 = m_w[0], m_w[1]
+    b1, b2 = b_w[0], b_w[1]
+    
+    x = x1 + lmbd * (xn - x1)
+    y = y1 + lmbd * (yn - y1)
+    
+    z_c = (x - b1) / m1 ### this is still in camera coords!
+    # z_c = (y - b2) / m2 ### also possible, results should be pretty much the same.
+    z = z_c * m_w[2] + b_w[2]
+    
+    return x, y, z
+
+def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, externalDict):
+    ### ball_3D: a dataframe with three columns: x, y and z; and the video frame numbers in the index
+    ### ball_2D: a dataframe with two columns: x, y; and the video frame numbers in the index
+    ### internalDict: a dictionary of internal camera matrices, with frames in the keys
+    ### externalDict: a dictionary of external camera matrices, with frames in the keys
+    
+    from ATMANpy.types.Points import Point
+    from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
+    
+    known_frames = ball_3D.dropna().index
+    for frame, row in ball_3D.iterrows():
+        if not frame in known_frames:
+            ### here, we need to interpolate!
+            ls_frame, nx_frame = find_last_and_next_list_member(frame, known_frames)
+            if ls_frame is not None and nx_frame is not None:
+                ### if both last and next position are known, we can interpolate
+                lsPt = ball_3D.loc[ls_frame]
+                nxPt = ball_3D.loc[nx_frame]
+                
+                ### now, use the internal and external camera matrices on the frame in question...
+                M_int, M_ext = internalDict[frame], externalDict[frame]
+                ball_data = ball_2D.loc[frame]
+                ballPt = Point((ball_data['x'], ball_data['y']))
+                
+                ### ...to derive the ray on which the ball has to lie
+                m_c, b_c = get_camera_ray_params(ballPt, M_int)
+                m_w, b_w = get_world_ray_params(m_c, M_ext)
+            
+                ### together with knowledge about the last and the next point that is known, 
+                ### we can interpolate!
+                # print(calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt))
+                
+                ball_3D.loc[frame] = calculate_interpolated_point(m_w, b_w, lsPt, nxPt)
+                    
+    ball_3D = interpolate_ball_positions_3D(ball_3D) ### just for backward and forward interpolation    
+
+    return ball_3D
+
+#%%
 
 def calc_ball_dist(ball_3D):
     dist_euclid = ((ball_3D - ball_3D.shift(-1)) ** 2).sum(axis = 1) ** 0.5 
@@ -247,7 +350,7 @@ def narrow_down_instantaneous_events(expanded_events):
         
 def merge_words_and_event_features(words, event_features):
     narrow_events = narrow_down_instantaneous_events(event_features)
-    event_series = pd.Series(narrow_events, name = 'Events')
+    event_series = pd.Series(narrow_events, name = 'Event')
     
     inf_words = pd.concat([words, event_series], axis = 1)
     
@@ -273,8 +376,8 @@ def init_spatial_dimensions(inf_words):
 def impose_serve(inf_words, schemaLines):
            
     ### Use the known latitude for serve -> always at y coord of one of the baselines!
-    serve_near_cond = inf_words.Events.str.startswith('SN')
-    serve_far_cond = inf_words.Events.str.startswith('SF')
+    serve_near_cond = inf_words.Event.str.startswith('SN')
+    serve_far_cond = inf_words.Event.str.startswith('SF')
     serve_near_latitude = schemaLines['Bottom Baseline'].center().y
     serve_far_latitude = schemaLines['Top Baseline'].center().y
     
@@ -288,7 +391,7 @@ def impose_serve(inf_words, schemaLines):
 def impose_net(inf_words, schemaLines):
 
     ### Use the known latitude for NET -> always at y coord of net!
-    net_cond = inf_words.Events.str.startswith('NET')
+    net_cond = inf_words.Event.str.startswith('NET')
     net_latitude = schemaLines['Net Line'].center().y
     
     preset_values = inf_words['y_3D']
@@ -300,7 +403,7 @@ def impose_net(inf_words, schemaLines):
 def impose_bounce(inf_words, bounce_height = 0.2):
     
     ### Use the height for bounce -> ball is low!
-    bounce_cond = inf_words.Events.str.startswith('B')
+    bounce_cond = inf_words.Event.str.startswith('B')
     
     preset_values = inf_words['z_3D']
     imposed_values = np.where(bounce_cond, bounce_height, preset_values)         
@@ -313,8 +416,8 @@ def impose_hit(inf_words, player_positions):
     ### Use the fact that the ball is hit slightly in front of player!
     how_far_in_front = 8 ### this corresponds to one foot
     
-    hit_far_cond = inf_words.Events == 'HF'
-    hit_near_cond = inf_words.Events == 'HN'
+    hit_far_cond = inf_words.Event == 'HF'
+    hit_near_cond = inf_words.Event == 'HN'
     
     hypothetical_ball_top = player_positions.top_y_3D + how_far_in_front
     hypothetical_ball_bot = player_positions.bot_y_3D - how_far_in_front
@@ -342,11 +445,14 @@ def make_3D_features(word_inference_frame, ball_3D, players_3D):
     bad_bounces = []
     
     features_3D = {}
-    for frame in ball_3D.index:
+    
+    word_inference_frame_not_none = word_inference_frame[word_inference_frame['Event'] != 'None']
+    for frame in word_inference_frame_not_none.index:
         
-        event = word_inference_frame.loc[frame, 'Events']
+        event = word_inference_frame.loc[frame, 'Event']
+        
         try:
-            next_event = word_inference_frame.loc[frame + 1, 'Events'] ### for speeds
+            next_event = word_inference_frame.loc[frame + 1, 'Event'] ### for speeds
         except:
             next_event = None
         

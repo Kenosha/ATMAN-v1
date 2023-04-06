@@ -63,7 +63,6 @@ def save_feature_frame(featFrm, featureName, videoName, storeName):
     
     featFrm.to_csv(filePath)   
     
-
 def save_contours(stream_features, featureName, videoName, storeName, compression = None):
     myFeature = {frmNum: extract_contour_values(featDict[featureName], compression = compression) for frmNum, featDict in stream_features.items() if featDict[featureName] is not None}
     featFrm = pd.DataFrame(myFeature).T ### in rows: frame number. 
@@ -201,7 +200,7 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
         featDict = atu.get_folder_struct('features_stored')
         featPath = os.path.join(featDict['main'], videoName, storeName)
 
-        featnameList = [f for f in os.listdir(featPath) if not f.endswith('.csv')]
+        featnameList = [f for f in os.listdir(featPath) if not f.endswith('.csv') and not f.startswith('3D')]
     
     ### collect all feature frames
     frameDict = {}
