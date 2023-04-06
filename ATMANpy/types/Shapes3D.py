@@ -149,17 +149,13 @@ class Ball3D:
     """
     A sphere: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
     """   
-    _SCALE = 8 ### TODO: this should be a global variable, since it is the same scale as in courtLines...
-    _RADIUS_IN_FEET = 0.108  ### what is the correct default radius? 
-                              ## should be the tennis ball in the usual coord system of court lines.
-                              ## ball radius in feet (2.6 inch diameter -> 1.3 inch radius = 0.108 ft.)
-    _DEFAULT_COLOR = (79, 255, 223) ### color of tennis ball in BGR
+    _DEFAULT_COLOR = (255, 255, 255)
     
     coords: tuple
+    radius: float
     
-    radius: Optional[float] = _SCALE * _RADIUS_IN_FEET
     color: Optional[tuple] = _DEFAULT_COLOR
-    name: str = 'Ball'
+    name: str = 'Ball3D'
     
     def __post_init__(self):
         #### IMMUTABILITY BREAKS ####
@@ -331,10 +327,6 @@ class Lines3D:
         return Lines3D([Line3D.from_line(aLn, x = x, y = y, z = z) for aLn in aLns], 
                       name = name)
     
-    # @staticmethod
-    # def make_court():
-    #     return Lines3D.from_lines(CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN), z = 0, name = 'CourtLines3D')
-    
     
 @dataclass(frozen = True)
 class Region3D():
@@ -460,7 +452,6 @@ class Regions3D():
     A list of regions, i.e. a set of planes that make some composite shape.
     """
     _DEFAULT_COLOR = (255, 255, 255)
-    _NET_COLOR = (212, 127, 255) ### a nice aquamarine
     
     regList: List[Region3D]
     
@@ -493,52 +484,6 @@ class Regions3D():
     def from_lines(aLns, width, dim = 'x', name = 'Regions3D', color = _DEFAULT_COLOR):
         return Regions3D([Region3D.from_line(aLn, width, dim = dim) for aLn in aLns], 
                          name = name, color = color)
-
-    # @staticmethod
-    # def make_court(color = _DEFAULT_COLOR):
-    #     courtLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
-    #     courtDims = courtLines.see_dimensions()
-        
-    #     courtLines3D = Lines3D.from_lines(courtLines, z = 0, name = 'CourtLines3D')
-        
-    #     courtRegions3D = []
-    #     for cLn in courtLines3D:
-    #         ### determine the dimension in which to thicken the lines
-    #         if cLn.is_left_to_right():
-    #             dim = 'y'
-    #         elif cLn.is_front_to_back():
-    #             dim = 'x'
-    #         else:
-    #             raise Exception('Court Lines can not have a non-zero z dimension!')
-            
-    #         ### determine the width of the line
-    #         if 'Baseline' in cLn.name:
-    #             width = courtDims['baseline_width']
-    #         else:
-    #             width = courtDims['otherline_width']
-            
-    #         courtRegions3D.append(Region3D.from_line(cLn, width = width, dim = dim, name = cLn.name))
-            
-    #     return Regions3D(courtRegions3D, name = 'CourtLines3D', color = color)    
-    
-    # @staticmethod
-    # def make_singles_net(color = _NET_COLOR):
-    #     courtLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
-    #     courtDims = courtLines.see_dimensions()
-        
-    #     netLn = Line3D.from_line(courtLines.add_singles_netline()['Net Line'], z = 0)
-    #     lPt, cPt, rPt = netLn.subdivide(3)
-    #     left_netLn = Line3D(lPt, cPt, name = 'Bottom')
-    #     right_netLn = Line3D(cPt, rPt, name = 'Bottom')
-        
-    #     lPt_up, cPt_up, rPt_up = [lPt.up(courtLines.net_height_post), 
-    #                               cPt.up(courtLines.net_height_middle), 
-    #                               rPt.up(courtLines.net_height_post)]
-    #     leftReg = Region3D.from_points(lPt_up, cPt_up, lPt, cPt)
-    #     rightReg = Region3D.from_points(cPt_up, rPt_up, cPt, rPt)
-        
-    #     return Regions3D([leftReg, rightReg], name = 'Net3D', color = color)
-        
         
     def rasterize(self, resolution):
         return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)

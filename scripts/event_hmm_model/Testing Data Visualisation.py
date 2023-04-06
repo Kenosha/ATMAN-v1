@@ -76,65 +76,81 @@ ball_3D_infer_show = ball_3D_infer[ball_3D_infer.index.isin(seq_data_infer.index
 ball_3D_ground_show = ball_3D_ground[ball_3D_ground.index.isin(seq_data_ground.index)]
 players_3D_show = players_3D[players_3D.index.isin(seq_data_infer.index)]
 
+#%% #### UTILITY SHAPES ####
+
+# def make_racket(player_coords, ball_coords_at_impact, ball_coords_frame_before):
+#     ### all of these have to be 3D!
+    
+    
 
 #%% #### VISUALIZE #########
 
 MS_BETWEEN_FRAMES = 40
+SHOW_VIDEO = False
+SHOW_GROUND = False
+SHOW_INFERENCE = True
 
 ### 1) Real Video
-frame_min, frame_max = min(seq_data_ground.index), max(seq_data_ground.index)
-show_video(cap, 
-            start_frame = frame_min, stop_frame = frame_max,
-            ms_between_frames = MS_BETWEEN_FRAMES)
+if SHOW_VIDEO:
+    frame_min, frame_max = min(seq_data_ground.index), max(seq_data_ground.index)
+    show_video(cap, 
+                start_frame = frame_min, stop_frame = frame_max,
+                ms_between_frames = MS_BETWEEN_FRAMES)
 
-### 2a) Generated View: Ground Truth
+### 2) Generated Views
 from ATMANpy.types.Visual3D import View, Camera, Scene
-from ATMANpy.types.Shapes3D import Ball3D
+from ATMANpy.types.ShapesTennis3D import Ball
 
-myCam = Camera.calibrated_AO_behind()
-backScn = Scene.make_court()
-frntScn = Scene.make_empty()
-backView = View.make(myCam, backScn)
+if SHOW_GROUND:
+    ### 2a) Ground Truth
 
-for frame in seq_data_ground.index:
+    myCam = Camera.calibrated_AO_behind()
+    backScn = Scene.make_court()
+    frntScn = Scene.make_empty()
+    backView = View.make(myCam, backScn)
     
-    try:
-        x, y, z = ball_3D_ground_show.loc[frame]
-    except KeyError:
-        tBall = None
-    else:
-        tBall = Ball3D((x, y, z))
-    frontView = View.make(myCam, frntScn.put(tBall))
-    
-    showFrm = backView.combine(frontView).snap()
-    show_continuous(showFrm.array, ms_between_frames = MS_BETWEEN_FRAMES)
-    
-cv.destroyAllWindows()
+    for frame in seq_data_ground.index:
+        
+        try:
+            x, y, z = ball_3D_ground_show.loc[frame]
+        except KeyError:
+            tBall = None
+        else:
+            tBall = Ball.make((x, y, z))
+        frontView = View.make(myCam, frntScn.put(tBall))
+        
+        showFrm = backView.combine(frontView).snap()
+        show_continuous(showFrm.array, ms_between_frames = MS_BETWEEN_FRAMES)
+        
+    cv.destroyAllWindows()
 
-
-### 2b) Generated View: Inference
-from ATMANpy.types.Visual3D import View, Camera, Scene
-from ATMANpy.types.Shapes3D import Ball3D
-
-myCam = Camera.calibrated_AO_behind()
-backScn = Scene.make_court()
-frntScn = Scene.make_empty()
-backView = View.make(myCam, backScn)
-
-for frame in seq_data_infer.index:
+if SHOW_INFERENCE:
+    ### 2b) Inference
     
-    try:
-        x, y, z = ball_3D_infer_show.loc[frame]
-    except KeyError:
-        tBall = None
-    else:
-        tBall = Ball3D((x, y, z))
-    frontView = View.make(myCam, frntScn.put(tBall))
+    myCam = Camera.calibrated_AO_behind()
+    backScn = Scene.make_court()
+    frntScn = Scene.make_empty()
+    backView = View.make(myCam, backScn)
     
-    showFrm = backView.combine(frontView).snap()
-    show_continuous(showFrm.array, ms_between_frames = MS_BETWEEN_FRAMES)
-    
-cv.destroyAllWindows()
+    for frame in seq_data_infer.index:
+        
+        ### Get Ball 3D Data
+        try:
+            x, y, z = ball_3D_infer_show.loc[frame]
+        except KeyError:
+            tBall = None
+        else:
+            tBall = Ball.make((x, y, z))
+            
+        ### Make Racket
+        players_3D_show.loc[frame]
+            
+        frontView = View.make(myCam, frntScn.put(tBall))
+        
+        showFrm = backView.combine(frontView).snap()
+        show_continuous(showFrm.array, ms_between_frames = MS_BETWEEN_FRAMES)
+        
+    cv.destroyAllWindows()
 
 
 

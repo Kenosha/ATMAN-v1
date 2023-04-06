@@ -9,7 +9,7 @@ from ATMANpy.types.Lines import Line, Lines, CourtLines
 
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 
-from ATMANpy.types.Shapes3D import Line3D, Region3D, Lines3D, Regions3D
+from ATMANpy.types.Shapes3D import Line3D, Region3D, Lines3D, Regions3D, Ball3D
 
 
 # @dataclass(frozen = True)
@@ -29,11 +29,6 @@ class Court(Regions3D):
     """
     _LINE_COLOR = (255, 255, 255)
     
-    regList: List[Region3D]
-    
-    name: str = 'CourtRegions3D'
-    color: Optional[tuple] = _LINE_COLOR
-
     @staticmethod
     def make(color = _LINE_COLOR):
         courtLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
@@ -59,16 +54,11 @@ class Court(Regions3D):
             
             courtRegions3D.append(Region3D.from_line(cLn, width = width, dim = dim, name = cLn.name))
             
-        return Court(courtRegions3D, name = 'CourtLines3D', color = color)    
+        return Court(courtRegions3D, name = 'Courtlines', color = color)    
     
 @dataclass(frozen = True)
 class Net(Regions3D):
     _NET_COLOR = (212, 127, 255) ### a nice aquamarine
-    
-    regList: List[Region3D]
-    
-    name: str = 'CourtRegions3D'
-    color: Optional[tuple] = _NET_COLOR
     
     @staticmethod
     def make_singles(color = _NET_COLOR):
@@ -83,6 +73,29 @@ class Net(Regions3D):
         leftReg = Region3D.from_points(lPt_up, cPt_up, lPt, cPt)
         rightReg = Region3D.from_points(cPt_up, rPt_up, cPt, rPt)
         
-        return Net([leftReg, rightReg], name = 'Net3D', color = color)
+        return Net([leftReg, rightReg], name = 'Net', color = color)
         
+@dataclass(frozen = True)
+class Ball(Ball3D):
+    _SCALE = 2 * SCHEMA_SIZE  ## times two, because there is a minimum scale factor... 
+    _RADIUS_IN_FEET = 0.108  ### what is the correct default radius? 
+                              ## should be the tennis ball in the usual coord system of court lines.
+                              ## ball radius in feet (2.6 inch diameter -> 1.3 inch radius = 0.108 ft.)
+    _BALL_COLOR = (79, 255, 223) ### color of tennis ball in BGR
+    
+    @staticmethod
+    def make(coords):
+        return Ball(coords, Ball._RADIUS_IN_FEET * Ball._SCALE, 
+                    color = Ball._BALL_COLOR, name = 'Tennis Ball')
+    
+# @dataclass(frozen = True)
+# class Racket(Region3D):
+    
+    
+    # @staticmethod
+    # def make(player)
+    
+    
+    
+       
         
