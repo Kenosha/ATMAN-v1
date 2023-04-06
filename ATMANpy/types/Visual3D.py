@@ -10,14 +10,22 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 from ATMANpy.types.Frames import BGRFrame
+from ATMANpy.types.Shapes3D import Regions3D
 
 @dataclass(frozen = True)
 class Scene:
     shapes: List ### a collection of various 3D shapes
     
     @staticmethod
-    def make():
+    def make_empty():
         return Scene([])
+    
+    @staticmethod
+    def make_court():
+        courtRegions3D = Regions3D.make_court()
+        net3D = Regions3D.make_singles_net()
+
+        return Scene.make_empty().put(courtRegions3D).put(net3D)
     
     def put(self, someShape):
         return Scene([*self.shapes, someShape])
@@ -204,7 +212,7 @@ class View:
     
 # from ATMANpy.types.Shapes3D import Ball3D, Lines3D, Region3D, Regions3D
 
-# emptyScn = Scene.make() 
+# emptyScn = Scene.empty() 
 # courtRegions3D = Regions3D.make_court()
 # myBall = Ball3D((30, 30, 30))
 # myNet = Regions3D.make_singles_net()

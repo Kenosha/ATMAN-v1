@@ -13,6 +13,7 @@ from typing import Optional, List
 from ATMANpy.types.Points import Point
 from ATMANpy.types.Lines import Line, Lines, CourtLines
 
+from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 
 @dataclass(frozen = True)
 class Point3D:
@@ -332,7 +333,7 @@ class Lines3D:
     
     @staticmethod
     def make_court():
-        return Lines3D.from_lines(CourtLines.make(), z = 0, name = 'CourtLines3D')
+        return Lines3D.from_lines(CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN), z = 0, name = 'CourtLines3D')
     
     
 @dataclass(frozen = True)
@@ -495,7 +496,7 @@ class Regions3D():
 
     @staticmethod
     def make_court(color = _DEFAULT_COLOR):
-        courtLines = CourtLines.make()
+        courtLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
         courtDims = courtLines.see_dimensions()
         
         courtLines3D = Lines3D.from_lines(courtLines, z = 0, name = 'CourtLines3D')
@@ -522,7 +523,7 @@ class Regions3D():
     
     @staticmethod
     def make_singles_net(color = _NET_COLOR):
-        courtLines = CourtLines.make()
+        courtLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
         courtDims = courtLines.see_dimensions()
         
         netLn = Line3D.from_line(courtLines.add_singles_netline()['Net Line'], z = 0)
