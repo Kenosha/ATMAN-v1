@@ -62,6 +62,10 @@ class Point3D:
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.coords[0] * op_x, self.coords[1] * op_y, self.coords[2] * op_z
         return Point3D(outCoords)
+    def __truediv__(self, other):
+        op_x, op_y, op_z = Point3D.get_operant(other)
+        outCoords = self.coords[0] / op_x, self.coords[1] / op_y, self.coords[2] / op_z
+        return Point3D(outCoords)
     def __floordiv__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.coords[0] // op_x, self.coords[1] // op_y, self.coords[2] // op_z
@@ -97,7 +101,7 @@ class Point3D:
         x_dist_64 = int(self.x - aPt.x) ### to prevent overflow when squaring.
         y_dist_64 = int(self.y - aPt.y) ### to prevent overflow when squaring.
         z_dist_64 = int(self.z - aPt.z) ### to prevent overflow when squaring.
-        res = (x_dist_64 ** 2 + y_dist_64 ** 2 + z_dist_64) ** 0.5
+        res = (x_dist_64 ** 2 + y_dist_64 ** 2 + z_dist_64 ** 2) ** 0.5
         return res
     
     def is_left(self, inObj):
@@ -163,6 +167,9 @@ class Ball3D:
         object.__setattr__(self, 'y', self.coords[1])
         object.__setattr__(self, 'z', self.coords[2])
         #############################  
+
+    def get_point(self):
+        return Point3D(self.coords)
     
     def rasterize(self, resolution, offset = 0.5):
         ### resolution -> points in a area of 1 sq. unit size 
@@ -179,6 +186,8 @@ class Ball3D:
         unit_circle = np.array([np.cos(theta) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi)]).T
         
         return unit_circle * self.radius + np.array(self.coords)[np.newaxis, :]
+
+
 
 
 @dataclass(frozen = True)
@@ -275,6 +284,9 @@ class Line3D:
             return self.leftPt
         else:
             return self.rightPt
+        
+    def center_point(self):
+        return (self.leftPt + self.rightPt) / 2
             
     def subdivide(self, elements = 100, return_coords = False):
         x_space = np.linspace(self.leftPt.x, self.rightPt.x, num = elements)
@@ -372,6 +384,7 @@ class Region3D():
     
     @staticmethod
     def from_points(p1: Point3D, p2: Point3D, p3: Point3D, p4: Point3D, 
+                    left_right = '+x', top_bottom = '+y',
                     name = 'Region3D', color = _DEFAULT_COLOR):
         # is_rectangle = p3 is None and p4 is None
         # if is_rectangle:
@@ -380,9 +393,17 @@ class Region3D():
             
         ### to connect arbitrary four points without crossing lines,
         # check the two leftmost points, and the two upper points.
-        l1, l2, r1, r2 = sorted([p1, p2, p3, p4], key = lambda pt: pt.x)   
-        lt, lb = sorted([l1, l2], key = lambda pt: pt.y)   
-        rt, rb = sorted([r1, r2], key = lambda pt: pt.y)   
+        def make_key_func(sign_and_coord):
+            sign, coord = sign_and_coord
+            if sign == '-':
+                return lambda pt: - getattr(pt, coord)
+            else:
+                return lambda pt: getattr(pt, coord)
+                
+        
+        l1, l2, r1, r2 = sorted([p1, p2, p3, p4], key = lambda pt: make_key_func(left_right)(pt))   
+        lt, lb = sorted([l1, l2], key = make_key_func(top_bottom))
+        rt, rb = sorted([r1, r2], key = make_key_func(top_bottom)) 
         
         lineList = [Line3D(lt, lb, name = 'Left'), 
                     Line3D(lt, rt, name = 'Top'), 
@@ -400,7 +421,7 @@ class Region3D():
         return Region3D(regLines, name = name, color = color)
     
     @staticmethod
-    def from_line(aLn, width, dim = 'x', 
+    def from_line(aLn, width, dim = 'x', left_right = '+x', top_bottom = '+y',
                   name = 'Region3D', color = _DEFAULT_COLOR):
         ### basically thicken a line to yield a region!
         ### the width dimension 'dim' is the dimension along which the thickness is introduced!
@@ -409,18 +430,21 @@ class Region3D():
                                         aLn.leftPt.right(width/2),
                                         aLn.rightPt.left(width/2),
                                         aLn.rightPt.right(width/2),
+                                        left_right = left_right, top_bottom = top_bottom,
                                         name = name, color = color)
         if dim == 'y':
             return Region3D.from_points(aLn.leftPt.front(width/2),
                                         aLn.leftPt.back(width/2),
                                         aLn.rightPt.front(width/2),
                                         aLn.rightPt.back(width/2),
+                                        left_right = left_right, top_bottom = top_bottom,
                                         name = name, color = color)
         if dim == 'z':
             return Region3D.from_points(aLn.leftPt.up(width/2),
                                         aLn.leftPt.down(width/2),
                                         aLn.rightPt.up(width/2),
                                         aLn.rightPt.down(width/2),
+                                        left_right = left_right, top_bottom = top_bottom,
                                         name = name, color = color)
     
     def rasterize(self, resolution):

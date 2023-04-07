@@ -8,8 +8,9 @@ from ATMANpy.types.Points import Point
 from ATMANpy.types.Lines import Line, Lines, CourtLines
 
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
+SCALE = 2 * SCHEMA_SIZE  ## times two, because there is a minimum scale factor... 
 
-from ATMANpy.types.Shapes3D import Line3D, Region3D, Lines3D, Regions3D, Ball3D
+from ATMANpy.types.Shapes3D import Point3D, Ball3D, Line3D, Region3D, Lines3D, Regions3D
 
 
 # @dataclass(frozen = True)
@@ -77,7 +78,6 @@ class Net(Regions3D):
         
 @dataclass(frozen = True)
 class Ball(Ball3D):
-    _SCALE = 2 * SCHEMA_SIZE  ## times two, because there is a minimum scale factor... 
     _RADIUS_IN_FEET = 0.108  ### what is the correct default radius? 
                               ## should be the tennis ball in the usual coord system of court lines.
                               ## ball radius in feet (2.6 inch diameter -> 1.3 inch radius = 0.108 ft.)
@@ -85,17 +85,111 @@ class Ball(Ball3D):
     
     @staticmethod
     def make(coords):
-        return Ball(coords, Ball._RADIUS_IN_FEET * Ball._SCALE, 
+        return Ball(coords, Ball._RADIUS_IN_FEET * SCALE, 
                     color = Ball._BALL_COLOR, name = 'Tennis Ball')
     
-# @dataclass(frozen = True)
-# class Racket(Region3D):
+@dataclass(frozen = True)
+class Player(Region3D):
+    _DEFAULT_HEIGHT = 6 ### in feet
+    _DEFAULT_WIDTH = 1
+    _DEFAULT_COLOR = (170, 255, 127) ### complement of net
+    _DEFAULT_NAME = 'Player'
+    
+    # coords: Point3D() ### 3D coordinates
+    # height: Optional[float] = _DEFAULT_HEIGHT * SCALE
+    
+    @staticmethod
+    def make(coords, height = _DEFAULT_HEIGHT * SCALE, width = _DEFAULT_WIDTH * SCALE,
+             color = _DEFAULT_COLOR, name = _DEFAULT_NAME):
+        if len(coords) == 2:
+            x, y = coords
+            z = 0
+        elif len(coords) == 3:
+            x, y, z = coords
+            
+        loPt = Point3D((x, y, z))
+        hiPt = loPt.up(height)
+        
+        centerLn = Line3D(loPt, hiPt)
+        return Player.from_line(centerLn, width, dim = 'x',
+                                     left_right = '+x', top_bottom = '-z',
+                                     color = color, name = name)
     
     
-    # @staticmethod
-    # def make(player)
+@dataclass(frozen = True)
+class Racquet(Region3D):
+    _DEFAULT_GRIP_HEIGHT = 4 * SCALE
+    # _DEFAULT_HEAD_HEIGHT = 5 * SCALE
+    _DEFAULT_LENGTH = 2.25 * SCALE
+    _DEFAULT_GRIP_WIDTH = 0.125 * SCALE
+    _DEFAULT_HEAD_WIDTH = 0.85 * SCALE
+    _DEFAULT_COLOR = (255, 212, 127)
+    _GRIP_TO_SWEET = 3/4 ### distance from grip end to sweet spot, as proportion of entire racquet length. 
+    
+    @staticmethod
+    def make(gripPt, spotPt, color = _DEFAULT_COLOR):
+        ### make from two points: bottom of the grip, and sweet spot
+
+        ### lengthen the line beyond the sweet spot, to include also the top
+        topPt = gripPt + (spotPt - gripPt) / Racquet._GRIP_TO_SWEET
+        
+        ## to initialise the racket, assume that it's edge is straight up.
+        ### TODO: NO! Need an angle of orientation for the face here!!!
+        t1, t2 = topPt.down(Racquet._DEFAULT_HEAD_WIDTH / 2), topPt.up(Racquet._DEFAULT_HEAD_WIDTH / 2)
+        b1, b2 = gripPt.down(Racquet._DEFAULT_GRIP_WIDTH / 2), gripPt.up(Racquet._DEFAULT_GRIP_WIDTH / 2)
+        
+        
+        # myRacquet = Racquet.from_points(t1, t2, b1, b2, color = color) ## -> sadly, this returns a region!
+        racquetLines = Region3D.from_points(t1, t2, b1, b2)
+        myRacquet = Racquet(racquetLines, color = color, name = 'Racquet')
+        
+        ### immutability breaks... just this once.
+        object.__setattr__(myRacquet, 'spotPt', spotPt) 
+        object.__setattr__(myRacquet, 'gripPt', gripPt)
+        
+        return myRacquet
     
     
-    
+    @staticmethod
+    def make_at_player(aPlayer, distance_from_player = 0, height = _DEFAULT_GRIP_HEIGHT,
+                       dir_hori = 0, dir_vert = 0, color = _DEFAULT_COLOR):
+        ### distance from player: the distance at which the player holds the racket from his trunk
+        ### height: the height at which the player holds the racket
+        ### dir_hori, dir_vert: horizontal and vertical angles, expressed in multiples of pi
+        centerPt = aPlayer['Bottom'].center_point().up(height)
+        gamma = np.pi * dir_hori
+        theta = np.pi * dir_vert
+        
+        ### make grip point
+        radius_inner = distance_from_player
+        unit_coords = np.sin(theta) * np.cos(gamma), np.sin(theta) * np.sin(gamma), np.cos(theta)
+        gripPt = Point3D(unit_coords) * radius_inner + centerPt
        
+        ### assumption here is that the angles are still direction_horizontal and _vertical.
+        radius_outer = radius_inner + Racquet._DEFAULT_LENGTH * Racquet._GRIP_TO_SWEET
+        spotPt = Point3D(unit_coords) * radius_outer + centerPt
+        
+        return Racquet.make(gripPt, spotPt, color = color)
+    
+    @staticmethod
+    def make_at_contact(aPlayer, aBall, 
+                        height = _DEFAULT_GRIP_HEIGHT, color = _DEFAULT_COLOR):
+        centerPt = aPlayer['Bottom'].center_point().up(height)
+        ballPt = aBall.get_point()
+        
+        lmbd = Racquet._DEFAULT_LENGTH / centerPt.distance_to(ballPt)
+        gripPt = ballPt + lmbd * (centerPt - ballPt)
+        
+        return Racquet.make(gripPt, ballPt)
+        
+    def find_dirs_hori_vert(self):
+        x, y, z = (self.spotPt - self.gripPt).coords
+        r = (x ** 2 + y ** 2 + z ** 2) * 0.5
+        theta = np.arccos(z / r)
+        gamma = np.arcsin(y / (r * np.sin(theta)))
+       
+        dir_hori = gamma / np.pi
+        dir_vert = theta / np.pi
+        return dir_hori, dir_vert
+        
         

@@ -90,6 +90,9 @@ SHOW_VIDEO = False
 SHOW_GROUND = False
 SHOW_INFERENCE = True
 
+BACKGROUND_RES = 1
+FOREGROUND_RES = 1
+
 ### 1) Real Video
 if SHOW_VIDEO:
     frame_min, frame_max = min(seq_data_ground.index), max(seq_data_ground.index)
@@ -99,7 +102,7 @@ if SHOW_VIDEO:
 
 ### 2) Generated Views
 from ATMANpy.types.Visual3D import View, Camera, Scene
-from ATMANpy.types.ShapesTennis3D import Ball
+from ATMANpy.types.ShapesTennis3D import Ball, Player, Racquet
 
 if SHOW_GROUND:
     ### 2a) Ground Truth
@@ -107,7 +110,7 @@ if SHOW_GROUND:
     myCam = Camera.calibrated_AO_behind()
     backScn = Scene.make_court()
     frntScn = Scene.make_empty()
-    backView = View.make(myCam, backScn)
+    backView = View.make(myCam, backScn, resolution = BACKGROUND_RES)
     
     for frame in seq_data_ground.index:
         
@@ -129,8 +132,7 @@ if SHOW_INFERENCE:
     
     myCam = Camera.calibrated_AO_behind()
     backScn = Scene.make_court()
-    frntScn = Scene.make_empty()
-    backView = View.make(myCam, backScn)
+    backView = View.make(myCam, backScn, resolution = BACKGROUND_RES)
     
     for frame in seq_data_infer.index:
         
@@ -142,10 +144,17 @@ if SHOW_INFERENCE:
         else:
             tBall = Ball.make((x, y, z))
             
-        ### Make Racket
-        players_3D_show.loc[frame]
+        ### Make Player
+        x_top, y_top, z_top, x_bot, y_bot, z_bot = players_3D_show.loc[frame]
+        topPlayer = Player.make((x_top, y_top, z_top), name = 'Roger Federer')
+        botPlayer = Player.make((x_bot, y_bot, z_bot), name = 'Tomas Berdych') 
             
-        frontView = View.make(myCam, frntScn.put(tBall))
+        ### Make Racket
+        topRacquet = Racquet.make_at_player(topPlayer, distance_from_player = 10, dir_hori = 0, dir_vert = 0.5)
+        botRacquet = Racquet.make_at_player(botPlayer, distance_from_player = 10, dir_hori = 0, dir_vert = 0.5)
+        
+        frntScn = Scene.make_empty().put(tBall).put(topPlayer).put(botPlayer).put(topRacquet).put(botRacquet)
+        frontView = View.make(myCam, frntScn, resolution = FOREGROUND_RES)
         
         showFrm = backView.combine(frontView).snap()
         show_continuous(showFrm.array, ms_between_frames = MS_BETWEEN_FRAMES)

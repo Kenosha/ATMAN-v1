@@ -212,7 +212,10 @@ class View:
 
         for pixel, color in zip(self.pxArr, self.clArr):
             u, v = pixel
-            snapArr[v, u] = color ### note the switch here: u are columns, v are rows, so indexing inverts! 
+            try:
+                snapArr[v, u] = color ### note the switch here: u are columns, v are rows, so indexing inverts! 
+            except IndexError:
+                pass
         
         snapFrm = BGRFrame(snapArr)
         
