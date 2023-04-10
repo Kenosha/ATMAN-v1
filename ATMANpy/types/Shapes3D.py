@@ -96,13 +96,15 @@ class Point3D:
     def up(self, units):
         return Point3D((self.x, self.y, self.z + units))
 
-
     def distance_to(self, aPt):
-        x_dist_64 = int(self.x - aPt.x) ### to prevent overflow when squaring.
-        y_dist_64 = int(self.y - aPt.y) ### to prevent overflow when squaring.
-        z_dist_64 = int(self.z - aPt.z) ### to prevent overflow when squaring.
-        res = (x_dist_64 ** 2 + y_dist_64 ** 2 + z_dist_64 ** 2) ** 0.5
+        x_dist = self.x - aPt.x
+        y_dist = self.y - aPt.y
+        z_dist = self.z - aPt.z
+        res = (x_dist ** 2 + y_dist ** 2 + z_dist ** 2) ** 0.5
         return res
+    
+    def length(self):
+        return self.distance_to(Point3D((0, 0, 0)))
     
     def is_left(self, inObj):
         if isinstance(inObj, Point3D):
@@ -146,6 +148,28 @@ class Point3D:
             comp = inObj
         return self.z > comp
 
+    def find_perpendicular(self):
+        ### finds one (of infinitely many) perpendicular vectors
+        v1, v2, v3 = self.coords
+
+        orthVec = Point3D((v3, v3, -v1-v2))
+        orthLen = orthVec.length()
+        if orthLen == 0:
+            orthVec = Point3D(v3, v3, -v1-v2)
+        return orthVec
+    
+    def find_orientation_hori_vert(self):
+        x, y, z = self.coords
+        r = self.length()
+        theta = np.arccos(z / r)
+        gamma = np.arcsin(y / (r * np.sin(theta)))
+       
+        dir_hori = gamma / np.pi
+        dir_vert = theta / np.pi
+        return dir_hori, dir_vert
+    
+    def cross(self, otherPt):
+        return Point3D(tuple(np.cross(self.coords, otherPt.coords)))
     
 
 @dataclass(frozen = True)
@@ -302,6 +326,16 @@ class Line3D:
     
     def length(self):
         return self.leftPt.distance_to(self.rightPt)        
+    
+    def to_vector(self):
+        return self.rightPt - self.leftPt
+    
+    def find_perpendicular(self):
+        return Line(Point3D((0, 0, 0)), self.to_vector().find_perpendicular())
+    
+    def find_orientation_hori_vert(self):
+        return self.to_vector().find_orientation_hori_vert()
+        
     
     
 @dataclass(frozen = True)

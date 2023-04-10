@@ -127,32 +127,49 @@ class Racquet(Region3D):
     _GRIP_TO_SWEET = 3/4 ### distance from grip end to sweet spot, as proportion of entire racquet length. 
     
     @staticmethod
-    def make(gripPt, spotPt, color = _DEFAULT_COLOR):
+    def make(gripPt, spotPt, inclination = 0, color = _DEFAULT_COLOR):
         ### make from two points: bottom of the grip, and sweet spot
+        racquetVector = spotPt - gripPt
 
         ### lengthen the line beyond the sweet spot, to include also the top
-        topPt = gripPt + (spotPt - gripPt) / Racquet._GRIP_TO_SWEET
+        topPt = gripPt + racquetVector / Racquet._GRIP_TO_SWEET
         
-        ## to initialise the racket, assume that it's edge is straight up.
-        ### TODO: NO! Need an angle of orientation for the face here!!!
-        t1, t2 = topPt.down(Racquet._DEFAULT_HEAD_WIDTH / 2), topPt.up(Racquet._DEFAULT_HEAD_WIDTH / 2)
-        b1, b2 = gripPt.down(Racquet._DEFAULT_GRIP_WIDTH / 2), gripPt.up(Racquet._DEFAULT_GRIP_WIDTH / 2)
+        ### find the points on the frame, to the left and right of the sweet spot
+        incl_rad = np.pi * inclination
+        # find two perpendicular vectors to racquet
+        orthVector_1 = racquetVector.find_perpendicular()
+        orthVector_2 = orthVector_1.cross(racquetVector)
+        # normalize to unit length
+        orthVector_1, orthVector_2 = orthVector_1 / orthVector_1.length(), orthVector_2 / orthVector_2.length()
+        # find unit_circle orthogonal to racket
+        unitPt = orthVector_1 * np.cos(incl_rad) + orthVector_2 * np.sin(incl_rad)
+        # scale and shift circle
+        scaledPt = unitPt * Racquet._DEFAULT_HEAD_WIDTH / 2
+        framePt_1, framePt_2, = spotPt + scaledPt, spotPt - scaledPt
         
-        
+        ### finalize racquet
         # myRacquet = Racquet.from_points(t1, t2, b1, b2, color = color) ## -> sadly, this returns a region!
-        racquetLines = Region3D.from_points(t1, t2, b1, b2)
+        racquetLines = Region3D.from_points(gripPt, framePt_1, topPt, framePt_2)
         myRacquet = Racquet(racquetLines, color = color, name = 'Racquet')
         
-        ### immutability breaks... just this once.
-        object.__setattr__(myRacquet, 'spotPt', spotPt) 
-        object.__setattr__(myRacquet, 'gripPt', gripPt)
+        ### immutability breaks...
+        # a) Angles
+        object.__setattr__(myRacquet, 'inclination', inclination)
+        dir_hori, dir_vert = myRacquet.find_orientation_hori_vert()
+        object.__setattr__(myRacquet, 'dir_hori', dir_hori)
+        object.__setattr__(myRacquet, 'dir_vert', dir_vert)
+        
+        # b) Lines and Vectors
+        object.__setattr__(myRacquet, 'racquetLine', Line3D(gripPt, spotPt)) 
+        object.__setattr__(myRacquet, 'planeVec1', orthVector_1)
+        object.__setattr__(myRacquet, 'planeVec2', orthVector_2)
         
         return myRacquet
     
     
     @staticmethod
     def make_at_player(aPlayer, distance_from_player = 0, height = _DEFAULT_GRIP_HEIGHT,
-                       dir_hori = 0, dir_vert = 0, color = _DEFAULT_COLOR):
+                       dir_hori = 0, dir_vert = 0, inclination = 0, color = _DEFAULT_COLOR):
         ### distance from player: the distance at which the player holds the racket from his trunk
         ### height: the height at which the player holds the racket
         ### dir_hori, dir_vert: horizontal and vertical angles, expressed in multiples of pi
@@ -169,10 +186,11 @@ class Racquet(Region3D):
         radius_outer = radius_inner + Racquet._DEFAULT_LENGTH * Racquet._GRIP_TO_SWEET
         spotPt = Point3D(unit_coords) * radius_outer + centerPt
         
-        return Racquet.make(gripPt, spotPt, color = color)
+        return Racquet.make(gripPt, spotPt, inclination = inclination, color = color)
     
     @staticmethod
     def make_at_contact(aPlayer, aBall, 
+                        aBall_before = None, aBall_after = None, ### provide these to make inclination, using law of reflection.
                         height = _DEFAULT_GRIP_HEIGHT, color = _DEFAULT_COLOR):
         centerPt = aPlayer['Bottom'].center_point().up(height)
         ballPt = aBall.get_point()
@@ -182,14 +200,7 @@ class Racquet(Region3D):
         
         return Racquet.make(gripPt, ballPt)
         
-    def find_dirs_hori_vert(self):
-        x, y, z = (self.spotPt - self.gripPt).coords
-        r = (x ** 2 + y ** 2 + z ** 2) * 0.5
-        theta = np.arccos(z / r)
-        gamma = np.arcsin(y / (r * np.sin(theta)))
-       
-        dir_hori = gamma / np.pi
-        dir_vert = theta / np.pi
-        return dir_hori, dir_vert
+    def find_orientation_hori_vert(self):
+        return self.racquetLine.find_orientation_hori_vert()
         
         
