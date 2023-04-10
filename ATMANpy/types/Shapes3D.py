@@ -103,9 +103,6 @@ class Point3D:
         res = (x_dist ** 2 + y_dist ** 2 + z_dist ** 2) ** 0.5
         return res
     
-    def length(self):
-        return self.distance_to(Point3D((0, 0, 0)))
-    
     def is_left(self, inObj):
         if isinstance(inObj, Point3D):
             comp = inObj.x
@@ -148,6 +145,16 @@ class Point3D:
             comp = inObj
         return self.z > comp
 
+    ### VECTOR FUNCTIONS
+    def length(self):
+        return self.distance_to(Point3D((0, 0, 0)))
+    
+    def normalize(self):
+        if self.length() == 0:
+            return None
+        else:
+            return self / self.length()
+    
     def find_perpendicular(self):
         ### finds one (of infinitely many) perpendicular vectors
         v1, v2, v3 = self.coords

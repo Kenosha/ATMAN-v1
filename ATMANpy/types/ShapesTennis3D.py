@@ -153,16 +153,16 @@ class Racquet(Region3D):
         myRacquet = Racquet(racquetLines, color = color, name = 'Racquet')
         
         ### immutability breaks...
-        # a) Angles
+        # a) Lines and Vectors
+        object.__setattr__(myRacquet, 'racquetLine', Line3D(gripPt, spotPt)) 
+        object.__setattr__(myRacquet, 'planeVec1', orthVector_1)
+        object.__setattr__(myRacquet, 'planeVec2', orthVector_2)
+        
+        # b) Angles
         object.__setattr__(myRacquet, 'inclination', inclination)
         dir_hori, dir_vert = myRacquet.find_orientation_hori_vert()
         object.__setattr__(myRacquet, 'dir_hori', dir_hori)
         object.__setattr__(myRacquet, 'dir_vert', dir_vert)
-        
-        # b) Lines and Vectors
-        object.__setattr__(myRacquet, 'racquetLine', Line3D(gripPt, spotPt)) 
-        object.__setattr__(myRacquet, 'planeVec1', orthVector_1)
-        object.__setattr__(myRacquet, 'planeVec2', orthVector_2)
         
         return myRacquet
     
@@ -192,13 +192,52 @@ class Racquet(Region3D):
     def make_at_contact(aPlayer, aBall, 
                         aBall_before = None, aBall_after = None, ### provide these to make inclination, using law of reflection.
                         height = _DEFAULT_GRIP_HEIGHT, color = _DEFAULT_COLOR):
+                
+        ###### Prepare uninclined racquet ######
         centerPt = aPlayer['Bottom'].center_point().up(height)
         ballPt = aBall.get_point()
         
         lmbd = Racquet._DEFAULT_LENGTH / centerPt.distance_to(ballPt)
-        gripPt = ballPt + lmbd * (centerPt - ballPt)
+        gripPt = ballPt + (centerPt - ballPt) * lmbd
         
-        return Racquet.make(gripPt, ballPt)
+        myRacquet_uninclined = Racquet.make(gripPt, ballPt)
+        
+        ###### Incline Racquet #####
+        ### get plane parameters
+        a, b = myRacquet_uninclined.planeVec1, myRacquet_uninclined.planeVec2
+        
+        ### get vector of incoming and outgoing ball, both oriented away from the racquet face.
+        if aBall_before is None and aBall_after is None:
+            return Racquet.make(gripPt, ballPt, inclination = 0)
+        elif aBall_before is None:
+            afterVector = aBall_after.get_point() - aBall.get_point() 
+            normalVector = afterVector.normalize()
+        elif aBall_after is None:
+            beforeVector = aBall_before.get_point() - aBall.get_point()
+            normalVector = beforeVector.normalize()
+        else:
+            beforeVector = aBall_before.get_point() - aBall.get_point()
+            afterVector = aBall_after.get_point() - aBall.get_point() 
+            
+            ### get normal vector relative to racquet plane
+            normalVector = ((beforeVector.normalize() + afterVector.normalize()) / 2).normalize()
+        
+        if normalVector is None: ### can happen if beforeVec = -afterVec
+            return Racquet.make(gripPt, ballPt, inclination = 0)
+        
+        ### get vector describing racquet line
+        racquetVector = myRacquet_uninclined.racquetLine.to_vector().normalize()
+        
+        M = normalVector.cross(racquetVector).x
+        c = np.sign(a.x) * (a.x ** 2 + b.x ** 2) ** 0.5
+        g = np.arctan(-b.x/a.x)
+        
+        incl_rad = np.arccos(M / c) - g
+        inclination = incl_rad / np.pi
+        
+        return Racquet.make(gripPt, ballPt, inclination = inclination)
+        
+
         
     def find_orientation_hori_vert(self):
         return self.racquetLine.find_orientation_hori_vert()
