@@ -233,8 +233,9 @@ def calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt):
     
     return lmbd
 
-def calculate_interpolated_point(m_w, b_w, lsPt, nxPt):
-    lmbd = calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)
+def calculate_interpolated_point(m_w, b_w, lsPt, nxPt, lmbd = None):
+    if lmbd is None:
+        lmbd = calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)
     
     x1, y1 = lsPt['x_3D'], lsPt['y_3D']
     xn, yn = nxPt['x_3D'], nxPt['y_3D']
@@ -251,7 +252,78 @@ def calculate_interpolated_point(m_w, b_w, lsPt, nxPt):
     
     return x, y, z
 
-def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, externalDict):
+def fix_lambda_sequence_iterative(lambdaDict, max_iterations = 150, correction_strength = 0.25):
+    assert 0 < correction_strength < 1, 'Correction strength has to be between 0 and 1'
+    from ATMANpy.funcs.util_funcs import shift_array
+    ### this function fixes interpolation lambdas that are impossible:
+        # not between 0 and 1
+        # not mon. increasing
+    ### it checks if the two issues above are present, and fixes the worst lambda,
+    ### until the problem disappears.
+    ### lambdaDict -> frame: interpolation lambda
+    # frames, lambdas = np.array(list(lambdaDict.keys())), np.array(list(lambdaDict.values()))
+    frames = list(lambdaDict.keys())
+    lambdas = list(lambdaDict.values())
+    nominal_d_lambda = 1 / (len(lambdas) + 1) ### on average, the ball moves by nominal_d_lambda between 0 and 1
+    
+    lambdas_exp = np.array([0, *lambdas, 1])
+    d_lambdas = lambdas_exp - shift_array(lambdas_exp, 1)
+    
+    iteration_count = 0
+    while not all(d_lambdas[1:] > 0):
+        if iteration_count > max_iterations:
+            print(f'Could not correct the following lambdas after {iteration_count} iterations:')
+            print(lambdaDict)
+            return lambdaDict
+        
+        worst_offender_index = d_lambdas[1:].argmin()
+        idx_bef, idx_aft = worst_offender_index, worst_offender_index + 1
+        ### the worst offender index + 1 is the number of frames into the interpolation we are 
+        # -> multiplying by the nominal gradient gives the value we should be at, nominally
+        worst_lambda_bef, worst_lambda_aft = lambdas_exp[idx_bef], lambdas_exp[idx_aft]
+        nominal_lambda_bef, nominal_lambda_aft = nominal_d_lambda * idx_bef, nominal_d_lambda * idx_aft
+        ### move towards the nominal lambda
+        new_lambda_bef = worst_lambda_bef + correction_strength * (nominal_lambda_bef - worst_lambda_bef)
+        new_lambda_aft = worst_lambda_aft + correction_strength * (nominal_lambda_aft - worst_lambda_aft)
+        ### replace in the expanded lambdas 
+        lambdas_exp[idx_bef] = new_lambda_bef
+        lambdas_exp[idx_aft] = new_lambda_aft
+        ### update differences
+        d_lambdas = lambdas_exp - shift_array(lambdas_exp, 1)
+        iteration_count += 1
+    
+    if iteration_count == 0:
+        return lambdaDict
+    else:
+        print(f'Corrected lambdas after {iteration_count} iterations!')
+        lambdas = lambdas_exp[1:-1]
+        return dict(zip(frames, lambdas))
+        
+### TODO: Can use the same idea as above to fix lambdas if they imply acceleration 
+# at some point -> the ball, after being hit, only decelerates, 
+## SO SECOND DIFFERENCES CAN ONLY DECREASE!!!!!!!
+   
+### TODO: FIX OUTLIERS IN Z-DIMENSION
+ # note that x and y dimensions are okay as long as interpolation fix with lambdas works...
+ # but this leaves the z dimension open still. We can look at the arc, estimate it, and remove outliers!
+import statsmodels.api as sm
+def fit_parabola_intervals(lambdas, z_values):
+    ### takes lambdas and z_values and fits a parabola.
+    # it then returns the fitted parabola values for each point (fit.effect)
+    # and the standard deviation around these fitted points (fit.sd)
+    exog, endo = lambdas, z_values
+    exog = sm.add_constant(exog)
+    exog = np.concatenate([exog, exog[:,[1]] ** 2], axis = 1)
+    mod = sm.OLS(endo, exog)
+    res = mod.fit()    
+    fit = res.t_test(exog)
+    return fit.effect, fit.sd
+
+def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, externalDict,
+                                        max_iterations = 150, correction_strength = 0.25,
+                                        acceptable_standard_deviations = 3, 
+                                        acceptable_absolute_deviation = 10,
+                                        prop_of_z_needed = 0.5):
     ### ball_3D: a dataframe with three columns: x, y and z; and the video frame numbers in the index
     ### ball_2D: a dataframe with two columns: x, y; and the video frame numbers in the index
     ### internalDict: a dictionary of internal camera matrices, with frames in the keys
@@ -261,10 +333,17 @@ def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, external
     from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
     
     known_frames = ball_3D.dropna().index
+    
+    ### FIRST PASS: FIGURE OUT LAMBDAS
+    lambdaDicts = []
+    argDicts = []
+    sequence_lambdas = {}
+    interpolation_arguments = {}
     for frame, row in ball_3D.iterrows():
         if not frame in known_frames:
             ### here, we need to interpolate!
             ls_frame, nx_frame = find_last_and_next_list_member(frame, known_frames)
+            # print(f'{frame} -- last: {ls_frame}, next: {nx_frame}')
             if ls_frame is not None and nx_frame is not None:
                 ### if both last and next position are known, we can interpolate
                 lsPt = ball_3D.loc[ls_frame]
@@ -281,11 +360,78 @@ def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, external
             
                 ### together with knowledge about the last and the next point that is known, 
                 ### we can interpolate!
-                # print(calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt))
+                ### UPDATE: We have to do two passes, because the interpolation can be slightly off:
+                    # 1) lambdas can be smaller than zero, and larger than one
+                    # 2) lambdas are not necessarily monotonously increasing.
+                    ### -> both of these issues are best fixed knowing the entire sequence of lambdas.
+                sequence_lambdas[frame] = calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)
+                # print(f'{frame}: {calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)}')
                 
-                ball_3D.loc[frame] = calculate_interpolated_point(m_w, b_w, lsPt, nxPt)
-                    
-    ball_3D = interpolate_ball_positions_3D(ball_3D) ### just for backward and forward interpolation    
+                ### save the necessary items in another dictionary, so we don't need to re-create
+                interpolation_arguments[frame] = (m_w, b_w, lsPt, nxPt)
+                # ball_3D.loc[frame] = calculate_interpolated_point(m_w, b_w, lsPt, nxPt)
+        else:
+            if not sequence_lambdas == {}:
+                lambdaDicts.append(sequence_lambdas)
+                argDicts.append(interpolation_arguments)
+                sequence_lambdas = {}
+                interpolation_arguments = {}
+        
+    ### FIX LAMBDAS
+    fixed_lambdaDicts = [fix_lambda_sequence_iterative(l, 
+                                                       max_iterations = max_iterations,
+                                                       correction_strength = correction_strength) for l in lambdaDicts]
+        
+    ### SECOND PASS: PERFORM INTERPOLATIONS
+    interDicts = []
+    interpolated_points = {}
+    for lambdaDict, argDict in zip(fixed_lambdaDicts, argDicts):
+        for frame, lmbd in lambdaDict.items():
+            interpolated_points[frame] = calculate_interpolated_point(*argDict[frame], lmbd = lmbd)    
+        interDicts.append(interpolated_points)
+        interpolated_points = {}
+    
+    ### THIRD PASS: FIX OUTLIERS IN Z-DIMENSION
+    # note that x and y dimensions are okay as long as interpolation fix with lambdas works...
+    # but this leaves the z dimension open still. We can look at the arc, estimate it, and remove outliers!
+    fixed_interDicts = []
+    for lambdaDict, interDict in zip(lambdaDicts, interDicts):
+        lambdas = np.array(list(lambdaDict.values()))
+        z_values = np.array([coords[2] for coords in interDict.values()])
+        
+        fit, sd = fit_parabola_intervals(lambdas, z_values)
+    
+        replace_because_negative = (z_values < 0) 
+        replace_because_weird = np.abs(z_values - fit) > np.maximum(acceptable_absolute_deviation, 
+                                                                    acceptable_standard_deviations * sd)
+        replace = replace_because_negative | replace_because_weird
+        
+        if replace.sum() == 0:
+        #     print(f'{z_values}: Replacing in {replace.sum()} positions')
+            fixed_interDicts.append(interDict)
+        elif replace.sum() / len(replace) > prop_of_z_needed:
+            # print('Too many issues, can not fix z-coordinates.')
+            fixed_interDicts.append(interDict) 
+        else:
+            x_values, y_values = [coords[0] for coords in interDict.values()], [coords[1] for coords in interDict.values()]
+            # new_z_values = np.where(replace, fit, z_values) ### replacing with fit is easy, but choppy
+            ### instead: maybe linearly interpolate?
+            gap_z_values = np.where(replace, np.nan, z_values)
+            idx = np.arange(len(gap_z_values))
+            idx_not_nan = np.isnan(gap_z_values) == False
+            new_z_values = np.interp(idx, idx[idx_not_nan], gap_z_values[idx_not_nan])
+            new_coords = list(zip(x_values, y_values, new_z_values))
+            new_interDict = dict(zip(list(interDict.keys()), new_coords))
+            fixed_interDicts.append(new_interDict)
+    
+    ### ASSIGN TO BALL_3D
+    for interDict in fixed_interDicts:
+        for frame, coords in interDict.items():
+            ball_3D.loc[frame] = coords
+    
+    ### ADD FORWARD AND BACKWARD INTERPOLATIONS
+    ball_3D = interpolate_ball_positions_3D(ball_3D)  
+
 
     return ball_3D
 

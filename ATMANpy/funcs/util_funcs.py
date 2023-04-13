@@ -79,6 +79,12 @@ def find_last_and_next_list_member(number_of_interest,
 
         return ls_member, nx_member
 
-
-
+import numpy as np
+def shift_array(arr, num, fill_value=np.nan):
+    arr = np.roll(arr,num)
+    if num < 0:
+        arr[num:] = fill_value
+    elif num > 0:
+        arr[:num] = fill_value
+    return arr
 
