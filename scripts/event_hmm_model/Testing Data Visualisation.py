@@ -130,7 +130,13 @@ if SHOW_GROUND:
 if SHOW_INFERENCE:
     ### 2b) Inference
     
-    myCam = Camera.calibrated_AO_behind()
+    ### courtside, angled
+    myCam = Camera.calibrated_AO_behind().left(20).into(14).pan(-0.06).down(4)
+    
+    ### side view
+    myCam = Camera.calibrated_AO_behind().right(55).pan(0.5).rotate(0.005).right(133).zoom(0.175)
+    myCam = myCam.tilt(-0.05).pan(0.008)
+    
     backScn = Scene.make_court()
     backView = View.make(myCam, backScn, resolution = BACKGROUND_RES)
     
@@ -140,20 +146,45 @@ if SHOW_INFERENCE:
         try:
             x, y, z = ball_3D_infer_show.loc[frame]
         except KeyError:
-            tBall = None
+            aBall = None
         else:
-            tBall = Ball.make((x, y, z))
+            aBall = Ball.make((x, y, z))
             
+        try:
+            x, y, z = ball_3D_infer_show.loc[frame - 1]
+        except KeyError:
+            aBall_before = None
+        else:
+            aBall_before = Ball.make((x, y, z))
+        
+        try:
+            x, y, z = ball_3D_infer_show.loc[frame + 1]
+        except KeyError:
+            aBall_after = None
+        else:
+            aBall_after = Ball.make((x, y, z))
+        
         ### Make Player
         x_top, y_top, z_top, x_bot, y_bot, z_bot = players_3D_show.loc[frame]
         topPlayer = Player.make((x_top, y_top, z_top), name = 'Roger Federer')
         botPlayer = Player.make((x_bot, y_bot, z_bot), name = 'Tomas Berdych') 
             
         ### Make Racket
-        topRacquet = Racquet.make_at_player(topPlayer, distance_from_player = 10, dir_hori = 0, dir_vert = 0.5)
-        botRacquet = Racquet.make_at_player(botPlayer, distance_from_player = 10, dir_hori = 0, dir_vert = 0.5)
+        topRacquet = Racquet.make_at_player(topPlayer, distance_from_player = 10, 
+                                            dir_hori = 0.5, dir_vert = 0.5, inclination = 0)
+        botRacquet = Racquet.make_at_player(botPlayer, distance_from_player = 10, 
+                                            dir_hori = 0.5, dir_vert = 0.5, inclination = 0)
+        if seq_data_infer.loc[frame, 'Event'] in ['HF', 'SFR', 'SFL']:
+            topRacquet = Racquet.make_at_contact(topPlayer, aBall, 
+                                                 aBall_before = aBall_before,
+                                                 aBall_after = aBall_after)
+        if seq_data_infer.loc[frame, 'Event'] in ['HN', 'SNR', 'SNL']:
+            botRacquet = Racquet.make_at_contact(botPlayer, aBall, 
+                                                 aBall_before = aBall_before,
+                                                 aBall_after = aBall_after)
+                                                 
         
-        frntScn = Scene.make_empty().put(tBall).put(topPlayer).put(botPlayer).put(topRacquet).put(botRacquet)
+        frntScn = Scene.make_empty().put(aBall).put(topPlayer).put(botPlayer).put(topRacquet).put(botRacquet)
         frontView = View.make(myCam, frntScn, resolution = FOREGROUND_RES)
         
         showFrm = backView.combine(frontView).snap()
@@ -163,4 +194,3 @@ if SHOW_INFERENCE:
 
 
 
-    

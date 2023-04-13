@@ -12,6 +12,10 @@ from typing import Optional, List
 from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.ShapesTennis3D import Court, Net
 
+from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
+SCALE = 2 * SCHEMA_SIZE  ## times two, because there is a minimum scale factor... 
+
+
 @dataclass(frozen = True)
 class Scene:
     shapes: List ### a collection of various 3D shapes
@@ -111,38 +115,96 @@ class Camera:
         homArr_2D = np.einsum('ij, nj -> ni', M_proj, homArr)
         pixArr = homArr_2D[:, :2] / homArr_2D[:, 2][:, np.newaxis]
         return pixArr
-    
-    def snap_scene(self, myScn, resolution = 10):
-        
-        ### 1) Project Point Cloud in 3D onto 2D Sensor
-        ptArr, clArr = myScn.rasterize(resolution)
-        pxArr = self.project_points(ptArr).astype(int)
-        
-        ### 2) For every point, get distance from Pinhole, and sort vectors by it!
-        distVec = ((ptArr - self.get_t()) ** 2).sum(axis = 1) ** 0.5
-        sort_idxs = np.argsort(distVec) ### indices, sorted by distance!
-        sort_pxArr, sort_clArr = pxArr[sort_idxs], clArr[sort_idxs]
-        
-        ### 3) Filter out all duplicates now: the only one we keep is the one closest to the camera!
-        def mask_firstocc_with_unique(a):
-            mask = np.ones(len(a), dtype=bool)
-            mask[np.unique(a, return_index=True, axis = 0)[1]] = False
-            return mask
-        
-        fs_mask = mask_firstocc_with_unique(sort_pxArr)
-        mask_pxArr, mask_clArr = sort_pxArr[fs_mask], sort_clArr[fs_mask]
-        
-        ### 4) Pluck every point onto a frame with the correct value, and show it!
-        rows, cols = self.sensor_dims[1], self.sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
-        snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
 
-        for pixel, color in zip(mask_pxArr, mask_clArr):
-            u, v = pixel
-            snapArr[v, u] = color ### note the switch here: u are columns, v are rows, so indexing inverts! 
+    ############ Internal Matrix Changes ##########
+    
+    def zoom(self, factor):
+        ### factor > 1 -> zoom in; factor < 1 -> zoom out
+        M_int_new = self.M_int
+        M_int_new[0, 0] *= factor
+        M_int_new[1, 1] *= factor
+
+        return Camera(M_int_new, self.M_ext, self.sensor_dims)
+
+    ############ External Matrix Changes ##########
+    def tilt(self, angle_pi):
+        ### Relative to the camera (where the z axis shoots straight out of the pinhole),
+        ### the tilt occurs along the x axis
+        ### angle_pi specified as multiples of pi
+        angle = angle_pi * np.pi
+        R = np.array([[1,             0,              0],
+                      [0, np.cos(angle), -np.sin(angle)],
+                      [0, np.sin(angle),  np.cos(angle)]])
         
-        snapFrm = BGRFrame(snapArr)
+        M_ext_new = R @ self.M_ext[:3]
+        M_ext_new = np.append(M_ext_new, np.array([[0, 0, 0, 1]]), axis = 0)
         
-        return snapFrm
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+    
+    def pan(self, angle_pi):
+        ### Relative to the camera (where the z axis shoots straight out of the pinhole),
+        ### the pan occurs along the y axis
+        ### angle_pi specified as multiples of pi
+        angle = angle_pi * np.pi
+        R = np.array([[ np.cos(angle), 0, np.sin(angle)],
+                      [             0, 1,             0],
+                      [-np.sin(angle), 0, np.cos(angle)]])
+        
+        M_ext_new = R @ self.M_ext[:3]
+        M_ext_new = np.append(M_ext_new, np.array([[0, 0, 0, 1]]), axis = 0)
+        
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+        
+    def rotate(self, angle_pi):
+        ### Relative to the camera (where the z axis shoots straight out of the pinhole),
+        ### the rotation occurs along the z axis.
+        ### angle_pi specified as multiples of pi
+        angle = angle_pi * np.pi
+        R = np.array([[np.cos(angle), -np.sin(angle), 0],
+                      [np.sin(angle),  np.cos(angle), 0],
+                      [            0,              0, 1]])
+        M_ext_new = R @ self.M_ext[:3]
+        M_ext_new = np.append(M_ext_new, np.array([[0, 0, 0, 1]]), axis = 0)
+        
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+        
+    def right(self, feet):
+        #### left-right motion occurs along the x-axis
+        M_ext_new = self.M_ext
+        M_ext_new[0, 3] += feet * SCALE
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+       
+    def left(self, feet):
+        #### left-right motion occurs along the x-axis
+        M_ext_new = self.M_ext
+        M_ext_new[0, 3] -= feet * SCALE
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+       
+    def down(self, feet):
+        #### up-down motion occurs along the y-axis
+        M_ext_new = self.M_ext
+        M_ext_new[1, 3] += feet * SCALE
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+       
+    def up(self, feet):
+        #### up-down motion occurs along the y-axis
+        M_ext_new = self.M_ext
+        M_ext_new[1, 3] -= feet * SCALE
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+    
+    def into(self, feet):
+        #### in-out motion occurs along the z-axis
+        M_ext_new = self.M_ext
+        M_ext_new[2, 3] += feet * SCALE
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+       
+    def out(self, feet):
+        #### in-out motion occurs along the z-axis
+        M_ext_new = self.M_ext
+        M_ext_new[2, 3] -= feet * SCALE
+        return Camera(self.M_int, M_ext_new, self.sensor_dims)
+    
+    
     
 @dataclass(frozen = True)
 class View:
