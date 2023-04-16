@@ -2,6 +2,7 @@
 HTK/
 papers/
 video_files/
+trajectories_stored/
 *.csv
 *.stats
 

@@ -88,3 +88,38 @@ def shift_array(arr, num, fill_value=np.nan):
         arr[:num] = fill_value
     return arr
 
+def split_into_contiguous(inList):
+    ### take a strictly monotonously increasing list of integers and 
+    ### split it into lists with contiguous integers
+    
+    x1, xs = inList[0], inList[1:]
+    
+    outList = []
+    currList = [x1]
+    
+    for x2 in xs:
+        if x2 == x1 + 1:
+            currList.append(x2)
+        else:
+            outList.append(currList)
+            currList = [x2]
+            
+        x1 = x2
+    
+    outList.append(currList)
+    
+    return outList
+    
+def widen_list(inList, by = 1):
+    by = int(by)
+    assert by >= 0
+    if by == 0:
+        return inList
+    
+    myList = [min(inList) - 1, *inList, max(inList) + 1]
+    if by == 1:
+        return myList
+    else:
+        return widen_list(myList, by = by - 1)
+    
+    
