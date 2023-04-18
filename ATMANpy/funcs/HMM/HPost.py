@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from ATMANpy.funcs.court_funcs import make_P_cond_inv
+import ATMANpy.auxil.constants as const
 
 def expand_inferred_sequence(inferred_sequence, word_beginning_frame = 0):
     
@@ -437,16 +438,20 @@ def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, external
 
 #%%
 
-def calc_ball_dist(ball_3D):
-    dist_euclid = ((ball_3D - ball_3D.shift(-1)) ** 2).sum(axis = 1) ** 0.5 
+def calc_ball_dist(ball_3D, norm = 2, offset = 1):
+    dist_euclid = ((ball_3D.shift(-offset) - ball_3D) ** norm).sum(axis = 1) ** (1 / norm)
     return dist_euclid
 
-def calc_ball_speed(dist_euclid, frames_per_second = 25, pixel_per_foot = 8):
+def calc_ball_speed(dist_euclid, frames_per_second = 25, frames = 1, pixel_per_foot = 8,
+                    unit = 'kph'):
     ### dist_euclid: distance in pixel across one frame
-    foot_per_second = dist_euclid * frames_per_second / pixel_per_foot
-    meter_per_second = foot_per_second * 0.3048
-    kilometer_per_hour = meter_per_second * 3600 / 1000
-    return kilometer_per_hour
+    foot_per_second = dist_euclid * frames_per_second / frames / pixel_per_foot
+    meter_per_second = foot_per_second * const.FOOT_TO_METER
+    if unit == 'mps':
+        return meter_per_second
+    elif unit == 'kph':
+        kilometer_per_hour = meter_per_second * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+        return kilometer_per_hour
 
 
 def count_consecutive(evt, evtList):

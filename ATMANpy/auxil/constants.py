@@ -1,0 +1,22 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Apr 17 22:36:11 2023
+
+@author: gianl
+"""
+
+### UNIT CONVERSIONS ###
+FOOT_TO_METER = 0.3048
+METER_TO_FOOT = 1 / FOOT_TO_METER
+
+KM_TO_M = 1000
+M_TO_KM = 1 / KM_TO_M
+
+HOUR_TO_MIN = 60
+MIN_TO_HOUR = 1 / HOUR_TO_MIN
+MIN_TO_SEC = 60
+SEC_TO_MIN = 1 / MIN_TO_SEC
+
+### SCALE OF MODEL COURT ###
+SCALE = 8
+MARGIN = 150

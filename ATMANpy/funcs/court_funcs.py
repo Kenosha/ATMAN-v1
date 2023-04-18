@@ -11,6 +11,7 @@ from ATMANpy.types.Points import Point, SafePoint
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
 
+import ATMANpy.auxil.constants as const
 
 ### PARAMETERS ###
 WHITE_PIXEL_THRESHOLD = 150 #this depends heavily on brightness of picture... lines are white, but they might not appear at 255 intensity.
@@ -20,8 +21,8 @@ INTENSITY_DIFFERENCE_THRESHOLD = 30
 MERGE_THRESHOLD = 2 * COURT_LINE_WIDTH 
 MARGIN_TO_CUT_HORIZONTAL = 40
 
-SCHEMA_SIZE = 4 
-SCHEMA_MARGIN = 150
+SCHEMA_SIZE = const.SCALE / 2 ### since there is a minimum scale factor of two...
+SCHEMA_MARGIN = const.MARGIN
 
 NET_FACTOR = 0.9
 NET_POINTS_TO_SEARCH = 100

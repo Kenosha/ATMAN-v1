@@ -229,7 +229,8 @@ class Racquet(Region3D):
         racquetVector = myRacquet_uninclined.racquetLine.to_vector().normalize()
         
         M = normalVector.cross(racquetVector).x
-        c = np.sign(a.x) * (a.x ** 2 + b.x ** 2) ** 0.5
+        sign = np.sign(a.x) if a.x != 0 else +1
+        c = sign * (a.x ** 2 + b.x ** 2) ** 0.5
         g = np.arctan(-b.x/a.x)
         
         incl_rad = np.arccos(M / c) - g
@@ -241,5 +242,6 @@ class Racquet(Region3D):
         
     def find_orientation_hori_vert(self):
         return self.racquetLine.find_orientation_hori_vert()
+        
         
         
