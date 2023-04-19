@@ -26,9 +26,9 @@ FPS = 25
 STEP_DURATION = 1 / FPS
 
 ### PHYSICAL PARAMETERS ####
-p = 1.21 ### air density, in kg / mm ^ 3
-R = 66 / 10**4 ### radius of tennis ball in meters (66mm * 10**-4) 
-m = 58 / 10**4 ### mass of tennis ball in kg (58 g * 10**-4)
+p = 1.21 ### air density, in kg / m ^ 3
+R = 66 / 10**4 ### radius of tennis ball in meters (66mm = 66m * 10**-4) 
+m = 58 / 10**4 ### mass of tennis ball in kg (58 g = 58 kg * 10**-4)
 g = 9.78 ### gravity of earth, in m/s**2
 
 C_D = 0.51 ### drag coefficient
@@ -264,8 +264,10 @@ def calculate_planar_ball_flight(trajFrm):
     return ground_dist_meters.values, vert_dist_meters.values
     
 def get_optimal_trajectory_indices(groundArr, vertArr, 
-                                   pos_ground_measured, pos_vert_measured):
+                                   pos_ground_measured, pos_vert_measured,
+                                   sum_of_squares = True):
     ### Search over all initial conditions, minimise distances
+    ### sum_of_squares: if true, minimise sum of squares; if false, minimise absolute deviation.
     assert len(pos_ground_measured) == len(pos_vert_measured)
     num_frames = len(pos_ground_measured)
         
@@ -275,11 +277,15 @@ def get_optimal_trajectory_indices(groundArr, vertArr,
     ground_dev = pos_ground_measured[np.newaxis, np.newaxis, np.newaxis, :] - pos_ground_theoretical
     vert_dev = pos_vert_measured[np.newaxis, np.newaxis, np.newaxis, :] - pos_vert_theoretical
     
-    squared_dev = (ground_dev ** 2 + vert_dev ** 2) ** 0.5
-    sum_squared_dev = squared_dev.sum(axis = 3)
+    if sum_of_squares:
+        my_dev = (ground_dev ** 2 + vert_dev ** 2) ** 0.5
+    else:
+        my_dev = np.abs(ground_dev) + np.abs(vert_dev)
+        
+    sum_dev = my_dev.sum(axis = 3)
+    best_idx_flat = sum_dev.argmin()
     
-    best_idx_flat = sum_squared_dev.argmin()
-    v_ground_idx, v_vert_idx, rpm_idx = np.unravel_index(best_idx_flat, sum_squared_dev.shape)
+    v_ground_idx, v_vert_idx, rpm_idx = np.unravel_index(best_idx_flat, sum_dev.shape)
     
     return v_ground_idx, v_vert_idx, rpm_idx
 
