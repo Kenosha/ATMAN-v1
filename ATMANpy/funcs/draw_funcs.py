@@ -8,7 +8,8 @@ Created on Thu Jun  9 18:44:04 2022
 """
 
 ######## GET SCHEMA ########
-from ATMANpy.types.Lines import CourtLines
+from ATMANpy.types.Points import Point
+from ATMANpy.types.Lines import CourtLines, Region
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines
 schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
@@ -18,7 +19,7 @@ from ATMANpy.funcs.court_funcs import find_courtlines
 
 # from ATMANpy.types.PutDispatcher import put
 
-def draw(featList, add_text = None):
+def draw(featList, add_text = None, textRegion = None):
     
     THICKNESS = 2
     
@@ -39,23 +40,38 @@ def draw(featList, add_text = None):
     
     NONPLAY_BRIGHTNESS_FACTOR = 0.4
     
-    def drawFunc(frmDict, featDict, frameNum = None):
+    def drawFunc(frmDict, featDict, frameNum = None, textRegion = textRegion):
         
         cFrm = frmDict['cFrm']
         sendFrm = cFrm
         
-        string_space_counter = 0
+        ### handle as text
+        textFeatures = [featStr for featStr in featList if type(featDict[featStr]) in [int, str]]
+        otherFeatures = [featStr for featStr in featList if not featStr in textFeatures]
         
-        #### ADD ADDITIONAL TEXT ###
-        if not add_text is None:
-            sendFrm = sendFrm.put(add_text, thickness = THICKNESS, color = TEXT_COLOR,
-                                  where = OTHER_TXT_LOC)
-                
-            string_space_counter += 1
+        #### HANDLE ALL TEXT ###
+        textLines = []
+        if textRegion is None:
+            textRegion = Region.from_points(Point((50, 50)), Point((200, 200)))
             
+        if not add_text is None:
+            textLines.append(add_text)
         
-        #### ADD ALL FEATURES #####
-        for featStr in featList:
+        for featStr in textFeatures:
+            feat = featDict[featStr]
+            if isinstance(feat, int):
+                feat = f'{featStr}: {feat}'
+            textLines.append(feat)
+        
+        text_distance = int(textRegion['Left'].length() / len(textLines))
+        
+        for i, text in enumerate(textLines):
+            text_coords = textRegion.p1.down(text_distance * i).coords
+            sendFrm = sendFrm.put(text, thickness = THICKNESS, color = TEXT_COLOR,
+                                  where = text_coords)
+        
+        #### ADD ALL OTHER FEATURES #####
+        for featStr in otherFeatures:
             
             ### FRAME NUMBER ###
             if featStr in FRM_NUM_ALIASES:
@@ -96,17 +112,6 @@ def draw(featList, add_text = None):
                     ### turn an integer to a string
                     ### note that this will trigger the isinstance(feat, str) below!
                     feat = f'{featStr}: {feat}' 
-                
-            if isinstance(feat, str):
-                
-                ### figure out the location of text: begings in OTHER_TEXT_LOC, then goes down.
-                text_coords = OTHER_TXT_LOC[0], OTHER_TXT_LOC[1] + TEXT_DISTANCE * string_space_counter
-            
-                sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = TEXT_COLOR,
-                                      where = text_coords)
-                
-                string_space_counter += 1
-                continue
             
             ### DEAL WITH FEATURE ###
             if 'secondary' in featStr:
@@ -150,3 +155,101 @@ def draw(featList, add_text = None):
         return sendFrm
     
     return drawFunc
+
+
+
+
+def split_and_check(boolArr, left_prop = 1, overall_prop = 2, 
+                    alt_boolArr = None,
+                    curr_x_offset = 0, curr_y_offset = 0,
+                    alt_x_offset = 0, alt_y_offset = 0):
+    ### this functions finds a large (not the largest, but good enough) rectangle
+    ### that has all boolean values set to one.
+    ### in this way, we can find an empty area in a frame, by feeding this function
+    ### an array with True if the value is 0 or (0, 0, 0)
+    ### for different outcomes, change left_prop and overall_prop to other integers, left_prop < overall_prop.
+    
+    from ATMANpy.funcs.util_funcs import split_array_in_two
+    
+    rows, cols = boolArr.shape
+    
+    if boolArr.sum() == rows * cols:
+        p1, p2 = (curr_x_offset, curr_y_offset), (curr_x_offset + rows, curr_y_offset + cols)
+        p1 = p1[1], p1[0] ### switch, because in frames, x and y are switched!
+        p2 = p2[1], p2[0] ### switch, because in frames, x and y are switched!
+        return Region.from_points(Point(p1), Point(p2))
+    else:
+        if rows > cols: ### split into upper and lower
+            axis = 0
+            add_x_offset = left_prop * rows // overall_prop
+            add_y_offset = 0
+        else: ### split into left and right
+            axis = 1
+            add_x_offset = 0
+            add_y_offset = left_prop * cols // overall_prop
+    
+    a, b = split_array_in_two(boolArr, left_prop = left_prop, overall_prop = overall_prop, axis = axis)
+
+    if alt_boolArr is None:
+        if a.sum() >= b.sum():
+            return split_and_check(a, alt_boolArr = b, 
+                                   left_prop = left_prop, overall_prop = overall_prop, 
+                                   curr_x_offset = curr_x_offset, 
+                                   curr_y_offset = curr_y_offset,
+                                   alt_x_offset = curr_x_offset + add_x_offset, 
+                                   alt_y_offset = curr_y_offset + add_y_offset)
+        elif b.sum() >= a.sum():
+            return split_and_check(b, alt_boolArr = a, 
+                                   left_prop = left_prop, overall_prop = overall_prop, 
+                                   curr_x_offset = curr_x_offset + add_x_offset, 
+                                   curr_y_offset = curr_y_offset + add_y_offset,
+                                   alt_x_offset = curr_x_offset, 
+                                   alt_y_offset = curr_y_offset)
+    elif a.sum() >= b.sum() >= alt_boolArr.sum():
+        return split_and_check(a, alt_boolArr = b, 
+                               left_prop = left_prop, overall_prop = overall_prop, 
+                               curr_x_offset = curr_x_offset, 
+                               curr_y_offset = curr_y_offset,
+                               alt_x_offset = curr_x_offset + add_x_offset, 
+                               alt_y_offset = curr_y_offset + add_y_offset)
+    elif a.sum() >= alt_boolArr.sum() >= b.sum():
+        return split_and_check(a, alt_boolArr = alt_boolArr, 
+                               left_prop = left_prop, overall_prop = overall_prop, 
+                               curr_x_offset = curr_x_offset, 
+                               curr_y_offset = curr_y_offset,
+                               alt_x_offset = alt_x_offset, 
+                               alt_y_offset = alt_y_offset)
+    elif b.sum() >= a.sum() >= alt_boolArr.sum():
+        return split_and_check(b, alt_boolArr = a, 
+                               left_prop = left_prop, overall_prop = overall_prop, 
+                               curr_x_offset = curr_x_offset + add_x_offset, 
+                               curr_y_offset = curr_y_offset + add_y_offset,
+                               alt_x_offset = curr_x_offset, 
+                               alt_y_offset = curr_y_offset)
+    elif b.sum() >= alt_boolArr.sum() >= a.sum():
+        return split_and_check(b, alt_boolArr = alt_boolArr, 
+                               left_prop = left_prop, overall_prop = overall_prop, 
+                               curr_x_offset = curr_x_offset + add_x_offset, 
+                               curr_y_offset = curr_y_offset + add_y_offset,
+                               alt_x_offset = alt_x_offset, 
+                               alt_y_offset = alt_y_offset)
+    elif alt_boolArr.sum() >= a.sum() >= b.sum():
+        return split_and_check(alt_boolArr, alt_boolArr = a, 
+                               left_prop = left_prop, overall_prop = overall_prop, 
+                               curr_x_offset = alt_x_offset, 
+                               curr_y_offset = alt_y_offset,
+                               alt_x_offset = curr_x_offset, 
+                               alt_y_offset = curr_y_offset)
+    elif alt_boolArr.sum() >= b.sum() >= a.sum():
+        return split_and_check(alt_boolArr, alt_boolArr = b, 
+                               left_prop = left_prop, overall_prop = overall_prop, 
+                               curr_x_offset = alt_x_offset, 
+                               curr_y_offset = alt_y_offset,
+                               alt_x_offset = curr_x_offset + add_x_offset, 
+                               alt_y_offset = curr_y_offset + add_y_offset)
+   
+
+
+
+
+

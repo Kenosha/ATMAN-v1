@@ -123,3 +123,11 @@ def widen_list(inList, by = 1):
         return widen_list(myList, by = by - 1)
     
     
+def split_array_in_two(myArr, left_prop = 1, overall_prop = 2, axis = 0):
+    ### left prop: parts of overall array that go to the left split, as proportion of overall
+    ### i.e: if left_prop = 2 and overall_prop = 3, the array is split 2/3, 1/3 along axis
+    assert left_prop < overall_prop
+    
+    parts = np.array_split(myArr, overall_prop, axis = axis)
+    left_parts, right_parts = parts[:left_prop], parts[left_prop:]
+    return np.concatenate(left_parts, axis = axis), np.concatenate(right_parts, axis = axis)
