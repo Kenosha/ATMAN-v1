@@ -89,6 +89,29 @@ class Ball(Ball3D):
                     color = Ball._BALL_COLOR, name = 'Tennis Ball')
     
 @dataclass(frozen = True)
+class Mark(Lines3D):
+    _MARK_COLOR = (0, 252, 124) ### green is default
+    _MARK_NAME = 'Mark'
+    _SIZE = 0.25 * SCALE 
+    
+    def make(cPt, flat_along_dimension = 'z', size = _SIZE, 
+             color = _MARK_COLOR, name = _MARK_NAME):
+        r = size / 2
+        if flat_along_dimension == 'x':
+            x1, x2 =  cPt.back(r).up(r), cPt.front(r).down(r)
+            y1, y2 =  cPt.back(r).down(r), cPt.front(r).up(r)
+        if flat_along_dimension == 'y':
+            x1, x2 =  cPt.left(r).up(r), cPt.right(r).down(r)
+            y1, y2 =  cPt.left(r).down(r), cPt.right(r).up(r)
+        if flat_along_dimension == 'z':
+            x1, x2 =  cPt.left(r).back(r), cPt.right(r).front(r)
+            y1, y2 =  cPt.left(r).front(r), cPt.right(r).back(r)
+        aLn, bLn = Line3D(x1, x2), Line3D(y1, y2)
+        
+        return Mark([aLn, bLn], color = color, name = name)
+     
+    
+@dataclass(frozen = True)
 class Player(Region3D):
     _DEFAULT_HEIGHT = 6 ### in feet
     _DEFAULT_WIDTH = 1
@@ -238,10 +261,8 @@ class Racquet(Region3D):
         
         return Racquet.make(gripPt, ballPt, inclination = inclination)
         
-
-        
     def find_orientation_hori_vert(self):
         return self.racquetLine.find_orientation_hori_vert()
         
-        
+
         

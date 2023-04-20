@@ -37,6 +37,8 @@ class Scene:
     def put(self, someShape):
         if someShape is None:
             return self
+        elif isinstance(someShape, list):
+            return Scene([*self.shapes, *someShape])
         else:
             return Scene([*self.shapes, someShape])
     

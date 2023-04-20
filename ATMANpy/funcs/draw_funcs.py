@@ -33,8 +33,6 @@ def draw(featList, add_text = None, textRegion = None):
     INTERPOLATED_BALL_COLOR = (0, 180, 255)
     
     FRAME_NUM_LOC = (1800, 50)
-    OTHER_TXT_LOC = (50, 50)
-    TEXT_DISTANCE = 30
     
     FRM_NUM_ALIASES = ['frmNum', 'frameNum', 'frmNumber', 'frameNumber']
     

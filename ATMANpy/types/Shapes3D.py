@@ -343,15 +343,21 @@ class Line3D:
     def find_orientation_hori_vert(self):
         return self.to_vector().find_orientation_hori_vert()
         
+    def rasterize(self, resolution):
+        return self.subdivide(elements = int(resolution * self.length()) + 2, return_coords = True)
     
     
 @dataclass(frozen = True)
 class Lines3D:
     """
     A list of Lines3D
-    """
+    """ 
+    _DEFAULT_COLOR = (255, 255, 255)
+    
     lineList: List[Line3D]
     name: str = 'Lines3D'
+    
+    color: Optional[tuple] = _DEFAULT_COLOR
     
     def __iter__(self):
         return iter(self.lineList)
@@ -380,6 +386,10 @@ class Lines3D:
         return Lines3D([Line3D.from_line(aLn, x = x, y = y, z = z) for aLn in aLns], 
                       name = name)
     
+    def rasterize(self, resolution):
+        return np.concatenate([aLn.rasterize(resolution) for aLn in self.lineList], axis = 0)
+        
+        
     
 @dataclass(frozen = True)
 class Region3D():
