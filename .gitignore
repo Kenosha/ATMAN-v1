@@ -6,6 +6,7 @@ unused/
 trajectories_stored/
 *.csv
 *.stats
+Todo.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
