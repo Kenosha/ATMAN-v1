@@ -102,7 +102,7 @@ if len(sequences_to_do) > 0:
 
 #%% READ EXISTENT 3D FEATURES
 
-INTERPOLATION_TYPE = 'linear' # linear or smart
+INTERPOLATION_TYPE = 'smart' # linear or smart
 EVENT_SOURCE = 'ground' # ground or inference
 
 from ATMANpy.funcs.feature_funcs import read_feature_frame
@@ -219,7 +219,7 @@ except FileNotFoundError:
 import cv2 as cv
 
 # test_data.IndexSF.unique() 
-SHOW_SEQUENCE = 108
+SHOW_SEQUENCE = 63
 
 ### GET TEST SEQUENCE STREAM FEATURES, EVENTS
 
@@ -234,8 +234,8 @@ ball_3D_infer_show = ball_3D_infer[ball_3D_infer.index.isin(seq_data_infer.index
 ball_3D_ground_show = ball_3D_ground[ball_3D_ground.index.isin(seq_data_ground.index)]
 players_3D_show = players_3D[players_3D.index.isin(seq_data_infer.index)]
 
-features_3D_ground = HPost.make_3D_features(seq_data_ground, ball_3D_ground_show, players_3D_show)
-features_3D_infer = HPost.make_3D_features(seq_data_infer, ball_3D_infer_show, players_3D_show)
+features_3D_ground = HPost.make_3D_features(seq_data_ground.reindex(ball_3D_ground_show.index), ball_3D_ground_show, players_3D_show)
+features_3D_infer = HPost.make_3D_features(seq_data_infer.reindex(ball_3D_infer_show.index), ball_3D_infer_show, players_3D_show)
 
 ### Show Video
 frame_min, frame_max = min(seq_data_ground.index), max(seq_data_ground.index)
@@ -252,11 +252,11 @@ for frame in features_3D_ground.keys():
     
     drawFunc = draw(['ball', 'playerTop', 'playerBot', 
                      'goodBounces', 'badBounces',
-                     'ballSpeed', 'stroke']) ### takes frmDict and featDict, returns show frame
+                     'stroke', 'ballSpeed']) ### takes frmDict and featDict, returns show frame
     
     showFrm = drawFunc(frmDict, featDict)
     
-    show_continuous(showFrm.array, ms_between_frames = 75)
+    show_continuous(showFrm.array, ms_between_frames = 40)
     
 cv.destroyAllWindows()
 
@@ -269,7 +269,7 @@ for frame in features_3D_infer.keys():
     
     drawFunc = draw(['ball', 'playerTop', 'playerBot', 
                      'goodBounces', 'badBounces',
-                     'ballSpeed', 'stroke']) ### takes frmDict and featDict, returns show frame
+                     'stroke', 'ballSpeed']) ### takes frmDict and featDict, returns show frame
     
     showFrm = drawFunc(frmDict, featDict)
     
