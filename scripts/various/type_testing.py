@@ -8,7 +8,7 @@ Created on Fri Mar 11 17:30:35 2022
 import cv2 as cv
 import numpy as np
 
-from ATMANpy.Points import Point
+from ATMANpy.Points import Point2D
 from ATMANpy.Lines import Line, Lines
 from ATMANpy.Frames import BGRFrame, GreyFrame
 
@@ -17,14 +17,14 @@ if __name__ == '__main__':
     ### Point and ArbPoint: Does typechecking work?
     coords = (-1, 2)
     coords = (1.5, 2)
-    Point(coords)
-    # SafePoint(coords)
+    Point2D(coords)
+    # SafePoint2D(coords)
     
     coords = (0, 0)
     a = np.zeros((100, 100), dtype = 'uint8')
     
     aFrm = BGRFrame(a)
-    aPt = Point(coords)
+    aPt = Point2D(coords)
     
     oFrm = aFrm.put(aPt, radius = 5)
     oFrm.show()
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     cFrm.show()
 
 
-    Point((4, 4)).up(10)
+    Point2D((4, 4)).up(10)
 
     ### typecheck works? ###
     # aFrm = BGRFrame(1)
@@ -53,8 +53,8 @@ if __name__ == '__main__':
 
 
     ### Check Line
-    aPt = Point((0, 0))
-    bPt = Point((100, 100))
+    aPt = Point2D((0, 0))
+    bPt = Point2D((100, 100))
     aLn = Line(aPt, bPt)
 
     bLn = Line(aPt.down(10), bPt.down(5))
@@ -80,8 +80,8 @@ if __name__ == '__main__':
     a = np.zeros((500, 500), dtype = 'uint8')
     gFrm = GreyFrame(a)
     
-    aPt = Point((0, 0))
-    bPt = Point((300, 100))
+    aPt = Point2D((0, 0))
+    bPt = Point2D((300, 100))
     
     ### normal case
     aLn = Line(aPt, bPt)
@@ -104,8 +104,8 @@ if __name__ == '__main__':
     
     
     ### parallel vertical case
-    aPt = Point((100, 0))
-    bPt = Point((100, 200))
+    aPt = Point2D((100, 0))
+    bPt = Point2D((100, 200))
     
     aLn = Line(aPt, bPt)
     bLn = Line(aPt.right(100), bPt.right(100))
@@ -122,7 +122,7 @@ if __name__ == '__main__':
     #### check projection
     
     ### within normal segment
-    aPt = Point((100, 100))
+    aPt = Point2D((100, 100))
     aLn = Line(aPt.down(200).left(100), aPt.right(300).up(100))
     
     lnFrm = gFrm.to_BGR().put(aLn)
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     p1.show()
     
     ### vertical line segment
-    aPt = Point((100, 100))
+    aPt = Point2D((100, 100))
     aLn = Line(aPt.down(200).right(100), aPt.right(100).down(100))
     
     lnFrm = gFrm.to_BGR().put(aLn)
@@ -155,7 +155,7 @@ if __name__ == '__main__':
     p1.show()
     
     ### check flips
-    aPt = Point((100, 100))
+    aPt = Point2D((100, 100))
     aLn = Line(aPt.down(200).left(100), aPt.right(100).down(10))
     
     lnFrm = gFrm.to_BGR().put(aLn)
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     
     
     ## line flips...
-    aPt = Point((100, 100))
+    aPt = Point2D((100, 100))
     aLn = Line(aPt.down(200).left(100), aPt.right(100).down(10))
     bLn = Line(aPt, aPt.up(50).right(25))
     
@@ -187,8 +187,8 @@ if __name__ == '__main__':
     
     
     ### check distance
-    aPt = Point((100, 0))
-    bPt = Point((200, 100))
+    aPt = Point2D((100, 0))
+    bPt = Point2D((200, 100))
     
     aPt.distance_to(bPt)
     

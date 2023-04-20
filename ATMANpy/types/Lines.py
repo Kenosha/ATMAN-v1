@@ -8,7 +8,7 @@ Created on Fri Mar 11 17:30:35 2022
 import numpy as np
 from dataclasses import dataclass
 
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 
 from typing import List
 
@@ -18,8 +18,8 @@ class Line:
     """
     A line between two points
     """
-    leftPt: Point
-    rightPt: Point
+    leftPt: Point2D
+    rightPt: Point2D
     
     name: str = 'Line'
     
@@ -45,7 +45,7 @@ class Line:
     @staticmethod
     def from_coords(four_coords, name = 'Line'):
         x1, y1, x2, y2 = four_coords
-        return Line(Point((x1, y1)), Point((x2, y2)), name = name)
+        return Line(Point2D((x1, y1)), Point2D((x2, y2)), name = name)
     
     ### METHODS ### 
     def append(self, other):
@@ -167,7 +167,7 @@ class Line:
                 
         if to_int:
             x_int, y_int = round(x_int), round(y_int)
-        return Point((x_int, y_int))
+        return Point2D((x_int, y_int))
             
     def weak_y(self, x):
         """
@@ -217,7 +217,7 @@ class Line:
         if self.left_point() != self.high_point():
             y_space = np.flip(y_space)
         x_y_space = zip(x_space, y_space)
-        return [Point(x_y) for x_y in x_y_space]
+        return [Point2D(x_y) for x_y in x_y_space]
     
     def join(self, bLn):
         if self.rightPt == bLn.leftPt:
@@ -452,7 +452,7 @@ class CourtLines(Lines):
             margin = round(margin)
 
         aspect_ratio = dim['side_length'] * 2 / dim['court_width']
-        _origin = SafePoint((margin, round(margin * aspect_ratio)))
+        _origin = SafePoint2D((margin, round(margin * aspect_ratio)))
         
         ### top half of court
         baseLine = Line(_origin, _origin.right(dim['court_width']), name = 'Top Baseline')
@@ -564,7 +564,7 @@ class Region(Lines):
     lineList: List[Line]
     name: str = 'Region'
     area: int = None
-    centroid: Point = None
+    centroid: Point2D = None
     
     def __post_init__(self):
         object.__setattr__(self, 'p1', self['Top'].leftPt)
@@ -574,12 +574,12 @@ class Region(Lines):
         object.__setattr__(self, 'points', (self.p1, self.p2, self.p3, self.p4))
     
     @staticmethod
-    def from_points(p1: Point, p2: Point, p3: Point = None, p4: Point = None,
+    def from_points(p1: Point2D, p2: Point2D, p3: Point2D = None, p4: Point2D = None,
                     area = None, centroid = None):
         is_rectangle = p3 is None and p4 is None
         if is_rectangle:
-            p3 = Point((p1.x, p2.y))
-            p4 = Point((p2.x, p1.y))
+            p3 = Point2D((p1.x, p2.y))
+            p4 = Point2D((p2.x, p1.y))
             
         ### to connect arbitrary four points without crossing lines,
         # check the two leftmost points, and the two upper points.
@@ -613,7 +613,7 @@ class Region(Lines):
             return Region.from_points(p1, p2, p3, p4)
        
     @staticmethod
-    def from_center(centerPt: Point, radius = 10):
+    def from_center(centerPt: Point2D, radius = 10):
         p1 = centerPt.up(radius).left(radius)
         p2 = centerPt.down(radius).left(radius)
         p3 = centerPt.up(radius).right(radius)
@@ -633,7 +633,7 @@ class Region(Lines):
         tr1, tr2 = self['Right'].high_point(), self['Top'].right_point()
         br1, br2 = self['Right'].low_point(), self['Bottom'].right_point()
         
-        avg = lambda p1, p2: Point((0.5 * (p1.x + p2.x), 0.5 * (p1.y + p2.y))).round_point()
+        avg = lambda p1, p2: Point2D((0.5 * (p1.x + p2.x), 0.5 * (p1.y + p2.y))).round_point()
         
         tl, bl, tr, br = avg(tl1, tl2), avg(bl1, bl2), avg(tr1, tr2), avg(br1, br2)
         

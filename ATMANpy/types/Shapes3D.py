@@ -10,7 +10,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional, List
 
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines
 
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
@@ -439,8 +439,8 @@ class Region3D():
                     name = 'Region3D', color = _DEFAULT_COLOR):
         # is_rectangle = p3 is None and p4 is None
         # if is_rectangle:
-        #     p3 = Point((p1.x, p2.y))
-        #     p4 = Point((p2.x, p1.y))
+        #     p3 = Point2D((p1.x, p2.y))
+        #     p4 = Point2D((p2.x, p1.y))
             
         ### to connect arbitrary four points without crossing lines,
         # check the two leftmost points, and the two upper points.

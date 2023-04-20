@@ -6,7 +6,7 @@ Created on Sun Apr 10 15:11:50 2022
 """
 
 import cv2 as cv
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
 from ATMANpy.types.Contours import Contour
 
@@ -19,7 +19,7 @@ def put(someFrm, someObj,
     if someObj is None:
         return someFrm
     
-    if isinstance(someObj, Point):
+    if isinstance(someObj, Point2D):
         # conf_point = point.conform_to(self)
         return InstClass(cv.circle(self_copy, someObj.round_coords(), radius, color, thickness))
     

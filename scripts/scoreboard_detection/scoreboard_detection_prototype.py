@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.funcs.util_funcs as atu
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 from ATMANpy.types.Contours import Contour
@@ -77,7 +77,7 @@ def construct_scoreboard_prior(cols, rows):
     x_offset = int(x_share * cols)
     y_offset = int(y_share * rows)
     
-    bot_left = Point((5, rows))
+    bot_left = Point2D((5, rows))
     top_right = bot_left.right(x_offset).up(y_offset)
     
     return Region.from_points(bot_left, top_right)
@@ -207,10 +207,10 @@ def lines_to_reg(lns):
     right_ys = [ln.rightPt.y for ln in lns]
     
     min_x, min_y = min(left_xs), min(left_ys)
-    leftPt = Point((min_x, min_y))
+    leftPt = Point2D((min_x, min_y))
     
     max_x, max_y = max(right_xs), max(right_ys)
-    rightPt = Point((max_x, max_y))
+    rightPt = Point2D((max_x, max_y))
     
     maskReg = Region.from_points(leftPt, rightPt)
     

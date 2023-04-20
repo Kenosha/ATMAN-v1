@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.utils as atu
-from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Points import Point2D, SafePoint2D
 from ATMANpy.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 
@@ -122,8 +122,8 @@ def get_normal_bool(courtlineList, normalized_deviation_threshold = 1, verbose =
     std_points = np.std(courtpoints, axis = 0)
     
     if verbose:
-        # avgRegion = Region.from_points(*[Point(tuple(c)) for c in avg_points])
-        medRegion = Region.from_points(*[Point(tuple(c)) for c in med_points])
+        # avgRegion = Region.from_points(*[Point2D(tuple(c)) for c in avg_points])
+        medRegion = Region.from_points(*[Point2D(tuple(c)) for c in med_points])
         # avgFrm = fit_frame_to_lines(medRegion.transform('round_points'))
         medFrm = fit_frame_to_lines(medRegion.transform('round_points'))
         # avgFrm.show()

@@ -10,7 +10,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.utils as atu
-from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Points import Point2D, SafePoint2D
 from ATMANpy.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 
@@ -46,7 +46,7 @@ COURT_LINE_WIDTH = 8 ### according to own rough calcs at 1920 x 1080, and also a
 INTENSITY_DIFFERENCE_THRESHOLD = 30
 
 ############ DETECTING WHITE LINES #############
-def get_vicinity(aPt: Point, 
+def get_vicinity(aPt: Point2D, 
                  radius: int = 5, direction: str = None):
     radius = round(radius)
     if direction == 'vertical':
@@ -72,7 +72,7 @@ def compare_intensity(refInt: int, newInt: int,
     else:
         return False
     
-def check_vicinity_of_point(aPt: Point, aFrm: Frame, 
+def check_vicinity_of_point(aPt: Point2D, aFrm: Frame, 
                             radius: int = 5, direction: str = None, int_diff_thresh: int = 10):
     refPt, newPt1, newPt2 = get_vicinity(aPt, radius = radius, direction = direction)
     refInt, newInt1, newInt2 = aFrm.eval_at(refPt), aFrm.eval_at(newPt1), aFrm.eval_at(newPt2)

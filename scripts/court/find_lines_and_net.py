@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.utils as atu
-from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Points import Point2D, SafePoint2D
 from ATMANpy.Lines import Line, Lines, CourtLines
 from ATMANpy.Frames import BGRFrame, GreyFrame
 

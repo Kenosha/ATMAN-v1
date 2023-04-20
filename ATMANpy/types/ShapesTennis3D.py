@@ -4,7 +4,6 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional, List
 
-from ATMANpy.types.Points import Point
 from ATMANpy.types.Lines import Line, Lines, CourtLines
 
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN

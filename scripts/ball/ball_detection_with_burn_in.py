@@ -2,7 +2,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.utils as atu
-from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Points import Point2D, SafePoint2D
 from ATMANpy.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 
@@ -175,7 +175,7 @@ cFrm.mask(motMask).show()
 contours, hierarchy = cv.findContours(motMask.array, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
 
 # ### how large is a ball?
-# ballReg = Region.from_points(Point((860, 567)), Point((870, 577)))
+# ballReg = Region.from_points(Point2D((860, 567)), Point2D((870, 577)))
 # cFrm.put(ballReg).show()
 DIAMETER_OF_BALL = 10
 ACCEPTABLE_DEV = 5

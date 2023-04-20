@@ -12,7 +12,7 @@ from ATMANpy.funcs.type_funcs import typecheck, pointcheck
 from typing import Optional
 
 @dataclass(frozen = True)
-class Point:
+class Point2D:
     """
     A point: tuple of integers, signifying x and y coordinates.
     """   
@@ -36,34 +36,34 @@ class Point:
             return op_x, op_y    
     
     def __add__(self, y):
-        op_x, op_y = Point.get_operant(y)
+        op_x, op_y = Point2D.get_operant(y)
         outCoords = self.coords[0] + op_x, self.coords[1] + op_y
-        return Point(outCoords)
+        return Point2D(outCoords)
     def __sub__(self, y):
-        op_x, op_y = Point.get_operant(y)
+        op_x, op_y = Point2D.get_operant(y)
         outCoords = self.coords[0] - op_x, self.coords[1] - op_y
-        return Point(outCoords)
+        return Point2D(outCoords)
     def __mul__(self, y):
-        op_x, op_y = Point.get_operant(y)
+        op_x, op_y = Point2D.get_operant(y)
         outCoords = self.coords[0] * op_x, self.coords[1] * op_y
-        return Point(outCoords)
+        return Point2D(outCoords)
     def __floordiv__(self, y):
-        op_x, op_y = Point.get_operant(y)
+        op_x, op_y = Point2D.get_operant(y)
         outCoords = self.coords[0] // op_x, self.coords[1] // op_y
-        return Point(outCoords)
+        return Point2D(outCoords)
     
     ### METHODS ###
     def up(self, points):
-        return Point((self.x, max(self.y - points, 0)))
+        return Point2D((self.x, max(self.y - points, 0)))
 
     def down(self, points):
-        return Point((self.x, self.y + points))
+        return Point2D((self.x, self.y + points))
 
     def left(self, points):
-        return Point((max(self.x - points, 0), self.y))
+        return Point2D((max(self.x - points, 0), self.y))
 
     def right(self, points):
-        return Point((self.x + points, self.y))
+        return Point2D((self.x + points, self.y))
     
     def distance_to(self, aPt):
         x_dist_64 = int(self.x - aPt.x) ### to prevent overflow when squaring.
@@ -75,19 +75,19 @@ class Point:
         # force the point to be in bounds
         corr_x = min(max(0, self.x), image.cols - 1)
         corr_y = min(max(0, self.y), image.rows - 1)
-        return Point((corr_x, corr_y))
+        return Point2D((corr_x, corr_y))
     
     def project_vertically(self, aLn):
         new_x = self.x
         new_y = aLn.weak_y(self.x)
         if not new_y is None:
-            return Point((new_x, new_y))
+            return Point2D((new_x, new_y))
     
     def project_horizontally(self, aLn):
         new_x = aLn.weak_x(self.y)
         new_y = self.y
         if not new_x is None:
-            return Point((new_x, new_y))
+            return Point2D((new_x, new_y))
         
     def flip_vertically(self, aLn):
         """
@@ -97,7 +97,7 @@ class Point:
         if not projPt is None:
             new_x = self.x
             new_y = projPt.y + (projPt.y - self.y)
-            return Point((new_x, new_y))
+            return Point2D((new_x, new_y))
     
     def flip_horizontally(self, aLn):
         """
@@ -107,7 +107,7 @@ class Point:
         if not projPt is None:
             new_x = projPt.x + (projPt.x - self.x)
             new_y = self.y
-            return Point((new_x, new_y))
+            return Point2D((new_x, new_y))
     
     def apply_homography(self, H):
         """
@@ -122,31 +122,31 @@ class Point:
             _smaller = max(min(hom_coords[:2]), 1) ### we're only worried about very small coords, hence the maximum condition
             _scale = round(np.log10(_smaller)) + 1
             norm_coords = hom_coords[:2] / (_epsilon ** _scale)
-        return Point(tuple(norm_coords))
+        return Point2D(tuple(norm_coords))
     
     def is_left(self, inObj):
-        if isinstance(inObj, Point):
+        if isinstance(inObj, Point2D):
             comp = inObj.x
         else:
             comp = inObj
         return self.x < comp
     
     def is_right(self, inObj):
-        if isinstance(inObj, Point):
+        if isinstance(inObj, Point2D):
             comp = inObj.x
         else:
             comp = inObj
         return self.x > comp
     
     def is_above(self, inObj):
-        if isinstance(inObj, Point):
+        if isinstance(inObj, Point2D):
             comp = inObj.y
         else:
             comp = inObj
         return self.y < comp
     
     def is_below(self, inObj):
-        if isinstance(inObj, Point):
+        if isinstance(inObj, Point2D):
             comp = inObj.y
         else:
             comp = inObj
@@ -157,7 +157,7 @@ class Point:
         return (round(x), round(y))
     
     def round_point(self):
-        return Point(self.round_coords(), value = self.value)
+        return Point2D(self.round_coords(), value = self.value)
         
     def within(self, myReg):
         tl, tr, bl, br = myReg.to_points()
@@ -168,15 +168,15 @@ class Point:
         
     def bind_below(self, bound):
         x, y = self.coords
-        return Point((max(x, bound), max(y, bound)))
+        return Point2D((max(x, bound), max(y, bound)))
     
     def bind_above(self, bound):
         x, y = self.coords
-        return Point((min(x, bound), min(y, bound)))
+        return Point2D((min(x, bound), min(y, bound)))
         
     
 @dataclass(frozen = True)
-class SafePoint(Point):
+class SafePoint2D(Point2D):
     """
     A typechecked point
     """
@@ -185,31 +185,31 @@ class SafePoint(Point):
         typecheck(self)
         pointcheck(self)
         
-        super(SafePoint, self).__post_init__()
+        super(Point2D, self).__post_init__()
         #####################  
         
     ### METHODS ###
     def up(self, points):
         if points == int(points):
-            return SafePoint((self.x, max(self.y - int(points), 0)))
+            return Point2D((self.x, max(self.y - int(points), 0)))
         else:
             raise TypeError("Move point by an integer amount!")
 
     def down(self, points):
         if points == int(points):
-            return SafePoint((self.x, self.y + int(points)))
+            return Point2D((self.x, self.y + int(points)))
         else:
             raise TypeError("Move point by an integer amount!")
 
     def left(self, points):
         if points == int(points):
-            return SafePoint((max(self.x - int(points), 0), self.y))
+            return Point2D((max(self.x - int(points), 0), self.y))
         else:
             raise TypeError("Move point by an integer amount!")
 
     def right(self, points):
         if points == int(points):
-            return SafePoint((self.x + int(points), self.y))
+            return Point2D((self.x + int(points), self.y))
         else:
             raise TypeError("Move point by an integer amount!")
 

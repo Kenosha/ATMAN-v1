@@ -159,7 +159,7 @@ speed_3D[['v_x', 'v_z', 'v']] = speed_3D[['v_x', 'v_z', 'v']] * const.M_TO_KM / 
 #%% 
 
 def make_text_features(event_features, players_3D, ball_3D, speed_3D):
-    from ATMANpy.types.Points import Point
+    from ATMANpy.types.Points import Point2D
     
     bounce_detected = False
     lock_stroke = False
@@ -173,14 +173,14 @@ def make_text_features(event_features, players_3D, ball_3D, speed_3D):
         
         ### BALL ###
         x, y, z = ball_3D.loc[frame]
-        ballPt = Point((x, y))
+        ballPt = Point2D((x, y))
         
         ### PLAYER ###
         top_x_3D, top_y_3D = players_3D.loc[frame, 'top_x_3D'], players_3D.loc[frame, 'top_y_3D']
         bot_x_3D, bot_y_3D = players_3D.loc[frame, 'bot_x_3D'], players_3D.loc[frame, 'bot_y_3D']
         
-        topPt = Point((top_x_3D, top_y_3D))
-        botPt = Point((bot_x_3D, bot_y_3D))
+        topPt = Point2D((top_x_3D, top_y_3D))
+        botPt = Point2D((bot_x_3D, bot_y_3D))
             
         ### SPEED ###
         curr_speed = speed_3D.loc[frame, 'v']

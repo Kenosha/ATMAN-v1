@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from ATMANpy.funcs.type_funcs import typecheck, arraycheck
 from ATMANpy.funcs.cv_funcs import show, get_frame    
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
 from ATMANpy.types.Contours import Contour
 
@@ -34,7 +34,7 @@ class FrameIterator:
         
         if self._rowIdx < rows:
             value = self._frame.array[self._rowIdx, self._colIdx]
-            out = Point((self._colIdx, self._rowIdx), value = value)
+            out = Point2D((self._colIdx, self._rowIdx), value = value)
             self._colIdx += 1
             return out
         else:
@@ -128,14 +128,14 @@ class Frame:
     def unique(self):
         return np.unique(self.array)
 
-    def eval_at(self, point: Point):
+    def eval_at(self, point: Point2D):
         point = point.conform_to(self)
         return self.array[point.y, point.x]
     
-    def fast_eval_at(self, point: Point):
+    def fast_eval_at(self, point: Point2D):
         return self.array[point.y, point.x]
     
-    def maybe_eval_at(self, point: Point):
+    def maybe_eval_at(self, point: Point2D):
         try:
             return self.array[point.y, point.x]
         except IndexError:
@@ -522,10 +522,10 @@ class GreyFrame(Frame):
             if a > SCREEN_SIZE_CONSTANT * self.size: 
                 continue
             
-            top_left = Point((t_x, t_y))
+            top_left = Point2D((t_x, t_y))
             bot_right = top_left.right(w - 1).down(h - 1) #note: if w is 1 pixel, then top_left = bot_right!
             myRegion = Region.from_points(top_left, bot_right, 
-                                          area = a, centroid = Point(centr))
+                                          area = a, centroid = Point2D(centr))
             if a > size_threshold:
                 regionList.append(myRegion)
                 

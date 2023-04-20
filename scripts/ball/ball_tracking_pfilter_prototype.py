@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.utils as atu
-from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Points import Point2D, SafePoint2D
 from ATMANpy.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 from ATMANpy.Contours import Contour
@@ -360,7 +360,7 @@ def get_motion_model(S, chamferMask):
     for s in S:
         ### determine model to use
         x, y = s[:2].squeeze()
-        sPt = Point((round(x), round(y)))
+        sPt = Point2D((round(x), round(y)))
         if not chamferMask.eval_at(sPt): ### not close to player
             A_star = A
         else:
@@ -464,7 +464,7 @@ def particles_to_points(S, particles_to_produce = None):
     else:
         to_draw = S.copy()
     coords = to_draw[:, :2, :]
-    points = [Point(round_tup(c.squeeze())) for c in coords]
+    points = [Point2D(round_tup(c.squeeze())) for c in coords]
     return points
 
 def average_particles(S, particles_to_produce = 100):

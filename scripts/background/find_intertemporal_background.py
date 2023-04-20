@@ -4,7 +4,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.utils as atu
-from ATMANpy.Points import Point, SafePoint
+from ATMANpy.Points import Point2D, SafePoint2D
 from ATMANpy.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 
@@ -161,10 +161,10 @@ avg_points = np.average(courtpoints, axis = 0)
 med_points = np.median(courtpoints, axis = 0)
 std_points = np.std(courtpoints, axis = 0)
 
-medRegion = Region.from_points(*[Point(tuple(c)) for c in med_points])
+medRegion = Region.from_points(*[Point2D(tuple(c)) for c in med_points])
 gFrm.to_BGR().put(medRegion).show()
 
-avgRegion = Region.from_points(*[Point(tuple(c)) for c in avg_points])
+avgRegion = Region.from_points(*[Point2D(tuple(c)) for c in avg_points])
 gFrm.to_BGR().put(avgRegion).show() ### average is bad, median is great!
 
 normalized_deviation = (courtpoints - med_points) / std_points
@@ -184,7 +184,7 @@ print(f' ... of which judged abnormal: {(~all_corners_within).sum()}')
 # In consequence, in the code below, many court regions will be labelled 'weird' which probably look completely ok.
 
 for pts, normBool in zip(courtpoints, all_corners_within):
-    myRegion = Region.from_points(*[Point(tuple(c)) for c in pts])
+    myRegion = Region.from_points(*[Point2D(tuple(c)) for c in pts])
     rFrm = gFrm.to_BGR().put(myRegion, thickness = 2, color = (255, 0, 0))
     if normBool:
         rFrm = rFrm.put('Normal!', color = (0, 255, 0), thickness = 4)

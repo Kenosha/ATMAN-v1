@@ -12,7 +12,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.funcs.util_funcs as atu
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 from ATMANpy.types.Contours import Contour
@@ -201,7 +201,7 @@ def construct_scoreboard_prior(cols, rows):
     x_offset = int(x_share * cols)
     y_offset = int(y_share * rows)
     
-    bot_left = Point((5, rows))
+    bot_left = Point2D((5, rows))
     top_right = bot_left.right(x_offset).up(y_offset)
     
     return Region.from_points(bot_left, top_right)

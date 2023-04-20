@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from ATMANpy.funcs.type_funcs import typecheck, arraycheck
 from ATMANpy.funcs.cv_funcs import show, get_frame    
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
 
 from multipledispatch import dispatch
@@ -35,11 +35,11 @@ class Contour:
         M = self.moments()
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
-        return Point((cX, cY))
+        return Point2D((cX, cY))
     
     def enclosing_region(self, margin = 0):
         x, y, w, h = cv.boundingRect(self.points)
-        p1, p2 = Point((x - margin, y - margin)), Point((x + w + margin, y + h + margin))
+        p1, p2 = Point2D((x - margin, y - margin)), Point2D((x + w + margin, y + h + margin))
         return Region.from_points(p1, p2)
         
     def fit_ellipse(self):

@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.funcs.util_funcs as atu
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 from ATMANpy.types.Contours import Contour
@@ -315,7 +315,7 @@ while True:
         
         # pPts = pf.particles_to_points(particles, particles_to_produce = 100)
         mean, std = pf.particles_to_area(particles, particles_to_produce = N)
-        pPt, radius = Point(mean), round((std[0] ** 2 + std[1] ** 2) ** 0.5)
+        pPt, radius = Point2D(mean), round((std[0] ** 2 + std[1] ** 2) ** 0.5)
         
         sendFrm = cFrm.put(topplayerRegion, thickness = 2, color = (0, 0, 255))
         sendFrm = sendFrm.put(botplayerRegion, thickness = 2, color = (0, 0, 255))
@@ -356,7 +356,7 @@ while True:
         
         # pPts = pf.particles_to_points(particles, particles_to_produce = 100)
         mean, std = pf.particles_to_area(particles, particles_to_produce = N)
-        pPt, radius = Point(mean), round((std[0] ** 2 + std[1] ** 2) ** 0.5)
+        pPt, radius = Point2D(mean), round((std[0] ** 2 + std[1] ** 2) ** 0.5)
         
         sendFrm = cFrm.put(topplayerRegion, thickness = 2, color = (0, 0, 255))
         sendFrm = sendFrm.put(botplayerRegion, thickness = 2, color = (0, 0, 255))

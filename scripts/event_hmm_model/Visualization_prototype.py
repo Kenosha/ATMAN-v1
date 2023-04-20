@@ -393,7 +393,7 @@ ball_speed = calc_speed(dist_euclid)
 
 height_to_size = lambda height: max(2, min(round(height / 25), 4))
 
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 
 curr_speed = '0 km/h'
@@ -411,15 +411,15 @@ for frame in ball_3D.index:
     
     ### BALL ###
     x, y, z = ball_3D.loc[frame]
-    ballPt = Point((x, y))
+    ballPt = Point2D((x, y))
     ballSize = height_to_size(z)
     
     ### PLAYER ###
     top_x_3D, top_y_3D = players_3D.loc[frame, 'top_x_3D'], players_3D.loc[frame, 'top_y_3D']
     bot_x_3D, bot_y_3D = players_3D.loc[frame, 'bot_x_3D'], players_3D.loc[frame, 'bot_y_3D']
     
-    topPt = Point((top_x_3D, top_y_3D))
-    botPt = Point((bot_x_3D, bot_y_3D))
+    topPt = Point2D((top_x_3D, top_y_3D))
+    botPt = Point2D((bot_x_3D, bot_y_3D))
     
     topReg = Region.from_center(topPt, radius = 5)
     botReg = Region.from_center(botPt, radius = 5)
