@@ -42,6 +42,13 @@ from ATMANpy.funcs.HMM.HVite import token_pass_sequence
 
 #%% MAKE INFERENCE ON TEST CASES
 
+from ATMANpy.funcs.feature_funcs import save_events
+
+SAVE_TRUE_EVENTS = True ### save the labelled events as features
+if SAVE_TRUE_EVENTS:
+    true_features = {frame: {'true_event': event} for frame, event in test_data.Event.to_dict().items()}
+    save_events(true_features, 'true_event', VIDEO_ID, STORE_NAME)
+
 ### GET STREAM FEATURES ###
 from ATMANpy.funcs.feature_funcs import load_stored_features
 stream_features = load_stored_features(VIDEO_ID, STORE_NAME)
@@ -91,15 +98,13 @@ for test_sequence in sequences_to_do:
     
 
 if len(sequences_to_do) > 0:
-    ### WRITE STREAM FEATURES
-    from ATMANpy.funcs.feature_funcs import save_events, save_feature_frame
-    
+    ### WRITE STREAM FEATURES    
     inferred_features = {frame: featDict for frame, featDict in stream_features.items() if 'grammatic_event' in featDict}
     save_events(inferred_features, 'grammatic_event', VIDEO_ID, STORE_NAME)
     
     inferred_features = {frame: featDict for frame, featDict in stream_features.items() if 'arbitrary_event' in featDict}
     save_events(inferred_features, 'arbitrary_event', VIDEO_ID, STORE_NAME)
-
+    
 #%% READ EXISTENT 3D FEATURES
 
 INTERPOLATION_TYPE = 'smart' # linear or smart
