@@ -7,7 +7,7 @@ Created on Fri Mar 25 16:57:49 2022
 
 import numpy as np
 
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
 
@@ -182,12 +182,12 @@ def calibrate_camera(gFrm, schemaLines, H,
     imgpoints =  np.array([*court_points_2D, *net_points_2D, *add_coords_image], dtype = np.float32)
 
     if verbose:
-        from ATMANpy.types.Points import Point
+        from ATMANpy.types.Points import Point2D
         from ATMANpy.funcs.line_funcs import fit_frame_to_lines
         schemaFrm = fit_frame_to_lines(schemaLines)
         for objP, imgP in zip(objpoints, imgpoints):
-            pt_3D = Point(tuple(objP[:2]))
-            pt_2D = Point(tuple(imgP))
+            pt_3D = Point2D(tuple(objP[:2]))
+            pt_2D = Point2D(tuple(imgP))
             
             schemaFrm.to_BGR().put(pt_3D, thickness = 2, radius = 4).show()
             gFrm.to_BGR().put(pt_2D, thickness = 2, radius = 4).show()
@@ -288,8 +288,8 @@ def update_homography(gFrm, H, config, white_pixel_threshold = WHITE_PIXEL_THRES
             b0, b1 = linear_regress(coordList)
             oldPt_1, oldPt_2 = coordList[0],coordList[-1]
             
-            newPt_1 = Point((oldPt_1[0], b0 + b1 * oldPt_1[0]))
-            newPt_2 = Point((oldPt_2[0], b0 + b1 * oldPt_2[0]))
+            newPt_1 = Point2D((oldPt_1[0], b0 + b1 * oldPt_1[0]))
+            newPt_2 = Point2D((oldPt_2[0], b0 + b1 * oldPt_2[0]))
             
             newLn = Line(newPt_1, newPt_2, name = aLn.name)
 

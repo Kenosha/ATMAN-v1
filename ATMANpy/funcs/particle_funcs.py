@@ -13,7 +13,7 @@ import numpy.matlib
 import cv2 as cv
 
 from ATMANpy.types.Frames import Frame
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 
 
 # the normal movement model
@@ -173,7 +173,7 @@ def get_motion_model(S, chamferMask, closeHistories = None, modelHistories = Non
     for s, switchBool in zip(S, propagation_rules):
         ### determine closeness
         x, y = s[:2].squeeze()
-        sPt = Point((round(x), round(y)))
+        sPt = Point2D((round(x), round(y)))
         if not chamferMask.eval_at(sPt): ### not close to player
             ball_is_close = False
             model_is_prime = False    
@@ -316,7 +316,7 @@ def particles_to_points(S, particles_to_produce = None):
     else:
         to_draw = S.copy()
     coords = to_draw[:, :2, :]
-    points = [Point(round_tup(c.squeeze())) for c in coords]
+    points = [Point2D(round_tup(c.squeeze())) for c in coords]
     return points
 
 

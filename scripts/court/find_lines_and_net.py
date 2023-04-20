@@ -43,7 +43,7 @@ cFrm.show()
 
 
 #### 1) find best court line width
-aPt = Point((400, 802))
+aPt = Point2D((400, 802))
 pointFrm = gFrm.to_BGR().put(aPt, radius = 4, thickness = 1)  
 pointFrm.show()
 ### radius 4 looks good... so COURT_LINE_WIDTH is 8!

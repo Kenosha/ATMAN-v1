@@ -9,7 +9,7 @@ stream features are post processed
 """
 
 import ATMANpy.funcs.util_funcs as atu
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 from ATMANpy.types.Contours import Contour
@@ -56,7 +56,7 @@ def get_point_bounds(pointArr,
     
     qs = [lower_q, 0.5, upper_q]
     loPt, mdPt, hiPt = np.round(np.quantile(pointArr, qs, axis = 0)).astype('int')
-    loPt, mdPt, hiPt = Point(loPt), Point(mdPt), Point(hiPt)
+    loPt, mdPt, hiPt = Point2D(loPt), Point2D(mdPt), Point2D(hiPt)
 
     ### interquantile distance
     iq_up, iq_lo = hiPt - mdPt, mdPt - loPt

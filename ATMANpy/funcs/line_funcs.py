@@ -8,13 +8,13 @@ Created on Wed Mar 16 16:58:08 2022
 import numpy as np
 import cv2 as cv
 
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
 
 
 ############ DETECTING WHITE LINES #############
-def get_vicinity(aPt: Point, 
+def get_vicinity(aPt: Point2D, 
                  radius: int = 5, direction: str = None):
     radius = round(radius)
     if direction == 'vertical':
@@ -40,7 +40,7 @@ def compare_intensity(refInt: int, newInt: int,
     else:
         return False
     
-def check_vicinity_of_point(aPt: Point, aFrm: Frame, 
+def check_vicinity_of_point(aPt: Point2D, aFrm: Frame, 
                             radius: int = 5, direction: str = None, int_diff_thresh: int = 10):
     refPt, newPt1, newPt2 = get_vicinity(aPt, radius = radius, direction = direction)
     refInt, newInt1, newInt2 = aFrm.eval_at(refPt), aFrm.eval_at(newPt1), aFrm.eval_at(newPt2)

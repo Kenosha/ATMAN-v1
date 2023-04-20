@@ -15,6 +15,9 @@ from ATMANpy.types.Contours import Contour
 from ATMANpy.types.Points import Point
 from ATMANpy.types.Lines import Region
 
+from ATMANpy.types.ShapesTennis3D import Ball, Player
+
+
 ##### Saving ################
 
 def extract_contour_values(contour, compression = None):
@@ -143,7 +146,7 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
         
     return featFrm
 
-def single_feature_to_object(singlefeatSeries):
+def single_2D_feature_to_object(singlefeatSeries):
     ### Turns a dictionary corresponding to a row of a feature frame (a single picture frame)
     ### into the object that we can work with.
     
@@ -191,6 +194,11 @@ def single_feature_to_object(singlefeatSeries):
         myH = np.array([x_vals, y_vals, z_vals])
         
         return myH
+    
+def single_3D_feature_to_object(singlefeatSeries):
+    if len(singlefeatSeries) == 3: ### is ball
+        return 
+    
        
 def load_stored_features(videoName, storeName, featnameList = None, keep_which = 'last'):
     
@@ -200,7 +208,7 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
         featDict = atu.get_folder_struct('features_stored')
         featPath = os.path.join(featDict['main'], videoName, storeName)
 
-        featnameList = [f for f in os.listdir(featPath) if not f.endswith('.csv') and not f.startswith('3D')]
+        featnameList = [f for f in os.listdir(featPath) if not f.endswith('.csv')]
     
     ### collect all feature frames
     frameDict = {}
@@ -223,7 +231,10 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
             except KeyError:
                 stream_features[idx][featName] = None
             else:
-                featObj = single_feature_to_object(featSeries)
+                if featName.startswith('3D'):
+                    featObj = single_3D_feature_to_object(featSeries)
+                else:    
+                    featObj = single_2D_feature_to_object(featSeries)
                 stream_features[idx][featName] = featObj
                 
     return stream_features

@@ -8,7 +8,7 @@ Created on Thu Jun  9 18:44:04 2022
 """
 
 ######## GET SCHEMA ########
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import CourtLines, Region
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines
@@ -50,7 +50,7 @@ def draw(featList, add_text = None, textRegion = None):
         #### HANDLE ALL TEXT ###
         textLines = []
         if textRegion is None:
-            textRegion = Region.from_points(Point((50, 50)), Point((200, 200)))
+            textRegion = Region.from_points(Point2D((50, 50)), Point2D((200, 200)))
             
         if not add_text is None:
             textLines.append(add_text)
@@ -175,7 +175,7 @@ def split_and_check(boolArr, left_prop = 1, overall_prop = 2,
         p1, p2 = (curr_x_offset, curr_y_offset), (curr_x_offset + rows, curr_y_offset + cols)
         p1 = p1[1], p1[0] ### switch, because in frames, x and y are switched!
         p2 = p2[1], p2[0] ### switch, because in frames, x and y are switched!
-        return Region.from_points(Point(p1), Point(p2))
+        return Region.from_points(Point2D(p1), Point2D(p2))
     else:
         if rows > cols: ### split into upper and lower
             axis = 0

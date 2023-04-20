@@ -330,7 +330,7 @@ def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, external
     ### internalDict: a dictionary of internal camera matrices, with frames in the keys
     ### externalDict: a dictionary of external camera matrices, with frames in the keys
     
-    from ATMANpy.types.Points import Point
+    from ATMANpy.types.Points import Point2D
     from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
     
     known_frames = ball_3D.dropna().index
@@ -353,7 +353,7 @@ def interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, external
                 ### now, use the internal and external camera matrices on the frame in question...
                 M_int, M_ext = internalDict[frame], externalDict[frame]
                 ball_data = ball_2D.loc[frame]
-                ballPt = Point((ball_data['x'], ball_data['y']))
+                ballPt = Point2D((ball_data['x'], ball_data['y']))
                 
                 ### ...to derive the ray on which the ball has to lie
                 m_c, b_c = get_camera_ray_params(ballPt, M_int)
@@ -582,7 +582,7 @@ def impose_hit(inf_words, player_positions):
     return inf_words
 
 def make_3D_features(word_inference_frame, ball_3D, players_3D):
-    from ATMANpy.types.Points import Point
+    from ATMANpy.types.Points import Point2D
     from ATMANpy.types.Lines import Region
     
     height_to_size = lambda height: max(2, min(round(height / 25), 4))
@@ -610,15 +610,15 @@ def make_3D_features(word_inference_frame, ball_3D, players_3D):
         
         ### BALL ###
         x, y, z = ball_3D.loc[frame]
-        ballPt = Point((x, y))
+        ballPt = Point2D((x, y))
         ballSize = height_to_size(z)
         
         ### PLAYER ###
         top_x_3D, top_y_3D = players_3D.loc[frame, 'top_x_3D'], players_3D.loc[frame, 'top_y_3D']
         bot_x_3D, bot_y_3D = players_3D.loc[frame, 'bot_x_3D'], players_3D.loc[frame, 'bot_y_3D']
         
-        topPt = Point((top_x_3D, top_y_3D))
-        botPt = Point((bot_x_3D, bot_y_3D))
+        topPt = Point2D((top_x_3D, top_y_3D))
+        botPt = Point2D((bot_x_3D, bot_y_3D))
         
         topReg = Region.from_center(topPt, radius = 5)
         botReg = Region.from_center(botPt, radius = 5)
