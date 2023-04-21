@@ -7,7 +7,7 @@ Created on Fri Mar 25 16:57:49 2022
 
 import numpy as np
 
-from ATMANpy.types.Points import Point2D, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame
 

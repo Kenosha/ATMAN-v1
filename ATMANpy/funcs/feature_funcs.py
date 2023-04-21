@@ -12,7 +12,7 @@ import pandas as pd
 
 import ATMANpy.funcs.util_funcs as atu 
 from ATMANpy.types.Contours import Contour
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 
 from ATMANpy.types.ShapesTennis3D import Ball, Player
@@ -176,7 +176,7 @@ def single_2D_feature_to_object(singlefeatSeries):
             num_points = len(x_vals) ### problem with this -> missing values are removed!
             if len(singlefeatDict) / 2 <= 4:
                 ### -> have a region!
-                myPoints = [Point((x, y)) for x, y in zip(x_vals, y_vals)]
+                myPoints = [Point2D((x, y)) for x, y in zip(x_vals, y_vals)]
                 return Region.from_points(*myPoints)
             else:
                 ### -> have a contour!
@@ -195,9 +195,16 @@ def single_2D_feature_to_object(singlefeatSeries):
         
         return myH
     
-def single_3D_feature_to_object(singlefeatSeries):
-    if len(singlefeatSeries) == 3: ### is ball
-        return 
+def single_3D_feature_to_object(singlefeatSeries, featName):
+    if 'ball' in featName.lower(): ### is ball
+        x, y, z = singlefeatSeries
+        return Ball.make((x, y, z))
+    elif 'topplayer' in featName.lower():
+        x, y, z, _, _, _ = singlefeatSeries
+        return Player.make((x, y, z))
+    elif 'botplayer' in featName.lower():
+        _, _, _, x, y, z = singlefeatSeries
+        return Player.make((x, y, z))    
     
        
 def load_stored_features(videoName, storeName, featnameList = None, keep_which = 'last'):
@@ -232,7 +239,7 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
                 stream_features[idx][featName] = None
             else:
                 if featName.startswith('3D'):
-                    featObj = single_3D_feature_to_object(featSeries)
+                    featObj = single_3D_feature_to_object(featSeries, featName)
                 else:    
                     featObj = single_2D_feature_to_object(featSeries)
                 stream_features[idx][featName] = featObj

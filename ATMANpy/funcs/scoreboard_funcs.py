@@ -6,7 +6,7 @@ Created on Thu Jun 16 23:17:50 2022
 """
 
 
-from ATMANpy.types.Points import Point
+from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
 
 from ATMANpy.funcs.line_funcs import merge_horizontal_lines
@@ -21,7 +21,7 @@ def construct_scoreboard_prior(cols, rows):
     x_offset = int(x_share * cols)
     y_offset = int(y_share * rows)
     
-    bot_left = Point((5, rows))
+    bot_left = Point2D((5, rows))
     top_right = bot_left.right(x_offset).up(y_offset)
     
     return Region.from_points(bot_left, top_right)
