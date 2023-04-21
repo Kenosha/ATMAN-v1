@@ -5,6 +5,8 @@ Created on Thu Apr 20 12:56:24 2023
 @author: gianl
 """
 
+import pandas as pd
+
 from dataclasses import dataclass
 from typing import Optional, List
 
@@ -13,14 +15,117 @@ from ATMANpy.types.Features import StreamFeatures
 
 from ATMANpy.funcs.HMM.HPost import narrow_down_instantaneous_events
 from ATMANpy.funcs.util_funcs import split_into_contiguous, widen_list
+import ATMANpy.funcs.spin_funcs as sf
 
+
+groundArr, vertArr, trajDict = sf.load_trajectories('TrajectoriesRPM', dtype = 'float32')
+
+### initialise search spaces with proper arguments
+import inspect
+kwargList = inspect.getargspec(sf.initialize).args
+kwargs = {k: v for k, v in trajDict.items() if k in kwargList}
+v_init_ground_space, v_init_vert_space, spin_rate_space = sf.initialize(dtype = 'float32', 
+                                                                        squeeze = True,  
+                                                                        **kwargs)
+
+import ATMANpy.auxil.constants as const
+
+#%%
 
 @dataclass(frozen = True)
 class Trajectory:
     trajFeats: StreamFeatures
-    # startEvent: str
-    # endEvent: str
-    # pointList: List[Point3D]
+    
+    def __iter__(self):
+        return iter(self.trajFeats)
+    
+    def get_frames(self, keep_before = 1): ### keep x frames before the beginning of flight 
+
+        eventDict = self.trajFeats['event']
+    
+        traj_frames = [frame for frame, event in eventDict.items() if event[0] == 'F'] ## init with flight frames
+        for i in range(1, keep_before + 1):
+            add_frame = min(traj_frames) - i
+            if add_frame in eventDict:
+                traj_frames = [add_frame, *traj_frames]
+        
+        ballSer = pd.Series(self.trajFeats['ball'])[traj_frames] ### get series of balls of interest
+        coordSer = ballSer.map(lambda myBall: myBall.get_point().coords) ### get coordinates
+        coordFrm = coordSer.apply(pd.Series) ### how the hell does this work?
+        coordFrm.columns = ['x', 'y', 'z']
+        return coordFrm
+    
+    def get_planar_ball_flight(self, keep_before = 1):
+        return sf.calculate_planar_ball_flight(self.get_frames(keep_before = keep_before))
+    
+    def get_flight_direction(self, keep_before = 1):
+        coordFrm = self.get_frames(keep_before = keep_before)
+        Dx, Dy = (coordFrm.iloc[-1] - coordFrm.iloc[0])[['x', 'y']]
+        return Point3D((Dx, Dy, 0)).normalize()
+    
+    def get_pre_flight_position(self, keep_before = 1):
+        coordFrm = self.get_frames(keep_before = keep_before)
+        return Point3D(coordFrm.iloc[0])
+    
+    def get_height(self, keep_before = 1):
+        coordFrm = self.get_frames(keep_before = keep_before)
+        return coordFrm.iloc[0]['z']
+    
+    def get_flight_frames(self, keep_before = 1):
+        coordFrm = self.get_frames(keep_before = keep_before)
+        return list(coordFrm.index)
+    
+    def fit_trajectory(self, theory_ground_array, theory_vert_array,
+                       v_init_ground_space, v_init_vert_space, spin_rate_space,
+                       keep_before = 1, sum_of_squares = False):
+        ### transform to trajectory to 2D coordinates
+        pos_ground_measured, pos_vert_measured = self.get_planar_ball_flight(keep_before = keep_before)
+        
+        ### compare against theoretical trajectory
+        v_ground_idx, v_vert_idx, rpm_idx = sf.get_optimal_trajectory_indices(theory_ground_array, theory_vert_array, 
+                                                                              pos_ground_measured, pos_vert_measured,
+                                                                              sum_of_squares = sum_of_squares)
+        
+        ### get initial conditions
+        v_init_ground = v_init_ground_space[v_ground_idx]
+        v_init_vert = v_init_vert_space[v_vert_idx]
+        spin_rpm = spin_rate_space[rpm_idx]
+        
+        ### get theoretical positions
+        pos_ground_theory = theory_ground_array[v_ground_idx, v_vert_idx, rpm_idx, :len(pos_ground_measured)]
+        pos_vert_theory = theory_vert_array[v_ground_idx, v_vert_idx, rpm_idx, :len(pos_vert_measured)]
+        
+        ### use positions to enhance the stream features with a 'ball_fit' feature.
+        ball_fit_dict = {}
+        flight_frames = self.get_flight_frames(keep_before = keep_before)
+        start_position = self.get_pre_flight_position(keep_before = keep_before)
+        ground_direction = self.get_flight_direction(keep_before = keep_before) * const.SCALE * const.METER_TO_FOOT 
+        vert_direction = Point3D((0, 0, 1)) * const.SCALE * const.METER_TO_FOOT 
+        for frame in self.trajFeats:
+            try:
+                flight_idx = flight_frames.index(frame) ### check if frame is in flight frames
+            except ValueError:
+                ball_fit_dict[frame] = None
+            else:
+                ### "deplanarize", using the ground direction and vert_direction unit vectors
+                x, z = pos_ground_theory[flight_idx], pos_vert_theory[flight_idx]
+                ball_fit_dict[frame] = start_position + ground_direction * x + vert_direction * z
+            
+        new_trajFeats = self.trajFeats.add('ball_fit', ball_fit_dict)
+        
+        return TrajectoryFitted(new_trajFeats, v_init_ground, v_init_vert, spin_rpm)
+        
+    
+@dataclass(frozen = True)
+class TrajectoryFitted(Trajectory):
+    ### a trajectory, with initial conditions describing its flight approximately
+    ### a separate object, because fitting the trajectory (and creating initial conditions)
+    ### takes a bit too long algorithmically,
+    ### so we use this class to instantiate objects with cached initial conditions
+    v_init_ground: float
+    v_init_vert: float
+    spin_rpm: float
+    
     
 @dataclass(frozen = True)
 class Shot:
@@ -67,12 +172,14 @@ class Shot:
         
         return Shot(shotTraj, bounceList)
                     
+    
 @dataclass(frozen = True)
-class Point:
+class Shots:
+    ### a general collection of shots.
     shotList: List[Shot]
     
-    @staticmethod
-    def from_features(myFeat):
+    @classmethod
+    def from_features(cls, myFeat):
         ### go from point to shots
         events_non_null = {frame: event for frame, event in myFeat['event'].items() if event != 'None'}
 
@@ -105,27 +212,16 @@ class Point:
         not_in_shot = [f for f in nonnullFrames if f not in shotFrames]
         assert not_in_nonnull == [] and not_in_shot == [], f'Superfluous: {not_in_nonnull}. Missing: {not_in_shot}'
         
-        return Point([Shot.from_features(shotFeat) for shotFeat in shotList])
-        
-        # ## first: find frames where 
-        # flight_frames = [frame for frame in events if events[frame] in ['FLIGHT_UP', 'FLIGHT_DOWN']]
-        # contiguous_flight_frames = split_into_contiguous(flight_frames)
-        # widened_flight_frames = [widen_list(myList, by = 1)[:-1] for myList in contiguous_flight_frames] ### these include also the frame with the event right before flight!
-
-        # ### shot frames
-        # def is_shot(fList): ### is a trajectory a shot or a bounce?
-        #     return events[fList[0]] in ['S', 'H'] # recall that by widening at the left, the first frame is the event preceding flight!
-        
-        # current_shot_traj = 
-        # for fList in widened_flight_frames:
+        return cls([Shot.from_features(shotFeat) for shotFeat in shotList])
             
-        
-        
-        # shot_frames = [fs for fs in widened_flight_frames if events[fs[0]] in ['S', 'H']]
-        # bounce_frames = [fs for fs in widened_flight_frames if fs not in shot_frames]        
-
-        
-
+    def __getitem__(self, item):
+        return self.shotList[item]
+    
+   
+@dataclass(frozen = True)
+class Point(Shots):
+    ### every point is a collection of shots in sequence!
+    pass
     
 @dataclass(frozen = True)
 class Points:
@@ -134,7 +230,7 @@ class Points:
     @staticmethod
     def from_stored_features(video_id, store_name, 
                              event_name = 'grammatic_event', ball_name = '3D_Ball',
-                             narrow_instantaneous_events = True):
+                                 narrow_instantaneous_events = True):
         ### go from points to point
         myFeats = StreamFeatures.from_store(video_id, store_name, featnameList = [event_name, ball_name])
         myFeats = myFeats.rename_feature(event_name, 'event').rename_feature(ball_name, 'ball')
@@ -153,6 +249,9 @@ class Points:
         
         return Points([Point.from_features(myFeat) for myFeat in featList])
     
+    def __getitem__(self, item):
+        return self.pointList[item]
+    
 
 
 #%% Testing
@@ -163,16 +262,29 @@ store_name = '10to100_ok2'
 event_name = 'grammatic_event'
 ball_name = '3D_Ball_smart_inference'
 
-myFeats = StreamFeatures.from_store(video_id, store_name, featnameList = [event_name, ball_name])
-myFeats = myFeats.rename_feature(event_name, 'event').rename_feature(ball_name, 'ball')
-featList = myFeats.split_joint_features()
-
-myFeat = featList[0]
-myPt = Point.from_features(myFeat)
-myPt.shotList[0]
-
-Points.from_stored_features(video_id, store_name, 
-                            event_name = event_name, ball_name = ball_name)
+myPts = Points.from_stored_features(video_id, store_name, 
+                                      event_name = event_name, ball_name = ball_name)
+myPt = myPts[0]
+myShot = myPt[0]
+myTraj = myShot.shotTraj
 
 
- 
+pos_ground_measured, pos_vert_measured = myTraj.get_planar_ball_flight()
+
+#%% 
+### read theoretical trajectories
+
+myTrajFit = myTraj.fit_trajectory(groundArr, vertArr, 
+                                  v_init_ground_space, v_init_vert_space, spin_rate_space)
+
+myTrajFit.trajFeats['ball']
+myTrajFit.trajFeats['ball_fit']
+
+
+
+
+
+
+
+
+

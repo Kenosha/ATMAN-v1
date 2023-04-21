@@ -20,6 +20,8 @@ class StreamFeatures:
         featDict = ff.load_stored_features(video_id, store_name, featnameList = featnameList)
         return StreamFeatures(featDict)
     
+    def __iter__(self):
+        return iter(self.featDict)
     
     def __getitem__(self, item):
         if isinstance(item, int):

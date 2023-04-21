@@ -232,16 +232,17 @@ import ATMANpy.funcs.HMM.HPost as HPost
 
 def calculate_initial_conditions(trajFrm, frames_to_use = 1):
     ### frames to use: how many of the first frames do we use to calculate the initial speeds?    
+    xDim, yDim, zDim = trajFrm.columns
     
     ground_speeds = []
     vert_speeds = []
     for f in range(frames_to_use): 
         offset = f + 1 ### if we only use 1 frame, offset will be 1, as in the default of calc_ball_dist
         
-        ground_dist = HPost.calc_ball_dist(trajFrm[['x_3D', 'y_3D']], norm = 2, offset = offset) ### in points
+        ground_dist = HPost.calc_ball_dist(trajFrm[[xDim, yDim]], norm = 2, offset = offset) ### in points
         ground_speed = HPost.calc_ball_speed(ground_dist, frames = offset, unit = 'mps')
     
-        vert_dist = HPost.calc_ball_dist(trajFrm[['z_3D']], norm = 1, offset = offset)
+        vert_dist = HPost.calc_ball_dist(trajFrm[[zDim]], norm = 1, offset = offset)
         vert_speed = HPost.calc_ball_speed(vert_dist, frames = offset, unit = 'mps') # transform to m/s
     
         ground_speeds.append(ground_speed.iloc[0])
@@ -253,11 +254,12 @@ def calculate_initial_conditions(trajFrm, frames_to_use = 1):
     return avg_ground_speed, avg_vert_speed
     
 def calculate_planar_ball_flight(trajFrm):
-    ground_dist = HPost.calc_ball_dist(trajFrm[['x_3D', 'y_3D']], norm = 2) ### in points
+    xDim, yDim, zDim = trajFrm.columns
+    ground_dist = HPost.calc_ball_dist(trajFrm[[xDim, yDim]], norm = 2) ### in points
     ground_dist_meters = ground_dist / const.SCALE * const.FOOT_TO_METER ### in meters
     ground_dist_meters = ground_dist_meters.cumsum().shift(1).fillna(0) ### normalised, so that at hit, m = 0
 
-    vert_dist = HPost.calc_ball_dist(trajFrm[['z_3D']], norm = 1)
+    vert_dist = HPost.calc_ball_dist(trajFrm[[zDim]], norm = 1)
     vert_dist_meters = vert_dist / const.SCALE * const.FOOT_TO_METER ### in meters
     vert_dist_meters = vert_dist_meters.cumsum().shift(1).fillna(0) ### normalised, so that at hit, m = 0
 
