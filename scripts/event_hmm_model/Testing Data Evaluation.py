@@ -118,9 +118,11 @@ except FileNotFoundError:
     ball_3D = pd.DataFrame()
 
 try:
-    players_3D = read_feature_frame('3D_players', VIDEO_ID, STORE_NAME)
+    top_player_3D = read_feature_frame('3D_topPlayer', VIDEO_ID, STORE_NAME)
+    bot_player_3D = read_feature_frame('3D_botPlayer', VIDEO_ID, STORE_NAME)
 except FileNotFoundError:
-    players_3D = pd.DataFrame()
+    top_player_3D = pd.DataFrame()
+    bot_player_3D = pd.DataFrame()
 
 #%% CREATE 3D FEATURES
 
@@ -149,8 +151,8 @@ for test_sequence in test_data.IndexSF.unique():
         seq_data = HPost.merge_words_and_event_features(seq_data_hidden, event_features)
 
     ## UNDERSTAND IF THE FEATURES HAVE ALREADY BEEN CREATED
-    players_done = seq_data.index.isin(players_3D.index).all()
-    ball_done = seq_data.index.isin(ball_3D.index).all()
+    players_done = seq_data.index.isin(top_player_3D.index).all()
+    ball_done = seq_data.index.isin(ball_3D.index).any() ### used to be .all(), but that is slightly too strict, as there is no interpolation if flight at the very end.
     
     if players_done and ball_done:
         print(f'Found in stored 3D features: {test_sequence}...')
@@ -163,8 +165,9 @@ for test_sequence in test_data.IndexSF.unique():
     
     if not players_done:
         ## 1) Players -> independent of whether we use ground truth events or inferred events!
-        players_3D = HPost.find_player_positions_3D(projDict, test_sequence_features)
-        save_feature_frame(players_3D, '3D_players', VIDEO_ID, STORE_NAME)
+        top_player_3D, bot_player_3D = HPost.find_player_positions_3D(projDict, test_sequence_features)
+        save_feature_frame(top_player_3D, '3D_topPlayer', VIDEO_ID, STORE_NAME)
+        save_feature_frame(bot_player_3D, '3D_botPlayer', VIDEO_ID, STORE_NAME)
     
     if not ball_done:
         ## 2) Ball
@@ -172,7 +175,7 @@ for test_sequence in test_data.IndexSF.unique():
         process_data = HPost.impose_serve(process_data, schemaLines)
         process_data = HPost.impose_net(process_data, schemaLines)
         process_data = HPost.impose_bounce(process_data, bounce_height = 0.2)
-        process_data = HPost.impose_hit(process_data, players_3D)
+        process_data = HPost.impose_hit(process_data, top_player_3D, bot_player_3D)
         ball_2D = process_data[['x', 'y']]
         
         if INTERPOLATION_TYPE == 'linear':

@@ -199,12 +199,9 @@ def single_3D_feature_to_object(singlefeatSeries, featName):
     if 'ball' in featName.lower(): ### is ball
         x, y, z = singlefeatSeries
         return Ball.make((x, y, z))
-    elif 'topplayer' in featName.lower():
-        x, y, z, _, _, _ = singlefeatSeries
-        return Player.make((x, y, z))
-    elif 'botplayer' in featName.lower():
-        _, _, _, x, y, z = singlefeatSeries
-        return Player.make((x, y, z))    
+    elif 'player' in featName.lower():
+        x, y, z = singlefeatSeries
+        return Player.make((x, y, z)) 
     
        
 def load_stored_features(videoName, storeName, featnameList = None, keep_which = 'last'):

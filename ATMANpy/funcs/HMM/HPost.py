@@ -105,13 +105,12 @@ def interpolate_matrices(matrixDict):
         
     return outDict
     
-    
-        
 def find_player_positions_3D(projDict, stream_features):
+    ### which: 'playerTop' or 'playerBot'
     frames = list(projDict.keys())
     
     ### FIND PLAYER POSITIONS ###
-    players_3D = pd.DataFrame(index = frames)
+    top_player_3D, bot_player_3D = pd.DataFrame(index = frames), pd.DataFrame(index = frames)
     
     for frame in frames:
         P = projDict[frame]
@@ -135,15 +134,15 @@ def find_player_positions_3D(projDict, stream_features):
         top_x_3D, top_y_3D, top_z_3D = np.insert(top_3D, cond_dim, cond_val)
         bot_x_3D, bot_y_3D, bot_z_3D = np.insert(bot_3D, cond_dim, cond_val)
         
-        players_3D.at[frame, 'top_x_3D'] = top_x_3D
-        players_3D.at[frame, 'top_y_3D'] = top_y_3D
-        players_3D.at[frame, 'top_z_3D'] = top_z_3D
+        top_player_3D.at[frame, 'x_3D'] = top_x_3D
+        top_player_3D.at[frame, 'y_3D'] = top_y_3D
+        top_player_3D.at[frame, 'z_3D'] = top_z_3D
         
-        players_3D.at[frame, 'bot_x_3D'] = bot_x_3D
-        players_3D.at[frame, 'bot_y_3D'] = bot_y_3D
-        players_3D.at[frame, 'bot_z_3D'] = bot_z_3D
+        bot_player_3D.at[frame, 'x_3D'] = bot_x_3D
+        bot_player_3D.at[frame, 'y_3D'] = bot_y_3D
+        bot_player_3D.at[frame, 'z_3D'] = bot_z_3D
     
-    return players_3D
+    return top_player_3D, bot_player_3D
 
 def find_known_ball_positions_3D(word_inference_frame, projDict):
     
@@ -562,8 +561,9 @@ def impose_bounce(inf_words, bounce_height = 0.2):
     
     return inf_words
 
-def impose_hit(inf_words, player_positions):
-    inf_player_positions = player_positions.loc[inf_words.index]
+def impose_hit(inf_words, top_player, bot_player):
+    inf_top_player_position = top_player.loc[inf_words.index]
+    inf_bot_player_position = bot_player.loc[inf_words.index]
     
     ### Use the fact that the ball is hit slightly in front of player!
     how_far_in_front = 8 ### this corresponds to one foot
@@ -571,8 +571,8 @@ def impose_hit(inf_words, player_positions):
     hit_far_cond = inf_words.Event == 'HF'
     hit_near_cond = inf_words.Event == 'HN'
     
-    hypothetical_ball_top = inf_player_positions.top_y_3D + how_far_in_front
-    hypothetical_ball_bot = inf_player_positions.bot_y_3D - how_far_in_front
+    hypothetical_ball_top = inf_top_player_position.y_3D + how_far_in_front
+    hypothetical_ball_bot = inf_bot_player_position.y_3D - how_far_in_front
 
     preset_values = inf_words['y_3D']
     imposed_values = np.where(hit_far_cond, hypothetical_ball_top, 
