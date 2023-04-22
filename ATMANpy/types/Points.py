@@ -185,7 +185,7 @@ class SafePoint2D(Point2D):
         typecheck(self)
         pointcheck(self)
         
-        super(Point2D, self).__post_init__()
+        super(SafePoint2D, self).__post_init__()
         #####################  
         
     ### METHODS ###
