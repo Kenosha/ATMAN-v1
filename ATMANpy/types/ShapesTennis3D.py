@@ -134,9 +134,11 @@ class Player(Region3D):
         
         centerLn = Line3D(loPt, hiPt)
         return Player.from_line(centerLn, width, dim = 'x',
-                                     left_right = '+x', top_bottom = '-z',
-                                     color = color, name = name)
+                                left_right = '+x', top_bottom = '-z',
+                                color = color, name = name)
     
+    def get_foot_point(self):
+        return self.lineList['Bottom'].center_point()
     
 @dataclass(frozen = True)
 class Racquet(Region3D):

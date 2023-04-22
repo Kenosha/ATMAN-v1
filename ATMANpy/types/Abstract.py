@@ -32,9 +32,22 @@ import ATMANpy.auxil.constants as const
 
 #%%
 
+
+@dataclass(frozen = True)
+class PlayerMovement:
+    playerFeatures: StreamFeatures
+    
+    @staticmethod
+    def from_features(myFeat, which):
+        ### myFeat -> a contiguous StreamFeatures containing 'top' and 'bot' feature
+        ### which -> top or bottom
+        return myFeat[which]
+        
+
+
 @dataclass(frozen = True)
 class Trajectory:
-    trajFeats: StreamFeatures
+    trajFeats: StreamFeatures ### with keys: ball, event
     
     def __iter__(self):
         return iter(self.trajFeats)
@@ -42,7 +55,9 @@ class Trajectory:
     def __getitem__(self, item):
         return self.trajFeats.__getitem__(item)
     
-    def get_coord_frame(self, keep_before = 1): ### keep x frames before the beginning of flight 
+    ### Trajectory Functions
+    # -> last serve, hit or bounce frame, all flight frames!
+    def get_trajectory_dataframe(self, keep_before = 1): ### keep x frames before the beginning of flight 
 
         eventDict = self.trajFeats['event']
     
@@ -58,31 +73,63 @@ class Trajectory:
         coordFrm.columns = ['x', 'y', 'z']
         return coordFrm
     
-    def get_planar_ball_flight(self, keep_before = 1):
-        return sf.calculate_planar_ball_flight(self.get_coord_frame(keep_before = keep_before))
+    def get_trajectory_frames(self, keep_before = 1):
+        coordFrm = self.get_trajectory_dataframe(keep_before = keep_before)
+        return list(coordFrm.index)
     
-    def get_flight_direction(self, keep_before = 1):
-        coordFrm = self.get_coord_frame(keep_before = keep_before)
+    def get_trajectory_planar(self, keep_before = 1):
+        return sf.calculate_planar_ball_flight(self.get_trajectory_dataframe(keep_before = keep_before))
+    
+    def get_trajectory_direction(self, keep_before = 1):
+        coordFrm = self.get_trajectory_dataframe(keep_before = keep_before)
         Dx, Dy = (coordFrm.iloc[-1] - coordFrm.iloc[0])[['x', 'y']]
         return Point3D((Dx, Dy, 0)).normalize()
     
-    def get_pre_flight_position(self, keep_before = 1):
-        coordFrm = self.get_coord_frame(keep_before = keep_before)
-        return Point3D(coordFrm.iloc[0])
+    ### Initial Functions 
+    # -> Serve, Hit, or Bounce frames!
+    def get_initial_event(self):
+        eventDict = self.trajFeats['event']
+        eventList = [event for event in eventDict.values() if not event.startswith('F')]
+        eventList = list(set(eventList))
+        assert len(eventList) == 1
+        return eventList[0]
     
-    def get_height(self, keep_before = 1):
-        coordFrm = self.get_coord_frame(keep_before = keep_before)
-        return coordFrm.iloc[0]['z']
+    def get_initial_frames(self):
+        eventDict = self.trajFeats['event']
+        return [frame for frame, event in eventDict.items() if not event.startswith('F')]
     
-    def get_flight_frames(self, keep_before = 1):
-        coordFrm = self.get_coord_frame(keep_before = keep_before)
-        return list(coordFrm.index)
+    def get_initial_position(self, how = 'mean'):
+        ### how: mean, first, last -> which of the bounces do we want?
+        ballDict = self.trajFeats['ball']
+        hit_or_bounce_points = [ballDict[frame].get_point() for frame in self.get_initial_frames()]
+        
+        if how == 'mean':
+            ### sum takes one or two arguments! if two are given, the second is the start value!
+            return sum(hit_or_bounce_points, Point3D((0, 0, 0))) / len(hit_or_bounce_points)
+        elif how == 'first':
+            return hit_or_bounce_points[0]
+        elif how == 'last':
+            return hit_or_bounce_points[-1]
     
+    ### Flight Functions
+    # -> Flight frames
+    def get_flight_event(self):
+        eventDict = self.trajFeats['event']
+        eventList = [event for event in eventDict.values() if event.startswith('F')]
+        eventList = list(set(eventList))
+        assert len(eventList) == 1
+        return eventList[0]
+    
+    def get_flight_frames(self):
+        eventDict = self.trajFeats['event']
+        return [frame for frame, event in eventDict.items() if event.startswith('F')]
+    
+    ### Other Functions
     def fit_trajectory(self, theory_ground_array, theory_vert_array,
                        v_init_ground_space, v_init_vert_space, spin_rate_space,
                        keep_before = 1, sum_of_squares = False):
         ### transform to trajectory to 2D coordinates
-        pos_ground_measured, pos_vert_measured = self.get_planar_ball_flight(keep_before = keep_before)
+        pos_ground_measured, pos_vert_measured = self.get_trajectory_planar(keep_before = keep_before)
         
         ### compare against theoretical trajectory
         v_ground_idx, v_vert_idx, rpm_idx = sf.get_optimal_trajectory_indices(theory_ground_array, theory_vert_array, 
@@ -100,9 +147,9 @@ class Trajectory:
         
         ### use positions to enhance the stream features with a 'ball_fit' feature.
         ball_fit_dict = {}
-        flight_frames = self.get_flight_frames(keep_before = keep_before)
-        start_position = self.get_pre_flight_position(keep_before = keep_before)
-        ground_direction = self.get_flight_direction(keep_before = keep_before) * const.SCALE * const.METER_TO_FOOT 
+        flight_frames = self.get_trajectory_frames(keep_before = keep_before)
+        start_position = self.get_initial_position(how = 'last')
+        ground_direction = self.get_trajectory_direction(keep_before = keep_before) * const.SCALE * const.METER_TO_FOOT 
         vert_direction = Point3D((0, 0, 1)) * const.SCALE * const.METER_TO_FOOT 
         for frame in self.trajFeats:
             try:
@@ -119,9 +166,10 @@ class Trajectory:
         return TrajectoryFitted(new_trajFeats, v_init_ground, v_init_vert, spin_rpm)
         
     def spline(self):
-        flight_frames = self.get_flight_frames(keep_before = 1)
+        flight_frames = self.get_trajectory_frames(keep_before = 1)
         splineDict = self.trajFeats.spline_3D(pointFeature = 'ball', frameList = flight_frames)
         return splineDict
+    
     
 @dataclass(frozen = True)
 class TrajectoryFitted(Trajectory):
@@ -134,7 +182,7 @@ class TrajectoryFitted(Trajectory):
     spin_rpm: float
      
     def spline(self):
-        flight_frames = self.get_flight_frames(keep_before = 1)
+        flight_frames = self.get_trajectory_frames(keep_before = 1)
         splineDict = self.trajFeats.spline_3D(pointFeature = 'ball', frameList = flight_frames)
         splineDict_fit = self.trajFeats.spline_3D(pointFeature = 'ball_fit', frameList = flight_frames)
         return splineDict, splineDict_fit
@@ -145,6 +193,8 @@ class TrajectoryFitted(Trajectory):
 class Shot:
     shotTraj: Trajectory
     bounceList: List[Trajectory] ### shots can bounce zero times, once, twice, ...
+    hitPlayer: PlayerMovement ### the hitting player
+    recPlayer: PlayerMovement ### the receiving player
     
     @staticmethod
     ### go from shots to trajectories
@@ -182,10 +232,111 @@ class Shot:
                     
         trajList.append(StreamFeatures(current_traj_feature))   
         
+        ### instantiate trajectories
         shotTraj, bounceList = Trajectory(trajList[0]), [Trajectory(traj) for traj in trajList[1:]]
         
-        return Shot(shotTraj, bounceList)
-                    
+        ### instantiate players
+        far_or_near = registered_hit[1] ### F -> far; N -> near (correspond to top and bot resp.)
+        hitStr = 'top' if far_or_near == 'F' else 'bot'
+        recStr = 'bot' if far_or_near == 'F' else 'top'
+        hitPlayer = PlayerMovement.from_features(myFeat, hitStr)
+        recPlayer = PlayerMovement.from_features(myFeat, recStr)
+        
+        return Shot(shotTraj, bounceList, hitPlayer, recPlayer)
+         
+    def fit_trajectory(self, theory_ground_array, theory_vert_array,
+                       v_init_ground_space, v_init_vert_space, spin_rate_space,
+                       keep_before = 1, sum_of_squares = False):
+        shotTrajFit = self.shotTraj.fit_trajectory(theory_ground_array, theory_vert_array, 
+                                                   v_init_ground_space, v_init_vert_space, spin_rate_space,
+                                                   keep_before = keep_before, sum_of_squares = sum_of_squares)
+        return Shot(shotTrajFit, self.bounceList, self.hitPlayer, self.recPlayer)
+    
+    def get_hit_event(self):
+        return self.shotTraj.get_initial_event()
+    
+    def get_ball_hit_position(self, how = 'mean'):
+        return self.shotTraj.get_initial_position(how = 'mean')
+    
+    def get_hit_height(self):
+        return self.get_ball_hit_position().z
+    
+    def get_bounce_positions(self):
+        return [bounceTraj.get_initial_position() for bounceTraj in self.bounceList]
+        
+    def get_player_hit_position(self, how = 'mean'):
+        hit_frames = self.shotTraj.get_initial_frames()
+        hitting_player_points = [self.hitPlayer[frame].get_foot_point() for frame in hit_frames]
+        
+        if how == 'mean':
+            ### sum takes one or two arguments! if two are given, the second is the start value!
+            return sum(hitting_player_points, Point3D((0, 0, 0))) / len(hitting_player_points)
+        elif how == 'first':
+            return hitting_player_points[0]
+        elif how == 'last':
+            return hitting_player_points[-1]
+    
+    def get_hit_which(self):
+        return 'bot' if self.get_hit_event()[1] == 'N' else 'top'
+    
+    def get_rec_which(self):
+        return 'bot' if self.get_hit_event()[1] == 'F' else 'top' 
+        
+    def is_fore(self):
+        ### TODO: Handedness of player!
+        playerPt = myShot.get_player_hit_position()
+        ballPt = myShot.get_ball_hit_position()
+        
+        if self.get_hit_which() == 'bot':
+            return ballPt.is_right(playerPt)
+        else:
+            return ballPt.is_left(playerPt)
+    
+    def is_back(self):
+        return not self.is_fore()
+    
+    def is_volley(self, prevShot):
+        ### prevShot: None or Shot
+        pass
+    
+    def is_ground(self, prevShot):
+        ### prevShot: None or Shot
+        pass
+        
+    def is_serve(self):
+        pass
+    
+    def is_hit(self):
+        pass
+        
+    def is_double_bounce(self):
+        pass
+    
+    def is_winner(self, nextShot):
+        ### nextShot: None or Shot
+        pass
+    
+    def is_cross(self):
+        pass
+    
+    def is_dtl(self):
+        pass
+    
+    def is_overhead(self):
+        pass
+    
+    def is_fair(self, nextShot):
+        ### nextShot: None or Shot
+        # Note: nextShot only needed if we record no bounce: 
+        # if there is no nextShot, it's fault, otherwise, it's fair.
+        pass
+    
+    def is_fault(self, nextShot):
+        ### nextShot: None or Shot
+        # Note: nextShot only needed if we record no bounce: 
+        # if there is no nextShot, it's fault, otherwise, it's fair.
+        pass
+    
     
 @dataclass(frozen = True)
 class Shots:
@@ -243,11 +394,14 @@ class Points:
     
     @staticmethod
     def from_stored_features(video_id, store_name, 
-                             event_name = 'grammatic_event', ball_name = '3D_Ball',
-                                 narrow_instantaneous_events = True):
+                             event_name = 'grammatic_event', ball_name = '3D_Ball', 
+                             top_player_name = '3D_topPlayer', bot_player_name = '3D_botPlayer',
+                             narrow_instantaneous_events = True):
         ### go from points to point
-        myFeats = StreamFeatures.from_store(video_id, store_name, featnameList = [event_name, ball_name])
+        featnameList = [event_name, ball_name, top_player_name, bot_player_name]
+        myFeats = StreamFeatures.from_store(video_id, store_name, featnameList = featnameList)
         myFeats = myFeats.rename_feature(event_name, 'event').rename_feature(ball_name, 'ball')
+        myFeats = myFeats.rename_feature(top_player_name, 'top').rename_feature(bot_player_name, 'bot')
         
         ### turn into list of contiguous stream features
         featList = myFeats.split_joint_features()
@@ -266,6 +420,13 @@ class Points:
     def __getitem__(self, item):
         return self.pointList[item]
     
+### NO NEED TO MAKE A COURT BECAUSE COURT FEATURES ARE UNCHANGING!
+# @dataclass(frozen = True)
+# class Court:
+#     courtFeatures: StreamFeatures
+    
+    
+    
 
 
 #%% Testing
@@ -275,15 +436,18 @@ store_name = '10to100_ok2'
 
 event_name = 'grammatic_event'
 ball_name = '3D_Ball_smart_inference'
+top_player_name = '3D_topPlayer'
+bot_player_name = '3D_botPlayer'
 
 myPts = Points.from_stored_features(video_id, store_name, 
-                                      event_name = event_name, ball_name = ball_name)
+                                    event_name = event_name, ball_name = ball_name,
+                                    top_player_name = top_player_name, bot_player_name = bot_player_name)
 myPt = myPts[0]
 myShot = myPt[0]
 myTraj = myShot.shotTraj
 
 
-pos_ground_measured, pos_vert_measured = myTraj.get_planar_ball_flight()
+pos_ground_measured, pos_vert_measured = myTraj.get_trajectory_planar()
 
 #%% 
 ### read theoretical trajectories
@@ -298,7 +462,8 @@ myTraj.spline()
 myTrajFit.spline()
 
 
-
-
+myShot.get_ball_hit_position()
+myShot.get_player_hit_position()
+myShot.get_bounce_positions()
 
 
