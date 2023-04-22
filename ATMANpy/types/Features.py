@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 import ATMANpy.funcs.feature_funcs as ff
 
+from ATMANpy.types.Lines import Line
+from ATMANpy.types.Shapes3D import Line3D
 
 
 @dataclass(frozen = True)
@@ -106,7 +108,35 @@ class StreamFeatures:
     def get_event_names(self):
         return list(self.featDict[0].keys())
     
+    def spline_2D(self, pointFeature = 'ball', frameList = None):
+        outDict = {}
         
+        if frameList is None:
+            frameList = self.get_frames()
+
+        f1, fs = frameList[0], frameList[1:]
+        for f2 in fs:
+            ballPt1 = self[f1][pointFeature]
+            ballPt2 = self[f2][pointFeature]
+            spLine = Line(ballPt1, ballPt2, name = 'Spline')
+            outDict[f2] = spLine
+            f1 = f2
+        return outDict
+    
+    def spline_3D(self, pointFeature = 'ball', frameList = None):
+        outDict = {}
+        
+        if frameList is None:
+            frameList = self.get_frames()
+
+        f1, fs = frameList[0], frameList[1:]
+        for f2 in fs:
+            ballPt1 = self[f1][pointFeature]
+            ballPt2 = self[f2][pointFeature]
+            spLine = Line3D(ballPt1, ballPt2, name = 'Spline')
+            outDict[f2] = spLine
+            f1 = f2
+        return outDict
     
         
 #%% Testing

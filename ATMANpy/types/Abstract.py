@@ -10,7 +10,7 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import Optional, List
 
-from ATMANpy.types.Shapes3D import Point3D
+from ATMANpy.types.Shapes3D import Point3D, Line3D
 from ATMANpy.types.Features import StreamFeatures
 
 from ATMANpy.funcs.HMM.HPost import narrow_down_instantaneous_events
@@ -18,7 +18,7 @@ from ATMANpy.funcs.util_funcs import split_into_contiguous, widen_list
 import ATMANpy.funcs.spin_funcs as sf
 
 
-groundArr, vertArr, trajDict = sf.load_trajectories('TrajectoriesRPM', dtype = 'float32')
+groundArr, vertArr, trajDict = sf.load_trajectories('TrajectoriesRPM_small', dtype = 'float32')
 
 ### initialise search spaces with proper arguments
 import inspect
@@ -39,7 +39,10 @@ class Trajectory:
     def __iter__(self):
         return iter(self.trajFeats)
     
-    def get_frames(self, keep_before = 1): ### keep x frames before the beginning of flight 
+    def __getitem__(self, item):
+        return self.trajFeats.__getitem__(item)
+    
+    def get_coord_frame(self, keep_before = 1): ### keep x frames before the beginning of flight 
 
         eventDict = self.trajFeats['event']
     
@@ -56,23 +59,23 @@ class Trajectory:
         return coordFrm
     
     def get_planar_ball_flight(self, keep_before = 1):
-        return sf.calculate_planar_ball_flight(self.get_frames(keep_before = keep_before))
+        return sf.calculate_planar_ball_flight(self.get_coord_frame(keep_before = keep_before))
     
     def get_flight_direction(self, keep_before = 1):
-        coordFrm = self.get_frames(keep_before = keep_before)
+        coordFrm = self.get_coord_frame(keep_before = keep_before)
         Dx, Dy = (coordFrm.iloc[-1] - coordFrm.iloc[0])[['x', 'y']]
         return Point3D((Dx, Dy, 0)).normalize()
     
     def get_pre_flight_position(self, keep_before = 1):
-        coordFrm = self.get_frames(keep_before = keep_before)
+        coordFrm = self.get_coord_frame(keep_before = keep_before)
         return Point3D(coordFrm.iloc[0])
     
     def get_height(self, keep_before = 1):
-        coordFrm = self.get_frames(keep_before = keep_before)
+        coordFrm = self.get_coord_frame(keep_before = keep_before)
         return coordFrm.iloc[0]['z']
     
     def get_flight_frames(self, keep_before = 1):
-        coordFrm = self.get_frames(keep_before = keep_before)
+        coordFrm = self.get_coord_frame(keep_before = keep_before)
         return list(coordFrm.index)
     
     def fit_trajectory(self, theory_ground_array, theory_vert_array,
@@ -115,6 +118,10 @@ class Trajectory:
         
         return TrajectoryFitted(new_trajFeats, v_init_ground, v_init_vert, spin_rpm)
         
+    def spline(self):
+        flight_frames = self.get_flight_frames(keep_before = 1)
+        splineDict = self.trajFeats.spline_3D(pointFeature = 'ball', frameList = flight_frames)
+        return splineDict
     
 @dataclass(frozen = True)
 class TrajectoryFitted(Trajectory):
@@ -125,7 +132,14 @@ class TrajectoryFitted(Trajectory):
     v_init_ground: float
     v_init_vert: float
     spin_rpm: float
-    
+     
+    def spline(self):
+        flight_frames = self.get_flight_frames(keep_before = 1)
+        splineDict = self.trajFeats.spline_3D(pointFeature = 'ball', frameList = flight_frames)
+        splineDict_fit = self.trajFeats.spline_3D(pointFeature = 'ball_fit', frameList = flight_frames)
+        return splineDict, splineDict_fit
+            
+        
     
 @dataclass(frozen = True)
 class Shot:
@@ -280,8 +294,8 @@ myTrajFit = myTraj.fit_trajectory(groundArr, vertArr,
 myTrajFit.trajFeats['ball']
 myTrajFit.trajFeats['ball_fit']
 
-
-
+myTraj.spline()
+myTrajFit.spline()
 
 
 
