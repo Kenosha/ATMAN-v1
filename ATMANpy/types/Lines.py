@@ -12,6 +12,8 @@ from ATMANpy.types.Points import Point2D, SafePoint2D
 
 from typing import List
 
+import ATMANpy.auxil.constants as const
+
 
 @dataclass(frozen = True)
 class Line:
@@ -407,35 +409,22 @@ class CourtLines(Lines):
     
     @staticmethod
     def get_dimensions(size = 4, force_dimensions = False):
-        ## court dimensions in feet
-        court_width = 36
-        side_length = 39
-        doubles_alley_width = 4.5
-        singles_width = court_width - 2 * doubles_alley_width
-        service_box_length = 21
-        service_box_width = singles_width / 2
-        net_beyond_line = 3
-        net_height_post = 3.5
-        net_height_middle = 3
-        baseline_width = 0.5 # 1/3: the minimum baseline width is a third of a foot
-        otherline_width = 0.25 # 1/6: the minimum width of other lines is a sixth of a foot
-    
-        scale_minimum = 2 ### minimum scale, so we have integers
-    
-        scale = size * scale_minimum
         
-        outDict = {'scale': scale,
-                   'court_width': scale * court_width,
-                   'side_length': scale * side_length,
-                   'doubles_alley_width': scale * doubles_alley_width,
-                   'singles_width': scale * singles_width,
-                   'service_box_length': scale * service_box_length,
-                   'service_box_width': scale * service_box_width,
-                   'net_beyond_line': scale * net_beyond_line,
-                   'net_height_post': scale * net_height_post,
-                   'net_height_middle': scale * net_height_middle,
-                   'baseline_width': scale * baseline_width,
-                   'otherline_width': scale * otherline_width}
+        ### dimensions of court, in feet
+        feetDict = {'scale': 1,
+                   'court_width': const.COURT_WIDTH,
+                   'side_length': const.SIDE_LENGTH,
+                   'doubles_alley_width': const.DOUBLES_ALLEY_WIDTH,
+                   'singles_width': const.SINGLES_WIDTH,
+                   'service_box_length': const.SERVICE_BOX_LENGTH,
+                   'service_box_width': const.SERVICE_BOX_WIDTH,
+                   'net_beyond_line': const.NET_BEYOND_LINE,
+                   'net_height_post': const.NET_BEYOND_POST,
+                   'net_height_middle': const.NET_HEIGHT_MIDDLE,
+                   'baseline_width': const.BASELINE_WIDTH,
+                   'otherline_width': const.OTHERLINE_WIDTH}
+        ### dimensions of court, scaled up
+        outDict = {k: const.SCALE * v for k, v in feetDict.items()}
         
         if force_dimensions:
             outDict = {k: round(v) for k, v in outDict.items()}

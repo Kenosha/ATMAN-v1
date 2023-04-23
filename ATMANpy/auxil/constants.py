@@ -20,3 +20,18 @@ SEC_TO_MIN = 1 / MIN_TO_SEC
 ### SCALE OF MODEL COURT ###
 SCALE = 8
 MARGIN = 150
+
+### DIMENSIONS IN FEET OF MODEL COURT ###
+
+## court dimensions in feet
+COURT_WIDTH = 36
+SIDE_LENGTH = 39
+DOUBLES_ALLEY_WIDTH = 4.5
+SINGLES_WIDTH = COURT_WIDTH - 2 * DOUBLES_ALLEY_WIDTH
+SERVICE_BOX_LENGTH = 21
+SERVICE_BOX_WIDTH = SINGLES_WIDTH / 2
+NET_BEYOND_LINE = 3
+NET_BEYOND_POST = 3.5
+NET_HEIGHT_MIDDLE = 3
+BASELINE_WIDTH = 0.5 # 1/3: the minimum baseline width is a third of a foot
+OTHERLINE_WIDTH = 0.25 # 1/6: the minimum width of other lines is a sixth of a foot
