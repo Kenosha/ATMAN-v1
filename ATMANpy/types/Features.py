@@ -15,27 +15,33 @@ from ATMANpy.types.Shapes3D import Line3D
 
 @dataclass(frozen = True)
 class StreamFeatures:
-    featDict: dict
+    streamDict: dict
     
     @staticmethod
     def from_store(video_id, store_name, featnameList = None):
         featDict = ff.load_stored_features(video_id, store_name, featnameList = featnameList)
         return StreamFeatures(featDict)
     
+    def __repr__(self):
+        features = self.get_features()
+        frames = self.get_frames()
+        min_frame, max_frame = frames[0], frames[-1]
+        return f'StreamFeatures(frames: {min_frame} to {max_frame}, features: {features})'
+    
     def __iter__(self):
-        return iter(self.featDict)
+        return iter(self.streamDict)
     
     def __getitem__(self, item):
         if isinstance(item, int):
             ### get a single frame feature dictionary!
             try:
-                return self.featDict[item]
+                return self.streamDict[item]
             except KeyError:
                 raise Exception(KeyError, f'No such frame: {item}')
             
         if isinstance(item, str):
             try:
-                return {frame: frameDict[item] for frame, frameDict in self.featDict.items()}
+                return {frame: frameDict[item] for frame, frameDict in self.streamDict.items()}
             except KeyError:
                 raise Exception(KeyError, f'No such feature: {item}')
             
@@ -45,45 +51,54 @@ class StreamFeatures:
     def drop(self, item):
         if isinstance(item, int):
             ### drop a single frame feature dictionary!
-            dropDict = {frame: features for frame, features in self.featDict.items() if frame != item}        
+            dropDict = {frame: featDict for frame, featDict in self.streamDict.items() if frame != item}        
         if isinstance(item, str):
-            dropDict = {frame: {name: feat for name, feat in features.items() if name != item} for frame, features in self.featDict.items()}
+            dropDict = {frame: {name: feat for name, feat in featDict.items() if name != item} for frame, featDict in self.streamDict.items()}
         return StreamFeatures(dropDict)
     
+    def keep(self, keepList):
+        if all([isinstance(item, int) for item in keepList]):
+            ### keeping frames!
+            streamDict = {frame: featDict for frame, featDict in self.streamDict.items() if frame in keepList}    
+        if all([isinstance(item, str) for item in keepList]):
+            ### keeping features!
+            streamDict = {frame: {feat: val for feat, val in featDict.items() if feat in keepList} for frame, featDict in self.streamDict.items()}
+        return StreamFeatures(streamDict)            
+        
     def add(self, key, value):
         
         if isinstance(key, int) and isinstance(value, dict): ### adding a frame!
-            if key in self.featDict:
+            if key in self.streamDict:
                 raise Exception(f'frame {key} exists, can not add entry.')
             else:
-                new_featDict = self.featDict.copy()
-                new_featDict[key] = value
-                return StreamFeatures(new_featDict)
+                new_streamDict = self.streamDict.copy()
+                new_streamDict[key] = value
+                return StreamFeatures(new_streamDict)
         
         elif isinstance(key, str): ### adding a feature
-            new_featDict = {}    
+            new_streamDict = {}    
             if isinstance(value, dict): ### dictionary like {frame: feature}, where feature might be different for every frame
-                for frame, features in self.featDict.items():
-                    if key in features:
+                for frame, featDict in self.streamDict.items():
+                    if key in featDict:
                         raise Exception(f'feature {key} exists, can not add entry.')
                     else:
-                        new_features = features.copy()
+                        new_featDict = featDict.copy()
                         try:
-                            new_features[key] = value[frame]
+                            new_featDict[key] = value[frame]
                         except KeyError:
-                            new_features[key] = None
-                        new_featDict[frame] = new_features
+                            new_featDict[key] = None
+                        new_streamDict[frame] = new_featDict
                         
             else: ### some constant thing, added everywhere 
-                for frame, features in self.featDict.items():
-                    if key in features:
+                for frame, featDict in self.streamDict.items():
+                    if key in featDict:
                         raise Exception(f'feature {key} exists, can not add entry.')
                     else:
-                        new_features = features.copy()
-                        new_features[key] = value
-                        new_featDict[frame] = new_features
+                        new_featDict = featDict.copy()
+                        new_featDict[key] = value
+                        new_streamDict[frame] = new_featDict
             
-            return StreamFeatures(new_featDict)
+            return StreamFeatures(new_streamDict)
         
         else:
             raise Exception('Invalid key, value combination to add to stream features.')
@@ -92,21 +107,22 @@ class StreamFeatures:
         rename_stringFunc = lambda inStr: new_name if inStr == old_name else inStr
         rename_dictFunc = lambda inDict: {rename_stringFunc(k): v for k, v in inDict.items()}
         
-        renamedDict = {frame: rename_dictFunc(features) for frame, features in self.featDict.items()}
+        renamedDict = {frame: rename_dictFunc(featDict) for frame, featDict in self.streamDict.items()}
         return StreamFeatures(renamedDict)
 
     def split_joint_features(self, min_feature_length = 0):
-        featList = ff.split_joint_features(self.featDict, min_feature_length = min_feature_length)
+        featList = ff.split_joint_features(self.streamDict, min_feature_length = min_feature_length)
         return [StreamFeatures(featDict) for featDict in featList]
         
     def length(self):
-        return len(self.featDict)
+        return len(self.streamDict)
     
     def get_frames(self):
-        return list(self.featDict.keys())
+        return list(self.streamDict.keys())
     
-    def get_event_names(self):
-        return list(self.featDict[0].keys())
+    def get_features(self):
+        first_frame = self.get_frames()[0]
+        return list(self.streamDict[first_frame].keys())
     
     def spline_2D(self, pointFeature = 'ball', frameList = None):
         outDict = {}

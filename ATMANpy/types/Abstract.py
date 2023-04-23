@@ -55,6 +55,19 @@ class Trajectory:
     def __getitem__(self, item):
         return self.trajFeats.__getitem__(item)
     
+    def __repr__(self):
+        initial_event = self.get_initial_event()
+        frames = self.trajFeats.get_frames()
+        min_frame, max_frame = frames[0], frames[-1]
+        
+        return f'Trajectory(frames: {min_frame} to {max_frame}, beginning with {initial_event}'
+    
+    @staticmethod
+    def from_features(trajFeats):
+        assert 'ball' in trajFeats.get_features(), f'ball feature not found in trajectory init with {trajFeats}'
+        assert 'event' in trajFeats.get_features(), f'event feature not found in trajectory init with {trajFeats}'
+        return Trajectory(trajFeats.keep(['ball', 'event']))
+    
     ### Trajectory Functions
     # -> last serve, hit or bounce frame, all flight frames!
     def get_trajectory_dataframe(self, keep_before = 1): ### keep x frames before the beginning of flight 
@@ -199,6 +212,7 @@ class Shot:
     @staticmethod
     ### go from shots to trajectories
     def from_features(myFeat):
+        print(f'Initialising Shot from {myFeat}...')
         ### go from shots to trajectories
         events_non_null = {frame: event for frame, event in myFeat['event'].items() if event != 'None'}
 
@@ -220,7 +234,7 @@ class Shot:
                     current_traj_feature[frame] = myFeat[frame]
                 elif event[0] in ['B', 'N']: ### a bounce or net event!
                     if is_bouncing: ### already bouncing in previous frame!
-                        current_traj_feature = myFeat[frame]
+                        current_traj_feature[frame] = myFeat[frame]
                     else: ### first bouncing frame here!
                         trajList.append(StreamFeatures(current_traj_feature))
                         current_traj_feature = {frame: myFeat[frame]}
@@ -233,7 +247,7 @@ class Shot:
         trajList.append(StreamFeatures(current_traj_feature))   
         
         ### instantiate trajectories
-        shotTraj, bounceList = Trajectory(trajList[0]), [Trajectory(traj) for traj in trajList[1:]]
+        shotTraj, bounceList = Trajectory.from_features(trajList[0]), [Trajectory.from_features(traj) for traj in trajList[1:]]
         
         ### instantiate players
         far_or_near = registered_hit[1] ### F -> far; N -> near (correspond to top and bot resp.)
@@ -255,6 +269,12 @@ class Shot:
     def get_hit_event(self):
         return self.shotTraj.get_initial_event()
     
+    def get_bounce_event(self):
+        if len(self.bounceList) == 0:
+            return None
+        else:
+            return self.bounceList[0].get_initial_event()
+        
     def get_ball_hit_position(self, how = 'mean'):
         return self.shotTraj.get_initial_position(how = 'mean')
     
@@ -263,7 +283,7 @@ class Shot:
     
     def get_bounce_positions(self):
         return [bounceTraj.get_initial_position() for bounceTraj in self.bounceList]
-        
+    
     def get_player_hit_position(self, how = 'mean'):
         hit_frames = self.shotTraj.get_initial_frames()
         hitting_player_points = [self.hitPlayer[frame].get_foot_point() for frame in hit_frames]
@@ -282,6 +302,9 @@ class Shot:
     def get_rec_which(self):
         return 'bot' if self.get_hit_event()[1] == 'F' else 'top' 
         
+    def get_num_bounces(self):
+        return len(self.bounceList)
+    
     def is_fore(self):
         ### TODO: Handedness of player!
         playerPt = myShot.get_player_hit_position()
@@ -297,45 +320,62 @@ class Shot:
     
     def is_volley(self, prevShot):
         ### prevShot: None or Shot
-        pass
+        return prevShot.get_num_bounces() == 0 
     
     def is_ground(self, prevShot):
         ### prevShot: None or Shot
-        pass
+        return not self.is_volley(prevShot)
         
     def is_serve(self):
-        pass
+        return self.get_hit_event()[0] == 'S'
     
     def is_hit(self):
-        pass
+        return not self.is_serve()
         
     def is_double_bounce(self):
-        pass
+        return self.get_num_bounces() > 1
     
     def is_winner(self, nextShot):
         ### nextShot: None or Shot
-        pass
+        if nextShot is None:
+            return self.is_fair(nextShot)
+        else:
+            return self.is_fair(nextShot) & self.is_double_bounce()
     
     def is_cross(self):
-        pass
+        ### if the x dimension is more than half the singles court width
+        CROSS_THRESHOLD = const.SINGLES_WIDTH / 2
+        trajVec = self.get_ball_hit_position() - self.get_bounce_positions()[0]
+        return abs(trajVec.y) > CROSS_THRESHOLD
     
     def is_dtl(self):
-        pass
+        return not self.is_cross()
     
     def is_overhead(self):
-        pass
-    
+        OVERHEAD_THRESHOLD = 2.25 * const.METER_TO_FOOT * const.SCALE ### 2.25 meter 
+        return self.is_hit() & self.get_hit_height() > OVERHEAD_THRESHOLD
+        
     def is_fair(self, nextShot):
         ### nextShot: None or Shot
         # Note: nextShot only needed if we record no bounce: 
         # if there is no nextShot, it's fault, otherwise, it's fair.
-        pass
+        bounce_event = self.get_bounce_event()
+        if bounce_event is None:
+            if nextShot is None:
+                return False
+            else:
+                return True
+        else:
+            if bounce_event[1] == 'I': ### IN
+                return True
+            else:
+                return False
     
     def is_fault(self, nextShot):
         ### nextShot: None or Shot
         # Note: nextShot only needed if we record no bounce: 
         # if there is no nextShot, it's fault, otherwise, it's fair.
-        pass
+        return not self.is_fair(nextShot)
     
     
 @dataclass(frozen = True)
@@ -345,6 +385,8 @@ class Shots:
     
     @classmethod
     def from_features(cls, myFeat):
+        print(f'Initialising {cls} from {myFeat}...')
+        
         ### go from point to shots
         events_non_null = {frame: event for frame, event in myFeat['event'].items() if event != 'None'}
 
@@ -465,5 +507,3 @@ myTrajFit.spline()
 myShot.get_ball_hit_position()
 myShot.get_player_hit_position()
 myShot.get_bounce_positions()
-
-
