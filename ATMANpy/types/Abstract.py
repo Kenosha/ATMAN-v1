@@ -80,7 +80,8 @@ class Trajectory:
             if add_frame in eventDict:
                 traj_frames = [add_frame, *traj_frames]
         
-        ballSer = pd.Series(self.trajFeats['ball'])[traj_frames] ### get series of balls of interest
+        ballSer = self.trajFeats['ball'].to_series()[traj_frames] ### get series of balls of interest
+        ballSer = ballSer.dropna() ### drop None ball events --> usually occur at end of point!
         coordSer = ballSer.map(lambda myBall: myBall.get_point().coords) ### get coordinates
         coordFrm = coordSer.apply(pd.Series) ### how the hell does this work?
         coordFrm.columns = ['x', 'y', 'z']
@@ -177,7 +178,8 @@ class Trajectory:
                 x, z = pos_ground_theory[flight_idx], pos_vert_theory[flight_idx]
                 ball_fit_dict[frame] = start_position + ground_direction * x + vert_direction * z
             
-        new_trajFeats = self.trajFeats.add('ball_fit', ball_fit_dict)
+        ball_fit_SF = StreamFeature(ball_fit_dict, name = 'ball_fit')
+        new_trajFeats = self.trajFeats.merge(ball_fit_SF)
         
         return TrajectoryFitted(new_trajFeats, v_init_ground, v_init_vert, spin_rpm)
         
@@ -310,29 +312,30 @@ class Shot:
         return [*shot_frames, *bounce_frames]
     
     def get_splines(self, which = 'ball'):
+        print(self)
         ### TODO: allow splining of player movement
         if which == 'ball':
             splineSF = self.shotTraj.get_splines()
             bouncesplineSFs = [bounceTraj.get_splines() for bounceTraj in self.bounceList]
             for bSF in bouncesplineSFs:
                 ### need the connecting spline also! otherwise, there is a one frame gap...
-                frame_bef, lastLine3D = splineSF.last()
-                frame_aft, firstLine3D = bSF.first()
-                assert frame_bef + 1 == frame_aft - 1, f'Connecting spline failed between {splineSF} and {bSF}'
-                connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
-                splineSF = splineSF.add(frame_bef + 1, connecting_spline)
+                # frame_bef, lastLine3D = splineSF.last()
+                # frame_aft, firstLine3D = bSF.first()
+                # # assert frame_bef + 1 == frame_aft - 1, f'Connecting spline failed between {splineSF} and {bSF}'
+                # connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
+                # splineSF = splineSF.add(frame_bef + 1, connecting_spline)
                 splineSF = splineSF.extend(bSF)
         elif which == 'ball_fit': ### has to be a TrajectoryFit
             splineSF = self.shotTraj.get_fit_splines()
-            bouncesplineSFs = [bounceTraj.get_fit_splines() for bounceTraj in self.bounceList]
-            for bSF in bouncesplineSFs:
-                ### need the connecting spline also! otherwise, there is a one frame gap...
-                frame_bef, lastLine3D = splineSF.last()
-                frame_aft, firstLine3D = bSF.first()
-                assert frame_bef + 1 == frame_aft - 1, f'Connecting spline failed between {splineSF} and {bSF}'
-                connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
-                splineSF = splineSF.add(frame_bef + 1, connecting_spline)
-                splineSF = splineSF.extend(bSF)
+            # bouncesplineSFs = [bounceTraj.get_splines() for bounceTraj in self.bounceList] ### not fitted!!!
+            # for bSF in bouncesplineSFs:
+            #     ### need the connecting spline also! otherwise, there is a one frame gap...
+            #     frame_bef, lastLine3D = splineSF.last()
+            #     frame_aft, firstLine3D = bSF.first()
+            #     assert frame_bef + 1 == frame_aft - 1, f'Connecting spline failed between {splineSF} and {bSF}'
+            #     connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
+            #     splineSF = splineSF.add(frame_bef + 1, connecting_spline)
+            #     splineSF = splineSF.extend(bSF)
         return splineSF
     
     def is_fore(self):
@@ -452,6 +455,21 @@ class Shots:
     def __getitem__(self, item):
         return self.shotList[item]
     
+     
+    def fit_trajectory(self, theory_ground_array, theory_vert_array,
+                       v_init_ground_space, v_init_vert_space, spin_rate_space,
+                       keep_before = 1, sum_of_squares = False):
+        return self.__class__([myShot.fit_trajectory(theory_ground_array, theory_vert_array,
+                                                     v_init_ground_space, v_init_vert_space, spin_rate_space,
+                                                     keep_before = 1, sum_of_squares = False) for myShot in self.shotList]) 
+    
+    def get_splines(self, which = 'ball'):
+        splineSFs = [myShot.get_splines(which = which) for myShot in self.shotList]
+        outSF, otherSFs = splineSFs[0], splineSFs[1:]
+        for otherSF in otherSFs:
+            outSF = outSF.extend(otherSF)
+        return outSF
+        
    
 @dataclass(frozen = True)
 class Point(Shots):

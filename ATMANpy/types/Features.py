@@ -7,6 +7,8 @@ Created on Thu Apr 20 15:59:24 2023
 
 from dataclasses import dataclass
 
+import pandas as pd
+
 import ATMANpy.funcs.feature_funcs as ff
 
 from ATMANpy.types.Lines import Line
@@ -32,6 +34,18 @@ class StreamFeaturesBase:
         except KeyError:
             raise Exception(KeyError, f'No such frame: {item}')
     
+    def keys(self):
+        return self.streamDict.keys()
+        
+    def items(self):
+        return self.streamDict.items()
+    
+    def values(self):
+        return self.streamDict.values()
+    
+    def to_series(self):
+        return pd.Series(self.streamDict, name = self.name)
+
     def first(self):
         frame = self.get_frames()[0]
         return frame, self.streamDict[frame]
@@ -67,6 +81,26 @@ class StreamFeaturesBase:
             streamDict = {**self.streamDict, **otherSF.streamDict} ### does not sort!
         return self.__class__(streamDict, name = self.name)
     
+    def merge(self, otherSF):
+        features, features_other = self.get_features(), otherSF.get_features()
+        
+        features_overlap = [f for f in features if f in features_other]
+        if features_overlap != []:
+            raise Exception(f'features {features_overlap} exist in {self} and {otherSF}, can not combine')
+            
+        streamDict = {}    
+        for frame, featObj in self.streamDict.items():
+            try:
+                other_featObj = otherSF[frame]
+            except:
+                other_featObj = {f: None for f in features_other}
+            finally:
+                if isinstance(other_featObj, dict):
+                    streamDict[frame] = {self.name: featObj, **other_featObj}
+                else:
+                    streamDict[frame] = {self.name: featObj, otherSF.name: other_featObj}
+        return StreamFeatures(streamDict)
+    
     def split_joint_features(self, min_feature_length = 0):
         sfList = ff.split_joint_features(self.streamDict, min_feature_length = min_feature_length)
         return [self.__class__(streamDict, name = self.name) for streamDict in sfList]
@@ -89,7 +123,11 @@ class StreamFeature(StreamFeaturesBase):
     
     def get_features(self):
         return [self.name]
-        
+    
+    def recolor(self, new_bgr):
+        recoloredDict = {frame: obj.recolor(new_bgr) for frame, obj in self.streamDict.items()}
+        return StreamFeature(recoloredDict, name = self.name)
+    
         
 @dataclass(frozen = True)
 class StreamFeatures(StreamFeaturesBase):
@@ -113,7 +151,8 @@ class StreamFeatures(StreamFeaturesBase):
             
         elif isinstance(item, str):
             try:
-                return {frame: frameDict[item] for frame, frameDict in self.streamDict.items()}
+                streamDict = {frame: frameDict[item] for frame, frameDict in self.streamDict.items()}
+                return StreamFeature(streamDict, name = item)
             except KeyError:
                 raise Exception(KeyError, f'No such feature: {item}')
             
@@ -229,45 +268,45 @@ class StreamFeatures(StreamFeaturesBase):
         return outDict
     
         
-# #%% Testing
+#%% Testing
 
 
-# video_id = 'pqxAmUWIoKc'
-# store_name = '10to100_ok2'
+video_id = 'pqxAmUWIoKc'
+store_name = '10to100_ok2'
 
-# myDict = {100: {'foo': 2, 'bar': 29}, 101: {'foo': 3, 'bar': 30}}
-# myDict2 = {102: {'foo': 2, 'bar': 29}, 103: {'foo': 3, 'bar': 30}}
+myDict = {100: {'foo': 2, 'bar': 29}, 101: {'foo': 3, 'bar': 30}}
+myDict2 = {102: {'foo': 2, 'bar': 29}, 103: {'foo': 3, 'bar': 30}}
 
-# SF = StreamFeatures(myDict)
-# SF2 = StreamFeatures(myDict2)
+SF = StreamFeatures(myDict)
+SF2 = StreamFeatures(myDict2)
 
-# SF[100]
-# SF.drop(100)
+SF[100]
+SF.drop(100)
 
-# SF.add(10, {'fri': 3})
+SF.add(10, {'fri': 3})
 
-# SF.extend(SF2)
-
-
-# SF[101]
-# SF.extend(SF2)[102]
+SF.extend(SF2)
 
 
-# myDict3 = {100: {'baz': 2, 'goo': 29}, 101: {'baz': 3, 'goo': 30}, 102: {'baz': 3, 'goo': 30}}
-# myDict3 = {100: {'baz': 2, 'goo': 29}}
-# SF3 = StreamFeatures(myDict3)
+SF[101]
+SF.extend(SF2)[102]
 
-# SF.merge(SF3)[100]
 
-# myDict = {100: 3, 101: 4, 102: 2}
-# # myDict2 = {102: 3, 103: 3, 104: 3}
-# myDict2 = {103: 3, 104: 3}
-# SF = StreamFeature(myDict, name = 'foo')
-# SF2 = StreamFeature(myDict2, name = 'foo')
+myDict3 = {100: {'baz': 2, 'goo': 29}, 101: {'baz': 3, 'goo': 30}, 102: {'baz': 3, 'goo': 30}}
+myDict3 = {100: {'baz': 2, 'goo': 29}}
+SF3 = StreamFeatures(myDict3)
 
-# SF.extend(SF2)
+SF.merge(SF3)[100]
 
-# SF.first()
+myDict = {100: 3, 101: 4, 102: 2}
+# myDict2 = {102: 3, 103: 3, 104: 3}
+myDict2 = {103: 3, 104: 3}
+SF = StreamFeature(myDict, name = 'foo')
+SF2 = StreamFeature(myDict2, name = 'foo')
+
+SF.extend(SF2)
+
+SF.first()
 
 
 
