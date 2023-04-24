@@ -35,3 +35,35 @@ NET_BEYOND_POST = 3.5
 NET_HEIGHT_MIDDLE = 3
 BASELINE_WIDTH = 0.5 # 1/3: the minimum baseline width is a third of a foot
 OTHERLINE_WIDTH = 0.25 # 1/6: the minimum width of other lines is a sixth of a foot
+
+### COLORS ####
+
+### these colors look good on black according to the internet ###
+RGB = {'ball_yellow': (223, 255, 79),
+       'soft_yellow': (254, 232, 81),
+       'fair_yellow': (249, 223, 48),
+       'taxi_yellow': (240, 233, 149),
+       
+       'minty_green': (53, 185, 151),
+       'grass_green': (145, 193, 62),
+       'leafy_green': (34, 175, 75),
+       'bluey_green': (8, 185, 165),
+       
+       'strong_blue': (15, 137, 202),
+       'bright_blue': (29, 162, 220),
+       'marine_blue': (26, 87, 143),
+       
+       'salmon_pink': (240, 85, 97),
+       'strong_pink': (238, 34, 74),
+       
+       'rose_orange': (238, 87, 61),
+       'sign_orange': (26, 87, 143),
+    
+       'intense_red': (238, 37, 36),
+
+       'bright_grey': (238, 238, 238),
+       'smokey_grey': (150, 150, 150)
+       }
+
+BGR = {name: (val[2], val[1], val[0]) for name, val in RGB.items()}
+

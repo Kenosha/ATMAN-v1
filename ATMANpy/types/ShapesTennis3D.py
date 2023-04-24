@@ -11,6 +11,7 @@ SCALE = 2 * SCHEMA_SIZE  ## times two, because there is a minimum scale factor..
 
 from ATMANpy.types.Shapes3D import Point3D, Ball3D, Line3D, Region3D, Lines3D, Regions3D
 
+import ATMANpy.auxil.constants as const
 
 # @dataclass(frozen = True)
 # class Court(Lines3D):
@@ -27,7 +28,7 @@ class Court(Regions3D):
     """
     A list of regions, i.e. a set of planes that make some composite shape.
     """
-    _LINE_COLOR = (255, 255, 255)
+    _LINE_COLOR = const.BGR['bright_grey']
     
     @staticmethod
     def make(color = _LINE_COLOR):
@@ -58,7 +59,7 @@ class Court(Regions3D):
     
 @dataclass(frozen = True)
 class Net(Regions3D):
-    _NET_COLOR = (212, 127, 255) ### a nice aquamarine
+    _NET_COLOR = const.BGR['bright_blue'] ### a nice aquamarine
     
     @staticmethod
     def make_singles(color = _NET_COLOR):
@@ -75,21 +76,25 @@ class Net(Regions3D):
         
         return Net([leftReg, rightReg], name = 'Net', color = color)
         
+    
 @dataclass(frozen = True)
 class Ball(Ball3D):
     _RADIUS_IN_FEET = 0.108  ### what is the correct default radius? 
                               ## should be the tennis ball in the usual coord system of court lines.
                               ## ball radius in feet (2.6 inch diameter -> 1.3 inch radius = 0.108 ft.)
-    _BALL_COLOR = (79, 255, 223) ### color of tennis ball in BGR
+    _BALL_COLOR = const.BGR['ball_yellow'] ### color of tennis ball in BGR
     
     @staticmethod
     def make(coords):
         return Ball(coords, Ball._RADIUS_IN_FEET * SCALE, 
                     color = Ball._BALL_COLOR, name = 'Tennis Ball')
     
+    def distance_to(self, otherBall):
+        return self.get_point().distance_to(otherBall.get_point())
+    
 @dataclass(frozen = True)
 class Mark(Lines3D):
-    _MARK_COLOR = (0, 252, 124) ### green is default
+    _MARK_COLOR = const.BGR['grass_green'] ### green is default
     _MARK_NAME = 'Mark'
     _SIZE = 0.25 * SCALE 
     
@@ -114,7 +119,7 @@ class Mark(Lines3D):
 class Player(Region3D):
     _DEFAULT_HEIGHT = 6 ### in feet
     _DEFAULT_WIDTH = 1
-    _DEFAULT_COLOR = (170, 255, 127) ### complement of net
+    _DEFAULT_COLOR = const.BGR['rose_orange'] ### complement of net
     _DEFAULT_NAME = 'Player'
     
     # coords: Point3D() ### 3D coordinates
@@ -147,7 +152,7 @@ class Racquet(Region3D):
     _DEFAULT_LENGTH = 2.25 * SCALE
     _DEFAULT_GRIP_WIDTH = 0.125 * SCALE
     _DEFAULT_HEAD_WIDTH = 0.85 * SCALE
-    _DEFAULT_COLOR = (255, 212, 127)
+    _DEFAULT_COLOR = const.BGR['strong_pink']
     _GRIP_TO_SWEET = 3/4 ### distance from grip end to sweet spot, as proportion of entire racquet length. 
     
     @staticmethod

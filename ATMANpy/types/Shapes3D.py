@@ -15,6 +15,8 @@ from ATMANpy.types.Lines import Line, Lines, CourtLines
 
 from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 
+import ATMANpy.auxil.constants as const
+
 @dataclass(frozen = True)
 class Point3D:
     """
@@ -184,7 +186,7 @@ class Ball3D:
     """
     A sphere: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
     """   
-    _DEFAULT_COLOR = (255, 255, 255)
+    _DEFAULT_COLOR = const.BGR['bright_grey']
     
     coords: tuple
     radius: float
@@ -226,7 +228,7 @@ class Line3D:
     """
     A line in three dimensions, between two Points3D.
     """
-    _DEFAULT_COLOR = (255, 255, 255)
+    _DEFAULT_COLOR = const.BGR['bright_grey']
     
     leftPt: Point3D
     rightPt: Point3D
@@ -346,13 +348,16 @@ class Line3D:
     def rasterize(self, resolution):
         return self.subdivide(elements = int(resolution * self.length()) + 2, return_coords = True)
     
+    def recolor(self, new_bgr):
+        return self.__class__(self.leftPt, self.rightPt, name = self.name, color = new_bgr)    
+    
     
 @dataclass(frozen = True)
 class Lines3D:
     """
     A list of Lines3D
     """ 
-    _DEFAULT_COLOR = (255, 255, 255)
+    _DEFAULT_COLOR = const.BGR['bright_grey']
     
     lineList: List[Line3D]
     name: str = 'Lines3D'
@@ -389,6 +394,9 @@ class Lines3D:
     def rasterize(self, resolution):
         return np.concatenate([aLn.rasterize(resolution) for aLn in self.lineList], axis = 0)
         
+    def recolor(self, new_bgr):
+        return self.__class__(self.lineList, name = self.name, color = new_bgr)    
+    
         
     
 @dataclass(frozen = True)
@@ -396,7 +404,7 @@ class Region3D():
     """
     A region, i.e. a plane, in three dimensions
     """
-    _DEFAULT_COLOR = (255, 255, 255)
+    _DEFAULT_COLOR = const.BGR['bright_grey']
     
     lineList: List[Line3D]
     
@@ -521,12 +529,16 @@ class Region3D():
         
         return outArr
 
+    def recolor(self, new_bgr):
+        return self.__class__(self.lineList, name = self.name, color = new_bgr)    
+    
+
 @dataclass(frozen = True)
 class Regions3D():
     """
     A list of regions, i.e. a set of planes that make some composite shape.
     """
-    _DEFAULT_COLOR = (255, 255, 255)
+    _DEFAULT_COLOR = const.BGR['bright_grey']
     
     regList: List[Region3D]
     
@@ -563,7 +575,9 @@ class Regions3D():
     def rasterize(self, resolution):
         return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
         
-        
+    def recolor(self, new_bgr):
+        return self.__class__(self.regList, name = self.name, color = new_bgr)    
+    
         
         
         
