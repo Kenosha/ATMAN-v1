@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 from ATMANpy.types.Shapes3D import Point3D, Line3D
-from ATMANpy.types.Features import StreamFeatures
+from ATMANpy.types.Features import StreamFeature, StreamFeatures
 
 from ATMANpy.funcs.HMM.HPost import narrow_down_instantaneous_events
 from ATMANpy.funcs.util_funcs import split_into_contiguous, widen_list
@@ -60,7 +60,7 @@ class Trajectory:
         frames = self.trajFeats.get_frames()
         min_frame, max_frame = frames[0], frames[-1]
         
-        return f'Trajectory(frames: {min_frame} to {max_frame}, beginning with {initial_event}'
+        return f'Trajectory({initial_event}, frames: {min_frame} to {max_frame})'
     
     @staticmethod
     def from_features(trajFeats):
@@ -138,6 +138,9 @@ class Trajectory:
         return [frame for frame, event in eventDict.items() if event.startswith('F')]
     
     ### Other Functions
+    def get_frames(self):
+        return self.trajFeats.get_frames()
+    
     def fit_trajectory(self, theory_ground_array, theory_vert_array,
                        v_init_ground_space, v_init_vert_space, spin_rate_space,
                        keep_before = 1, sum_of_squares = False):
@@ -178,11 +181,10 @@ class Trajectory:
         
         return TrajectoryFitted(new_trajFeats, v_init_ground, v_init_vert, spin_rpm)
         
-    def spline(self):
+    def get_splines(self):
         flight_frames = self.get_trajectory_frames(keep_before = 1)
         splineDict = self.trajFeats.spline_3D(pointFeature = 'ball', frameList = flight_frames)
-        return splineDict
-    
+        return StreamFeature(splineDict, 'ball_spline')
     
 @dataclass(frozen = True)
 class TrajectoryFitted(Trajectory):
@@ -193,14 +195,12 @@ class TrajectoryFitted(Trajectory):
     v_init_ground: float
     v_init_vert: float
     spin_rpm: float
-     
-    def spline(self):
+    
+    def get_fit_splines(self):
         flight_frames = self.get_trajectory_frames(keep_before = 1)
-        splineDict = self.trajFeats.spline_3D(pointFeature = 'ball', frameList = flight_frames)
-        splineDict_fit = self.trajFeats.spline_3D(pointFeature = 'ball_fit', frameList = flight_frames)
-        return splineDict, splineDict_fit
-            
-        
+        splineDict = self.trajFeats.spline_3D(pointFeature = 'ball_fit', frameList = flight_frames)
+        return StreamFeature(splineDict, 'ball_fit_spline')
+    
     
 @dataclass(frozen = True)
 class Shot:
@@ -212,7 +212,6 @@ class Shot:
     @staticmethod
     ### go from shots to trajectories
     def from_features(myFeat):
-        print(f'Initialising Shot from {myFeat}...')
         ### go from shots to trajectories
         events_non_null = {frame: event for frame, event in myFeat['event'].items() if event != 'None'}
 
@@ -305,10 +304,41 @@ class Shot:
     def get_num_bounces(self):
         return len(self.bounceList)
     
+    def get_frames(self):
+        shot_frames = self.shotTraj.get_frames()
+        bounce_frames = [frame for bounceTraj in self.bounceList for frame in bounceTraj.get_frames()]
+        return [*shot_frames, *bounce_frames]
+    
+    def get_splines(self, which = 'ball'):
+        ### TODO: allow splining of player movement
+        if which == 'ball':
+            splineSF = self.shotTraj.get_splines()
+            bouncesplineSFs = [bounceTraj.get_splines() for bounceTraj in self.bounceList]
+            for bSF in bouncesplineSFs:
+                ### need the connecting spline also! otherwise, there is a one frame gap...
+                frame_bef, lastLine3D = splineSF.last()
+                frame_aft, firstLine3D = bSF.first()
+                assert frame_bef + 1 == frame_aft - 1, f'Connecting spline failed between {splineSF} and {bSF}'
+                connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
+                splineSF = splineSF.add(frame_bef + 1, connecting_spline)
+                splineSF = splineSF.extend(bSF)
+        elif which == 'ball_fit': ### has to be a TrajectoryFit
+            splineSF = self.shotTraj.get_fit_splines()
+            bouncesplineSFs = [bounceTraj.get_fit_splines() for bounceTraj in self.bounceList]
+            for bSF in bouncesplineSFs:
+                ### need the connecting spline also! otherwise, there is a one frame gap...
+                frame_bef, lastLine3D = splineSF.last()
+                frame_aft, firstLine3D = bSF.first()
+                assert frame_bef + 1 == frame_aft - 1, f'Connecting spline failed between {splineSF} and {bSF}'
+                connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
+                splineSF = splineSF.add(frame_bef + 1, connecting_spline)
+                splineSF = splineSF.extend(bSF)
+        return splineSF
+    
     def is_fore(self):
         ### TODO: Handedness of player!
-        playerPt = myShot.get_player_hit_position()
-        ballPt = myShot.get_ball_hit_position()
+        playerPt = self.get_player_hit_position()
+        ballPt = self.get_ball_hit_position()
         
         if self.get_hit_which() == 'bot':
             return ballPt.is_right(playerPt)
@@ -385,8 +415,6 @@ class Shots:
     
     @classmethod
     def from_features(cls, myFeat):
-        print(f'Initialising {cls} from {myFeat}...')
-        
         ### go from point to shots
         events_non_null = {frame: event for frame, event in myFeat['event'].items() if event != 'None'}
 
@@ -428,7 +456,9 @@ class Shots:
 @dataclass(frozen = True)
 class Point(Shots):
     ### every point is a collection of shots in sequence!
-    pass
+    
+    def get_frames(self):
+        return [frame for shot in self.shotList for frame in shot.get_frames()]
     
 @dataclass(frozen = True)
 class Points:
@@ -453,7 +483,8 @@ class Points:
             narrowList = []
             for myFeat in featList:
                 narrowDict = narrow_down_instantaneous_events(myFeat['event'])
-                narrowFeat = myFeat.drop('event').add('event', narrowDict)
+                eventSF = StreamFeature(narrowDict, 'event')
+                narrowFeat = myFeat.drop('event').merge(eventSF)
                 narrowList.append(narrowFeat)
             featList = narrowList
         
@@ -462,48 +493,40 @@ class Points:
     def __getitem__(self, item):
         return self.pointList[item]
     
-### NO NEED TO MAKE A COURT BECAUSE COURT FEATURES ARE UNCHANGING!
-# @dataclass(frozen = True)
-# class Court:
-#     courtFeatures: StreamFeatures
-    
-    
-    
+
+# #%% Testing
+
+# video_id = 'pqxAmUWIoKc'
+# store_name = '10to100_ok2'
+
+# event_name = 'grammatic_event'
+# ball_name = '3D_Ball_smart_inference'
+# top_player_name = '3D_topPlayer'
+# bot_player_name = '3D_botPlayer'
+
+# myPts = Points.from_stored_features(video_id, store_name, 
+#                                     event_name = event_name, ball_name = ball_name,
+#                                     top_player_name = top_player_name, bot_player_name = bot_player_name)
+# myPt = myPts[0]
+# myShot = myPt[0]
+# myTraj = myShot.shotTraj
 
 
-#%% Testing
+# pos_ground_measured, pos_vert_measured = myTraj.get_trajectory_planar()
 
-video_id = 'pqxAmUWIoKc'
-store_name = '10to100_ok2'
+# #%% 
+# ### read theoretical trajectories
 
-event_name = 'grammatic_event'
-ball_name = '3D_Ball_smart_inference'
-top_player_name = '3D_topPlayer'
-bot_player_name = '3D_botPlayer'
+# myTrajFit = myTraj.fit_trajectory(groundArr, vertArr, 
+#                                   v_init_ground_space, v_init_vert_space, spin_rate_space)
 
-myPts = Points.from_stored_features(video_id, store_name, 
-                                    event_name = event_name, ball_name = ball_name,
-                                    top_player_name = top_player_name, bot_player_name = bot_player_name)
-myPt = myPts[0]
-myShot = myPt[0]
-myTraj = myShot.shotTraj
+# myTrajFit.trajFeats['ball']
+# myTrajFit.trajFeats['ball_fit']
+
+# myTraj.spline()
+# myTrajFit.spline()
 
 
-pos_ground_measured, pos_vert_measured = myTraj.get_trajectory_planar()
-
-#%% 
-### read theoretical trajectories
-
-myTrajFit = myTraj.fit_trajectory(groundArr, vertArr, 
-                                  v_init_ground_space, v_init_vert_space, spin_rate_space)
-
-myTrajFit.trajFeats['ball']
-myTrajFit.trajFeats['ball_fit']
-
-myTraj.spline()
-myTrajFit.spline()
-
-
-myShot.get_ball_hit_position()
-myShot.get_player_hit_position()
-myShot.get_bounce_positions()
+# myShot.get_ball_hit_position()
+# myShot.get_player_hit_position()
+# myShot.get_bounce_positions()
