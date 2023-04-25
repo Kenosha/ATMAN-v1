@@ -162,12 +162,18 @@ class Trajectory:
         pos_ground_theory = theory_ground_array[v_ground_idx, v_vert_idx, rpm_idx, :len(pos_ground_measured)]
         pos_vert_theory = theory_vert_array[v_ground_idx, v_vert_idx, rpm_idx, :len(pos_vert_measured)]
         
-        ### use positions to enhance the stream features with a 'ball_fit' feature.
-        ball_fit_dict = {}
-        flight_frames = self.get_trajectory_frames(keep_before = keep_before)
+        ### calculate planar direction unit vectors and start position in 3D
+        unit_rescale = const.SCALE * const.METER_TO_FOOT 
         start_position = self.get_initial_position(how = 'last')
-        ground_direction = self.get_trajectory_direction(keep_before = keep_before) * const.SCALE * const.METER_TO_FOOT 
-        vert_direction = Point3D((0, 0, 1)) * const.SCALE * const.METER_TO_FOOT 
+        vert_direction = Point3D((0, 0, 1))
+        ground_direction = self.get_trajectory_direction(keep_before = keep_before) 
+        if ground_direction is None: ### at the end of a point -> no direction because no interpolation!
+            return TrajectoryFitted(self.trajFeats, None, None, None)
+        vert_direction, ground_direction = vert_direction * unit_rescale, ground_direction * unit_rescale
+        
+        ### calculate 3D position from planar direction unit vectors
+        flight_frames = self.get_trajectory_frames(keep_before = keep_before)
+        ball_fit_dict = {}
         for frame in self.trajFeats:
             try:
                 flight_idx = flight_frames.index(frame) ### check if frame is in flight frames
@@ -261,11 +267,17 @@ class Shot:
          
     def fit_trajectory(self, theory_ground_array, theory_vert_array,
                        v_init_ground_space, v_init_vert_space, spin_rate_space,
-                       keep_before = 1, sum_of_squares = False):
+                       keep_before = 1, sum_of_squares = False, fit_bounces = True):
         shotTrajFit = self.shotTraj.fit_trajectory(theory_ground_array, theory_vert_array, 
                                                    v_init_ground_space, v_init_vert_space, spin_rate_space,
                                                    keep_before = keep_before, sum_of_squares = sum_of_squares)
-        return Shot(shotTrajFit, self.bounceList, self.hitPlayer, self.recPlayer)
+        if fit_bounces:
+            bounceList = [bounceTraj.fit_trajectory(theory_ground_array, theory_vert_array, 
+                                                       v_init_ground_space, v_init_vert_space, spin_rate_space,
+                                                       keep_before = keep_before, sum_of_squares = sum_of_squares) for bounceTraj in self.bounceList]
+        else:
+            bounceList = self.bounceList
+        return Shot(shotTrajFit, bounceList, self.hitPlayer, self.recPlayer)
     
     def get_hit_event(self):
         return self.shotTraj.get_initial_event()
@@ -327,15 +339,15 @@ class Shot:
                 splineSF = splineSF.extend(bSF)
         elif which == 'ball_fit': ### has to be a TrajectoryFit
             splineSF = self.shotTraj.get_fit_splines()
-            # bouncesplineSFs = [bounceTraj.get_splines() for bounceTraj in self.bounceList] ### not fitted!!!
-            # for bSF in bouncesplineSFs:
+            bouncesplineSFs = [bounceTraj.get_fit_splines() for bounceTraj in self.bounceList] ### not fitted!!!
+            for bSF in bouncesplineSFs:
             #     ### need the connecting spline also! otherwise, there is a one frame gap...
             #     frame_bef, lastLine3D = splineSF.last()
             #     frame_aft, firstLine3D = bSF.first()
             #     assert frame_bef + 1 == frame_aft - 1, f'Connecting spline failed between {splineSF} and {bSF}'
             #     connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
             #     splineSF = splineSF.add(frame_bef + 1, connecting_spline)
-            #     splineSF = splineSF.extend(bSF)
+                splineSF = splineSF.extend(bSF)
         return splineSF
     
     def is_fore(self):
