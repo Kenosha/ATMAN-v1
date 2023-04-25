@@ -14,6 +14,14 @@ import ATMANpy.funcs.feature_funcs as ff
 from ATMANpy.types.Lines import Line
 from ATMANpy.types.Shapes3D import Line3D
 
+def try_getattr(obj, methodStr):
+    try:
+        return getattr(obj, methodStr)
+    except:
+        def noneFunc(*args, **kwargs):
+            return None
+        return noneFunc
+
 ### TODO: Safety -> ensure stream features to be monotonously increasing! (don't have to be contiguous)
 
 @dataclass(frozen = True)
@@ -125,8 +133,12 @@ class StreamFeature(StreamFeaturesBase):
         return [self.name]
     
     def recolor(self, new_bgr):
-        recoloredDict = {frame: obj.recolor(new_bgr) for frame, obj in self.streamDict.items()}
-        return StreamFeature(recoloredDict, name = self.name)
+        reinstDict = {frame: try_getattr(obj, 'recolor')(new_bgr) for frame, obj in self.streamDict.items()}
+        return StreamFeature(reinstDict, name = self.name)
+    
+    def resize(self, new_thickness):
+        reinstDict = {frame: try_getattr(obj, 'recolor')(new_thickness) for frame, obj in self.streamDict.items()}
+        return StreamFeature(reinstDict, name = self.name)
     
         
 @dataclass(frozen = True)

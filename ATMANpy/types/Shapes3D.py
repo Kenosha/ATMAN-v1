@@ -182,13 +182,11 @@ class Point3D:
     
 
 @dataclass(frozen = True)
-class Ball3D:
+class Ball3D(Point3D):
     """
     A sphere: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
     """   
     _DEFAULT_COLOR = const.BGR['bright_grey']
-    
-    coords: tuple
     radius: float
     
     color: Optional[tuple] = _DEFAULT_COLOR
@@ -201,6 +199,20 @@ class Ball3D:
         object.__setattr__(self, 'z', self.coords[2])
         #############################  
 
+    ### REINSTANTIATION ###
+    def reposition(self, new_coords):
+        return self.__class__(new_coords, self.radius, name = self.name, color = self.color)    
+
+    def resize(self, new_radius):
+        return self.__class__(self.coords, new_radius, name = self.name, color = self.color)    
+
+    def rename(self, new_name):
+        return self.__class__(self.coords, self.radius, name = new_name, color = self.color)    
+
+    def recolor(self, new_bgr):
+        return self.__class__(self.coords, self.radius, name = self.name, color = new_bgr)    
+
+    ### METHODS ###
     def get_point(self):
         return Point3D(self.coords)
     
@@ -221,8 +233,6 @@ class Ball3D:
         return unit_circle * self.radius + np.array(self.coords)[np.newaxis, :]
 
 
-
-
 @dataclass(frozen = True)
 class Line3D:
     """
@@ -233,14 +243,25 @@ class Line3D:
     leftPt: Point3D
     rightPt: Point3D
     
-    color: Optional[tuple] = _DEFAULT_COLOR
     name: str = 'Line3D'
+    color: Optional[tuple] = _DEFAULT_COLOR
+    thickness: Optional[int] = 0
 
     @staticmethod
     def from_line(aLn, x = None, y = None, z = None):
         leftPt = Point3D.from_point(aLn.leftPt, x = x, y = y, z = z)
         rightPt = Point3D.from_point(aLn.rightPt, x = x, y = y, z = z)
         return Line3D(leftPt, rightPt, name = aLn.name)
+    
+    ### REINSTANTIATION ###
+    def rename(self, new_name):
+        return self.__class__(self.leftPt, self.rightPt, name = new_name, color = self.name, thickness = self.thickness)
+        
+    def recolor(self, new_bgr):
+        return self.__class__(self.leftPt, self.rightPt, name = self.name, color = new_bgr, thickness = self.thickness)
+    
+    def resize(self, new_thickness):
+        return self.__class__(self.leftPt, self.rightPt, name = self.name, color = self.color, thickness = new_thickness)    
     
     ### METHODS ###
     def left(self, units):
@@ -340,16 +361,37 @@ class Line3D:
         return self.rightPt - self.leftPt
     
     def find_perpendicular(self):
-        return Line(Point3D((0, 0, 0)), self.to_vector().find_perpendicular())
+        return Line3D(Point3D((0, 0, 0)), self.to_vector().find_perpendicular())
     
     def find_orientation_hori_vert(self):
         return self.to_vector().find_orientation_hori_vert()
         
     def rasterize(self, resolution):
-        return self.subdivide(elements = int(resolution * self.length()) + 2, return_coords = True)
-    
-    def recolor(self, new_bgr):
-        return self.__class__(self.leftPt, self.rightPt, name = self.name, color = new_bgr)    
+        lineArr = self.subdivide(elements = int(resolution * self.length()) + 1, return_coords = True)
+        if self.thickness == 0:
+            return lineArr
+        else:
+            radius = self.thickness / 2
+            ### 6 points around a circle, scaled up with resolution and the thickness
+            # -> the thicker the line, the farther out the points, so we need more.
+            num_circle_points = int(radius * resolution * 6)
+            radList = np.linspace(-np.pi, np.pi, num = num_circle_points, endpoint = False) 
+            ### turn into 2D -> n x dim
+            radArr = radList[:, np.newaxis] 
+            ### make orthogonal vectors
+            orthVector_1 = self.find_perpendicular().to_vector()
+            orthVector_2 = orthVector_1.cross(self.to_vector())
+            # normalize to unit length
+            orthVector_1, orthVector_2 = orthVector_1 / orthVector_1.length(), orthVector_2 / orthVector_2.length()
+            # turn into 2D -> n x dim
+            orthVector_1, orthVector_2 = np.array(orthVector_1.coords)[np.newaxis, :] , np.array(orthVector_2.coords)[np.newaxis, :] 
+            # find unit_circle points
+            unitArr = orthVector_1 * np.cos(radArr) + orthVector_2 * np.sin(radArr)
+            # scale circle
+            scaledArr = unitArr * radius
+            # add center points
+            outArr = np.tile(scaledArr, (len(lineArr), 1)) + np.repeat(lineArr, num_circle_points, axis = 0)
+            return outArr
     
     
 @dataclass(frozen = True)
@@ -391,12 +433,17 @@ class Lines3D:
         return Lines3D([Line3D.from_line(aLn, x = x, y = y, z = z) for aLn in aLns], 
                       name = name)
     
-    def rasterize(self, resolution):
-        return np.concatenate([aLn.rasterize(resolution) for aLn in self.lineList], axis = 0)
+    ### REINSTANTIATION ###
+    def rename(self, new_name):
+        return self.__class__(self.lineList, name = new_name, color = self.color)   
         
     def recolor(self, new_bgr):
         return self.__class__(self.lineList, name = self.name, color = new_bgr)    
     
+    
+    def rasterize(self, resolution):
+        return np.concatenate([aLn.rasterize(resolution) for aLn in self.lineList], axis = 0)
+        
         
     
 @dataclass(frozen = True)
@@ -506,6 +553,14 @@ class Region3D():
                                    left_right = left_right, top_bottom = top_bottom,
                                    name = name, color = color)
     
+    ### REINSTANTIATION ###
+    def rename(self, new_name):
+        return self.__class__(self.lineList, name = new_name, color = self.color)    
+    
+    def recolor(self, new_bgr):
+        return self.__class__(self.lineList, name = self.name, color = new_bgr)    
+    
+    ### METHODS ###
     def rasterize(self, resolution):
         ### resolution -> points in a area of 1 sq. unit size 
         ## area, not volume, since we're only rasterizing surfaces! -> everything pictured is hollow!
@@ -529,9 +584,6 @@ class Region3D():
         
         return outArr
 
-    def recolor(self, new_bgr):
-        return self.__class__(self.lineList, name = self.name, color = new_bgr)    
-    
 
 @dataclass(frozen = True)
 class Regions3D():
@@ -572,12 +624,16 @@ class Regions3D():
         return Regions3D([Region3D.from_line(aLn, width, dim = dim) for aLn in aLns], 
                          name = name, color = color)
         
-    def rasterize(self, resolution):
-        return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
-        
+    ### REINSTANTIATION ###
+    def rename(self, new_name):
+        return self.__class__(self.regList, name = new_name, color = self.color)   
+    
     def recolor(self, new_bgr):
         return self.__class__(self.regList, name = self.name, color = new_bgr)    
     
+    ### METHODS ###
+    def rasterize(self, resolution):
+        return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
         
         
         
