@@ -10,6 +10,8 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import Optional, List
 
+from ATMANpy.types.ShapesTennis3D import Racquet
+
 from ATMANpy.types.Shapes3D import Point3D, Line3D
 from ATMANpy.types.Features import StreamFeature, StreamFeatures
 
@@ -42,6 +44,9 @@ class PlayerMovement:
         ### myFeat -> a contiguous StreamFeatures containing 'top' and 'bot' feature
         ### which -> top or bottom
         return PlayerMovement(myFeat[which])
+    
+    def __getitem__(self, item):
+        return self.playerSF.__getitem__(item)
     
     def get_name(self):
         return self.playerSF.name
@@ -367,11 +372,160 @@ class Shot:
             ballSF = ballSF.extend(bounceTraj.trajSFs['ball'])
         return ballSF
     
-    def feat_racquet(self, nextShot):
-        ### nextShot -> needed to understand the striking motion beginning before the actual shot event.
+    def feat_hit_racquet(self, prevShot):
+        ### prevShot -> needed to understand the direction of the incoming ball.
+        top_or_bot = self.get_hit_which()
         
-        pass
+        hit_frames = self.shotTraj.get_initial_frames()
+        flight_frames = [f for f in self.get_frames() if f not in hit_frames]
+        last_hit_frame = max(hit_frames)
+        
+        ### figure out ready position (for after the hit has been made)
+        READY_POSITION_WHEN = 3 ### how many frames after hit is the ready position reached?
+        READY_POSITION_DIST = 10
+        READY_POSITION_VERT = 0.5
+        READY_POSITION_HORI = 0.5 if top_or_bot == 'top' else -0.5 
+        readyPlayer = self.hitPlayer[last_hit_frame + READY_POSITION_WHEN]
+        readyRacquet = Racquet.make_at_player(readyPlayer, 
+                                              dir_hori = READY_POSITION_HORI,
+                                              dir_vert = READY_POSITION_VERT,
+                                              distance_from_player = READY_POSITION_DIST)
+        
+        sfDict = {}
+        
+        ### Figure out Hit Frames -> different for serve and normal hit
+        if self.is_serve():
+            ####### SERVE #########
+            serveBall = self.shotTraj['ball'][last_hit_frame]
+            nextBall = self.shotTraj[last_hit_frame + 1]['ball']
+            servePlayer = self.hitPlayer[last_hit_frame]
+            hitRacquet = Racquet.make_at_contact(servePlayer, serveBall,
+                                                 aBall_before = None, aBall_after = nextBall)
+            SERVE_MOTION_WHEN = 3 ### x frames before serve is hit, motion starts!
             
+            for frame in hit_frames:
+                if last_hit_frame - frame > SERVE_MOTION_WHEN:
+                    sfDict[frame] = readyRacquet
+                else:
+                    
+                    ### interpolate between the ready position and the serve contact racquet
+                    lambda_bef_aft = 1 - (last_hit_frame - frame) / SERVE_MOTION_WHEN
+                    motionRacquet = Racquet.make_between(readyRacquet, hitRacquet, lambda_bef_aft = lambda_bef_aft)
+                    sfDict[frame] = motionRacquet
+        else:
+            ###### NORMAL HIT #####
+            ### figure out previous and next ball, to calculate the inclination of the racquet.
+            if prevShot is None:
+                prevBall = None
+            else:
+                if prevShot.bounceList == []:
+                    frm, prevBall = prevShot.shotTraj['ball'].last()
+                else:
+                    frm, prevBall = prevShot.shotTraj['ball'].last()
+            nextBall = self.shotTraj[last_hit_frame + 1]['ball']
+            
+            ### start populating feature dictionary
+
+            for frame in hit_frames:
+                hitRacquet = Racquet.make_at_contact(self.hitPlayer[frame], self.shotTraj['ball'][frame],
+                                                    aBall_before = prevBall, aBall_after = nextBall)
+                sfDict[frame] = hitRacquet
+        
+        ### figure out flight frames
+        for i, frame in enumerate(flight_frames):
+            if i < READY_POSITION_WHEN:
+                lambda_bef_aft = i / READY_POSITION_WHEN
+                betweenRacquet = Racquet.make_between(hitRacquet, readyRacquet, lambda_bef_aft)
+                sfDict[frame] = betweenRacquet
+            else:
+                sfDict[frame] = Racquet.make_at_player(self.hitPlayer[frame], 
+                                                       dir_hori = READY_POSITION_HORI,
+                                                       dir_vert = READY_POSITION_VERT,
+                                                       distance_from_player = READY_POSITION_DIST)
+            
+        return StreamFeature(sfDict, name = 'Racquet')
+    
+    def feat_rec_racquet(self, nextShot):
+        ### nextShot -> needed to understand the striking motion beginning before the actual shot event.
+        top_or_bot = self.get_rec_which()
+        
+        ### ready position parameters
+        READY_POSITION_DIST = 10
+        READY_POSITION_VERT = 0.5
+        READY_POSITION_HORI = 0.5 if top_or_bot == 'top' else -0.5 
+        
+        if nextShot is None: ### in this case, there is no takeback, no striking motion to prepare
+            sfDict = {}
+            for frame in self.get_frames():
+                readyRacquet = Racquet.make_at_player(self.recPlayer[frame], 
+                                                      distance_from_player = READY_POSITION_DIST,
+                                                      dir_hori = READY_POSITION_HORI,
+                                                      dir_vert = READY_POSITION_VERT)
+                sfDict[frame] = readyRacquet
+            
+        else: ### in this case, we need to prepare the takeback, and the striking motion
+            hit_frames = self.shotTraj.get_initial_frames()
+            last_hit_frame = max(hit_frames)
+            
+            next_hit_frames = nextShot.shotTraj.get_initial_frames()
+            next_first_hit_frame = min(next_hit_frames) ### want the first hit frame!
+            next_last_hit_frame = max(next_hit_frames)
+            
+            ### figure out take-back position (in preparation of the next hit by the receiving player)
+            TAKEBACK_POSITION_WHEN = 3 ### how many frames after hit is the ready position reached?
+            TAKEBACK_POSITION_DIST = 10
+            TAKEBACK_POSITION_VERT = 0.5
+            prep_right = (nextShot.is_fore() and top_or_bot == 'bot') or (nextShot.is_back() and top_or_bot == 'top')
+            TAKEBACK_POSITION_HORI = 0 if prep_right else 1
+            takebackPlayer = self.recPlayer[last_hit_frame + TAKEBACK_POSITION_WHEN]
+            takebackRacquet = Racquet.make_at_player(takebackPlayer, 
+                                                     dir_hori = TAKEBACK_POSITION_HORI,
+                                                     dir_vert = TAKEBACK_POSITION_VERT,
+                                                     distance_from_player = TAKEBACK_POSITION_DIST)
+            
+            ### figure out where ball is struck (in preparation of the next hit by the receiving player)
+            hitPlayer = nextShot.hitPlayer[next_first_hit_frame]
+            hitBall = nextShot.shotTraj['ball'][next_first_hit_frame]
+            hitBall_after = nextShot.shotTraj[next_last_hit_frame + 1]['ball']
+            frm, hitBall_before = self.shotTraj['ball'].last() 
+            
+            hitRacquet = Racquet.make_at_contact(hitPlayer, hitBall,
+                                                aBall_before = hitBall_before, aBall_after = hitBall_after)
+            
+            ### start populating feature dictionary
+            REACTION_FRAMES = 2 ### how many frames needed to react before takeback
+            BEGIN_STRIKE_WHEN = 3 ### how many frames before the hit the racquet begins swinging forward
+            
+            sfDict = {}
+            for i, frame in enumerate(self.get_frames()):
+                if i < REACTION_FRAMES: ### in ready position, before player has reacted
+                
+                    readyRacquet = Racquet.make_at_player(self.recPlayer[frame], 
+                                           distance_from_player = READY_POSITION_DIST,
+                                           dir_hori = READY_POSITION_HORI,
+                                           dir_vert = READY_POSITION_VERT)
+                    sfDict[frame] = readyRacquet
+                    
+                elif i < REACTION_FRAMES + TAKEBACK_POSITION_WHEN: ### taking back, in motion
+                    lambda_bef_aft = i / (REACTION_FRAMES + TAKEBACK_POSITION_WHEN)
+                    takingbackRacquet = Racquet.make_between(readyRacquet, takebackRacquet, lambda_bef_aft = lambda_bef_aft)
+                    sfDict[frame] = takingbackRacquet
+                
+                elif len(self.get_frames()) - i < BEGIN_STRIKE_WHEN: ### striking, in motion
+                    lambda_bef_aft = 1 - (len(self.get_frames()) - i) / BEGIN_STRIKE_WHEN
+                    strikingRacquet = Racquet.make_between(takingbackRacquet, hitRacquet, lambda_bef_aft = lambda_bef_aft)
+                    sfDict[frame] = strikingRacquet
+                
+                else: ### static, in take back position
+                    takingbackRacquet = Racquet.make_at_player(self.recPlayer[frame], 
+                                                               dir_hori = TAKEBACK_POSITION_HORI,
+                                                               dir_vert = TAKEBACK_POSITION_VERT,
+                                                               distance_from_player = TAKEBACK_POSITION_DIST)
+                    sfDict[frame] = takingbackRacquet
+                    
+        return StreamFeature(sfDict, name = 'Racquet')
+                
+        
     # b) Splines
     def feat_ball_splines(self):
         splineSF = self.shotTraj.feat_splines()
@@ -528,27 +682,9 @@ class Shots:
     
     ### FEATURE GETTERS ###
     
+    def feat_hit_racquet(self):
+        pass ### need to handle this method separately, but not so easy as with continuous Point!
     
-    
-    # # def feat_bot_player(self):
-    # #     playerSFs = [myShot.feat_bot_player() for myShot in self.shotList]
-    # #     outSF, 
-    
-    
-    # def feat_ball_splines(self):
-    #     splineSFs = [myShot.feat_ball_splines() for myShot in self.shotList]
-    #     outSF, otherSFs = splineSFs[0], splineSFs[1:]
-    #     for otherSF in otherSFs:
-    #         outSF = outSF.extend(otherSF)
-    #     return outSF
-    
-    # def feat_ball_fit_splines(self):
-    #     splineSFs = [myShot.feat_ball_fit_splines() for myShot in self.shotList]
-    #     outSF, otherSFs = splineSFs[0], splineSFs[1:]
-    #     for otherSF in otherSFs:
-    #         outSF = outSF.extend(otherSF)
-    #     return outSF
-        
    
 @dataclass(frozen = True)
 class Point(Shots):
@@ -569,6 +705,86 @@ class Point(Shots):
     def get_frames(self):
         return [frame for shot in self.shotList for frame in shot.get_frames()]
     
+    def feat_hit_racquet(self):
+        someSFs = []
+        
+        for i, myShot in enumerate(self.shotList):
+            try:
+                prevShot = self.shotList[i - 1]
+            except:
+                prevShot = None
+            someSFs.append(myShot.feat_hit_racquet(prevShot))
+    
+        ### Join StreamFeature objects.
+        outSF, otherSFs = someSFs[0], someSFs[1:]
+        for otherSF in otherSFs:
+            outSF = outSF.extend(otherSF)
+        return outSF
+    
+    def feat_rec_racquet(self):
+        someSFs = []
+        
+        for i, myShot in enumerate(self.shotList):
+            try:
+                nextShot = self.shotList[i + 1]
+            except:
+                nextShot = None
+            someSFs.append(myShot.feat_rec_racquet(nextShot))
+    
+        ### Join StreamFeature objects.
+        outSF, otherSFs = someSFs[0], someSFs[1:]
+        for otherSF in otherSFs:
+            outSF = outSF.extend(otherSF)
+        return outSF
+    
+    def feat_top_racquet(self):
+        someSFs = []
+        
+        for i, myShot in enumerate(self.shotList):
+            if myShot.get_hit_which() == 'top':
+                try:
+                    prevShot = self.shotList[i - 1]
+                except:
+                    prevShot = None
+                someSFs.append(myShot.feat_hit_racquet(prevShot))
+            else:
+                try:
+                    nextShot = self.shotList[i + 1]
+                except:
+                    nextShot = None 
+                someSFs.append(myShot.feat_rec_racquet(nextShot))
+        
+        ### Join StreamFeature objects.
+        outSF, otherSFs = someSFs[0], someSFs[1:]
+        for otherSF in otherSFs:
+            outSF = outSF.extend(otherSF)
+        return outSF
+    
+    def feat_bot_racquet(self):
+        someSFs = []
+        
+        for i, myShot in enumerate(self.shotList):
+            if myShot.get_hit_which() == 'bot':
+                try:
+                    prevShot = self.shotList[i - 1]
+                except:
+                    prevShot = None
+                someSFs.append(myShot.feat_hit_racquet(prevShot))
+            else:
+                try:
+                    nextShot = self.shotList[i + 1]
+                except:
+                    nextShot = None 
+                someSFs.append(myShot.feat_rec_racquet(nextShot))
+        
+        ### Join StreamFeature objects.
+        outSF, otherSFs = someSFs[0], someSFs[1:]
+        for otherSF in otherSFs:
+            outSF = outSF.extend(otherSF)
+        return outSF
+        
+            
+                
     
 @dataclass(frozen = True)
 class Points:
@@ -606,8 +822,8 @@ class Points:
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
 def __make_method(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
     def method(self):
-        someSF = [getattr(myShot, shotMethodStr)() for myShot in self.shotList]
-        outSF, otherSFs = someSF[0], someSF[1:]
+        someSFs = [getattr(myShot, shotMethodStr)() for myShot in self.shotList]
+        outSF, otherSFs = someSFs[0], someSFs[1:]
         for otherSF in otherSFs:
             outSF = outSF.extend(otherSF)
         return outSF
@@ -616,8 +832,10 @@ def __make_method(myClass, shotMethodStr): ### helper to automatically make all 
     
 for methodStr in dir(Shot):
     if methodStr.startswith('feat_'):
-        __make_method(Shots, methodStr)
-        __make_method(Point, methodStr)
+        if not methodStr in dir(Shots): ### do not overwrite
+            __make_method(Shots, methodStr)
+        if not methodStr in dir(Point): ### do not overwrite
+            __make_method(Point, methodStr)
     
 
 # #%% Testing

@@ -267,6 +267,28 @@ class Racquet(Region3D):
         
         return Racquet.make(gripPt, ballPt, inclination = inclination)
         
+    @staticmethod
+    def make_between(befRacquet, aftRacquet, lambda_bef_aft = 0.5):
+        ### interpolate a racquet between two positions
+        befLine, aftLine = befRacquet.racquetLine, aftRacquet.racquetLine
+        # leftPt -> grip, rightPt -> spotPt
+
+        itpl_gripPt = befLine.leftPt * (1 - lambda_bef_aft) + aftLine.leftPt * lambda_bef_aft
+        itpl_spotPt = befLine.rightPt * (1 - lambda_bef_aft) + aftLine.rightPt * lambda_bef_aft
+
+        itpl_racLine = Line3D(itpl_gripPt, itpl_spotPt) 
+        ### this line is potentially too long or short! 
+        ### --> shorten it at the grip, so the racquet head stays on interpolated line.
+        
+        unit_racVec = itpl_racLine.to_vector().normalize()
+        corr_gripPt = itpl_spotPt - unit_racVec * Racquet._DEFAULT_LENGTH
+        
+        ### interpolate inclination
+        current_inclination = befRacquet.inclination * (1 - lambda_bef_aft) + aftRacquet.inclination * lambda_bef_aft
+        
+        return Racquet.make(corr_gripPt, itpl_spotPt, inclination = current_inclination)
+    
+    
     def find_orientation_hori_vert(self):
         return self.racquetLine.find_orientation_hori_vert()
         

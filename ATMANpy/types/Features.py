@@ -132,6 +132,9 @@ class StreamFeature(StreamFeaturesBase):
     def get_features(self):
         return [self.name]
     
+    def rename(self, new_name):
+        return StreamFeature(self.streamDict, name = new_name)
+    
     def recolor(self, new_bgr):
         reinstDict = {frame: try_getattr(obj, 'recolor')(new_bgr) for frame, obj in self.streamDict.items()}
         return StreamFeature(reinstDict, name = self.name)
