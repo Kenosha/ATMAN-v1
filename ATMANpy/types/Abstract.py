@@ -5,6 +5,7 @@ Created on Thu Apr 20 12:56:24 2023
 @author: gianl
 """
 
+import numpy as np
 import pandas as pd
 
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from ATMANpy.types.Shapes3D import Point3D, Line3D
 from ATMANpy.types.Features import StreamFeature, StreamFeatures
 
 from ATMANpy.funcs.HMM.HPost import narrow_down_instantaneous_events
-from ATMANpy.funcs.util_funcs import split_into_contiguous, widen_list
+from ATMANpy.funcs.util_funcs import split_into_contiguous, widen_list, prepend_index_level
 import ATMANpy.funcs.spin_funcs as sf
 
 
@@ -80,10 +81,11 @@ class Trajectory:
     def get_trajectory_dataframe(self, keep_before = 1): ### keep x frames before the beginning of flight 
 
         eventDict = self.trajSFs['event']
-    
+        
+        last_initial_frame = self.get_initial_frames()[-1]
         traj_frames = [frame for frame, event in eventDict.items() if event[0] == 'F'] ## init with flight frames
-        for i in range(1, keep_before + 1):
-            add_frame = min(traj_frames) - i
+        for i in range(keep_before):
+            add_frame = last_initial_frame - i
             if add_frame in eventDict:
                 traj_frames = [add_frame, *traj_frames]
         
@@ -148,6 +150,42 @@ class Trajectory:
     ### Other Functions
     def get_frames(self):
         return self.trajSFs.get_frames()
+    
+    def get_frame_event_series(self):
+        initial_frames = self.get_initial_frames()
+        return self.trajSFs['event'].to_series()[initial_frames]
+    
+    def get_frame_event_pairs(self, how = 'last'):
+        idx = 0 if how == 'first' else -1
+        return self.get_initial_frames()[idx], self.get_initial_event()
+    
+    def get_frame_event_dict(self):
+        hit_event = self.get_initial_event()
+        hit_frames = self.get_initial_frames()
+        return {'event': hit_event, 'start': min(hit_frames), 'end': max(hit_frames)}    
+    
+    def compare(self, otherTraj, reverse = False):
+        # if reverse: left is right, right is left
+        self_which = 'left' if not reverse else 'right'
+        other_which = 'right' if not reverse else 'left'
+        
+        ### compare hit with hit
+        selfDict = self.get_frame_event_dict()
+        ### turn into series
+        selfSer = pd.Series(selfDict)
+        selfSer.index.name = 'datum'
+        selfSer = prepend_index_level(selfSer, 'which', self_which)
+
+        if otherTraj is not None:
+            otherDict = otherTraj.get_frame_event_dict()
+            ### turn into series
+            otherSer = pd.Series(otherDict)
+            otherSer.index.name = 'datum'
+            otherSer = prepend_index_level(otherSer, 'which', other_which)
+        
+            return pd.concat([selfSer, otherSer], axis = 0)
+        else:
+            return selfSer
     
     def fit_trajectory(self, theory_ground_array, theory_vert_array,
                        v_init_ground_space, v_init_vert_space, spin_rate_space,
@@ -248,7 +286,7 @@ class Shot:
             else:
                 if registered_hit == event: ### the original hit event -> still at the beginning of shot trajectory.
                     current_traj_feature[frame] = myFeat[frame]
-                elif event[0] in ['B', 'N']: ### a bounce or net event!
+                elif event[0] in ['B', 'N', 'C']: ### a bounce, net or cord event!
                     if is_bouncing: ### already bouncing in previous frame!
                         current_traj_feature[frame] = myFeat[frame]
                     else: ### first bouncing frame here!
@@ -346,6 +384,83 @@ class Shot:
         bounce_frames = [frame for bounceTraj in self.bounceList for frame in bounceTraj.get_frames()]
         return [*shot_frames, *bounce_frames]
     
+    def get_frame_event_pairs(self, how = 'last'):
+        return [myTraj.get_frame_event_pairs(how = how) for myTraj in [self.shotTraj, *self.bounceList]]
+    
+    def get_frame_event_series(self):
+        shotSer = self.shotTraj.get_frame_event_series()
+        bounceList = [bounceTraj.get_frame_event_series() for bounceTraj in self.bounceList]
+        return pd.concat([shotSer, *bounceList], axis = 0)
+    
+    def compare(self, otherShot, reverse = False):
+        compFrm_rows = []
+        
+        if otherShot is None:
+            hitSer = self.shotTraj.compare(None, reverse = reverse)
+            compFrm_rows.append(hitSer)
+            for bounceTraj in self.bounceList:
+                bounceSer = bounceTraj.compare(None, reverse = reverse)
+                compFrm_rows.append(bounceSer)
+        else:
+            ### compare hit with hit
+            hitSer = self.shotTraj.compare(otherShot.shotTraj, reverse = reverse)
+            compFrm_rows.append(hitSer)
+            
+            ### Compare bounces --> here, we need matching along closeness of frames!
+            # idea: compute a match matrix 
+                # -> i dimension: self.trajectories, j dimension: other.trajectories
+                # value -> 'closeness' of other trajectory
+            matchArr = np.zeros((len(self.bounceList), len(otherShot.bounceList)))
+            
+            def closeness_number(start1, stop1, start2, stop2):
+                return (abs(start1 - start2) + abs(stop1 - stop2)) / 2
+            
+            for i, selfTraj in enumerate(self.bounceList):
+                self_frames = selfTraj.get_initial_frames()
+                self_min_frame, self_max_frame = min(self_frames), max(self_frames)
+                
+                for j, otherTraj in enumerate(otherShot.bounceList):
+                    other_frames = otherTraj.get_initial_frames()
+                    other_min_frame, other_max_frame = min(other_frames), max(other_frames)
+                    
+                    matchArr[i, j] = closeness_number(self_min_frame, self_max_frame, 
+                                                 other_min_frame, other_max_frame)
+            
+            ### now, get minimum match for each 
+            self_matches = []
+            other_matches = []
+            ACCEPTABLE_CLOSENESS = 10   
+            try:
+                best_match = np.argmin(matchArr, axis = 1)
+            except ValueError: ### happens if there is no shot to argmin over:
+                pass
+            else:
+                for selfIdx, otherIdx in enumerate(best_match): ### closest for each traj in self
+                    if matchArr[selfIdx, otherIdx] <= ACCEPTABLE_CLOSENESS:
+                        matchSer = self.bounceList[selfIdx].compare(otherShot.bounceList[otherIdx], reverse = reverse)
+                        compFrm_rows.append(matchSer)
+                        self_matches.append(selfIdx)
+                        other_matches.append(otherIdx)
+            
+            ### now, deal with unmatched
+            for i in range(len(self.bounceList)):
+                if i not in self_matches:
+                    unmatchSer = self.bounceList[i].compare(None, reverse = reverse)
+                    compFrm_rows.append(unmatchSer)
+                    
+            for i in range(len(otherShot.bounceList)):
+                if i not in other_matches:
+                    unmatchSer = otherShot.bounceList[i].compare(None, reverse = ~reverse) ### inverted, because otherShot is "self"
+                    compFrm_rows.append(unmatchSer)
+                    
+        ### sort out the output frame
+        outFrm = pd.concat(compFrm_rows, axis = 1).T
+        outFrm.columns = outFrm.columns.swaplevel()
+        
+        outFrm = outFrm.sort_index(axis = 1, level = 0,
+                                   key = lambda idx: idx.map({'event': 0, 'start': 1, 'end': 2}))
+        return outFrm 
+        
     ### FEATURE GETTERS ###
     # a) Objects
     def feat_hit_player(self):
@@ -525,7 +640,6 @@ class Shot:
                     
         return StreamFeature(sfDict, name = 'Racquet')
                 
-        
     # b) Splines
     def feat_ball_splines(self):
         splineSF = self.shotTraj.feat_splines()
@@ -538,6 +652,7 @@ class Shot:
             # connecting_spline = Line3D(lastLine3D.rightPt, firstLine3D.leftPt)
             # splineSF = splineSF.add(frame_bef + 1, connecting_spline)
             splineSF = splineSF.extend(bSF)
+            
     def feat_ball_fit_splines(self):
         ### has to be a TrajectoryFit
         splineSF = self.shotTraj.feat_fit_splines()
@@ -672,6 +787,8 @@ class Shots:
     def __getitem__(self, item):
         return self.shotList[item]
     
+    def __len__(self):
+        return len(self.shotList)
      
     def fit_trajectory(self, theory_ground_array, theory_vert_array,
                        v_init_ground_space, v_init_vert_space, spin_rate_space,
@@ -704,6 +821,45 @@ class Point(Shots):
         
     def get_frames(self):
         return [frame for shot in self.shotList for frame in shot.get_frames()]
+    
+    def get_winner(self):
+        lastShot = self.shotList[-1]
+        
+        if lastShot.is_fair(None): ### None -> there is no nextShot
+            return lastShot.hitPlayer.get_name()
+        else:
+            return lastShot.recPlayer.get_name()
+        
+    def get_frame_event_pairs(self, how = 'last'):
+        return [frm_evt for myShot in self for frm_evt in myShot.get_frame_event_pairs(how = how)]
+    
+    def get_frame_event_series(self):
+        return pd.concat([shot.get_frame_event_series() for shot in self.shotList], axis = 0)
+    
+    def compare(self, otherPt):
+        shotframeList = []
+        
+        if len(self) >= len(otherPt):
+            for idx in range(len(self)):
+                selfShot = self[idx]
+                try:
+                    otherShot = otherPt[idx]
+                except:
+                    otherShot = None
+                
+                shotframeList.append(selfShot.compare(otherShot, reverse = False))
+                
+        else:
+            for idx in range(len(otherPt)):
+                otherShot = otherPt[idx]
+                try:
+                    selfShot = self[idx]
+                except:
+                    selfShot = None
+                
+                shotframeList.append(otherShot.compare(selfShot, reverse = True))
+                
+        return pd.concat(shotframeList, ignore_index = True)
     
     def feat_hit_racquet(self):
         someSFs = []
@@ -783,7 +939,6 @@ class Point(Shots):
             outSF = outSF.extend(otherSF)
         return outSF
         
-            
                 
     
 @dataclass(frozen = True)
@@ -818,6 +973,9 @@ class Points:
     
     def __getitem__(self, item):
         return self.pointList[item]
+    
+    def __len__(self):
+        return len(self.pointList)
     
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
 def __make_method(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
