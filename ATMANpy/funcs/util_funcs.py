@@ -8,6 +8,8 @@ Utility Functions
 """
 
 import os
+import time
+import datetime
 
 mainDir = r'C:\Users\gianl\Documents\GitHub\ATMAN'
 
@@ -24,6 +26,13 @@ def get_folder_struct(source, verbose = True):
         
     else:
         if verbose: print(f'No such directory: {sourceDir}')
+
+
+def make_timestamp():
+    ts = time.time()
+    ts_format = datetime.datetime.fromtimestamp(ts).strftime('%Y%m%d_%H%M%S')
+    
+    return ts_format
 
 
 ####### video read in

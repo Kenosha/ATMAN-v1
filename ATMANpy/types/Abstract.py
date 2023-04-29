@@ -164,10 +164,10 @@ class Trajectory:
         hit_frames = self.get_initial_frames()
         return {'event': hit_event, 'start': min(hit_frames), 'end': max(hit_frames)}    
     
-    def compare(self, otherTraj, reverse = False):
+    def compare(self, otherTraj, reverse = False, left_name = 'left', right_name = 'right'):
         # if reverse: left is right, right is left
-        self_which = 'left' if not reverse else 'right'
-        other_which = 'right' if not reverse else 'left'
+        self_which = left_name if not reverse else right_name
+        other_which = right_name if not reverse else left_name
         
         ### compare hit with hit
         selfDict = self.get_frame_event_dict()
@@ -392,18 +392,18 @@ class Shot:
         bounceList = [bounceTraj.get_frame_event_series() for bounceTraj in self.bounceList]
         return pd.concat([shotSer, *bounceList], axis = 0)
     
-    def compare(self, otherShot, reverse = False):
+    def compare(self, otherShot, reverse = False, left_name = None, right_name = None):
         compFrm_rows = []
         
         if otherShot is None:
-            hitSer = self.shotTraj.compare(None, reverse = reverse)
+            hitSer = self.shotTraj.compare(None, reverse = reverse, left_name = left_name, right_name = right_name)
             compFrm_rows.append(hitSer)
             for bounceTraj in self.bounceList:
-                bounceSer = bounceTraj.compare(None, reverse = reverse)
+                bounceSer = bounceTraj.compare(None, reverse = reverse, left_name = left_name, right_name = right_name)
                 compFrm_rows.append(bounceSer)
         else:
             ### compare hit with hit
-            hitSer = self.shotTraj.compare(otherShot.shotTraj, reverse = reverse)
+            hitSer = self.shotTraj.compare(otherShot.shotTraj, reverse = reverse, left_name = left_name, right_name = right_name)
             compFrm_rows.append(hitSer)
             
             ### Compare bounces --> here, we need matching along closeness of frames!
@@ -437,7 +437,7 @@ class Shot:
             else:
                 for selfIdx, otherIdx in enumerate(best_match): ### closest for each traj in self
                     if matchArr[selfIdx, otherIdx] <= ACCEPTABLE_CLOSENESS:
-                        matchSer = self.bounceList[selfIdx].compare(otherShot.bounceList[otherIdx], reverse = reverse)
+                        matchSer = self.bounceList[selfIdx].compare(otherShot.bounceList[otherIdx], reverse = reverse, left_name = left_name, right_name = right_name)
                         compFrm_rows.append(matchSer)
                         self_matches.append(selfIdx)
                         other_matches.append(otherIdx)
@@ -445,18 +445,19 @@ class Shot:
             ### now, deal with unmatched
             for i in range(len(self.bounceList)):
                 if i not in self_matches:
-                    unmatchSer = self.bounceList[i].compare(None, reverse = reverse)
+                    unmatchSer = self.bounceList[i].compare(None, reverse = reverse, left_name = left_name, right_name = right_name)
                     compFrm_rows.append(unmatchSer)
                     
             for i in range(len(otherShot.bounceList)):
                 if i not in other_matches:
-                    unmatchSer = otherShot.bounceList[i].compare(None, reverse = ~reverse) ### inverted, because otherShot is "self"
+                    unmatchSer = otherShot.bounceList[i].compare(None, reverse = ~reverse, ### inverted, because otherShot is "self" 
+                                                                 left_name = left_name, right_name = right_name) 
                     compFrm_rows.append(unmatchSer)
                     
         ### sort out the output frame
         outFrm = pd.concat(compFrm_rows, axis = 1).T
         outFrm.columns = outFrm.columns.swaplevel()
-        
+        outFrm.index.name = 'Traj'
         outFrm = outFrm.sort_index(axis = 1, level = 0,
                                    key = lambda idx: idx.map({'event': 0, 'start': 1, 'end': 2}))
         return outFrm 
@@ -836,7 +837,7 @@ class Point(Shots):
     def get_frame_event_series(self):
         return pd.concat([shot.get_frame_event_series() for shot in self.shotList], axis = 0)
     
-    def compare(self, otherPt):
+    def compare(self, otherPt, left_name = None, right_name = None):
         shotframeList = []
         
         if len(self) >= len(otherPt):
@@ -847,7 +848,9 @@ class Point(Shots):
                 except:
                     otherShot = None
                 
-                shotframeList.append(selfShot.compare(otherShot, reverse = False))
+                shotFrm = selfShot.compare(otherShot, reverse = False, left_name = left_name, right_name = right_name)
+                shotFrm = prepend_index_level(shotFrm, 'Shot', idx)
+                shotframeList.append(shotFrm)
                 
         else:
             for idx in range(len(otherPt)):
@@ -857,9 +860,14 @@ class Point(Shots):
                 except:
                     selfShot = None
                 
-                shotframeList.append(otherShot.compare(selfShot, reverse = True))
+                shotFrm = otherShot.compare(selfShot, reverse = True, left_name = left_name, right_name = right_name)
+                shotFrm = prepend_index_level(shotFrm, 'Shot', idx)
+                shotframeList.append(shotFrm)
                 
-        return pd.concat(shotframeList, ignore_index = True)
+        outFrm = pd.concat(shotframeList, ignore_index = False)
+        outFrm = outFrm.sort_index(axis = 1, level = 0,
+                                   key = lambda idx: idx.map({'event': 0, 'start': 1, 'end': 2}))
+        return outFrm
     
     def feat_hit_racquet(self):
         someSFs = []
@@ -944,9 +952,10 @@ class Point(Shots):
 @dataclass(frozen = True)
 class Points:
     pointList: List[Point]
+    name: str = 'Points'
     
     @staticmethod
-    def from_stored_features(video_id, store_name, 
+    def from_stored_features(video_id, store_name, name = "Points",
                              event_name = 'grammatic_event', ball_name = '3D_Ball', 
                              top_player_name = '3D_topPlayer', bot_player_name = '3D_botPlayer',
                              narrow_instantaneous_events = True):
@@ -968,14 +977,29 @@ class Points:
                 narrowFeat = myFeat.drop('event').merge(eventSF)
                 narrowList.append(narrowFeat)
             featList = narrowList
-        
-        return Points([Point.from_features(myFeat) for myFeat in featList])
+            
+        return Points([Point.from_features(myFeat) for myFeat in featList], name = name)
     
     def __getitem__(self, item):
         return self.pointList[item]
     
     def __len__(self):
         return len(self.pointList)
+    
+    def compare(self, otherPts, left_name = None, right_name = None):
+        assert len(self) == len(otherPts), 'Points have to be equal length to compare!'
+        if left_name is None:
+            left_name = self.name
+        if right_name is None:
+            right_name = otherPts.name
+        
+        frameList = []
+        for idx in range(len(self)):
+            compFrm = self[idx].compare(otherPts[idx], left_name = self.name, right_name = otherPts.name)      
+            compFrm = prepend_index_level(compFrm, 'Point', idx)
+            frameList.append(compFrm)
+        return pd.concat(frameList)
+        
     
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
 def __make_method(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.

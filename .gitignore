@@ -7,6 +7,7 @@ trajectories_stored/
 *.csv
 *.stats
 Todo.txt
+*graphs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
