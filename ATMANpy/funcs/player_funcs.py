@@ -9,7 +9,7 @@ Created on Thu Mar 24 18:04:52 2022
 import cv2 as cv
 import numpy as np
 
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 from ATMANpy.types.Contours import Contour
