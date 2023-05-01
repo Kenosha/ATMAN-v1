@@ -143,6 +143,9 @@ class StreamFeature(StreamFeaturesBase):
         reinstDict = {frame: try_getattr(obj, 'recolor')(new_thickness) for frame, obj in self.streamDict.items()}
         return StreamFeature(reinstDict, name = self.name)
     
+    def apply(self, func, name, *args, **kwargs):
+        applyDict = {frame: func(feature, *args, **kwargs) for frame, feature in self.items()}
+        return StreamFeature(applyDict, name = name)
         
 @dataclass(frozen = True)
 class StreamFeatures(StreamFeaturesBase):
@@ -250,6 +253,12 @@ class StreamFeatures(StreamFeaturesBase):
     def get_features(self):
         first_frame = self.get_frames()[0]
         return list(self.streamDict[first_frame].keys())
+    
+    def apply(self, func, name): ###TODO: at some point, allow *args, **kwargs (like for StreamFeature)
+        import inspect
+        argList = inspect.getfullargspec(func).args
+        applyDict = {frame: func(*[self[frame][arg] for arg in argList]) for frame in self}
+        return StreamFeature(applyDict, name = name)
     
     #### Should these be here?
     def spline_2D(self, pointFeature = 'ball', frameList = None):
