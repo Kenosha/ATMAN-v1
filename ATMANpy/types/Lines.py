@@ -270,6 +270,9 @@ class Lines:
         return len(self.lineList)
 
     #### METHODS ###    
+    def names(self):
+        return [aLn.name for aLn in self.lineList]
+    
     def append(self, other):
         if isinstance(other, Line):
             return Lines([*self.lineList, other])
@@ -510,6 +513,20 @@ class CourtLines(Lines):
         p2 = self[f'Top {width} Deuce Line'].weak_intersect(self['Top Baseline'])
         p3 = self[f'Bottom {width} Ad Line'].weak_intersect(self['Bottom Baseline'])
         p4 = self[f'Bottom {width} Deuce Line'].weak_intersect(self['Bottom Baseline'])
+        return Region.from_points(p1, p2, p3, p4)
+    
+    def get_service_box(self, side = 'Top', which = 'Deuce'):
+        p1 = self[f'{side} Singles {which} Line'].weak_intersect(self['Net Line'])
+        p2 = self[f'{side} Center Line'].weak_intersect(self['Net Line'])
+        p3 = self[f'{side} Singles {which} Line'].weak_intersect(self[f'{side} Service Line'])
+        p4 = self[f'{side} Center Line'].weak_intersect(self[f'{side} Service Line'])
+        return Region.from_points(p1, p2, p3, p4)
+    
+    def get_service_boxes(self, side = 'Top'):
+        p1 = self[f'{side} Singles Deuce Line'].weak_intersect(self['Net Line'])
+        p2 = self[f'{side} Singles Ad Line'].weak_intersect(self['Net Line'])
+        p3 = self[f'{side} Singles Deuce Line'].weak_intersect(self[f'{side} Service Line'])
+        p4 = self[f'{side} Singles Ad Line'].weak_intersect(self[f'{side} Service Line'])
         return Region.from_points(p1, p2, p3, p4)
     
     def transform(self, lineFunc, *args, **kwargs):
