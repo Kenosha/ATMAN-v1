@@ -129,22 +129,26 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
     featDict = atu.get_folder_struct('features_stored')
     savePath = os.path.join(featDict['main'], videoName, storeName, featureName)
     
-    frmList = []
-    for file in os.listdir(savePath):
-        filePath = os.path.join(savePath, file)
-        myFrm = pd.read_csv(filePath, index_col = 0)
-        frmList.append(myFrm)
-        
-    featFrm = pd.concat(frmList)
-    featFrm = featFrm[~featFrm.reset_index().duplicated().values] ### drop exact duplicates (including the index = frame number)
-
-    if not featFrm.index.duplicated().any():
-        print(f'Feature merger for {featureName} successful.')
+    
+    if os.path.isdir(savePath):
+        frmList = []
+        for file in os.listdir(savePath):
+            filePath = os.path.join(savePath, file)
+            myFrm = pd.read_csv(filePath, index_col = 0)
+            frmList.append(myFrm)
+            
+        featFrm = pd.concat(frmList)
+        featFrm = featFrm[~featFrm.reset_index().duplicated().values] ### drop exact duplicates (including the index = frame number)
+    
+        if not featFrm.index.duplicated().any():
+            print(f'Feature merger for {featureName} successful.')
+        else:
+            featFrm = featFrm[~featFrm.index.duplicated(keep = keep_which)]
+            print(f'Feature merger for {featureName} unsuccessful due to duplicated frames with ambiguous values. Kept the {keep_which} occurence, arbitrarily.')
+            
+        return featFrm
     else:
-        featFrm = featFrm[~featFrm.index.duplicated(keep = keep_which)]
-        print(f'Feature merger for {featureName} unsuccessful due to duplicated frames with ambiguous values. Kept the {keep_which} occurence, arbitrarily.')
-        
-    return featFrm
+        return pd.DataFrame()
 
 def single_2D_feature_to_object(singlefeatSeries):
     ### Turns a dictionary corresponding to a row of a feature frame (a single picture frame)
