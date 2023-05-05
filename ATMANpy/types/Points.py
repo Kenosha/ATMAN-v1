@@ -174,6 +174,11 @@ class Point2D:
         x, y = self.coords
         return Point2D((min(x, bound), min(y, bound)))
         
+    def find_perpendicular(self):
+        #### interpret a point as a vector, and find one (of two) perpendicular vectors
+        v1, v2 = self.coords
+        return Point2D((-v2, v1))
+    
     
 @dataclass(frozen = True)
 class SafePoint2D(Point2D):
