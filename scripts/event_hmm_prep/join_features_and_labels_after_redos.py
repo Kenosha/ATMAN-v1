@@ -11,12 +11,25 @@ import warnings
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 import ATMANpy.funcs.util_funcs as atu
-from ATMANpy.types.Points import Point, SafePoint
+from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
 from ATMANpy.types.Contours import Contour
 
 from ATMANpy.funcs.draw_funcs import draw
+
+import ATMANpy.auxil.constants as const
+
+###### GET LINE FUNC #######
+from ATMANpy.funcs.court_funcs import find_courtlines
+from ATMANpy.types.Lines import CourtLines
+from ATMANpy.funcs.line_funcs import fit_frame_to_lines
+SCHEMA_SIZE = const.SCALE / 2 ### since there is a minimum scale factor of two...
+SCHEMA_MARGIN = const.MARGIN
+schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
+schemaRegion = schemaLines.get_court_region()
+schemaFrm = fit_frame_to_lines(schemaLines)
+
 
 # image operation
 import cv2 as cv
@@ -53,7 +66,6 @@ for file in os.listdir(labPath):
     frm = pd.read_csv(os.path.join(labPath, file), index_col = 0)
     frmList.append(frm)
     
-    
 labFrm = pd.concat(frmList)
 
 # ### remove first versions of relabelled sequences ###
@@ -72,10 +84,7 @@ labFrm = pd.concat(frmList)
 
 labFrm = labFrm.groupby('Index', group_keys = False).apply(lambda df: df.sort_values('FrameNum'))
 labFrm = labFrm[labFrm.Event != 'NOHIT']
-
-
 # labFrm = labFrm[~labFrm['FrameNum'].duplicated(keep = 'last')]
-
 
 def show_index(idx):
     labels = labFrm[labFrm.Index == idx]
@@ -296,12 +305,91 @@ fillFrm = labFrm.groupby('Index', group_keys = False).apply(fill_in_directions)
 ###### Now, add in 'observation' data -> the location, velocity and acceleration of the ball.
 
 from ATMANpy.funcs.feature_funcs import load_stored_features, split_joint_features
-stream_features = load_stored_features(VIDEO_ID, STORE_NAME)
-splitList = split_joint_features(stream_features)
+from ATMANpy.types.Features import StreamFeatures
+featnameList = ['playerTop', 'playerBot', 'ball', 'H']
+mySF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = featnameList)
 
-sf = splitList[0]
-from ATMANpy.funcs.high_level_funcs import smart_interpolate_ball_contours
-sf_itpl = smart_interpolate_ball_contours(sf, verbose = False)
+mySF = mySF.merge(mySF['H'].apply(find_courtlines, 'courtLines', schemaLines))
+
+#### Add in boolean features for in/out calling
+def distance_from_near_court(courtLines, ball):
+    try:
+        cPt = ball.center()
+    except:
+        return None
+    else:
+        courtReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+        
+        ### get the distances to the bounding lines, and take the nearest one
+        courtDists = [line.distance_to(cPt) for line in courtReg]
+        nearest_dist = min(courtDists)
+        
+        if cPt.within(courtReg):
+            return -nearest_dist ### balls within are marked with a negative distance
+        else:
+            return nearest_dist ### balls without are marked with a positive distance
+        
+def distance_from_far_court(courtLines, ball):
+    try:
+        cPt = ball.center()
+    except:
+        return None
+    else:
+        courtReg = courtLines.get_half_region(side = 'Top', width = 'Singles')
+        
+        ### get the distances to the bounding lines, and take the nearest one
+        courtDists = [line.distance_to(cPt) for line in courtReg]
+        nearest_dist = min(courtDists)
+        
+        if cPt.within(courtReg):
+            return -nearest_dist ### balls within are marked with a negative distance
+        else:
+            return nearest_dist ### balls without are marked with a positive distance
+
+def certainty_out_near_court(courtLines, ball):
+    ### idea: use a sigmoid to express the certainty that a ball is in orr out the resp. region
+    # given the distance calculated with the funcs above.
+    # the sigmoid is centered at zero, naturally, but the scaling factor K is not set in stone.
+    # (is it centered at zero? a ball on the line is pretty much in, at more than 50% certainty...)
+    # it has to be reassessed with common sense, using for example a threshold function value of 80%,
+    # and checking which distance_from_near_court one would sensibly assign 
+    # an 80% chance of being in or out IF the ball is on the ground at this moment.
+    x_80 = 6 ### in our case, six pixels. TODO: make this more resilient against changes in aspect ratio!
+    dist = distance_from_near_court(courtLines, ball)
+    if dist is None:
+        return None
+    else:
+        k = - np.log(0.2) / x_80
+        return 1 / (1 + np.exp(-k * dist))
+    
+def certainty_out_far_court(courtLines, ball):
+    ### idea: use a sigmoid to express the certainty that a ball is in orr out the resp. region
+    # given the distance calculated with the funcs above.
+    # the sigmoid is centered at zero, naturally, but the scaling factor K is not set in stone.
+    # (is it centered at zero? a ball on the line is pretty much in, at more than 50% certainty...)
+    # it has to be reassessed with common sense, using for example a threshold function value of 80%,
+    # and checking which distance_from_near_court one would sensibly assign 
+    # an 80% chance of being in or out IF the ball is on the ground at this moment.
+    x_80 = 6 ### in our case, six pixels. TODO: make this more resilient against changes in aspect ratio!
+    dist = distance_from_far_court(courtLines, ball)
+    if dist is None:
+        return None
+    else:
+        k = - np.log(0.2) / x_80
+        return 1 / (1 + np.exp(-k * dist))
+
+### Split into contiguous features ###
+splitList = mySF.split_joint_features()
+len(splitList)
+
+# courtLines = courtSF[10604]
+# sb = courtLines.get_service_boxes(side = 'Top')
+# sb = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+
+# GreyFrame(np.zeros((1080, 1920), dtype = 'uint8')).put(courtLines, thickness = 3).show()
+# GreyFrame(np.zeros((1080, 1920), dtype = 'uint8')).put(sb, thickness = 3).show()
+
+# ball = sf['ball'][10604]
 
 
 def get_observation_frame(sf):
@@ -342,16 +430,28 @@ def get_observation_frame(sf):
     secondary_accelFrm = (speedFrm.shift(-ACCELERATION_SHIFT) - speedFrm) * 2
     accelFrm = accelFrm.fillna(secondary_accelFrm)
     
+    #### PROJECTED DISTANCE TO COURTLINE ###
+    # idea: this is additional info for bounces: we give the perpendicular distance to the nearest courtline
+    # of the point, in 2D. In this way, the bounce HMMs will better be able to infer whether a ball is in or out.
+    ### for each distinct bounce event, we have to make a distance metric
+    # -> for BINSL/BONS(L), we have to make a distance of ball to the region of the near left service box
+    # -> for BINSR/BONS(R), we have to make a distance of ball to the region of the near right service box
+    # -> for BIN/BON, we have to make a distance of ball to the region of the near singles court
+    distance_features = ['dN', 'dF']
+    distFrm = pd.concat([sf[feat].to_series() for feat in distance_features], axis = 1)
+    
     #### LABEL AND CONCAT
     speedFrm.columns = ['v_x', 'v_y']
     accelFrm.columns = ['a_x', 'a_y']
     
-    obsFrm = pd.concat([ballFrm, speedFrm, accelFrm], axis = 1)
+    obsFrm = pd.concat([ballFrm, speedFrm, accelFrm, distFrm], axis = 1)
 
     return obsFrm
     
 
 ### JOIN OBSERVATIONS AND LABELS ###
+
+from ATMANpy.funcs.high_level_funcs import smart_interpolate_ball_contours
 
 fillSer = fillFrm[['FrameNum', 'Event']].set_index('FrameNum').squeeze()
 dups = fillFrm[fillSer.index.duplicated(keep = False)]
@@ -360,6 +460,11 @@ jointList = []
 
 for idx, sf in enumerate(splitList):
     sf_itpl = smart_interpolate_ball_contours(sf)
+        
+    dnSF = sf_itpl.apply(certainty_out_near_court, 'dN') ## distance Near
+    dfSF = sf_itpl.apply(certainty_out_far_court, 'dF') ### distance Far
+    
+    sf_itpl = sf_itpl.merge(dnSF).merge(dfSF)
     
     obsFrm = get_observation_frame(sf_itpl)
     
@@ -429,6 +534,20 @@ def show_idx(idx):
            ms_between_frames = 30)
 
 savePath = os.path.join(vidPath, 'hmm_data_final')
-jointFrm.to_csv(os.path.join(savePath, 'events_final.csv'))
+jointFrm.to_csv(os.path.join(savePath, 'events_final_inout.csv'))
+
+chk_near = jointFrm[jointFrm.Event.isin(['BIN', 'BON'])]
+chk_far = jointFrm[jointFrm.Event.isin(['BIF', 'BOF'])]
+
+####
+chk_far = pd.concat([jointFrm.groupby('Event').dF.mean(),
+                     jointFrm.groupby('Event').dF.std()], axis = 1)
+chk_far.columns = ['Mean', 'Std']
+
+chk_near = pd.concat([jointFrm.groupby('Event').dN.mean(),
+                     jointFrm.groupby('Event').dN.std()], axis = 1)
+chk_near.columns = ['Mean', 'Std']
+
+
 
 

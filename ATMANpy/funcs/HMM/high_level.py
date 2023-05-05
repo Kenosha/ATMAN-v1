@@ -6,8 +6,10 @@ Created on Mon Jul 25 00:46:42 2022
 """
 
 
-def init_all_single_mixture(word_training_sample, event_to_num_statesFunc = None,    
-                            train_threshold = 7, 
+def init_all_single_mixture(word_training_sample, 
+                            featDict = None,
+                            event_to_num_statesFunc = None,    
+                            train_threshold = 8, 
                             stop_iteration_threshold_init = 10 ** -10, 
                             stop_iteration_threshold_rest = 10 ** -7,
                             min_iterations = 15, max_iterations = 50,
@@ -22,12 +24,19 @@ def init_all_single_mixture(word_training_sample, event_to_num_statesFunc = None
     initDict = {}
     restDict = {}
     for wordStr in all_words:
-    
+        
+        ### get number of states
         num_states = event_to_num_statesFunc(wordStr)
+   
+        ### get features
+        if featDict is None:
+            features = word_training_sample.columns
+        else:
+            features = featDict[wordStr]
    
         print(f'Doing {wordStr}...')
         
-        words = word_training_sample.loc[wordStr]
+        words = word_training_sample.loc[wordStr, features]
         num_words = len(words.index.get_level_values("IndexWord").unique())
         num_frames = len(words)
         print(f'Number of words to train on: {num_words}, occupying {num_frames} frames')

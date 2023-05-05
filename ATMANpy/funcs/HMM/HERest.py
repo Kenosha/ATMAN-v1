@@ -441,7 +441,7 @@ def log_xi_exit_numerator(elnaArr, elnbArr, seqArr, A):
                                           elnbArr_exit))
     return eln_numerator
 
-def HERest(init_hmmDict, dataFrm, num_cycles = 4):
+def HERest(init_hmmDict, dataFrm, num_cycles = 4, tikhonov_regularizer = 0):
 
     ### Import from HRest    
     from ATMANpy.funcs.HMM.HRest import weighted_denominator
@@ -495,7 +495,8 @@ def HERest(init_hmmDict, dataFrm, num_cycles = 4):
                 HMM = paramDict[word]
                 A, avg, cov = HMM['A'], HMM['avg'], HMM['cov']
                 avgArr = avg.values
-                wordArr = words.values
+                features = list(avg.columns)
+                wordArr = words[features].values
                 
                 ### calculate emission accumulators
                 elngammaArr = eln_gammas[idx][:, 1:-1] ### gammas for this index, for emitting states
@@ -540,6 +541,10 @@ def HERest(init_hmmDict, dataFrm, num_cycles = 4):
             upd_entryArr = np.einsum('i,  -> i', xientryAccumulator[word], 1 / gammaAccumulator_entry[word])
             upd_emitArr = np.einsum('ij, i -> ij', xiemitAccumulator[word], 1 / gammaAccumulator[word])
             upd_exitArr = np.einsum('i, i -> i', xiexitAccumulator[word], 1 / gammaAccumulator[word])
+            
+            ##### TIKHONOV REGULARIZATION #######
+            regArr = np.eye(*upd_covArr.shape[1:])[np.newaxis, :, :] * tikhonov_regularizer
+            upd_covArr = upd_covArr + regArr
             
             ##### UPDATE THE HMM PARAMETERS #####
             HMM = paramDict[word]

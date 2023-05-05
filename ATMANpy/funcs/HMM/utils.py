@@ -110,10 +110,11 @@ def calculate_emission_densities(words, avg, cov, density_floor = None):
     ### PREPARE SOME HELPER VARS
     states = avg.index.unique()
     num_states = len(states)
-    num_vars = len(avg.columns)
+    features = list(avg.columns)
+    num_vars = len(features)
     
     ### PREPARE ARRAYS ###
-    wordArr = words.values ### shape: num_obs, num_vars
+    wordArr = words[features].values ### shape: num_obs, num_vars
     avgArr = avg.values.T  ### shape: num_vars, num_states
     covArr = cov.values.reshape(num_states, num_vars, num_vars) ### shape: num_states, num_vars, num_vars
     dists = wordArr[:, :, np.newaxis] - avgArr[np.newaxis, :, :] ### shape: num_obs, num_vars, num_states
@@ -137,7 +138,7 @@ def calculate_emission_densities(words, avg, cov, density_floor = None):
     dist_x_cov_inv = np.einsum(trans_vec_mat_mulStr, dists, invArr)
     
     vec_vec_mulStr = 'njs, njs -> ns'
-    exp_term = np.einsum(vec_vec_mulStr,dist_x_cov_inv, dists)
+    exp_term = np.einsum(vec_vec_mulStr, dist_x_cov_inv, dists)
     numerator = np.exp(-0.5 * exp_term) ### shape: num_obs, num_states
     
     # b) Denominator

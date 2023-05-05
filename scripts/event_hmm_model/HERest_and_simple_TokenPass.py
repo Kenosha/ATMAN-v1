@@ -18,11 +18,12 @@ import pandas as pd
 import numpy as np
 
 from ATMANpy.funcs.util_funcs import get_folder_struct
+from ATMANpy.funcs.HMM.utils import read_train_test
 
 np.seterr('ignore')
 
 VIDEO_ID = 'pqxAmUWIoKc'
-DATA_SET = 'events_final.csv'
+DATA_SET = 'events_final_inout.csv'
 
 hmmPath = get_folder_struct('ball_event_hmm')[VIDEO_ID]
 dataPath = os.path.join(hmmPath, 'hmm_data_final')
@@ -33,9 +34,13 @@ dataFrm.index.name = 'Frame'
 dataFrm = dataFrm[~dataFrm.Event.isna()]
 all_words = dataFrm.Event.unique()
 
-RELATIVE_SPLIT = 0.85
-from ATMANpy.funcs.HMM.utils import split_into_training_and_testing
-train_data, test_data = split_into_training_and_testing(dataFrm, relative_split = RELATIVE_SPLIT)
+# RELATIVE_SPLIT = 0.85
+# from ATMANpy.funcs.HMM.utils import split_into_training_and_testing
+# train_data, test_data = split_into_training_and_testing(dataFrm, relative_split = RELATIVE_SPLIT)
+BASELINE_MODEL = 'embedded_cyc3_nrel85'
+train_data, test_data = read_train_test(BASELINE_MODEL) ### redo with same split as first model 'embedded_cyc_nrel85'
+train_data = dataFrm[dataFrm.IndexSF.isin(train_data.IndexSF.unique())]
+test_data = dataFrm[dataFrm.IndexSF.isin(test_data.IndexSF.unique())]
 
 ####################################################
 ###### Initialize HMMs using HInit and HRest #######
@@ -49,9 +54,26 @@ word_training_sample = choose_random_sample_words(train_data)
 # -> for the moment, assume they're all three state hmms, except None, which is one state.
 event_to_num_states = lambda wordStr: 1 if wordStr == 'None' else 3
 
+### 3) Assign features to each word
+all_words = word_training_sample.index.get_level_values('Event').unique()
+always_features = ['x', 'y', 'v_x', 'v_y', 'a_x', 'a_y']
+featDict = {k: always_features for k in all_words}
+
+sorted(all_words)
+nearList = ['BIN', 'BINSL', 'BINSR', 'BON', 'BONS', 'HN', 'SNL', 'SNR']
+farList = ['BIF', 'BIFSL', 'BIFSR', 'BOF', 'BOFS', 'HF', 'SFL', 'SFR']
+neitherList = [w for w in all_words if not w in nearList and not w in farList]
+
+for word in nearList:
+    featDict[word] = [*always_features, 'dN']
+for word in farList:
+    featDict[word] = [*always_features, 'dF']
+for word in neitherList:
+    featDict[word] = [*always_features, 'dF'] ### doesn't matter
+
 from ATMANpy.funcs.HMM.high_level import init_all_single_mixture
 
-initDict = init_all_single_mixture(word_training_sample, 
+initDict = init_all_single_mixture(word_training_sample, featDict = featDict,
                                    event_to_num_statesFunc = event_to_num_states)
 
 print('_____________________')
@@ -67,7 +89,7 @@ print('_____________________')
 NUM_CYCLES = 3
 
 from ATMANpy.funcs.HMM.HERest import HERest
-hmmDict = HERest(initDict, train_data, num_cycles = NUM_CYCLES)
+hmmDict = HERest(initDict, train_data, num_cycles = NUM_CYCLES, tikhonov_regularizer = 0.1)
 
 
 print('____________________________')
@@ -78,11 +100,12 @@ print('____________________________')
 
 ### Save HMM Parameters
 
-model_name = f'embedded_cyc{NUM_CYCLES}_nrel{round(RELATIVE_SPLIT * 100)}'
+# model_name = f'embedded_cyc{NUM_CYCLES}_nrel{round(RELATIVE_SPLIT * 100)}'
+model_name = f'{BASELINE_MODEL}_inout_logit'
 
 from ATMANpy.funcs.HMM.utils import save_hmm_params, save_train_test
-save_hmm_params(hmmDict, model_name, VIDEO_ID)
-save_train_test(train_data, test_data, model_name, VIDEO_ID)
+save_hmm_params(hmmDict, model_name)
+save_train_test(train_data, test_data, model_name)
 
 
 #%% Testing Inference
