@@ -37,10 +37,14 @@ class StreamFeaturesBase:
 
     def __getitem__(self, item):
         ### get a single frame feature dictionary!
-        try:
-            return self.streamDict[item]
-        except KeyError:
-            raise Exception(KeyError, f'No such frame: {item}')
+        if isinstance(item, int):
+            try:
+                return self.streamDict[item]
+            except KeyError:
+                raise KeyError(f'No such frame: {item}')
+        elif isinstance(item, list):
+            return self.__class__({frame: featDict for frame, featDict in self.items() if frame in item})
+                
     
     def keys(self):
         return self.streamDict.keys()
@@ -51,6 +55,9 @@ class StreamFeaturesBase:
     def values(self):
         return self.streamDict.values()
     
+    def is_empty(self):
+        return self.streamDict == {}
+
     def to_series(self):
         return pd.Series(self.streamDict, name = self.name)
 
@@ -124,10 +131,17 @@ class StreamFeature(StreamFeaturesBase):
     #### (like pd.Series) -> frames in index, objects (single feature) in values!
     name: str = None ### The name of a StreamFeature instance is the name of the stored feature.
     
+    @staticmethod
+    def from_series(featSer):
+        return StreamFeature(featSer.to_dict(), name = featSer.name)
+    
     def __repr__(self):
-        frames = self.get_frames()
-        min_frame, max_frame = frames[0], frames[-1]
-        return f'StreamFeature({self.name}, frames: {min_frame} to {max_frame})'
+        if self.is_empty():
+            return 'StreamFeature()'
+        else:
+            frames = self.get_frames()
+            min_frame, max_frame = frames[0], frames[-1]
+            return f'StreamFeature({self.name}, frames: {min_frame} to {max_frame})'
     
     def get_features(self):
         return [self.name]
@@ -144,9 +158,21 @@ class StreamFeature(StreamFeaturesBase):
         return StreamFeature(reinstDict, name = self.name)
     
     def apply(self, func, name, *args, **kwargs):
-        applyDict = {frame: func(feature, *args, **kwargs) for frame, feature in self.items()}
+        applyDict = {}
+        for frame, feature in self.items():
+            if feature is None:
+                applyDict[frame] = None
+            else:
+                applyDict[frame] = func(feature, *args, **kwargs)
         return StreamFeature(applyDict, name = name)
         
+    def save(self, videoName, storeName):
+        ### TODO: integrate further with feature_funcs
+        from ATMANpy.funcs.feature_funcs import save_feature_frame
+        featSer = self.to_series().rename('x_0')
+        save_feature_frame(featSer, self.name, videoName, storeName)
+
+    
 @dataclass(frozen = True)
 class StreamFeatures(StreamFeaturesBase):
     ####### (like pd.DataFrame) -> frames in index, featDict in values -> multiple features
@@ -158,13 +184,16 @@ class StreamFeatures(StreamFeaturesBase):
         return StreamFeatures(featDict)
     
     def __repr__(self):
-        features = self.get_features()
-        frames = self.get_frames()
-        min_frame, max_frame = frames[0], frames[-1]
-        return f'StreamFeatures({features}, frames: {min_frame} to {max_frame})'
-    
+        if self.is_empty():
+            return 'StreamFeatures()'
+        else:
+            features = self.get_features()
+            frames = self.get_frames()
+            min_frame, max_frame = frames[0], frames[-1]
+            return f'StreamFeatures({features}, frames: {min_frame} to {max_frame})'
+        
     def __getitem__(self, item):
-        if isinstance(item, int):
+        if isinstance(item, int) or isinstance(item, list):
             return super().__getitem__(item)
             
         elif isinstance(item, str):
@@ -172,7 +201,7 @@ class StreamFeatures(StreamFeaturesBase):
                 streamDict = {frame: frameDict[item] for frame, frameDict in self.streamDict.items()}
                 return StreamFeature(streamDict, name = item)
             except KeyError:
-                raise Exception(KeyError, f'No such feature: {item}')
+                raise KeyError(f'No such feature: {item}')
             
         else:
             raise Exception('Pass in a frame (int) or an feature name (str)')
