@@ -77,7 +77,16 @@ class StreamFeaturesBase:
     def keep(self, keepList):
         streamDict = {frame: featDict for frame, featDict in self.streamDict.items() if frame in keepList}    
         return self.__class__(streamDict, name = self.name)
-        
+    
+    def conform(self, conformList):
+        streamDict = {}
+        for frame in conformList:
+            if frame in self.keys():
+                streamDict[frame] = self[frame]
+            else:
+                streamDict[frame] = {feat: None for feat in self.get_features()}
+        return self.__class__(streamDict, name = self.name)
+    
     def add(self, key, value):
         if key in self.streamDict:
             raise Exception(f'frame {key} exists, can not add entry.')
@@ -172,7 +181,9 @@ class StreamFeature(StreamFeaturesBase):
         featSer = self.to_series().rename('x_0')
         save_feature_frame(featSer, self.name, videoName, storeName)
 
-    
+    def unsqueeze(self):
+        return StreamFeatures({frame: {self.name: feat} for frame, feat in self.items()})
+
 @dataclass(frozen = True)
 class StreamFeatures(StreamFeaturesBase):
     ####### (like pd.DataFrame) -> frames in index, featDict in values -> multiple features
@@ -280,14 +291,23 @@ class StreamFeatures(StreamFeaturesBase):
         return list(self.streamDict.keys())
     
     def get_features(self):
-        first_frame = self.get_frames()[0]
-        return list(self.streamDict[first_frame].keys())
+        if self.is_empty():
+            return []
+        else:
+            first_frame = self.get_frames()[0]
+            return list(self.streamDict[first_frame].keys())
     
     def apply(self, func, name): ###TODO: at some point, allow *args, **kwargs (like for StreamFeature)
         import inspect
         argList = inspect.getfullargspec(func).args
         applyDict = {frame: func(*[self[frame][arg] for arg in argList]) for frame in self}
         return StreamFeature(applyDict, name = name)
+    
+    def squeeze(self):
+        if len(self.get_features()) == 1:
+            return self[self.get_features()[0]]
+        else:
+            return self
     
     #### Should these be here?
     def spline_2D(self, pointFeature = 'ball', frameList = None):

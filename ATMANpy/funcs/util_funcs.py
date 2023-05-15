@@ -140,3 +140,35 @@ def split_array_in_two(myArr, left_prop = 1, overall_prop = 2, axis = 0):
     parts = np.array_split(myArr, overall_prop, axis = axis)
     left_parts, right_parts = parts[:left_prop], parts[left_prop:]
     return np.concatenate(left_parts, axis = axis), np.concatenate(right_parts, axis = axis)
+
+### signature of functions
+
+import inspect
+def get_positional_arguments(someFunc):
+    spec = inspect.getfullargspec(someFunc)
+    num_kwargs = len(spec.defaults)
+    return spec.args[:-num_kwargs]
+
+def get_return_names(someFunc):
+    src, num_lines = inspect.getsourcelines(someFunc)
+    src = [ln.strip(' ').rstrip('\n') for ln in src]
+    ret = [ln for ln in src if ln.startswith('return ')]
+    ret = [ln[7:] for ln in ret] ### remove 'return '
+    ret = [ln.split(',') for ln in ret] ### split return values by comma
+    ret = [[val.strip(' ') for val in ln] for ln in ret] ### drop whitespace
+    
+    nums_ret_vals = [len(ln) for ln in ret]
+    assert len(set(nums_ret_vals)) == 1, f'Ambiguous number of return values in {someFunc}: {ret}'
+    num_ret_vals = nums_ret_vals[0]
+    
+    ret_vals = [vals for vals in ret if vals != ['None'] * num_ret_vals]
+    
+    ### we now have to check for uniqueness of the non-'None' return values
+    # since we have asserted all return values to have the same length
+    # we can compare them elementwise
+    ret_vals_elementwise = [[vals[i] for vals in ret_vals] for i in range(num_ret_vals)]
+    ret_vals_uniques = [len(set(vals)) for vals in ret_vals_elementwise]
+    assert ret_vals_uniques == [1] * num_ret_vals, f'non-uniquely names return values in {someFunc}: {ret_vals}'
+    
+    return ret_vals[0] ### due to uniqueness, take first.
+

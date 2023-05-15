@@ -61,12 +61,13 @@ def draw(featList, add_text = None, textRegion = None):
                 feat = f'{featStr}: {feat}'
             textLines.append(feat)
         
-        text_distance = int(textRegion['Left'].length() / len(textLines))
-        
-        for i, text in enumerate(textLines):
-            text_coords = textRegion.p1.down(text_distance * i).coords
-            sendFrm = sendFrm.put(text, thickness = THICKNESS, color = TEXT_COLOR,
-                                  where = text_coords)
+        if not len(textLines) == 0:
+            text_distance = int(textRegion['Left'].length() / len(textLines))
+            
+            for i, text in enumerate(textLines):
+                text_coords = textRegion.p1.down(text_distance * i).coords
+                sendFrm = sendFrm.put(text, thickness = THICKNESS, color = TEXT_COLOR,
+                                      where = text_coords)
         
         #### ADD ALL OTHER FEATURES #####
         for featStr in otherFeatures:
