@@ -52,4 +52,6 @@ def put(someFrm, someObj,
             p, ps = someObj[0], someObj[1:]
             return put(put(someFrm, p, color = color, radius = radius, thickness = thickness, where = where, size = size), 
                        ps, color = color, radius = radius, thickness = thickness, where = where, size = size)
+        
+    return someFrm ### if any other entry type --> we can't display it, so we just return original frame, instead of None
     ####################

@@ -44,8 +44,7 @@ class StreamFeaturesBase:
                 raise KeyError(f'No such frame: {item}')
         elif isinstance(item, list):
             return self.__class__({frame: featDict for frame, featDict in self.items() if frame in item})
-                
-    
+           
     def keys(self):
         return self.streamDict.keys()
         
@@ -68,6 +67,11 @@ class StreamFeaturesBase:
     def last(self):
         frame = self.get_frames()[-1]
         return frame, self.streamDict[frame]
+    
+    def update(self, item, value):
+        outDict = self.streamDict.copy()
+        outDict[item] = value
+        return self.__class__(outDict)
     
     def drop(self, item):
         ### drop a single frame feature dictionary!
@@ -135,6 +139,12 @@ class StreamFeaturesBase:
     def get_frames(self):
         return list(self.streamDict.keys())   
     
+    def to_dict(self):
+        return self.streamDict
+    
+    def to_list(self):
+        return list(self.streamDict.values())
+    
 @dataclass(frozen = True)
 class StreamFeature(StreamFeaturesBase):
     #### (like pd.Series) -> frames in index, objects (single feature) in values!
@@ -151,7 +161,13 @@ class StreamFeature(StreamFeaturesBase):
             frames = self.get_frames()
             min_frame, max_frame = frames[0], frames[-1]
             return f'StreamFeature({self.name}, frames: {min_frame} to {max_frame})'
-    
+        
+    def maybe_get(self, item):
+        try:
+            return self[item]
+        except KeyError:
+            return None
+                  
     def get_features(self):
         return [self.name]
     
@@ -217,6 +233,12 @@ class StreamFeatures(StreamFeaturesBase):
         else:
             raise Exception('Pass in a frame (int) or an feature name (str)')
 
+    def maybe_get(self, item):
+        try:
+            return self[item]
+        except KeyError:
+            return {feat: None for feat in self.get_features()}
+                  
     def drop(self, item):
         if isinstance(item, int):
             ### drop a single frame feature dictionary!
@@ -344,42 +366,42 @@ class StreamFeatures(StreamFeaturesBase):
 #%% Testing
 
 
-video_id = 'pqxAmUWIoKc'
-store_name = '10to100_ok2'
+# video_id = 'pqxAmUWIoKc'
+# store_name = '10to100_ok2'
 
-myDict = {100: {'foo': 2, 'bar': 29}, 101: {'foo': 3, 'bar': 30}}
-myDict2 = {102: {'foo': 2, 'bar': 29}, 103: {'foo': 3, 'bar': 30}}
+# myDict = {100: {'foo': 2, 'bar': 29}, 101: {'foo': 3, 'bar': 30}}
+# myDict2 = {102: {'foo': 2, 'bar': 29}, 103: {'foo': 3, 'bar': 30}}
 
-SF = StreamFeatures(myDict)
-SF2 = StreamFeatures(myDict2)
+# SF = StreamFeatures(myDict)
+# SF2 = StreamFeatures(myDict2)
 
-SF[100]
-SF.drop(100)
+# SF[100]
+# SF.drop(100)
 
-SF.add(10, {'fri': 3})
+# SF.add(10, {'fri': 3})
 
-SF.extend(SF2)
-
-
-SF[101]
-SF.extend(SF2)[102]
+# SF.extend(SF2)
 
 
-myDict3 = {100: {'baz': 2, 'goo': 29}, 101: {'baz': 3, 'goo': 30}, 102: {'baz': 3, 'goo': 30}}
-myDict3 = {100: {'baz': 2, 'goo': 29}}
-SF3 = StreamFeatures(myDict3)
+# SF[101]
+# SF.extend(SF2)[102]
 
-SF.merge(SF3)[100]
 
-myDict = {100: 3, 101: 4, 102: 2}
-# myDict2 = {102: 3, 103: 3, 104: 3}
-myDict2 = {103: 3, 104: 3}
-SF = StreamFeature(myDict, name = 'foo')
-SF2 = StreamFeature(myDict2, name = 'foo')
+# myDict3 = {100: {'baz': 2, 'goo': 29}, 101: {'baz': 3, 'goo': 30}, 102: {'baz': 3, 'goo': 30}}
+# myDict3 = {100: {'baz': 2, 'goo': 29}}
+# SF3 = StreamFeatures(myDict3)
 
-SF.extend(SF2)
+# SF.merge(SF3)[100]
 
-SF.first()
+# myDict = {100: 3, 101: 4, 102: 2}
+# # myDict2 = {102: 3, 103: 3, 104: 3}
+# myDict2 = {103: 3, 104: 3}
+# SF = StreamFeature(myDict, name = 'foo')
+# SF2 = StreamFeature(myDict2, name = 'foo')
+
+# SF.extend(SF2)
+
+# SF.first()
 
 
 
