@@ -402,23 +402,23 @@ class Lines:
 class CourtLines(Lines):
     lineList: List[Line]
     name: str = 'Lines'
-    size: int = None
+    scale: int = None
     margin: int = None
     force_dimensions: bool = False
     
-    def _set_dimensions(self, size = 4, force_dimensions = False):
+    def _set_dimensions(self, scale = const.SCALE, force_dimensions = False):
         ### This method is just for convenience, so we can initialize the dimensions
         # created in 'get_dimensions' 
-        dimDict = CourtLines.get_dimensions(size = size, force_dimensions = force_dimensions)
+        dimDict = CourtLines.get_dimensions(scale = scale, force_dimensions = force_dimensions)
         
         for attr, value in dimDict.items():
             object.__setattr__(self, attr, value)
     
     def __post_init__(self):
-        self._set_dimensions(size = self.size, force_dimensions = self.force_dimensions)
+        self._set_dimensions(scale = self.scale, force_dimensions = self.force_dimensions)
     
     @staticmethod
-    def get_dimensions(size = 4, force_dimensions = False):
+    def get_dimensions(scale = const.SCALE, force_dimensions = False):
         
         ### dimensions of court, in feet
         feetDict = {'scale': 1,
@@ -444,9 +444,9 @@ class CourtLines(Lines):
     
     ### always use this method to construct the court lines!
     @staticmethod
-    def make(size = 4, margin = 10, force_dimensions = False):
+    def make(scale = const.SCALE, margin = const.MARGIN, force_dimensions = False):
         
-        dim = CourtLines.get_dimensions(size = size, force_dimensions = force_dimensions)
+        dim = CourtLines.get_dimensions(scale = scale, force_dimensions = force_dimensions)
         if force_dimensions:
             margin = round(margin)
 
@@ -482,14 +482,14 @@ class CourtLines(Lines):
             
         courtLines = CourtLines(courtLines.lineList, 
                                 name = 'Court Lines', 
-                                size = size, 
+                                scale = scale, 
                                 margin = margin,
                                 force_dimensions = force_dimensions)
         
         return courtLines
     
     def see_dimensions(self):
-        return CourtLines.get_dimensions(size = self.size, 
+        return CourtLines.get_dimensions(scale = self.scale, 
                                          force_dimensions = self.force_dimensions)
     
     def add_singles_netline(self):
@@ -498,7 +498,7 @@ class CourtLines(Lines):
                                 netLine.rightPt.left(self.doubles_alley_width).right(self.net_beyond_line),
                                 name = 'Net Line')
         return CourtLines(self.append(netLine), 
-                          name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
+                          name = self.name, scale = self.scale, margin = self.margin, force_dimensions = self.force_dimensions)
         
     def add_doubles_netline(self):
         netLine = self['Top Baseline'].down(self.side_length)
@@ -506,7 +506,7 @@ class CourtLines(Lines):
                                 netLine.rightPt.right(self.net_beyond_line),
                                 name = 'Net Line')
         return CourtLines(self.append(netLine), 
-                          name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
+                          name = self.name, scale = self.scale, margin = self.margin, force_dimensions = self.force_dimensions)
         
     def get_half_region(self, side = 'Top', width = 'Doubles'):
         p1 = self[f'{side} {width} Ad Line'].weak_intersect(self['Net Line'])
@@ -539,10 +539,10 @@ class CourtLines(Lines):
     def transform(self, lineFunc, *args, **kwargs):
         if isinstance(lineFunc, str):
             return CourtLines([getattr(l, lineFunc)(*args, name = l.name, **kwargs) for l in self.lineList], 
-                              name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
+                              name = self.name, scale = self.scale, margin = self.margin, force_dimensions = self.force_dimensions)
         else:
             return CourtLines([lineFunc(l, *args, name = l.name, **kwargs) for l in self.lineList],
-                              name = self.name, size = self.size, margin = self.margin, force_dimensions = self.force_dimensions)
+                              name = self.name, scale = self.scale, margin = self.margin, force_dimensions = self.force_dimensions)
     
     def pixel_in_meter(self, horiLine = 'Top Baseline', vertLine = 'Top Center Line'):
         ### how many pixel are in a meter?

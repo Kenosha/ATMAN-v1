@@ -13,8 +13,6 @@ from typing import Optional, List
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines
 
-from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
-
 import ATMANpy.auxil.constants as const
 
 @dataclass(frozen = True)

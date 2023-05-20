@@ -301,14 +301,13 @@ def calculate_homography(schemaPts: tuple, projectedPts: tuple):
     return H
 
 def get_homography(v_Lines, h_Lines, white_BoolFrm, 
-                   verbose = False, show_threshold_score = 1000, displayFrame = None,
-                   size = 4, margin = 10):
+                   verbose = False, show_threshold_score = 1000, displayFrame = None):
     ## scores for matched and unmatched
     MATCH_SCORE = 1
     UNMATCH_SCORE = -0.5
     
     ### prepare court lines and point configs
-    courtLines = CourtLines.make(size = size, margin = margin)
+    courtLines = CourtLines.make()
     court_configs = get_court_schema_intersection_points(courtLines)
     if displayFrame is None:
         displayFrame = white_BoolFrm.to_grey()
@@ -369,8 +368,7 @@ def get_homography(v_Lines, h_Lines, white_BoolFrm,
     return best_homography, best_config
 
 def get_homography_225(l_v_Lines, r_v_Lines, h_Lines, white_BoolFrm, 
-                       verbose = False, show_threshold_score = 1000, displayFrame = None,
-                       size = 4, margin = 10):
+                       verbose = False, show_threshold_score = 1000, displayFrame = None):
     """
     This is a fast version of get homography if we encounter a 2-2-5 line config:
         2 left vertical, 2 right vertical, 5 horizontal lines. 
@@ -382,7 +380,7 @@ def get_homography_225(l_v_Lines, r_v_Lines, h_Lines, white_BoolFrm,
     UNMATCH_SCORE = -0.5
     
     ### prepare court lines and point configs
-    courtLines = CourtLines.make(size = size, margin = margin)
+    courtLines = CourtLines.make()
     # fit_frame_to_lines(courtLines).put(courtLines).show()
     court_configs = get_court_schema_intersection_points(courtLines)
     if displayFrame is None:

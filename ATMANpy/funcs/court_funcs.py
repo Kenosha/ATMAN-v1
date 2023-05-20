@@ -21,9 +21,6 @@ INTENSITY_DIFFERENCE_THRESHOLD = 30
 MERGE_THRESHOLD = 2 * COURT_LINE_WIDTH 
 MARGIN_TO_CUT_HORIZONTAL = 40
 
-SCHEMA_SIZE = const.SCALE / 2 ### since there is a minimum scale factor of two...
-SCHEMA_MARGIN = const.MARGIN
-
 NET_FACTOR = 0.9
 NET_POINTS_TO_SEARCH = 100
 #####
@@ -70,7 +67,7 @@ def find_homography_225_only(gFrm, verbose = False):
     if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
         # print('Fast Homography Algorithm...')
         from ATMANpy.funcs.line_funcs import get_homography_225
-        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose)
         return H, config
     else:
         return None, None
@@ -123,14 +120,14 @@ def find_homography(gFrm, verbose = False):
     if len(l_v_Lines) == 2 and len(r_v_Lines) == 2 and len(h_Lines) == 5:
         # print('Fast Homography Algorithm...')
         from ATMANpy.funcs.line_funcs import get_homography_225
-        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+        H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose)
 
     else:
         # print('General Homography Algorithm...')
         from ATMANpy.funcs.line_funcs import get_homography 
         print(f'Constellation: Left lines: {len(l_v_Lines)}, right lines: {len(r_v_Lines)}, horizontal lines: {len(h_Lines)}')
         v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
-        H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose, size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+        H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose)
 
     return H, config
 

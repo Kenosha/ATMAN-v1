@@ -19,9 +19,8 @@ import cv2 as cv
 import numpy as np
 
 ######## GET SCHEMA ########
-from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines
-schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
+schemaLines = CourtLines.make().add_singles_netline()
 schemaRegion = schemaLines.get_court_region()
 schemaFrm = fit_frame_to_lines(schemaLines)
 

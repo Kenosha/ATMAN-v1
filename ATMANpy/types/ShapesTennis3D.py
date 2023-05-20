@@ -6,9 +6,6 @@ from typing import Optional, List
 
 from ATMANpy.types.Lines import Line, Lines, CourtLines
 
-from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
-SCALE = 2 * SCHEMA_SIZE  ## times two, because there is a minimum scale factor... 
-
 from ATMANpy.types.Shapes3D import Point3D, Ball3D, Line3D, Region3D, Lines3D, Regions3D
 
 import ATMANpy.auxil.constants as const
@@ -32,7 +29,7 @@ class Court(Regions3D):
     
     @staticmethod
     def make(color = _LINE_COLOR):
-        courtLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+        courtLines = CourtLines.make()
         courtDims = courtLines.see_dimensions()
         
         courtLines3D = Lines3D.from_lines(courtLines, z = 0, name = 'CourtLines3D')
@@ -63,7 +60,7 @@ class Net(Regions3D):
     
     @staticmethod
     def make_singles(color = _NET_COLOR):
-        courtLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN)
+        courtLines = CourtLines.make()
 
         netLn = Line3D.from_line(courtLines.add_singles_netline()['Net Line'], z = 0)
         lPt, cPt, rPt = netLn.subdivide(3)
@@ -86,7 +83,7 @@ class Ball(Ball3D):
     
     @staticmethod
     def make(coords):
-        return Ball(coords, Ball._RADIUS_IN_FEET * SCALE, 
+        return Ball(coords, Ball._RADIUS_IN_FEET * const.SCALE, 
                     color = Ball._BALL_COLOR, name = 'Tennis Ball')
     
     def distance_to(self, otherBall):
@@ -96,7 +93,7 @@ class Ball(Ball3D):
 class Mark(Lines3D):
     _MARK_COLOR = const.BGR['grass_green'] ### green is default
     _MARK_NAME = 'Mark'
-    _SIZE = 0.25 * SCALE 
+    _SIZE = 0.25 * const.SCALE 
     
     def make(cPt, flat_along_dimension = 'z', size = _SIZE, 
              color = _MARK_COLOR, name = _MARK_NAME):
@@ -126,7 +123,7 @@ class Player(Region3D):
     # height: Optional[float] = _DEFAULT_HEIGHT * SCALE
     
     @staticmethod
-    def make(coords, height = _DEFAULT_HEIGHT * SCALE, width = _DEFAULT_WIDTH * SCALE,
+    def make(coords, height = _DEFAULT_HEIGHT * const.SCALE, width = _DEFAULT_WIDTH * const.SCALE,
              color = _DEFAULT_COLOR, name = _DEFAULT_NAME):
         if len(coords) == 2:
             x, y = coords
@@ -147,11 +144,11 @@ class Player(Region3D):
     
 @dataclass(frozen = True)
 class Racquet(Region3D):
-    _DEFAULT_GRIP_HEIGHT = 4 * SCALE
+    _DEFAULT_GRIP_HEIGHT = 4 * const.SCALE
     # _DEFAULT_HEAD_HEIGHT = 5 * SCALE
-    _DEFAULT_LENGTH = 2.25 * SCALE
-    _DEFAULT_GRIP_WIDTH = 0.125 * SCALE
-    _DEFAULT_HEAD_WIDTH = 0.85 * SCALE
+    _DEFAULT_LENGTH = 2.25 * const.SCALE
+    _DEFAULT_GRIP_WIDTH = 0.125 * const.SCALE
+    _DEFAULT_HEAD_WIDTH = 0.85 * const.SCALE
     _DEFAULT_COLOR = const.BGR['strong_pink']
     _GRIP_TO_SWEET = 3/4 ### distance from grip end to sweet spot, as proportion of entire racquet length. 
     

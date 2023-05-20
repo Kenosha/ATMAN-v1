@@ -10,9 +10,8 @@ Created on Thu Jun  9 18:44:04 2022
 ######## GET SCHEMA ########
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import CourtLines, Region
-from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines
-schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
+schemaLines = CourtLines.make().add_singles_netline()
 
 ###### GET LINE FUNC #######
 from ATMANpy.funcs.court_funcs import find_courtlines
