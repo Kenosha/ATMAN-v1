@@ -22,9 +22,39 @@ from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame
 # ################
 
         
-
 @dataclass(frozen = True)
 class Frames:
+    array: np.array
+    name: str = 'frames'
+    
+    def size(self, unit = 'GB'):
+        unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
+        return round(self.array.size / unitMap[unit], 1)
+    
+    def length(self):
+        return self.array.shape[0]
+    
+    def __iter__(self):
+        return self.array.__iter__()
+    
+    
+@dataclass(frozen = True)
+class GreyFrames(Frames):
+    name: str = 'grey_frames'
+    
+    @staticmethod
+    def from_video(cap, start_frame, stop_frame):
+        frames = get_frames(cap, start_frame, stop_frame, color_space = 'grey')
+        return GreyFrames(frames)
+    
+    def __repr__(self):
+        return f'GreyFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
+    
+    
+    
+
+@dataclass(frozen = True)
+class _Frames:
     video_id: str
     start_frame: int
     stop_frame: int

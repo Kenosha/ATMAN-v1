@@ -5,16 +5,27 @@ Created on Mon May 15 10:03:08 2023
 @author: gianl
 """
 
+import time
+from dataclasses import dataclass
+import cv2 as cv
+from multiprocessing.pool import Pool, ThreadPool
+from collections import deque
+
 from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame
+from ATMANpy.types.MultiFrames import GreyFrames
 from ATMANpy.types.Features import StreamFeatures, StreamFeature
 from ATMANpy.types.Caches import Cache
 
 from ATMANpy.funcs.draw_funcs import draw
-
-from dataclasses import dataclass
-import cv2 as cv
-
 from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
+
+# @dataclass(frozen = True)
+# class StreamBase:
+#     start_frame: int
+#     stop_frame: int
+
+#     def length(self):
+#         return stop_frame - start_frame + 1 ### stream contains both start and stop frame!
 
 @dataclass(frozen = True)
 class Stream:
@@ -37,17 +48,38 @@ class Stream:
         ret, frame = self.cap.read()
         
         return BGRFrame(frame)
-         
-    def apply(self, mySF: StreamFeatures):
+       
+    def argstrings_to_args(self, funcArgs, frmNum, rawArr):
+        ### get arguments to plug into feature extraction function
+        args = []
+        for argStr in funcArgs:
+            if argStr == 'cFrm':
+                argObj = BGRFrame(rawArr)
+            elif argStr == 'gFrm':
+                argObj = BGRFrame(rawArr).to_grey()
+            elif argStr == 'hFrm':
+                argObj = BGRFrame(rawArr).to_HSV()
+            else:
+                try:
+                    argObj = self.features[frmNum][argStr]
+                except KeyError as e:
+                    raise e
+            args.append(argObj)
+        return args
+    
+    def attach(self, mySF: StreamFeatures):
         return self.__class__(self.cap, self.start_frame, self.stop_frame, features = mySF)
+
+    def decap(self):
+        myFrms = GreyFrames.from_video(self.cap, self.start_frame, self.stop_frame) ### adapt to all color spaces
+        return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
             
         self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame)
         frmNum = self.start_frame
         
-        while self.cap.isOpened() and (self.start_frame <= frmNum < self.stop_frame):
-            frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES))
+        while self.cap.isOpened() and (self.start_frame <= frmNum <= self.stop_frame):
             ret, frame = self.cap.read()
             
             frame = yield frmNum, frame # take in frame, possibly altered, to show 
@@ -59,16 +91,33 @@ class Stream:
                            fontFace = cv.FONT_HERSHEY_SIMPLEX, fontScale = 2,
                            color = (0, 255, 0), thickness = 3)
             
-            
             if frame is not None:
                 cv.imshow('frame', frame)
                 if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
                     cv.destroyAllWindows()  
                     # yield None
                     break
+            
+            frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES))
         
         else:
             cv.destroyAllWindows()
+
+    def chunk_generator(self, chunksize):
+        ### generate decapped chunks of the stream, one by one lazily
+        chunk_start = self.start_frame
+        chunk_end = min(chunk_start + chunksize - 1, self.stop_frame) 
+        ### since the last frame is included, a chunk of size 10 with chunk_start 5 ends at 14 = 5 + 10 - 1
+        
+        while not chunk_end == self.stop_frame:
+            yield Stream(self.cap, chunk_start, chunk_end, self.features).decap()
+            chunk_start = chunk_end + 1
+            chunk_end = min(chunk_start + chunksize - 1, self.stop_frame)
+        else:
+            # if not chunk_start == chunk_end:
+            yield Stream(self.cap, chunk_start, chunk_end, self.features).decap() ### yield one last time
+        
+        
 
     def show(self, ms_between_frames = 25, frame_counter = False):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
@@ -94,9 +143,11 @@ class Stream:
                
     def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
         
+        ### Establish function arguments and return shape
         funcArgs = get_positional_arguments(featureFunc)
         funcVals = get_return_names(featureFunc)
 
+        ### Initialize Generator
         gen = self.generator()
         frmNum, rawArr = next(gen) ### prime the generator
         
@@ -104,20 +155,7 @@ class Stream:
         while True:
             
             ### get arguments to plug into feature extraction function
-            args = []
-            for argStr in funcArgs:
-                if argStr == 'cFrm':
-                    argObj = BGRFrame(rawArr)
-                elif argStr == 'gFrm':
-                    argObj = BGRFrame(rawArr).to_grey()
-                elif argStr == 'hFrm':
-                    argObj = BGRFrame(rawArr).to_HSV()
-                else:
-                    try:
-                        argObj = self.features[frmNum][argStr]
-                    except KeyError as e:
-                        raise e
-                args.append(argObj)
+            args = Stream.argstrings_to_args(self, funcArgs, frmNum, rawArr) ### 
                 
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
             assert len(args) == len(funcArgs)
@@ -125,7 +163,7 @@ class Stream:
             ### assign to a dictionary, depending on whether we get one or multiple return values
             if len(funcVals) == 1:
                 myFeature = featureFunc(*args, **kwargs)
-                streamDict[frmNum] = myFeature
+                streamDict[frmNum] = {funcVals[0]: myFeature}
             else:
                 myFeatures = featureFunc(*args, **kwargs)
                 streamDict[frmNum] = dict(zip(funcVals, myFeatures))
@@ -137,12 +175,133 @@ class Stream:
                 break 
         
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
-        if len(funcVals) == 1:
-            return StreamFeature(streamDict, name = funcVals[0])
-        else:
-            return StreamFeatures(streamDict)
-            
+        return StreamFeatures(streamDict).squeeze()
+    
+    def _extract_pool(self, poolCls, num_workers, featureFunc, **kwargs):
+        """
+        Auxiliary extract method for parallelisation 
+            -> pass in a threadPool to do threaded extraction
+            -> pass in a Pool to do multiprocessed extraction
+            (see extract_threaded and extract_mp below)
+        """
         
+        ### Set up the pool
+        pool = poolCls(processes = num_workers)
+        pending = deque()
+        
+        ### Establish function arguments and return shape
+        funcArgs = get_positional_arguments(featureFunc)
+        funcVals = get_return_names(featureFunc)
+
+        ### Initialize Generator
+        gen = self.generator()
+        frmNum, rawArr = next(gen) ### prime the generator
+        generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+        
+        streamDict = {}
+        while True:
+            
+            if not generator_is_exhausted and len(pending) < num_workers:
+                ### get arguments to plug into feature extraction function
+                args = self.argstrings_to_args(funcArgs, frmNum, rawArr)
+                    
+                ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
+                assert len(args) == len(funcArgs)
+                
+                ### if there is space in the queue, add a task!
+                task = pool.apply_async(featureFunc, args, kwargs)
+                pending.append((frmNum, task))
+            else:
+                time.sleep(0.01) ### need this to give the leftmost task time to finish!
+            
+            while len(pending) > 0 and pending[0][1].ready():
+                taskNum, task = pending.popleft()
+                
+                if len(funcVals) == 1:
+                    myFeature = task.get()
+                    streamDict[taskNum] = {funcVals[0]: myFeature}
+                else:
+                    myFeatures = task.get()
+                    streamDict[taskNum] = dict(zip(funcVals, myFeatures))
+                
+            if not generator_is_exhausted and len(pending) < num_workers: ### only when there is space in the queue
+                ### iterate the generator.
+                try:
+                    frmNum, rawArr = gen.send(None) ### sending None -> nothing is shown! TODO: "Loud" option -> extract + show.
+                except StopIteration:
+                    pool.close() ### pool closed once generator has nothing to yield --> no new elements will be added.
+                    generator_is_exhausted = True
+                    continue ### stop condition is not here anymore! we have to keep going until pending is empty and all tasks are done
+                
+                
+            ### stop condition
+            if generator_is_exhausted and len(pending) == 0:
+                pool.terminate() ### once pending queue is zero, we can terminate the pool.
+                break
+            
+        pool.close()
+        
+        ### write to StreamFeature or StreamFeatures, depending on the number of return values.
+        return StreamFeatures(streamDict).squeeze()
+    
+    def extract_pool_threaded(self, num_workers, featureFunc, **kwargs):
+        return self._extract_pool(ThreadPool, num_workers, featureFunc, **kwargs)
+    
+    def extract_pool_mp(self, num_workers, featureFunc, **kwargs):
+        return self._extract_pool(Pool, num_workers, featureFunc, **kwargs)
+    
+    def extract_chunk_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+        ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
+        # chunk the Stream and let each chunk be worked by one worker.
+        # This is especially important for CachedStream, below, where we need sequential doing of tasks
+        # but still want the speedup of parallel computing. 
+        # With pooled parallelism, we can not guarantee that the frame before is already done
+        # when the task for a given frame is dispatched, so that functions that track (needing prior frame information)
+        # can not be applied.
+        pass
+        
+        
+    
+# @dataclass(frozen = True)
+# class Stream(StreamBase):
+#     cap: cv.VideoCapture
+    
+@dataclass(frozen = True)
+class DecapStream:
+    ### here, the Stream is dissociated from its videoCapture, which is turned into a MultiFrames object.
+    frames: GreyFrames
+    start_frame: int
+    stop_frame: int
+    features: StreamFeatures = StreamFeatures({})
+
+    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+            
+        for idx, frame in enumerate(self.frames):
+            
+            frmNum = self.start_frame + idx
+            frame = yield frmNum, frame # take in frame, possibly altered, to show 
+            ## TODO: include featDict as a thing the generator yields!
+            
+            if frame_counter:
+                cv.putText(frame, str(frmNum), org = (40, 40), 
+                           fontFace = cv.FONT_HERSHEY_SIMPLEX, fontScale = 2,
+                           color = (0, 255, 0), thickness = 3)
+            
+            
+            if frame is not None:
+                cv.imshow('frame', frame)
+                if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+                    cv.destroyAllWindows()  
+                    # yield None
+                    break
+        
+        else:
+            cv.destroyAllWindows()
+            
+    def extract(self, featureFunc, **kwargs):
+        return Stream.extract(self, featureFunc, **kwargs)
+    
+    
 @dataclass(frozen = True)
 class CachedStream(Stream):
     cache_size: int = 1 ### number of frames before and after the current frame (e.g.: cache size 1 -> three frames in cache.)
@@ -258,6 +417,7 @@ class CachedStream(Stream):
     
     def show(self):
         self.decache().show()
+    
     
     
     
