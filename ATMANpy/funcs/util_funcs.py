@@ -146,8 +146,11 @@ def split_array_in_two(myArr, left_prop = 1, overall_prop = 2, axis = 0):
 import inspect
 def get_positional_arguments(someFunc):
     spec = inspect.getfullargspec(someFunc)
-    num_kwargs = len(spec.defaults)
-    return spec.args[:-num_kwargs]
+    if spec.defaults is not None:
+        num_kwargs = len(spec.defaults)
+        return spec.args[:-num_kwargs]
+    else:
+        return spec.args
 
 def get_return_names(someFunc):
     src, num_lines = inspect.getsourcelines(someFunc)
@@ -171,4 +174,6 @@ def get_return_names(someFunc):
     assert ret_vals_uniques == [1] * num_ret_vals, f'non-uniquely names return values in {someFunc}: {ret_vals}'
     
     return ret_vals[0] ### due to uniqueness, take first.
+
+
 
