@@ -6,10 +6,11 @@ Created on Thu Apr 20 15:59:24 2023
 """
 
 from dataclasses import dataclass
-
+import numpy as np
 import pandas as pd
 
 import ATMANpy.funcs.feature_funcs as ff
+from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
 
 from ATMANpy.types.Lines import Line
 from ATMANpy.types.Shapes3D import Line3D
@@ -35,16 +36,6 @@ class StreamFeaturesBase:
     def __iter__(self):
         return iter(self.streamDict)
 
-    def __getitem__(self, item):
-        ### get a single frame feature dictionary!
-        if isinstance(item, int):
-            try:
-                return self.streamDict[item]
-            except KeyError:
-                raise KeyError(f'No such frame: {item}')
-        elif isinstance(item, list):
-            return self.__class__({frame: featDict for frame, featDict in self.items() if frame in item})
-           
     def keys(self):
         return self.streamDict.keys()
         
@@ -145,6 +136,11 @@ class StreamFeaturesBase:
     def to_list(self):
         return list(self.streamDict.values())
     
+    def to_array(self):
+        ### out shape: frames x features x d1 x d2 x ... x dN 
+        ### even a StreamFeature instance will have a features dimension, at position 1 (frames always at position 0)
+        return np.array([self[featName].to_list() for featName in self.get_features()]).swapaxes(0, 1)
+    
 @dataclass(frozen = True)
 class StreamFeature(StreamFeaturesBase):
     #### (like pd.Series) -> frames in index, objects (single feature) in values!
@@ -162,6 +158,41 @@ class StreamFeature(StreamFeaturesBase):
             min_frame, max_frame = frames[0], frames[-1]
             return f'StreamFeature({self.name}, frames: {min_frame} to {max_frame})'
         
+    def __getitem__(self, item):
+        if isinstance(item, list):
+            if all([isinstance(el, int) for el in item]):
+                return StreamFeature({frame: feature for frame, feature in self.items() if frame in item})
+            else:
+                return KeyError(f'List passed to StreamFeature must be all integers, instead got {item}')
+        
+        elif isinstance(item, int): ### get a single frame feature dictionary!
+             try:
+                 return self.streamDict[item]
+             except KeyError:
+                 raise KeyError(f'No such frame: {item}')
+        
+        elif isinstance(item, str):
+            if item == self.name:
+                return self
+            else:
+                raise KeyError(f'No such feature: {item}')
+        else:
+            raise Exception('Pass in a frame (int) or a list of frames')
+     
+    def __eq__(self, otherSF):
+        if self.name == otherSF.name:
+            outName = self.name + '_equal'
+        else:
+            outName = self.name + '_equal_' + otherSF.name
+        return BoolFeature({frame: self[frame] == otherSF[frame] for frame in self}, name = outName)
+     
+    def __ne__(self, otherSF):
+        if self.name == otherSF.name:
+            outName = self.name + '_unequal'
+        else:
+            outName = self.name + '_unequal_' + otherSF.name
+        return BoolFeature({frame: self[frame] != otherSF[frame] for frame in self}, name = outName)
+     
     def maybe_get(self, item):
         try:
             return self[item]
@@ -182,14 +213,35 @@ class StreamFeature(StreamFeaturesBase):
         reinstDict = {frame: try_getattr(obj, 'recolor')(new_thickness) for frame, obj in self.streamDict.items()}
         return StreamFeature(reinstDict, name = self.name)
     
-    def apply(self, func, name, *args, **kwargs):
+    def apply(self, func, assignArgs = None): ### TODO: at some point, allow *args, **kwargs
+        ### This method allows for function application to single features, element by element
+        ### func takes in features (H, courtLines, etc) and returns features
+        
+        if assignArgs is None:
+            funcArgs = get_positional_arguments(func)
+        else: ### give the option to directly assign function arguments, regardless of name
+            funcArgs = assignArgs
+            
+        funcVals = get_return_names(func)
+    
+        assert funcArgs == self.get_features(), f'Expected function arguments ({funcArgs}) have to be same as available features ({self.get_features()})'
+    
+        ### figure out name
+        if len(funcVals) == 1:
+            name = funcVals[0]
+        else:
+            name = func.__name__
+            
         applyDict = {}
-        for frame, feature in self.items():
-            if feature is None:
-                applyDict[frame] = None
+        for frame in self:
+            funcOut = func(self[frame])
+            
+            if len(funcVals) == 1:
+                applyDict[frame] = {name: funcOut}
             else:
-                applyDict[frame] = func(feature, *args, **kwargs)
-        return StreamFeature(applyDict, name = name)
+                applyDict[frame] = dict(zip(funcVals, funcOut))
+    
+        return StreamFeatures(applyDict, name = name).squeeze()
         
     def save(self, videoName, storeName):
         ### TODO: integrate further with feature_funcs
@@ -220,19 +272,39 @@ class StreamFeatures(StreamFeaturesBase):
             return f'StreamFeatures({features}, frames: {min_frame} to {max_frame})'
         
     def __getitem__(self, item):
-        if isinstance(item, int) or isinstance(item, list):
-            return super().__getitem__(item)
-            
+        if isinstance(item, list):
+            if all([isinstance(el, int) for el in item]):
+                return StreamFeature({frame: featDict for frame, featDict in self.items() if frame in item})
+            elif all([isinstance(el, str) for el in item]):
+                missing_in_feature = [el for el in item if el not in self.get_features()]
+                if len(missing_in_feature) > 0:
+                    raise KeyError(f'{missing_in_feature} not contained in features of {self}')
+                else:
+                    return StreamFeatures({frame: {feat: val for feat, val in featDict.items() if feat in item} for frame, featDict in self.streamDict.items()})
+            else:
+                raise KeyError(f'List passed to StreamFeature must be all integers or all strings, instead got {item}')
+        elif isinstance(item, int): ### get a single frame feature dictionary!
+             try:
+                 return self.streamDict[item]
+             except KeyError:
+                 raise KeyError(f'No such frame: {item}')
         elif isinstance(item, str):
             try:
                 streamDict = {frame: frameDict[item] for frame, frameDict in self.streamDict.items()}
                 return StreamFeature(streamDict, name = item)
             except KeyError:
                 raise KeyError(f'No such feature: {item}')
-            
         else:
-            raise Exception('Pass in a frame (int) or an feature name (str)')
+            raise Exception('Pass in a frame (int) or an feature name (str) or a list of these.')
 
+    def __eq__(self, otherSF):
+        shared_features = [f for f in self.get_features() if f in otherSF.get_features()]
+        return BoolFeatures({frame: {feat + '_equal': self[frame][feat] == otherSF[frame][feat] for feat in shared_features} for frame in self.get_frames()})
+        
+    def __ne__(self, otherSF):
+        shared_features = [f for f in self.get_features() if f in otherSF.get_features()]
+        return BoolFeatures({frame: {feat + '_unequal': self[frame][feat] != otherSF[frame][feat] for feat in shared_features} for frame in self.get_frames()})
+        
     def maybe_get(self, item):
         try:
             return self[item]
@@ -319,11 +391,47 @@ class StreamFeatures(StreamFeaturesBase):
             first_frame = self.get_frames()[0]
             return list(self.streamDict[first_frame].keys())
     
-    def apply(self, func, name): ###TODO: at some point, allow *args, **kwargs (like for StreamFeature)
-        import inspect
-        argList = inspect.getfullargspec(func).args
-        applyDict = {frame: func(*[self[frame][arg] for arg in argList]) for frame in self}
-        return StreamFeature(applyDict, name = name)
+    def apply(self, func, assignArgs = None, assignVals = None, where = None): ###TODO: at some point, allow *args, **kwargs
+        ### This method allows for function application to single features, element by element
+        ### func takes in features (H, courtLines, etc) and returns features
+        ### assignArgs --> List: give the option to directly assign function arguments, regardless of name
+        ### assignVals --> List: give the option to rename the result features
+        ### where --> BoolFeature: give the option to apply the function not everywhere
+    
+        if assignArgs is None:
+            funcArgs = get_positional_arguments(func)
+        else: ### give the option to directly assign function arguments, regardless of name
+            funcArgs = assignArgs
+        if assignVals is None:
+            funcVals = get_return_names(func)
+        else:
+            funcVals = assignVals
+    
+        assert set(funcArgs).issubset(set(self.get_features())), f'Expected function arguments ({funcArgs}) have to be contained in available features ({self.get_features()})'
+        
+        ### figure out name
+        if len(funcVals) == 1:
+            name = funcVals[0]
+        else:
+            name = func.__name__
+            
+        applyDict = {}
+        for frame in self:
+            
+            if where is None or where[frame]:
+                funcOut = func(*[self[frame][arg] for arg in funcArgs])
+                
+                if len(funcVals) == 1:
+                    applyDict[frame] = {name: funcOut}
+                else:
+                    applyDict[frame] = dict(zip(funcVals, funcOut))
+                    
+            else: ### if where is not None AND where[frame] is False...
+                applyDict[frame] = {val: self[frame][val] for val in funcVals} 
+                # ... we don't apply the function, instead look for the function values in the SF itself.
+                    
+    
+        return StreamFeatures(applyDict, name = name).squeeze()
     
     def squeeze(self):
         if len(self.get_features()) == 1:
@@ -362,6 +470,45 @@ class StreamFeatures(StreamFeaturesBase):
             f1 = f2
         return outDict
     
+@dataclass(frozen = True)
+class BoolFeature(StreamFeature):
+    def __repr__(self):
+        if self.is_empty():
+            return 'BoolFeature()'
+        else:
+            frames = self.get_frames()
+            min_frame, max_frame = frames[0], frames[-1]
+            return f'BoolFeature({self.name}, frames: {min_frame} to {max_frame})'
+    
+    def neg(self):
+        return BoolFeature({frame: not bool_feat for frame, bool_feat in self.items()})
+        
+
+@dataclass(frozen = True)
+class BoolFeatures(StreamFeatures):
+    
+    def __repr__(self):
+        if self.is_empty():
+            return 'BoolFeatures()'
+        else:
+            features = self.get_features()
+            frames = self.get_frames()
+            min_frame, max_frame = frames[0], frames[-1]
+            return f'BoolFeatures({features}, frames: {min_frame} to {max_frame})'
+        
+    def any(self):
+        boolArr = self.to_array().any(axis = 1)
+        frames = self.get_frames()
+        return BoolFeature(dict(zip(frames, boolArr)), name = 'any')
+    
+    def all(self):
+        boolArr = self.to_array().all(axis = 1)
+        frames = self.get_frames()
+        return BoolFeature(dict(zip(frames, boolArr)), name = 'all')
+    
+    def neg(self):
+        return BoolFeatures({frame: {feat_name: not bool_feat for feat_name, bool_feat in featDict.items()} for frame, featDict in self.items()})
+        
         
 #%% Testing
 
