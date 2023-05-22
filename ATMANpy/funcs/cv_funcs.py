@@ -42,17 +42,17 @@ def get_frames(cap, start_frame, stop_frame, color_space = 'bgr'):
     cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
     frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
     
-    while cap.isOpened() and (start_frame <= frmNum < stop_frame):
-        
-        frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
+    while cap.isOpened() and (start_frame <= frmNum <= stop_frame):
         ret, frame = cap.read()
         
         if color_space == 'hsv':
             frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
         if color_space == 'grey':
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2GREY)
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             
         outFrames.append(frame)
+        
+        frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
         
     return np.array(outFrames)
 
@@ -99,9 +99,7 @@ def video_stream(cap, start_frame = None, stop_frame = None, ms_between_frames =
     cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
     frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
     
-    while cap.isOpened() and (start_frame <= frmNum < stop_frame):
-        
-        frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
+    while cap.isOpened() and (start_frame <= frmNum <= stop_frame):
         ret, frame = cap.read()
         
         frame = yield frmNum, frame # take in frame, possibly altered, to show
@@ -112,6 +110,8 @@ def video_stream(cap, start_frame = None, stop_frame = None, ms_between_frames =
             if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
                 cv.destroyAllWindows()  
                 yield None
+                
+        frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
     
     else:
         cv.destroyAllWindows()
