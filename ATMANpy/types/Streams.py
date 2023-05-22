@@ -318,8 +318,7 @@ class CachedStream(Stream):
         self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame - self.cache_size)
         frmNum = self.start_frame - self.cache_size
         
-        while self.cap.isOpened() and (self.start_frame - self.cache_size <= frmNum < self.stop_frame + self.cache_size):
-            frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES)) ### the latest frame being read
+        while self.cap.isOpened() and (self.start_frame - self.cache_size <= frmNum <= self.stop_frame + self.cache_size):
             cntNum = frmNum - self.cache_size ### the central frame in the current iteration
 
             ret, currArr = self.cap.read()
@@ -335,7 +334,7 @@ class CachedStream(Stream):
             if frameCache.is_full():
                 inArr = yield frmNum - frameCache.size, frameCache, featCache # take in frame, possibly altered, to show
             else:
-                continue
+                inArr = None
             
             ### using the frame that comes back in, do something.
             ### if None is sent to generator, do nothing.
@@ -350,6 +349,8 @@ class CachedStream(Stream):
                     cv.destroyAllWindows() 
                     break
                     # yield None
+                    
+            frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES)) ### the latest frame being read
         else:
             cv.destroyAllWindows()
         
