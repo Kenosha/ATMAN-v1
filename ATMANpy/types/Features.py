@@ -33,6 +33,18 @@ class StreamFeaturesBase:
         # - StreamFeatures (like pd.DataFrame) -> frames in index, featDict in values -> multiple features
     streamDict: dict 
     
+    @staticmethod
+    def concatenate(featureList, axis = 0):
+        ### concatenates a list of features; axis similar to pandas
+        # axis = 0 ---> along index (i.e. frames)
+        # axis = 1 ---> along columns (i.e. features)
+        if len(featureList) == 0:
+            return StreamFeatures({})
+        else:    
+            concatFunc = StreamFeaturesBase.extend if axis == 0 else StreamFeaturesBase.merge
+            x, xs = featureList[0], featureList[1:]
+            return concatFunc(x, StreamFeaturesBase.concatenate(xs))
+        
     def __iter__(self):
         return iter(self.streamDict)
 
@@ -120,7 +132,7 @@ class StreamFeaturesBase:
                     streamDict[frame] = {self.name: featObj, otherSF.name: other_featObj}
         return StreamFeatures(streamDict)
     
-    def split_joint_features(self, min_feature_length = 0):
+    def split(self, min_feature_length = 0):
         sfList = ff.split_joint_features(self.streamDict, min_feature_length = min_feature_length)
         return [self.__class__(streamDict, name = self.name) for streamDict in sfList]
         
@@ -374,10 +386,6 @@ class StreamFeatures(StreamFeaturesBase):
         renamedDict = {frame: rename_dictFunc(featDict) for frame, featDict in self.streamDict.items()}
         return StreamFeatures(renamedDict)
 
-    def split_joint_features(self, min_feature_length = 0):
-        featList = ff.split_joint_features(self.streamDict, min_feature_length = min_feature_length)
-        return [StreamFeatures(featDict) for featDict in featList]
-        
     def length(self):
         return len(self.streamDict)
     

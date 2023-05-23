@@ -116,8 +116,6 @@ class Stream:
         else:
             # if not chunk_start == chunk_end:
             yield Stream(self.cap, chunk_start, chunk_end, self.features).decap() ### yield one last time
-        
-        
 
     def show(self, ms_between_frames = 25, frame_counter = False):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
@@ -203,7 +201,7 @@ class Stream:
             
             if not generator_is_exhausted and len(pending) < num_workers:
                 ### get arguments to plug into feature extraction function
-                args = self.argstrings_to_args(funcArgs, frmNum, rawArr)
+                args = Stream.argstrings_to_args(self, funcArgs, frmNum, rawArr)
                     
                 ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
                 assert len(args) == len(funcArgs)
@@ -238,34 +236,70 @@ class Stream:
             if generator_is_exhausted and len(pending) == 0:
                 pool.terminate() ### once pending queue is zero, we can terminate the pool.
                 break
-            
-        pool.close()
-        
+           
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def extract_pool_threaded(self, num_workers, featureFunc, **kwargs):
+    def extract_threaded(self, num_workers, featureFunc, **kwargs):
         return self._extract_pool(ThreadPool, num_workers, featureFunc, **kwargs)
     
-    def extract_pool_mp(self, num_workers, featureFunc, **kwargs):
+    def extract_mp(self, num_workers, featureFunc, **kwargs):
         return self._extract_pool(Pool, num_workers, featureFunc, **kwargs)
     
-    def extract_chunk_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
         ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
+        # create a pool of chunks: 
         # chunk the Stream and let each chunk be worked by one worker.
         # This is especially important for CachedStream, below, where we need sequential doing of tasks
         # but still want the speedup of parallel computing. 
         # With pooled parallelism, we can not guarantee that the frame before is already done
         # when the task for a given frame is dispatched, so that functions that track (needing prior frame information)
         # can not be applied.
-        pass
         
+        ### Set up the pool
+        pool = Pool(processes = num_workers)
+        pending = deque()
         
+        ### Initialize Generator
+        gen = self.chunk_generator(chunksize)
+        try:
+            chunkStm = next(gen) ### prime the generator
+            generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+        except StopIteration:
+            pool.close()
+            generator_is_exhausted = True
     
-# @dataclass(frozen = True)
-# class Stream(StreamBase):
-#     cap: cv.VideoCapture
-    
+        sfList = []
+        while True:
+            if not generator_is_exhausted and len(pending) < num_workers:                
+                ### if there is space in the queue, add a task!
+                task = pool.apply_async(chunkStm.extract, [featureFunc], kwargs)
+                pending.append(task)
+            else:
+                time.sleep(0.01) ### need this to give the leftmost task time to finish!
+            
+            while len(pending) > 0 and pending[0].ready():
+                mySF = pending.popleft().get()
+                sfList.append(mySF)
+            
+            if not generator_is_exhausted and len(pending) < num_workers: ### only when there is space in the queue
+                ### iterate the generator.
+                try:
+                    chunkStm = next(gen) ### iterate the generator
+                    generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+                except StopIteration:
+                    pool.close() ### pool closed once generator has nothing to yield --> no new elements will be added.
+                    generator_is_exhausted = True
+                    continue ### stop condition is not here anymore! we have to keep going until pending is empty and all tasks are done
+                
+            ### stop condition
+            if generator_is_exhausted and len(pending) == 0:
+                pool.terminate() ### once pending queue is zero, we can terminate the pool.
+                break
+            
+        return StreamFeatures.concatenate(sfList)
+            
+            
 @dataclass(frozen = True)
 class DecapStream:
     ### here, the Stream is dissociated from its videoCapture, which is turned into a MultiFrames object.
@@ -412,7 +446,7 @@ class CachedStream(Stream):
         
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
-    
+            
     def decache(self):
         return Stream(self.cap, self.start_frame, self.stop_frame, self.features)
     
@@ -420,5 +454,8 @@ class CachedStream(Stream):
         self.decache().show()
     
     
+# @dataclass(frozen = True)
+# class DecapCachedStream(DecapStream):
+#     cache_size: int = 1
     
     
