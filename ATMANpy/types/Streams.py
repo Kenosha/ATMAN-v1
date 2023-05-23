@@ -106,16 +106,15 @@ class Stream:
     def chunk_generator(self, chunksize):
         ### generate decapped chunks of the stream, one by one lazily
         chunk_start = self.start_frame
-        chunk_end = min(chunk_start + chunksize - 1, self.stop_frame) 
+        chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame) 
         ### since the last frame is included, a chunk of size 10 with chunk_start 5 ends at 14 = 5 + 10 - 1
         
-        while not chunk_end == self.stop_frame:
-            yield Stream(self.cap, chunk_start, chunk_end, self.features).decap()
-            chunk_start = chunk_end + 1
-            chunk_end = min(chunk_start + chunksize - 1, self.stop_frame)
+        while not chunk_stop == self.stop_frame:
+            yield Stream(self.cap, chunk_start, chunk_stop, self.features).decap()
+            chunk_start = chunk_stop + 1
+            chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame)
         else:
-            # if not chunk_start == chunk_end:
-            yield Stream(self.cap, chunk_start, chunk_end, self.features).decap() ### yield one last time
+            yield Stream(self.cap, chunk_start, chunk_stop, self.features).decap() ### yield one last time
 
     def show(self, ms_between_frames = 25, frame_counter = False):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
@@ -336,18 +335,52 @@ class DecapStream:
         return Stream.extract(self, featureFunc, **kwargs)
     
     
-@dataclass(frozen = True)
+@dataclass(frozen = True) ### despite a frozen dataclass, within the functions below, the features attribute is treated as mutable, so we can update it and use it dynamically for subsequent iterations
 class CachedStream(Stream):
     cache_size: int = 1 ### number of frames before and after the current frame (e.g.: cache size 1 -> three frames in cache.)
     
+    def _set_mut_features(self, features_needed = None):
+        ### set the mutable features attribute
+        ### used internally to dynamically update features and use them subsequently in extraction.
+        _mut_features = self.features
+        ### to allow this, they have to ...
+        # ... conform to the beginning and end of the Stream (including cache).
+        frameList = list(range(self.start_frame - self.cache_size, self.stop_frame + self.cache_size + 1))
+        _mut_features = _mut_features.conform(frameList)
+        # ... ensure that return values of the featureFunc are included in the mut_features, 
+        # so that they may be written to and read out by subsequent iterations of the feature func.
+        if not features_needed is None:
+            to_add = [f for f in features_needed if f not in _mut_features.get_features()]
+            for feature in to_add:
+                _mut_features = _mut_features.add(feature, None)
+        
+        object.__setattr__(self, '_mut_features', _mut_features)
+    
+    def _update_mut_features(self, frmNum, updDict):
+        ### update the mutable features with the features just created
+        featDict = self._mut_features[frmNum] ### these are all the features, those that are updated by featureFunc and those that aren't
+        combDict = {}
+        for feat in featDict:
+            if feat in updDict:
+                combDict[feat] = updDict[feat]
+            else:
+                combDict[feat] = featDict[feat]
+        object.__setattr__(self, '_mut_features', self._mut_features.update(frmNum, combDict))
+    
+    def _delete_mut_features(self):
+        object.__delattr__(self, '_mut_features')
+        
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
-            # 2) the featCache -> current feature at center, with future and past features around
+            # 2) the featCache -> current feature at center, with future and past features around    
         frameCache = Cache(self.cache_size, [])
         # featCache = Cache(self.cache_size, [])
         ### Update: The featCache is not updated, but rebuilt, so that changes to past features can be used by featFunc.
         featIndices = frameCache.get_indices()
+    
+        ### mutable features always have to exist here!
+        assert hasattr(self, '_mut_features'), 'To create a generator for a CachedStream, mutable features always have to exist!'
     
         self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame - self.cache_size)
         frmNum = self.start_frame - self.cache_size
@@ -356,11 +389,9 @@ class CachedStream(Stream):
             cntNum = frmNum - self.cache_size ### the central frame in the current iteration
 
             ret, currArr = self.cap.read()
-            # feat = self._mut_features.maybe_get(frmNum)
             
-            ### feed the cache
+            ### feed/build the caches
             frameCache = frameCache.add(currArr)
-            # featCache = featCache.add(feat) ### this only ever changes a future feature! we can update changed past features.
             features = [self._mut_features.maybe_get(idx + cntNum) for idx in featIndices]
             featCache = Cache.from_list(features)
             
@@ -388,6 +419,23 @@ class CachedStream(Stream):
         else:
             cv.destroyAllWindows()
         
+    def chunk_generator(self, chunksize):
+        start_frame_with_cache = self.start_frame - self.cache_size
+        stop_frame_with_cache = self.stop_frame + self.cache_size
+        
+        ### generate decapped chunks of the stream, one by one lazily
+        chunk_start = start_frame_with_cache
+        chunk_stop = min(chunk_start + chunksize - 1, stop_frame_with_cache) 
+        ### since the last frame is included, a chunk of size 10 with chunk_start 5 ends at 14 = 5 + 10 - 1
+        
+        while not chunk_stop == stop_frame_with_cache:
+            yield CachedStream(self.cap, chunk_start, chunk_stop, self.features, cache_size = self.cache_size).decap()
+            chunk_start = chunk_stop + 1
+            chunk_stop = min(chunk_start + chunksize - 1, stop_frame_with_cache)
+        else:
+            ### yield one last time
+            yield CachedStream(self.cap, chunk_start, chunk_stop, self.features, cache_size = self.cache_size).decap() 
+        
     def extract(self, featureFunc, **kwargs):
         
         ### Establish function arguments and return shape
@@ -395,20 +443,7 @@ class CachedStream(Stream):
         funcVals = get_return_names(featureFunc)
         assert funcArgs == ['frameCache', 'featCache'], f'Function passed in to CachedStream.extract should have *["frameCache", "featCache"] as positional arguments, not *{funcArgs}'
         
-        ### set the mutable features attribute
-        ### used internally to dynamically update features and use them subsequently in extraction.
-        _mut_features = self.features
-        ### to allow this, they have to ...
-        # ... conform to the beginning and end of the Stream (including cache).
-        frameList = list(range(self.start_frame - self.cache_size, self.stop_frame + self.cache_size + 1))
-        _mut_features = _mut_features.conform(frameList)
-        # ... ensure that return values of the featureFunc are included in the mut_features, 
-        # so that they may be written to and read out by subsequent iterations of the feature func.
-        to_add = [f for f in funcVals if f not in _mut_features.get_features()]
-        for feature in to_add:
-            _mut_features = _mut_features.add(feature, None)
-        
-        object.__setattr__(self, '_mut_features', _mut_features)
+        self._set_mut_features(features_needed = funcVals)
         
         ### Initialize Generator
         gen = self.generator()
@@ -426,15 +461,8 @@ class CachedStream(Stream):
                 updDict = dict(zip(funcVals, funcOut))
             streamDict[frmNum] = updDict
             
-            ### update the mutable features with the features just created
-            featDict = self._mut_features[frmNum] ### these are all the features, those that are updated by featureFunc and those that aren't
-            combDict = {}
-            for feat in featDict:
-                if feat in updDict:
-                    combDict[feat] = updDict[feat]
-                else:
-                    combDict[feat] = featDict[feat]
-            object.__setattr__(self, '_mut_features', self._mut_features.update(frmNum, combDict))
+            ### update mutable features with what we have just calculated
+            self._update_mut_features(frmNum, updDict)
             
             ### iterate the generator.
             try:
@@ -442,7 +470,8 @@ class CachedStream(Stream):
             except StopIteration:
                 break 
         
-        object.__delattr__(self, '_mut_features')
+        ### delete the mutable features -> they are not needed, and should always be deleted since they can be large.
+        self._delete_mut_features()
         
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
@@ -450,12 +479,21 @@ class CachedStream(Stream):
     def decache(self):
         return Stream(self.cap, self.start_frame, self.stop_frame, self.features)
     
+    def decap(self):
+        myFrms = GreyFrames.from_video(self.cap, self.start_frame, self.stop_frame) ### adapt to all color spaces
+        return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, cache_size = self.cache_size)
+
     def show(self):
         self.decache().show()
     
     
-# @dataclass(frozen = True)
-# class DecapCachedStream(DecapStream):
-#     cache_size: int = 1
+@dataclass(frozen = True)
+class DecapCachedStream(DecapStream):
+    cache_size: int = 1
+    
+    _set_mut_features = CachedStream._set_mut_features
+    _update_mut_features = CachedStream._update_mut_features        
+    _delete_mut_features = CachedStream._delete_mut_features
+        
     
     
