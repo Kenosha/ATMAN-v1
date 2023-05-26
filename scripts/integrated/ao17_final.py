@@ -77,4 +77,29 @@ if __name__ == '__main__':
     brList = mergeList.apply(sa.correct_point, assignArgs = ['br', 'brReg'], assignVals = ['br'])
     correctList = tlList.merge(trList).merge(blList).merge(brList)
 
-        
+    ###### Next Up ######
+    
+    ### (line_normalization.py)
+    # -> i think with our corner correction, we are good here!    
+    
+    ### (feature_saving_big_run.py)
+    # Scoreboard Detection
+    # Burn In (medFrm, stdFrm), Shadow
+    # Player Tracking with RoIs
+    # Ball Contours
+    # Track Ball Particles
+    # Smoothe Particles
+    # Choose Ball Contour
+    
+    ### (ballboy_detection_big_run/multiframe.py)
+    # ballboy detection 
+    # ballboy segmentation
+    
+    ### (join_features_and_labels_after_redos.py)
+    # smart_interpolate_ball_contours
+    
+    ### (testing data evaluation II)
+    # make inference on points.
+    # find 3D players, 3D ball
+    
+    
