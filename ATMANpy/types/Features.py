@@ -42,18 +42,6 @@ class StreamFeaturesBase:
         # - StreamFeature (like pd.Series) -> frames in index, objects (single feature) in values!
         # - StreamFeatures (like pd.DataFrame) -> frames in index, featDict in values -> multiple features
     streamDict: dict 
-    
-    @staticmethod
-    def concatenate(featureList, axis = 0):
-        ### concatenates a list of features; axis similar to pandas
-        # axis = 0 ---> along index (i.e. frames)
-        # axis = 1 ---> along columns (i.e. features)
-        if len(featureList) == 0:
-            return StreamFeatures({})
-        else:    
-            concatFunc = StreamFeaturesBase.extend if axis == 0 else StreamFeaturesBase.merge
-            x, xs = featureList[0], featureList[1:]
-            return concatFunc(x, StreamFeaturesBase.concatenate(xs))
         
     def __iter__(self):
         return iter(self.streamDict)
