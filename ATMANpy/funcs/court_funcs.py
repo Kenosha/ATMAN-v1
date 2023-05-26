@@ -125,7 +125,7 @@ def find_homography(gFrm, verbose = False):
     else:
         # print('General Homography Algorithm...')
         from ATMANpy.funcs.line_funcs import get_homography 
-        print(f'Constellation: Left lines: {len(l_v_Lines)}, right lines: {len(r_v_Lines)}, horizontal lines: {len(h_Lines)}')
+        if verbose: print(f'Constellation: Left lines: {len(l_v_Lines)}, right lines: {len(r_v_Lines)}, horizontal lines: {len(h_Lines)}')
         v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
         H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose)
 
