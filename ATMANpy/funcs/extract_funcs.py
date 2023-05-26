@@ -66,13 +66,33 @@ def track_courtlines(frameCache, featCache,
         
     return courtLines, H, config, trackFlag
 
-def redo_not_found(gFrm, courtLines, H, config, trackFlag):
-    if trackFlag == 'Not Found':
+def redo_not_found(gFrm, courtLines, H, config, trackFlag, to_retry):
+    if to_retry:
         H, config = find_homography(gFrm)
         if H is not None:
             trackFlag = 'Found (w. gen. H.)'
             courtLines = find_courtlines(H, schemaLines)
-            
+
     return courtLines, H, config, trackFlag
+            
         
+def plug_hole_in_homographies(mySF):
         
+    DISTANCE_THRESHOLD = 15
+    inList = split_joint_features(sf)
+    end_and_begin = [(max(sf_prev), min(sf_succ)) for sf_prev, sf_succ in zip(inList[:-1], inList[1:])]
+    end_and_begin = [(end, beg) for end, beg in end_and_begin if beg - end < DISTANCE_THRESHOLD]
+    
+    to_redo = []
+    for end, beg in end_and_begin:
+        frames_missing_between = list(range(end + 1, beg))
+        to_redo.extend(frames_missing_between)
+    
+    for frm in to_redo:
+        gFrm = GreyFrame.from_video(cap, frm)
+        courtLines, netLines, H, config, outFlag = hlf.track_courtlines(gFrm, None, None, only_225 = False)
+        
+        if not H is None:
+            out_sf[frm] = {'H': H}
+            
+    return out_sf

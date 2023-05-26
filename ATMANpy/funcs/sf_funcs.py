@@ -2,16 +2,7 @@
 """
 Created on Sun May 21 14:00:53 2023
 
-As opposed to sf_postprocess_funcs, these functions work with the types in Features -> StreamFeature and StreamFeatures.
-The functions are meant to be applied to SF using .apply -> they take as argument a featDict, plus *args and **kwargs
-
-Function argument names and return names matter, since they are parsed by the .apply method.
-Arguments and Values have to be named after the features that they denote.
-
-In principle, these names of features can be arbitrary, but should be consistent!
-For example, the courtline homography is named 'H'.
-
-Alternatively, we can also write functions here that take a stream feature and return a stream feature, 
+Here we write functions here that take a stream feature and return a stream feature, 
 if the feature in question lends itself to vectorization or other speed ups 
 that call for treating all features as a whole, across frames 
 
@@ -20,26 +11,83 @@ that call for treating all features as a whole, across frames
 
 import numpy as np
 
-from ATMANpy.types.Features import StreamFeatures
+from ATMANpy.types.Features import StreamFeatures, StreamFeature, BoolFeatures, BoolFeature
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
+
+import ATMANpy.funcs.sf_apply_funcs as sf
 
 from ATMANpy.types.Lines import CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
 
-def get_court_corner_points(courtLines):
-    tl, tr, bl, br = courtLines.get_court_region().to_points()
-    return tl, tr, bl, br
+def get_redo_frames(mySF, redo_threshold = 24): 
+    ### below this many consequent frames that were not found,
+    ### we will retry all of them.
+    
+    def list_to_ranges(inList):
+        outList = []
+        left_elem = None
+        last_elem = None
+        for i in inList:
+            if last_elem is None:
+                last_elem = i
+                left_elem = i
+                continue
+                
+            if left_elem is None:
+                left_elem = i
+                continue
+            
+            if i == last_elem + 1:
+                last_elem = i
+                continue
+            elif i > last_elem + 1:
+                outList.append((left_elem, last_elem))
+                left_elem = i
+                last_elem = i
+                continue
+            
+        return outList
+            
+    def flatten(list_of_lists):
+        if list_of_lists == []:
+            return []
+        else:
+            return [*list_of_lists[0], *flatten(list_of_lists[1:])]
+    
+    nfSF = mySF.filter(mySF['trackFlag'] == 'Not Found')
+    nfList = nfSF.keys()
+    
+    contiguous = list_to_ranges(nfList)      
+    to_retry = [list(range(start, end + 1)) for start, end in contiguous if end - start < redo_threshold]
+    to_retry_flat = flatten(to_retry)
+    
+    streamDict = {frame: frame in to_retry_flat for frame in mySF.keys()}
+    
+    return BoolFeature(streamDict, 'to_retry')
 
-def points_to_coords(tl, tr, bl, br):
-    tl, tr, bl, br = tl.coords, tr.coords, bl.coords, br.coords
-    return tl, tr, bl, br
+def get_hole_frames(mySF):
+    ### similar to get_redo_frames above    
+    
+    DISTANCE_THRESHOLD = 15
+    inList = mySF.split()
+    end_and_begin = [(max(sf_prev), min(sf_succ)) for sf_prev, sf_succ in zip(inList[:-1], inList[1:])]
+    end_and_begin = [(end, beg) for end, beg in end_and_begin if beg - end < DISTANCE_THRESHOLD]
+    
+    to_retry = []
+    for end, beg in end_and_begin:
+        frames_missing_between = list(range(end + 1, beg))
+        to_retry.extend(frames_missing_between)
+        
+    streamDict = {frame: frame in to_retry for frame in mySF.keys()}
+    
+    return BoolFeature(streamDict, name = 'to_retry')
 
 def median_corner_regions(inSF, how_many_unilateral = 8):
     
     required_features = ['tl', 'tr', 'bl', 'br']
     mySF = inSF[required_features]
-    myArr = mySF.apply(points_to_coords).to_array()
+    myArr = mySF.apply(sf.points_to_coords).to_array()
     numFrames = mySF.length()
     
     ### Auxiliary function for finding outlier courtlines    
@@ -95,16 +143,4 @@ def median_corner_regions(inSF, how_many_unilateral = 8):
     
     return StreamFeatures(dict(zip(mySF.get_frames(), dictList)), name = 'median_corner_regions')
    
-def correct_point(somePt, someReg):
-    if somePt.within(someReg):
-        
-        return somePt
-    else:
-        return someReg.centroid.round_point()
-
-def calculate_homography(tl, tr, bl, br):
-    courtRegion = Region.from_points(tl, tr, bl, br)
-    H = schemaLines.get_court_region().get_homography(courtRegion)
-    return H
-
 
