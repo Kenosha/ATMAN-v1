@@ -14,6 +14,16 @@ from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
 
 from ATMANpy.types.Lines import Line
 from ATMANpy.types.Shapes3D import Line3D
+from ATMANpy.types.MultiFeatures import SFList
+
+def eqFunc(someFeat, otherFeat):
+    eq = someFeat == otherFeat
+    if isinstance(eq, bool):
+        return eq
+    elif isinstance(eq, np.ndarray):
+        return eq.all()
+    else: ### add cases if you need them!
+        raise Exception(f'Equality could not be ascertained between {someFeat} and {otherFeat}')
 
 def try_getattr(obj, methodStr):
     try:
@@ -78,20 +88,15 @@ class StreamFeaturesBase:
     
     def drop(self, item):
         ### drop a single frame feature dictionary!
-        streamDict = {frame: featDict for frame, featDict in self.streamDict.items() if frame != item}    
+        streamDict = {frame: featDict for frame, featDict in self.items() if frame != item}    
         return self.__class__(streamDict, name = self.name)
     
     def keep(self, keepList):
-        streamDict = {frame: featDict for frame, featDict in self.streamDict.items() if frame in keepList}    
+        streamDict = {frame: featDict for frame, featDict in self.items() if frame in keepList}    
         return self.__class__(streamDict, name = self.name)
     
-    def conform(self, conformList):
-        streamDict = {}
-        for frame in conformList:
-            if frame in self.keys():
-                streamDict[frame] = self[frame]
-            else:
-                streamDict[frame] = {feat: None for feat in self.get_features()}
+    def filter(self, boolSF):
+        streamDict = {frame: featDict for frame, featDict in self.items() if boolSF[frame]}
         return self.__class__(streamDict, name = self.name)
     
     def add(self, key, value):
@@ -134,7 +139,7 @@ class StreamFeaturesBase:
     
     def split(self, min_feature_length = 0):
         sfList = ff.split_joint_features(self.streamDict, min_feature_length = min_feature_length)
-        return [self.__class__(streamDict, name = self.name) for streamDict in sfList]
+        return SFList([self.__class__(streamDict, name = self.name) for streamDict in sfList])
         
     def length(self):
         return len(self.streamDict)
@@ -173,7 +178,7 @@ class StreamFeature(StreamFeaturesBase):
     def __getitem__(self, item):
         if isinstance(item, list):
             if all([isinstance(el, int) for el in item]):
-                return StreamFeature({frame: feature for frame, feature in self.items() if frame in item})
+                return self.__class__({frame: feature for frame, feature in self.items() if frame in item})
             else:
                 return KeyError(f'List passed to StreamFeature must be all integers, instead got {item}')
         
@@ -191,20 +196,26 @@ class StreamFeature(StreamFeaturesBase):
         else:
             raise Exception('Pass in a frame (int) or a list of frames')
      
-    def __eq__(self, otherSF):
-        if self.name == otherSF.name:
-            outName = self.name + '_equal'
+    def __eq__(self, otherObj):
+        if isinstance(otherObj, StreamFeature):
+            if self.name == otherObj.name:
+                outName = self.name + '_equal'
+            else:
+                outName = self.name + '_equal_' + otherObj.name
+            return BoolFeature({frame: eqFunc(self[frame], otherObj[frame]) for frame in self}, name = outName)
         else:
-            outName = self.name + '_equal_' + otherSF.name
-        return BoolFeature({frame: self[frame] == otherSF[frame] for frame in self}, name = outName)
-     
-    def __ne__(self, otherSF):
-        if self.name == otherSF.name:
-            outName = self.name + '_unequal'
+            return BoolFeature({frame: eqFunc(self[frame], otherObj) for frame in self}, name = self.name + '_equal')
+            
+    def __ne__(self, otherObj):
+        if isinstance(otherObj, StreamFeature):
+            if self.name == otherObj.name:
+                outName = self.name + '_unequal'
+            else:
+                outName = self.name + '_unequal_' + otherObj.name
+            return BoolFeature({frame: not eqFunc(self[frame], otherObj[frame]) for frame in self}, name = outName)
         else:
-            outName = self.name + '_unequal_' + otherSF.name
-        return BoolFeature({frame: self[frame] != otherSF[frame] for frame in self}, name = outName)
-     
+            return BoolFeature({frame: not eqFunc(self[frame], otherObj) for frame in self}, name = self.name + '_unequal')
+            
     def maybe_get(self, item):
         try:
             return self[item]
@@ -214,16 +225,31 @@ class StreamFeature(StreamFeaturesBase):
     def get_features(self):
         return [self.name]
     
+    def conform(self, conformList):
+        streamDict = {}
+        for frame in conformList:
+            if frame in self.keys():
+                streamDict[frame] = self[frame]
+            else:
+                streamDict[frame] = None
+        return self.__class__(streamDict, name = self.name)  
+      
+    def fillna(self, fill_value):
+        return self.__class__({frame: fill_value if feat is None else feat for frame, feat in self.items()}, name = self.name)
+      
+    def dropna(self):
+        return StreamFeature({frame: feat for frame, feat in self.items() if feat is not None}, name = self.name)
+    
     def rename(self, new_name):
-        return StreamFeature(self.streamDict, name = new_name)
+        return self.__class__(self.streamDict, name = new_name)
     
     def recolor(self, new_bgr):
         reinstDict = {frame: try_getattr(obj, 'recolor')(new_bgr) for frame, obj in self.streamDict.items()}
-        return StreamFeature(reinstDict, name = self.name)
+        return self.__class__(reinstDict, name = self.name)
     
     def resize(self, new_thickness):
         reinstDict = {frame: try_getattr(obj, 'recolor')(new_thickness) for frame, obj in self.streamDict.items()}
-        return StreamFeature(reinstDict, name = self.name)
+        return self.__class__(reinstDict, name = self.name)
     
     def apply(self, func, assignArgs = None): ### TODO: at some point, allow *args, **kwargs
         ### This method allows for function application to single features, element by element
@@ -274,6 +300,10 @@ class StreamFeatures(StreamFeaturesBase):
         featDict = ff.load_stored_features(video_id, store_name, featnameList = featnameList)
         return StreamFeatures(featDict)
     
+    @staticmethod
+    def type_squeeze(): ### weird!
+        return StreamFeature
+    
     def __repr__(self):
         if self.is_empty():
             return 'StreamFeatures()'
@@ -286,13 +316,13 @@ class StreamFeatures(StreamFeaturesBase):
     def __getitem__(self, item):
         if isinstance(item, list):
             if all([isinstance(el, int) for el in item]):
-                return StreamFeature({frame: featDict for frame, featDict in self.items() if frame in item})
+                return self.__class__.type_squeeze()({frame: featDict for frame, featDict in self.items() if frame in item})
             elif all([isinstance(el, str) for el in item]):
                 missing_in_feature = [el for el in item if el not in self.get_features()]
                 if len(missing_in_feature) > 0:
                     raise KeyError(f'{missing_in_feature} not contained in features of {self}')
                 else:
-                    return StreamFeatures({frame: {feat: val for feat, val in featDict.items() if feat in item} for frame, featDict in self.streamDict.items()})
+                    return self.__class__({frame: {feat: val for feat, val in featDict.items() if feat in item} for frame, featDict in self.streamDict.items()})
             else:
                 raise KeyError(f'List passed to StreamFeature must be all integers or all strings, instead got {item}')
         elif isinstance(item, int): ### get a single frame feature dictionary!
@@ -303,26 +333,41 @@ class StreamFeatures(StreamFeaturesBase):
         elif isinstance(item, str):
             try:
                 streamDict = {frame: frameDict[item] for frame, frameDict in self.streamDict.items()}
-                return StreamFeature(streamDict, name = item)
+                return self.__class__.type_squeeze()(streamDict, name = item)
             except KeyError:
                 raise KeyError(f'No such feature: {item}')
         else:
             raise Exception('Pass in a frame (int) or an feature name (str) or a list of these.')
 
-    def __eq__(self, otherSF):
-        shared_features = [f for f in self.get_features() if f in otherSF.get_features()]
-        return BoolFeatures({frame: {feat + '_equal': self[frame][feat] == otherSF[frame][feat] for feat in shared_features} for frame in self.get_frames()})
+    def __eq__(self, otherObj):
+        if isinstance(otherObj, StreamFeatures):
+            shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
+            return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj[frame][feat]) for feat in shared_features} for frame in self.get_frames()})
+        else:
+            return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj) for feat in shared_features} for frame in self.get_frames()})
         
-    def __ne__(self, otherSF):
-        shared_features = [f for f in self.get_features() if f in otherSF.get_features()]
-        return BoolFeatures({frame: {feat + '_unequal': self[frame][feat] != otherSF[frame][feat] for feat in shared_features} for frame in self.get_frames()})
+    def __ne__(self, otherObj):
+        if isinstance(otherObj, StreamFeatures):
+            shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
+            return BoolFeatures({frame: {feat + '_unequal': eqFunc(self[frame][feat], otherObj[frame][feat]) for feat in shared_features} for frame in self.get_frames()})
+        else:
+            return BoolFeatures({frame: {feat + '_unequal': not eqFunc(self[frame][feat], otherObj) for feat in shared_features} for frame in self.get_frames()})
         
     def maybe_get(self, item):
         try:
             return self[item]
         except KeyError:
             return {feat: None for feat in self.get_features()}
-                  
+                
+    def conform(self, conformList):
+        streamDict = {}
+        for frame in conformList:
+            if frame in self.keys():
+                streamDict[frame] = self[frame]
+            else:
+                streamDict[frame] = {feat: None for feat in self.get_features()}
+        return StreamFeatures(streamDict, name = self.name)
+      
     def drop(self, item):
         if isinstance(item, int):
             ### drop a single frame feature dictionary!
@@ -339,7 +384,7 @@ class StreamFeatures(StreamFeaturesBase):
             ### keeping features!
             streamDict = {frame: {feat: val for feat, val in featDict.items() if feat in keepList} for frame, featDict in self.streamDict.items()}
         return StreamFeatures(streamDict)            
-        
+    
     def add(self, key, value):
         if isinstance(key, int) and isinstance(value, dict): ### adding a frame!
             return super().add(key, value)
@@ -378,6 +423,10 @@ class StreamFeatures(StreamFeaturesBase):
                 else:
                     streamDict[frame] = {**featDict, otherSF.name: other_featObj}
         return StreamFeatures(streamDict)
+    
+    def dropna(self):
+        none_feature = {feat: None for feat in self.get_features()}
+        return self.__class__({frame: featDict for frame, featDict in self.items() if featDict != none_feature}, name = self.name)
     
     def rename_feature(self, old_name, new_name):
         rename_stringFunc = lambda inStr: new_name if inStr == old_name else inStr
@@ -488,12 +537,24 @@ class BoolFeature(StreamFeature):
             min_frame, max_frame = frames[0], frames[-1]
             return f'BoolFeature({self.name}, frames: {min_frame} to {max_frame})'
     
+    def fillna(self, fill_value):
+        assert isinstance(fill_value, bool), 'Filling a BoolFeature can only be done with True or False'
+        return BoolFeature({frame: fill_value if feat is None else feat for frame, feat in self.items()}, name = self.name)
+       
     def neg(self):
         return BoolFeature({frame: not bool_feat for frame, bool_feat in self.items()})
-        
+    
+    def true(self):
+        return sum(self.values())
+    def false(self):
+        return self.length() - self.true()
 
 @dataclass(frozen = True)
 class BoolFeatures(StreamFeatures):
+    
+    @staticmethod
+    def type_squeeze():
+        return BoolFeature
     
     def __repr__(self):
         if self.is_empty():
@@ -514,6 +575,11 @@ class BoolFeatures(StreamFeatures):
         frames = self.get_frames()
         return BoolFeature(dict(zip(frames, boolArr)), name = 'all')
     
+    def true(self):
+        return {feat: self[feat].true() for feat in self.get_features()}
+    def false(self):
+        return {feat: self[feat].false() for feat in self.get_features()}
+        
     def neg(self):
         return BoolFeatures({frame: {feat_name: not bool_feat for feat_name, bool_feat in featDict.items()} for frame, featDict in self.items()})
         
