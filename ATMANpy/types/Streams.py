@@ -13,7 +13,7 @@ from collections import deque
 
 from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame
 from ATMANpy.types.MultiFrames import GreyFrames
-from ATMANpy.types.Features import StreamFeatures, StreamFeature
+from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList
 from ATMANpy.types.Caches import Cache
 
 from ATMANpy.funcs.draw_funcs import draw
