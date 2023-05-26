@@ -27,6 +27,30 @@ from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
 #     def length(self):
 #         return stop_frame - start_frame + 1 ### stream contains both start and stop frame!
 
+
+def extract_mp_timer(extractMethod):
+
+    def timed(*args, **kw):
+
+        time_before = time.time()
+        result = extractMethod(*args, **kw)
+        time_after = time.time()
+
+        timeStr = round(time_after - time_before, 2) 
+        selfObj, otherArgs, exFunc = args[0], args[1:-1], args[-1]
+        
+        if len(otherArgs) == 1:
+            num_workers = otherArgs[0]
+            paramStr = f'{num_workers} workers'
+        if len(otherArgs) == 2:
+            num_workers, chunksize = otherArgs
+            paramStr = f'{num_workers} workers and chunks of {chunksize}'
+        print(f'{extractMethod.__name__} on {selfObj.__class__.__name__} with {exFunc.__name__} using {paramStr}: took {timeStr} seconds')
+
+        return result
+
+    return timed
+
 @dataclass(frozen = True)
 class Stream:
     cap: cv.VideoCapture
@@ -137,8 +161,9 @@ class Stream:
             except StopIteration:
                 cv.destroyAllWindows()
                 break 
-               
+          
     def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
+        ### where --> BoolFeature: give the option to apply the function not everywhere
         
         ### Establish function arguments and return shape
         funcArgs = get_positional_arguments(featureFunc)
@@ -165,6 +190,24 @@ class Stream:
                 myFeatures = featureFunc(*args, **kwargs)
                 streamDict[frmNum] = dict(zip(funcVals, myFeatures))
             
+            # if where is None or where[frmNum]: ### if where is not given or is true at this position, we calculate the function value
+            #     ### assign to a dictionary, depending on whether we get one or multiple return values
+            #     if len(funcVals) == 1:
+            #         myFeature = featureFunc(*args, **kwargs)
+            #         streamDict[frmNum] = {funcVals[0]: myFeature}
+            #     else:
+            #         myFeatures = featureFunc(*args, **kwargs)
+            #         streamDict[frmNum] = dict(zip(funcVals, myFeatures))
+            # else: ### if where is false, we just take the features in the stream
+            #     selfDict = self.features.maybe_get(frmNum)
+            #     combDict = {}
+            #     for feat in funcVals:
+            #         if feat in selfDict:
+            #             combDict[feat] = selfDict[feat]
+            #         else:
+            #             combDict[feat] = None
+            #     streamDict[frmNum] = combDict
+                
             ### iterate the generator.
             try:
                 frmNum, rawArr = gen.send(None) ### sending None -> nothing is shown! TODO: "Loud" option -> extract + show.
@@ -239,13 +282,7 @@ class Stream:
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def extract_threaded(self, num_workers, featureFunc, **kwargs):
-        return self._extract_pool(ThreadPool, num_workers, featureFunc, **kwargs)
-    
-    def extract_mp(self, num_workers, featureFunc, **kwargs):
-        return self._extract_pool(Pool, num_workers, featureFunc, **kwargs)
-    
-    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+    def _extract_chunked(self, poolCls, num_workers, chunksize, featureFunc, **kwargs):
         ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
         # create a pool of chunks: 
         # chunk the Stream and let each chunk be worked by one worker.
@@ -254,6 +291,7 @@ class Stream:
         # With pooled parallelism, we can not guarantee that the frame before is already done
         # when the task for a given frame is dispatched, so that functions that track (needing prior frame information)
         # can not be applied.
+        WAIT_SECS = 0.001
         
         ### Set up the pool
         pool = Pool(processes = num_workers)
@@ -272,10 +310,11 @@ class Stream:
         while True:
             if not generator_is_exhausted and len(pending) < num_workers:                
                 ### if there is space in the queue, add a task!
+                # print(f'Queueing {chunkStm}...')
                 task = pool.apply_async(chunkStm.extract, [featureFunc], kwargs)
                 pending.append(task)
             else:
-                time.sleep(0.01) ### need this to give the leftmost task time to finish!
+                time.sleep(WAIT_SECS) ### need this to give the leftmost task time to finish!
             
             while len(pending) > 0 and pending[0].ready():
                 mySF = pending.popleft().get()
@@ -296,7 +335,23 @@ class Stream:
                 pool.terminate() ### once pending queue is zero, we can terminate the pool.
                 break
             
-        return StreamFeatures.concatenate(sfList)
+        return SFList(sfList).concatenate(axis = 0)
+    
+    @extract_mp_timer
+    def extract_threaded(self, num_workers, featureFunc, **kwargs):
+        return self._extract_pool(ThreadPool, num_workers, featureFunc, **kwargs)
+    
+    @extract_mp_timer
+    def extract_mp(self, num_workers, featureFunc, **kwargs):
+        return self._extract_pool(Pool, num_workers, featureFunc, **kwargs)
+    
+    @extract_mp_timer
+    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
+        return self._extract_chunked(ThreadPool, num_workers, chunksize, featureFunc, **kwargs)
+            
+    @extract_mp_timer
+    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+        return self._extract_chunked(Pool, num_workers, chunksize, featureFunc, **kwargs)
             
             
 @dataclass(frozen = True)
@@ -420,6 +475,8 @@ class CachedStream(Stream):
             cv.destroyAllWindows()
         
     def chunk_generator(self, chunksize):
+        assert chunksize > 2 * self.cache_size, f'Chunks have to be large enough to accomodate the cache! With cache size {self.cache_size}, a minimum chunk size of {self.cache_size * 2 + 1} is needed!'
+        
         start_frame_with_cache = self.start_frame - self.cache_size
         stop_frame_with_cache = self.stop_frame + self.cache_size
         
@@ -430,12 +487,14 @@ class CachedStream(Stream):
         
         while not chunk_stop == stop_frame_with_cache:
             yield CachedStream(self.cap, chunk_start, chunk_stop, self.features, cache_size = self.cache_size).decap()
-            chunk_start = chunk_stop + 1
+            last_proper_frame = chunk_stop - self.cache_size ### this is the last frame that we can expect to be done properly, with full cache.
+            next_proper_frame = last_proper_frame + 1 ### for the next chunk, this is the first frame we want to be done properly.
+            chunk_start = next_proper_frame - self.cache_size ### importantly, the next chunk does not start right after the previous chunk, but there is some overlap, so we can include the cache specific frames!
             chunk_stop = min(chunk_start + chunksize - 1, stop_frame_with_cache)
         else:
             ### yield one last time
             yield CachedStream(self.cap, chunk_start, chunk_stop, self.features, cache_size = self.cache_size).decap() 
-        
+       
     def extract(self, featureFunc, **kwargs):
         
         ### Establish function arguments and return shape
@@ -475,7 +534,13 @@ class CachedStream(Stream):
         
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
+       
+    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream.extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs)
             
+    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream.extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs)
+                 
     def decache(self):
         return Stream(self.cap, self.start_frame, self.stop_frame, self.features)
     
@@ -495,5 +560,51 @@ class DecapCachedStream(DecapStream):
     _update_mut_features = CachedStream._update_mut_features        
     _delete_mut_features = CachedStream._delete_mut_features
         
+    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+        ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
+            # 1) the frameCache -> current frame at center, with future and past frames around
+            # 2) the featCache -> current feature at center, with future and past features around    
+        frameCache = Cache(self.cache_size, [])
+        # featCache = Cache(self.cache_size, [])
+        ### Update: The featCache is not updated, but rebuilt, so that changes to past features can be used by featFunc.
+        featIndices = frameCache.get_indices()
     
+        ### mutable features always have to exist here!
+        assert hasattr(self, '_mut_features'), 'To create a generator for a CachedStream, mutable features always have to exist!'
+    
+        for idx, frame in enumerate(self.frames):
+            frmNum = self.start_frame + idx            
+            cntNum = frmNum - self.cache_size ### the central frame in the current iteration
+
+            ### feed/build the caches
+            frameCache = frameCache.add(frame)
+            features = [self._mut_features.maybe_get(idx + cntNum) for idx in featIndices]
+            featCache = Cache.from_list(features)
+            
+            ### check if we are supposed to yield -> only once cache is full!
+            if frameCache.is_full():
+                inArr = yield frmNum - frameCache.size, frameCache, featCache # take in frame, possibly altered, to show
+            else:
+                inArr = None
+            
+            ### using the frame that comes back in, do something.
+            ### if None is sent to generator, do nothing.
+            if inArr is not None:
+                if frame_counter:
+                    cv.putText(inArr, str(frmNum), org = (40, 40), 
+                               fontFace = cv.FONT_HERSHEY_SIMPLEX, fontScale = 2,
+                               color = (0, 255, 0), thickness = 3)
+                
+                cv.imshow('frame', inArr)
+                if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+                    cv.destroyAllWindows() 
+                    break
+                    # yield None
+                    
+        else:
+            cv.destroyAllWindows()
+            
+    def extract(self, featureFunc, **kwargs):
+        return CachedStream.extract(self, featureFunc, **kwargs)
+            
     
