@@ -290,16 +290,27 @@ class StreamFeature(StreamFeaturesBase):
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = [f'{dim}_{idx}' for dim in ['x', 'y', 'z'] for idx in range(3)][:8]
         featFrm.columns = featLabels
-        ff.save_feature_frame(featFrm, 'H', videoName, storeName)
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+    
+    def _save_region(self, videoName, storeName):
+        exFunc = ff.extract_region_values
+        outSF = self.apply(exFunc)
+        featFrm = pd.DataFrame(outSF.streamDict).T
+        featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(4)]) ### region has four corners.
+        featFrm.columns = featLabels
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
     def save(self, videoName, storeName):
         contourNames = []
         homographyNames = ['H']
+        regionNames = ['scoreBoard']
         
         if self.name in contourNames:
             self._save_contours(videoName, storeName)
-        if self.name in homographyNames:
+        elif self.name in homographyNames:
             self._save_homography(videoName, storeName)
+        elif self.name in regionNames:
+            self._save_region(videoName, storeName)
         else:
             featFrm = self.to_series()
             ff.save_feature_frame(featFrm, self.name, videoName, storeName)
@@ -673,7 +684,7 @@ class SFList:
         else:    
             concatFunc = StreamFeaturesBase.extend if axis == 0 else StreamFeaturesBase.merge
             x, xs = self[0], self[1:]
-            return concatFunc(x, xs.concatenate()) 
+        return concatFunc(x, xs.concatenate())
         
 #%% Testing
 

@@ -17,34 +17,47 @@ from ATMANpy.types.Lines import Region
 
 from ATMANpy.types.ShapesTennis3D import Ball, Player
 
+MISSING_SENTINEL_VALUE = 9999 ### if an integer is missing, we add this value. 
+                                # can't be np.nan, because np.nan is not an integer.
 
 ##### Saving ################
 
 def extract_contour_values(contour, compression = None):
-    MISSING_SENTINEL_VALUE = 9999 ### if an integer is missing, we add this value. 
-                                    # can't be np.nan, because np.nan is not an integer.
     if compression is None:
         print('Please give an integer value for the degree of compression')
+        
+    if contour is None:
+        featValues = []
     else:
         featValues = np.ravel(contour.compress(compression).points)
-        number_of_missing_values = compression * 2 - len(featValues)
-        if number_of_missing_values > 0:
-            featValues = [*featValues, *[MISSING_SENTINEL_VALUE for _ in range(number_of_missing_values)]]
-        return featValues
+        
+    number_of_missing_values = compression * 2 - len(featValues)
+    if number_of_missing_values > 0:
+        featValues = [*featValues, *[MISSING_SENTINEL_VALUE for _ in range(number_of_missing_values)]]
+    return featValues
 
 def extract_homography_values(H):
-    featValues = np.ravel(H)[:8]
+    if H is None:
+        featValues = [MISSING_SENTINEL_VALUE] * 8
+    else:
+        featValues = np.ravel(H)[:8]
     return featValues
 
 def extract_particle_values(particleArr):
+    if particleArr is None:
+        featValues = None ### figure something out here...
+    else:
+        featValues = np.ravel(particleArr.astype(int))
     # uniqueParticles = np.unique(particleArr, axis = 0) ### we don't do this, 
                                                          ### because the number of repetitions matters!
-    featValues = np.ravel(particleArr.astype(int))
     return featValues
                                                          
 def extract_region_values(region):
-    coords = [pt.coords for pt in region.to_points()]
-    featValues = np.ravel(coords)
+    if region is None:
+        featValues = [MISSING_SENTINEL_VALUE] * 8 ### 4 points with 2 coords.
+    else:
+        coords = [pt.coords for pt in region.to_points()]
+        featValues = np.ravel(coords)
     return featValues
     
 def save_feature_frame(featFrm, featureName, videoName, storeName):
@@ -126,7 +139,9 @@ def save_events(stream_features, featureName, videoName, storeName):
 ###### Loading #############
 
 def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
-       
+    
+    print('Reading {featureName}...')
+    
     import os
     featDict = atu.get_folder_struct('features_stored')
     savePath = os.path.join(featDict['main'], videoName, storeName, featureName)
@@ -138,18 +153,28 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
             filePath = os.path.join(savePath, file)
             myFrm = pd.read_csv(filePath, index_col = 0)
             frmList.append(myFrm)
-            
+        
+        if frmList == []:
+            print(f'   ... No data found!')
+            return pd.DataFrame()
+        
         featFrm = pd.concat(frmList)
         featFrm = featFrm[~featFrm.reset_index().duplicated().values] ### drop exact duplicates (including the index = frame number)
+        
+        try:
+            featFrm = featFrm.astype(int)
+        except:
+            print(f'   ... Could not cast to integer!')
     
         if not featFrm.index.duplicated().any():
-            print(f'Feature merger for {featureName} successful.')
+            print(f'   ... Feature merger for successful.')
         else:
             featFrm = featFrm[~featFrm.index.duplicated(keep = keep_which)]
-            print(f'Feature merger for {featureName} unsuccessful due to duplicated frames with ambiguous values. Kept the {keep_which} occurence, arbitrarily.')
+            print(f'   ... Feature merger for {featureName} unsuccessful due to duplicated frames with ambiguous values. Kept the {keep_which} occurence, arbitrarily.')
             
         return featFrm
     else:
+        print(f'   ... No data found!')
         return pd.DataFrame()
 
 def single_2D_feature_to_object(singlefeatSeries):
@@ -169,8 +194,11 @@ def single_2D_feature_to_object(singlefeatSeries):
     
     if y_vals == []:
         ### this means we have scalars --> array of values, or single value.
-        valArr = singlefeatSeries.values
-        if len(valArr) == 1:
+        # valArr = singlefeatSeries.values
+        valArr = x_vals
+        if len(valArr) == 0:
+            return None
+        elif len(valArr) == 1:
             return valArr[0]
         else:
             return valArr
