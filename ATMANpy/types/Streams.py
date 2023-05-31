@@ -320,7 +320,7 @@ class Stream:
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def _extract_chunked(self, poolCls, num_workers, chunksize, featureFunc, **kwargs):
+    def _extract_chunked(self, poolCls, num_workers, chunksize, featureFunc, _join = True, **kwargs):
         ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
         # create a pool of chunks: 
         # chunk the Stream and let each chunk be worked by one worker.
@@ -372,8 +372,11 @@ class Stream:
             if generator_is_exhausted and len(pending) == 0:
                 pool.terminate() ### once pending queue is zero, we can terminate the pool.
                 break
-            
-        return SFList(sfList).concatenate(axis = 0)
+         
+        if _join:
+            return SFList(sfList).concatenate(axis = 0)
+        else:
+            return SFList(sfList)
     
     @extract_mp_timer
     def extract_threaded(self, num_workers, featureFunc, where = None, **kwargs):
@@ -385,11 +388,11 @@ class Stream:
     
     @extract_mp_timer
     def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, **kwargs)
+        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _join = True, **kwargs)
             
     @extract_mp_timer
     def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, **kwargs)
+        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _join = True, **kwargs)
             
 @dataclass(frozen = True)
 class StreamList:
@@ -399,23 +402,39 @@ class StreamList:
     def from_SFList(sfList, cap):
         return StreamList([Stream.from_SF(mySF, cap) for mySF in sfList])
     
+    def __repr__(self):
+        return f'StreamList({self.length()} Streams from {self[0].start_frame} to {self[-1].stop_frame})'
+    
     def __iter__(self):
         return self.streams.__iter__()
     
     def __getitem__(self, item):
-        return self.streams[item]
-    
+        if isinstance(item, int):
+            return self.streams[item]
+        else:
+            return StreamList(self.streams[item])
+        
+    def length(self):
+        return len(self.streams)
+        
     def chunk_generator(self, chunksize = None): ### chunks are simply the elements!
         for myStm in self:
             yield myStm.decap()
         
+    def extract(self, featureFunc, **kwargs):
+        outList = []
+        for myStm in self:
+            mySF = myStm.extract(featureFunc, **kwargs)
+            outList.append(mySF)
+        return SFList(outList)
+        
     def extract_chunked_threaded(self, num_workers, featureFunc, **kwargs):
         chunksize = None
-        return Stream.extract_chunked_threaded(self, num_workers, chunksize, featureFunc, kwargs)
+        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _join = False, **kwargs)
     
     def extract_chunked_mp(self, num_workers, featureFunc, **kwargs):
         chunksize = None
-        return Stream.extract_chunked_mp(self, num_workers, chunksize, featureFunc, kwargs)
+        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _join = False, **kwargs)
         
         
 @dataclass(frozen = True)
