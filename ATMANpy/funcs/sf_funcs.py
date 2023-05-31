@@ -143,4 +143,32 @@ def median_corner_regions(inSF, how_many_unilateral = 8):
     
     return StreamFeatures(dict(zip(mySF.get_frames(), dictList)), name = 'median_corner_regions')
    
+    
+def get_normal_bool(courtSF, normalized_deviation_threshold = 1, verbose = False):
+    
+    def court_points(courtLines):
+        p1, p2 = courtLines['Top Baseline'].leftPt, courtLines['Top Baseline'].rightPt
+        p3, p4 = courtLines['Bottom Baseline'].leftPt, courtLines['Bottom Baseline'].rightPt
+        p1, p2, p3, p4 = p1.coords, p2.coords, p3.coords, p4.coords
+        # return [p1.coords, p2.coords, p3.coords, p4.coords]
+        return p1, p2, p3, p4
+    
+    pointSF = courtSF['courtLines'].apply(court_points)
+    courtpoints = pointSF.to_array()
+    
+    med_points = np.median(courtpoints, axis = 0)
+    std_points = np.std(courtpoints, axis = 0)
+    
+    normalized_deviation = (courtpoints - med_points) / std_points
+    within_bool = np.abs(normalized_deviation) < normalized_deviation_threshold
+    all_corners_within = np.all(within_bool, axis = (1, 2))
+    
+    if verbose:
+        print(f'   Number of Court Lines Found:   {len(courtpoints)}')
+        print(f'    ... of which judged normal:   {all_corners_within.sum()}')
+        print(f'    ... of which judged abnormal: {(~all_corners_within).sum()}')
+
+    boolSF = BoolFeature(dict(zip(courtSF.keys(), all_corners_within)), name = 'all_corners_within')
+    return boolSF
+
 
