@@ -32,13 +32,15 @@ def extract_contour_values(contour, compression = None):
             featValues = [*featValues, *[MISSING_SENTINEL_VALUE for _ in range(number_of_missing_values)]]
         return featValues
 
-def extract_homography_values(homography):
-    return np.ravel(homography)[:8]
+def extract_homography_values(H):
+    featValues = np.ravel(H)[:8]
+    return featValues
 
 def extract_particle_values(particleArr):
     # uniqueParticles = np.unique(particleArr, axis = 0) ### we don't do this, 
                                                          ### because the number of repetitions matters!
-    return np.ravel(particleArr.astype(int))
+    featValues = np.ravel(particleArr.astype(int))
+    return featValues
                                                          
 def extract_region_values(region):
     coords = [pt.coords for pt in region.to_points()]
@@ -271,11 +273,9 @@ def split_joint_features(stream_features, min_feature_length = 0):
     
     return featList
         
-
 def join_split_features(splitList):
     return {k: v for sf in splitList for k, v in sf.items()}
     
-
 def filter_features_by_play_sequence_frame(stream_features, seqFrame):
     ### seqFrame -> two columns: start_frame and stop_frame    
     stream_features_filtered = {}

@@ -73,7 +73,11 @@ def get_horizontal_lines(gFrm, scoreROI,
     # myFrm.to_BGR().put(vertLns).show() ### strange...
     # myFrm.to_BGR().put(lns2).show() ### ok! 
     
-    straightLns = [ln for ln in horiLns if -slope_threshold < ln.slope() < slope_threshold]
+    straightLns = []
+    for ln in horiLns:
+        if ln.slope() is not None:
+            if -slope_threshold < ln.slope() < slope_threshold:
+                straightLns.append(ln)
     # myFrm.to_BGR().put(straightLns).show()
     
     # adjust for score region cropping
@@ -92,8 +96,6 @@ def get_horizontal_lines(gFrm, scoreROI,
     
     return straightLns
 
-
-
 def lines_to_reg(lns):
     left_xs = [ln.leftPt.x for ln in lns]
     left_ys = [ln.leftPt.y for ln in lns]
@@ -101,10 +103,10 @@ def lines_to_reg(lns):
     right_ys = [ln.rightPt.y for ln in lns]
     
     min_x, min_y = min(left_xs), min(left_ys)
-    leftPt = Point((min_x, min_y))
+    leftPt = Point2D((min_x, min_y))
     
     max_x, max_y = max(right_xs), max(right_ys)
-    rightPt = Point((max_x, max_y))
+    rightPt = Point2D((max_x, max_y))
     
     maskReg = Region.from_points(leftPt, rightPt)
     return maskReg
@@ -124,10 +126,10 @@ def find_scoreboard(gFrm,
                                     min_line_length_after_merge = min_line_length_after_merge)
 
     if len(scoreLns) >= min_lines:
-        scoreReg = lines_to_reg(scoreLns)
+        scoreBoard = lines_to_reg(scoreLns)
     else:
         return None
 
-    if verbose: gFrm.to_BGR().put(scoreReg, thickness = 2).show()
+    if verbose: gFrm.to_BGR().put(scoreBoard, thickness = 2).show()
         
-    return scoreReg
+    return scoreBoard

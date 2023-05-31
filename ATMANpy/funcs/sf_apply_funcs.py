@@ -33,12 +33,15 @@ def points_to_coords(tl, tr, bl, br):
 
 def correct_point(somePt, someReg):
     if somePt.within(someReg):
-        
-        return somePt
+        return somePt, False
     else:
-        return someReg.centroid.round_point()
+        return someReg.centroid.round_point(), True
 
 def calculate_homography(tl, tr, bl, br):
     courtRegion = Region.from_points(tl, tr, bl, br)
     H = schemaLines.get_court_region().get_homography(courtRegion)
     return H
+
+def replace_trackflag(trackFlag, replace_value):
+    return ''
+        
