@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from typing import List
+from functools import partial
 
 import ATMANpy.funcs.feature_funcs as ff
 from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
@@ -214,6 +215,9 @@ class StreamFeature(StreamFeaturesBase):
         return [self.name]
     
     def conform(self, conformList):
+        if isinstance(conformList, StreamFeaturesBase):
+            conformList = conformList.keys() 
+        
         streamDict = {}
         for frame in conformList:
             if frame in self.keys():
@@ -239,18 +243,18 @@ class StreamFeature(StreamFeaturesBase):
         reinstDict = {frame: try_getattr(obj, 'recolor')(new_thickness) for frame, obj in self.streamDict.items()}
         return self.__class__(reinstDict, name = self.name)
     
-    def apply(self, func, assignArgs = None): ### TODO: at some point, allow *args, **kwargs
+    def apply(self, func, where = None): ### TODO: at some point, allow *args, **kwargs
         ### This method allows for function application to single features, element by element
         ### func takes in features (H, courtLines, etc) and returns features
         
-        if assignArgs is None:
-            funcArgs = get_positional_arguments(func)
-        else: ### give the option to directly assign function arguments, regardless of name
-            funcArgs = assignArgs
+        # if assignArgs is None:
+        #     funcArgs = get_positional_arguments(func)
+        # else: ### give the option to directly assign function arguments, regardless of name
+        #     funcArgs = assignArgs
             
         funcVals = get_return_names(func)
     
-        assert funcArgs == self.get_features(), f'Expected function arguments ({funcArgs}) have to be same as available features ({self.get_features()})'
+        # assert funcArgs == self.get_features(), f'Expected function arguments ({funcArgs}) have to be same as available features ({self.get_features()})'
     
         ### figure out name
         if len(funcVals) == 1:
@@ -260,23 +264,57 @@ class StreamFeature(StreamFeaturesBase):
             
         applyDict = {}
         for frame in self:
-            funcOut = func(self[frame])
-            
-            if len(funcVals) == 1:
-                applyDict[frame] = {name: funcOut}
-            else:
-                applyDict[frame] = dict(zip(funcVals, funcOut))
-    
+            if where is None or where[frame]:
+                funcOut = func(self[frame])
+                
+                if len(funcVals) == 1:
+                    applyDict[frame] = {name: funcOut}
+                else:
+                    applyDict[frame] = dict(zip(funcVals, funcOut))
+                    
+            else: ### if where is not None AND where[frame] is False...
+                applyDict[frame] = {self.name: self[frame]} 
+                # ... we don't apply the function, instead look for the function values in the SF itself.
+                
         return StreamFeatures(applyDict, name = name).squeeze()
+            
         
+    def _save_contours(self, videoName, storeName, compression = None):
+        exFunc = partial(ff.extract_contour_values, compression = compression)
+        changedSF = self.apply(exFunc) 
+        # changedFrm = pd.
+    
+    def _save_homography(self, videoName, storeName):
+        exFunc = ff.extract_homography_values
+        outSF = self.apply(exFunc)
+        featFrm = pd.DataFrame(outSF.streamDict).T
+        featLabels = [f'{dim}_{idx}' for dim in ['x', 'y', 'z'] for idx in range(3)][:8]
+        featFrm.columns = featLabels
+        ff.save_feature_frame(featFrm, 'H', videoName, storeName)
+    
     def save(self, videoName, storeName):
-        ### TODO: integrate further with feature_funcs
-        from ATMANpy.funcs.feature_funcs import save_feature_frame
-        featSer = self.to_series().rename('x_0')
-        save_feature_frame(featSer, self.name, videoName, storeName)
-
+        contourNames = []
+        homographyNames = ['H']
+        
+        if self.name in contourNames:
+            self._save_contours(videoName, storeName)
+        if self.name in homographyNames:
+            self._save_homography(videoName, storeName)
+        else:
+            featFrm = self.to_series()
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        
     def unsqueeze(self):
         return StreamFeatures({frame: {self.name: feat} for frame, feat in self.items()})
+    
+    def to_bool(self):
+        return BoolFeature(self.streamDict, name = self.name)
+
+    def to_series(self):
+        return pd.Series(self.streamDict, name = self.name)
+
+    def value_counts(self):
+        return self.to_series().value_counts()
 
 @dataclass(frozen = True)
 class StreamFeatures(StreamFeaturesBase):
@@ -328,15 +366,15 @@ class StreamFeatures(StreamFeaturesBase):
             raise Exception('Pass in a frame (int) or an feature name (str) or a list of these.')
 
     def __eq__(self, otherObj):
+        shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
         if isinstance(otherObj, StreamFeatures):
-            shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
             return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj[frame][feat]) for feat in shared_features} for frame in self.get_frames()})
         else:
             return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj) for feat in shared_features} for frame in self.get_frames()})
         
     def __ne__(self, otherObj):
+        shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
         if isinstance(otherObj, StreamFeatures):
-            shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
             return BoolFeatures({frame: {feat + '_unequal': eqFunc(self[frame][feat], otherObj[frame][feat]) for feat in shared_features} for frame in self.get_frames()})
         else:
             return BoolFeatures({frame: {feat + '_unequal': not eqFunc(self[frame][feat], otherObj) for feat in shared_features} for frame in self.get_frames()})
@@ -348,6 +386,9 @@ class StreamFeatures(StreamFeaturesBase):
             return {feat: None for feat in self.get_features()}
                 
     def conform(self, conformList):
+        if isinstance(conformList, StreamFeaturesBase):
+            conformList = conformList.keys()
+        
         streamDict = {}
         for frame in conformList:
             if frame in self.keys():
@@ -416,6 +457,22 @@ class StreamFeatures(StreamFeaturesBase):
         none_feature = {feat: None for feat in self.get_features()}
         return self.__class__({frame: featDict for frame, featDict in self.items() if featDict != none_feature}, name = self.name)
     
+    def replace(self, otherSF):
+        outDict = self.streamDict.copy()
+        other_features = otherSF.get_features()
+        for frame, otherDict in otherSF.items():
+            try:
+                featDict = self[frame].copy()
+            except:
+                continue
+            else:
+                for featName, featVal in otherDict.items():
+                    if featName in featDict:
+                        featDict[featName] = featVal
+                outDict[frame] = featDict
+            
+        return StreamFeatures(outDict, name = self.name)
+    
     def rename_feature(self, old_name, new_name):
         rename_stringFunc = lambda inStr: new_name if inStr == old_name else inStr
         rename_dictFunc = lambda inDict: {rename_stringFunc(k): v for k, v in inDict.items()}
@@ -483,6 +540,13 @@ class StreamFeatures(StreamFeaturesBase):
             return self[self.get_features()[0]]
         else:
             return self
+    
+    def save(self):
+        for feat in self.get_features():
+            self[feat].save()
+    
+    def to_bool(self):
+        return BoolFeatures(self.streamDict, name = self.name)
     
     #### Should these be here?
     def spline_2D(self, pointFeature = 'ball', frameList = None):
