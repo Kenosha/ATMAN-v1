@@ -12,7 +12,7 @@ import numpy as np
 from dataclasses import dataclass
 
 import ATMANpy.funcs.util_funcs as atu
-from ATMANpy.funcs.cv_funcs import get_frames   
+from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
 from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame
 
 
@@ -45,6 +45,11 @@ class GreyFrames(Frames):
     @staticmethod
     def from_video(cap, start_frame, stop_frame):
         frames = get_frames(cap, start_frame, stop_frame, color_space = 'grey')
+        return GreyFrames(frames)
+    
+    @staticmethod
+    def from_list(cap, frameList):
+        frames = get_framelist(cap, frameList, color_space = 'grey')
         return GreyFrames(frames)
     
     def __repr__(self):

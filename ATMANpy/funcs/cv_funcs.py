@@ -56,6 +56,23 @@ def get_frames(cap, start_frame, stop_frame, color_space = 'bgr'):
         
     return np.array(outFrames)
 
+def get_framelist(cap, frameList, color_space = 'bgr'):
+    
+    outFrames = []
+    
+    for frmNum in frameList:
+        cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
+        ret, frame = cap.read()
+        
+        if color_space == 'hsv':
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        if color_space == 'grey':
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+            
+        outFrames.append(frame)
+        
+    return np.array(outFrames)
+
 def show_video(cap, start_frame = None, stop_frame = None, ms_between_frames = None,
                frame_counter = False):
        
