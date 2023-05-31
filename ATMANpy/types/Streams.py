@@ -10,6 +10,8 @@ from dataclasses import dataclass
 import cv2 as cv
 from multiprocessing.pool import Pool, ThreadPool
 from collections import deque
+from random import randrange
+from typing import List
 
 from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame
 from ATMANpy.types.MultiFrames import GreyFrames
@@ -58,7 +60,20 @@ class Stream:
     stop_frame: int
     features: StreamFeatures = StreamFeatures({})
         
+    @staticmethod
+    def from_SF(mySF, cap):
+        return Stream(cap, mySF.get_frames()[0], mySF.get_frames()[-1], mySF)
+    
     def __post_init__(self):
+        total_frames = self.cap.get(cv.CAP_PROP_FRAME_COUNT)
+        if self.start_frame < 0:
+            print(f'Negative start frame ({self.start_frame}) not available. Reinitializing with start_frame = 0...')
+            object.__setattr__(self, 'start_frame', 0)
+        
+        if self.stop_frame > total_frames:
+            print(f'{self.stop_frame} not available in cap of length {total_frames}. Reinitializing with stop_frame = {total_frames}...')
+            object.__setattr__(self, 'stop_frame', total_frames)
+        
         mySF = self.features
         if isinstance(self.features, StreamFeature):
             ### transform StreamFeature into StreamFeatures
@@ -127,7 +142,7 @@ class Stream:
         else:
             cv.destroyAllWindows()
 
-    def chunk_generator(self, chunksize):
+    def chunk_generator(self, chunksize = 100):
         ### generate decapped chunks of the stream, one by one lazily
         chunk_start = self.start_frame
         chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame) 
@@ -162,7 +177,7 @@ class Stream:
                 cv.destroyAllWindows()
                 break 
           
-    def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
+    def extract(self, featureFunc, where = None, **kwargs): ### cv_funcs.get_stream_features
         ### where --> BoolFeature: give the option to apply the function not everywhere
         
         ### Establish function arguments and return shape
@@ -171,7 +186,13 @@ class Stream:
 
         ### Initialize Generator
         gen = self.generator()
-        frmNum, rawArr = next(gen) ### prime the generator
+        try:
+            frmNum, rawArr = next(gen) ### prime the generator
+        except StopIteration:
+            return StreamFeatures({})
+        
+        if where is not None:
+            where = where.conform(self.features)
         
         streamDict = {}
         while True:
@@ -182,31 +203,31 @@ class Stream:
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
             assert len(args) == len(funcArgs)
             
-            ### assign to a dictionary, depending on whether we get one or multiple return values
-            if len(funcVals) == 1:
-                myFeature = featureFunc(*args, **kwargs)
-                streamDict[frmNum] = {funcVals[0]: myFeature}
-            else:
-                myFeatures = featureFunc(*args, **kwargs)
-                streamDict[frmNum] = dict(zip(funcVals, myFeatures))
+            # ### assign to a dictionary, depending on whether we get one or multiple return values
+            # if len(funcVals) == 1:
+            #     myFeature = featureFunc(*args, **kwargs)
+            #     streamDict[frmNum] = {funcVals[0]: myFeature}
+            # else:
+            #     myFeatures = featureFunc(*args, **kwargs)
+            #     streamDict[frmNum] = dict(zip(funcVals, myFeatures))
             
-            # if where is None or where[frmNum]: ### if where is not given or is true at this position, we calculate the function value
-            #     ### assign to a dictionary, depending on whether we get one or multiple return values
-            #     if len(funcVals) == 1:
-            #         myFeature = featureFunc(*args, **kwargs)
-            #         streamDict[frmNum] = {funcVals[0]: myFeature}
-            #     else:
-            #         myFeatures = featureFunc(*args, **kwargs)
-            #         streamDict[frmNum] = dict(zip(funcVals, myFeatures))
-            # else: ### if where is false, we just take the features in the stream
-            #     selfDict = self.features.maybe_get(frmNum)
-            #     combDict = {}
-            #     for feat in funcVals:
-            #         if feat in selfDict:
-            #             combDict[feat] = selfDict[feat]
-            #         else:
-            #             combDict[feat] = None
-            #     streamDict[frmNum] = combDict
+            if where is None or where[frmNum]: ### if where is not given or is true at this position, we calculate the function value
+                ### assign to a dictionary, depending on whether we get one or multiple return values
+                if len(funcVals) == 1:
+                    myFeature = featureFunc(*args, **kwargs)
+                    streamDict[frmNum] = {funcVals[0]: myFeature}
+                else:
+                    myFeatures = featureFunc(*args, **kwargs)
+                    streamDict[frmNum] = dict(zip(funcVals, myFeatures))
+            else: ### if where is false, we just take the features in the stream
+                selfDict = self.features.maybe_get(frmNum)
+                combDict = {}
+                for feat in funcVals:
+                    if feat in selfDict:
+                        combDict[feat] = selfDict[feat]
+                    else:
+                        combDict[feat] = None
+                streamDict[frmNum] = combDict
                 
             ### iterate the generator.
             try:
@@ -217,13 +238,14 @@ class Stream:
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def _extract_pool(self, poolCls, num_workers, featureFunc, **kwargs):
+    def _extract_pool(self, poolCls, num_workers, featureFunc, where = None, **kwargs):
         """
         Auxiliary extract method for parallelisation 
             -> pass in a threadPool to do threaded extraction
             -> pass in a Pool to do multiprocessed extraction
             (see extract_threaded and extract_mp below)
         """
+        WAIT_SECS = 0.001
         
         ### Set up the pool
         pool = poolCls(processes = num_workers)
@@ -235,24 +257,31 @@ class Stream:
 
         ### Initialize Generator
         gen = self.generator()
-        frmNum, rawArr = next(gen) ### prime the generator
-        generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+        try:
+            frmNum, rawArr = next(gen) ### prime the generator
+            generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+        except StopIteration:
+            pool.close()
+            generator_is_exhausted = True
         
+        if where is not None:
+            where = where.conform(self.features)
+            
         streamDict = {}
         while True:
             
-            if not generator_is_exhausted and len(pending) < num_workers:
-                ### get arguments to plug into feature extraction function
-                args = Stream.argstrings_to_args(self, funcArgs, frmNum, rawArr)
+            if not generator_is_exhausted and len(pending) < num_workers: #if there is space in the queue...
+                if where is None or where[frmNum]: #and we actually want to calculate the function...
+                    ### get arguments to plug into feature extraction function
+                    args = Stream.argstrings_to_args(self, funcArgs, frmNum, rawArr)
+                        
+                    ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
+                    assert len(args) == len(funcArgs)
                     
-                ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
-                assert len(args) == len(funcArgs)
-                
-                ### if there is space in the queue, add a task!
-                task = pool.apply_async(featureFunc, args, kwargs)
-                pending.append((frmNum, task))
+                    task = pool.apply_async(featureFunc, args, kwargs)
+                    pending.append((frmNum, task))
             else:
-                time.sleep(0.01) ### need this to give the leftmost task time to finish!
+                time.sleep(WAIT_SECS) ### need this to give the leftmost task time to finish!
             
             while len(pending) > 0 and pending[0][1].ready():
                 taskNum, task = pending.popleft()
@@ -278,7 +307,16 @@ class Stream:
             if generator_is_exhausted and len(pending) == 0:
                 pool.terminate() ### once pending queue is zero, we can terminate the pool.
                 break
-           
+        
+        if where is not None:
+            outDict = {}
+            for frmNum in self.features.get_frames():
+                if where[frmNum]:
+                    outDict[frmNum] = streamDict[frmNum]
+                else:
+                    outDict[frmNum] = {featName: feat for featName, feat in self.features[frmNum].items() if featName in funcVals}
+            streamDict = outDict.copy()
+         
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
@@ -298,7 +336,7 @@ class Stream:
         pending = deque()
         
         ### Initialize Generator
-        gen = self.chunk_generator(chunksize)
+        gen = self.chunk_generator(chunksize = chunksize)
         try:
             chunkStm = next(gen) ### prime the generator
             generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
@@ -338,22 +376,48 @@ class Stream:
         return SFList(sfList).concatenate(axis = 0)
     
     @extract_mp_timer
-    def extract_threaded(self, num_workers, featureFunc, **kwargs):
-        return self._extract_pool(ThreadPool, num_workers, featureFunc, **kwargs)
+    def extract_threaded(self, num_workers, featureFunc, where = None, **kwargs):
+        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, where = None, **kwargs)
     
     @extract_mp_timer
-    def extract_mp(self, num_workers, featureFunc, **kwargs):
-        return self._extract_pool(Pool, num_workers, featureFunc, **kwargs)
+    def extract_mp(self, num_workers, featureFunc, where = None, **kwargs):
+        return Stream._extract_pool(self, Pool, num_workers, featureFunc, where = None, **kwargs)
     
     @extract_mp_timer
     def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return self._extract_chunked(ThreadPool, num_workers, chunksize, featureFunc, **kwargs)
+        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, **kwargs)
             
     @extract_mp_timer
     def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return self._extract_chunked(Pool, num_workers, chunksize, featureFunc, **kwargs)
+        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, **kwargs)
             
-            
+@dataclass(frozen = True)
+class StreamList:
+    streams: List[Stream]
+    
+    @staticmethod
+    def from_SFList(sfList, cap):
+        return StreamList([Stream.from_SF(mySF, cap) for mySF in sfList])
+    
+    def __iter__(self):
+        return self.streams.__iter__()
+    
+    def __getitem__(self, item):
+        return self.streams[item]
+    
+    def chunk_generator(self, chunksize = None): ### chunks are simply the elements!
+        for myStm in self:
+            yield myStm.decap()
+        
+    def extract_chunked_threaded(self, num_workers, featureFunc, **kwargs):
+        chunksize = None
+        return Stream.extract_chunked_threaded(self, num_workers, chunksize, featureFunc, kwargs)
+    
+    def extract_chunked_mp(self, num_workers, featureFunc, **kwargs):
+        chunksize = None
+        return Stream.extract_chunked_mp(self, num_workers, chunksize, featureFunc, kwargs)
+        
+        
 @dataclass(frozen = True)
 class DecapStream:
     ### here, the Stream is dissociated from its videoCapture, which is turned into a MultiFrames object.
@@ -389,6 +453,66 @@ class DecapStream:
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
     
+    def extract_mp(self, num_workers, featureFunc, **kwargs):
+        return Stream.extract_mp(self, num_workers, featureFunc, **kwargs)
+    
+@dataclass(frozen = True)
+class NCDecapStream:
+    ### Non-Consecutive Decapped Stream -> a collection of frames which do not have to be consecutive
+    frames: GreyFrames
+    frameNums: List
+    features: StreamFeatures = StreamFeatures({})
+    
+    def __repr__(self):
+        if self.is_empty():
+            return 'NCDecapStream({})'
+        else:
+            return f'NCDecapStream(frames = {self.frames}, frameNums = {self.frameNums[0]} ... {self.frameNums[-1]}, features = {self.features})'
+    
+    def length(self):
+        return self.frames.length()
+    
+    def is_empty(self):
+        return self.length() == 0
+    
+    @staticmethod
+    def from_bool(boolSF, cap):
+        filterSF = boolSF.filter(boolSF) ## keep only true entries
+        frameNums = list(filterSF.keys())
+        frames = GreyFrames.from_list(cap, frameNums) ### TODO: speed up the get_framelist function by threading.
+        return NCDecapStream(frames, frameNums, filterSF)
+    
+    def attach(self, mySF: StreamFeatures):
+        return NCDecapStream(self.frames, self.frameNums, features = mySF)
+    
+    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+            
+        for frame, frameNum in zip(self.frames, self.frameNums):
+            
+            frame = yield frameNum, frame # take in frame, possibly altered, to show 
+            ## TODO: include featDict as a thing the generator yields!
+            
+            if frame_counter:
+                cv.putText(frame, str(frameNum), org = (40, 40), 
+                           fontFace = cv.FONT_HERSHEY_SIMPLEX, fontScale = 2,
+                           color = (0, 255, 0), thickness = 3)
+            
+            
+            if frame is not None:
+                cv.imshow('frame', frame)
+                if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+                    cv.destroyAllWindows()  
+                    # yield None
+                    break
+        
+        else:
+            cv.destroyAllWindows()
+    
+    def extract(self, featureFunc, **kwargs):
+        return Stream.extract(self, featureFunc, **kwargs)
+    
+    def extract_mp(self, num_workers, featureFunc, **kwargs):
+        return Stream.extract_mp(self, num_workers, featureFunc, **kwargs)
     
 @dataclass(frozen = True) ### despite a frozen dataclass, within the functions below, the features attribute is treated as mutable, so we can update it and use it dynamically for subsequent iterations
 class CachedStream(Stream):
@@ -606,5 +730,41 @@ class DecapCachedStream(DecapStream):
             
     def extract(self, featureFunc, **kwargs):
         return CachedStream.extract(self, featureFunc, **kwargs)
+        
+@dataclass(frozen = True)
+class RandStream(Stream):
+    number_of_frames: int = 100
+    
+    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
             
+        frmNum = randrange(self.start_frame, self.stop_frame)
+        frames_yielded = 0
+    
+        while self.cap.isOpened() and frames_yielded < self.number_of_frames:
+            
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
+            ret, frame = self.cap.read()
+            
+            frame = yield frmNum, frame # take in frame, possibly altered, to show 
+            # frame = yield frame 
+            ## TODO: include featDict as a thing the generator yields!
+            
+            if frame_counter:
+                cv.putText(frame, str(frmNum), org = (40, 40), 
+                           fontFace = cv.FONT_HERSHEY_SIMPLEX, fontScale = 2,
+                           color = (0, 255, 0), thickness = 3)
+            
+            if frame is not None:
+                cv.imshow('frame', frame)
+                if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+                    cv.destroyAllWindows()  
+                    # yield None
+                    break
+            
+            frmNum = randrange(self.start_frame, self.stop_frame)
+        
+        else:
+            cv.destroyAllWindows()
+    
+     
     
