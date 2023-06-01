@@ -12,7 +12,7 @@ import pandas as pd
 from dataclasses import dataclass
 
 from ATMANpy.funcs.type_funcs import typecheck, arraycheck
-from ATMANpy.funcs.cv_funcs import show, get_frame    
+from ATMANpy.funcs.cv_funcs import show, show_continuous, get_frame    
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
 from ATMANpy.types.Contours import Contour
@@ -124,6 +124,10 @@ class Frame:
     ### SHOW METHODS ###
     def show(self):
         show(self.array, name = self.name)
+
+    def show_continuous(self, ms_between_frames = 30):
+        still_showing = show_continuous(self.array, ms_between_frames = ms_between_frames)
+        return still_showing
 
     def unique(self):
         return np.unique(self.array)
