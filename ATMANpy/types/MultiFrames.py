@@ -21,6 +21,21 @@ from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame
 # cap = atu.get_video(VIDEO_ID)
 # ################
 
+
+class FramesIterator:
+    def __init__(self, array, frameType):
+        self._array = array
+        self._frameType = frameType
+        self._index = 0
+
+    def __next__(self):
+        try:
+            nextArr = self._array[self._index]
+        except IndexError:
+            raise StopIteration
+        else:
+            self._index += 1
+            return self._frameType(nextArr)
         
 @dataclass(frozen = True)
 class Frames:
@@ -34,8 +49,8 @@ class Frames:
     def length(self):
         return self.array.shape[0]
     
-    def __iter__(self):
-        return self.array.__iter__()
+    # def __iter__(self):
+    #     return self.array.__iter__()
     
     
 @dataclass(frozen = True)
@@ -55,9 +70,9 @@ class GreyFrames(Frames):
     def __repr__(self):
         return f'GreyFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
     
+    def __iter__(self):
+        return FramesIterator(self.array, GreyFrame)
     
-    
-
 @dataclass(frozen = True)
 class _Frames:
     video_id: str
