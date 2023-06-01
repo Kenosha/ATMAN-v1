@@ -140,7 +140,7 @@ def save_events(stream_features, featureName, videoName, storeName):
 
 def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
     
-    print('Reading {featureName}...')
+    print(f'Reading {featureName}...')
     
     import os
     featDict = atu.get_folder_struct('features_stored')
@@ -161,10 +161,10 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
         featFrm = pd.concat(frmList)
         featFrm = featFrm[~featFrm.reset_index().duplicated().values] ### drop exact duplicates (including the index = frame number)
         
-        try:
-            featFrm = featFrm.astype(int)
-        except:
-            print(f'   ... Could not cast to integer!')
+        # try:
+        #     featFrm = featFrm.astype(int)
+        # except:
+        #     print(f'   ... Could not cast to integer!')
     
         if not featFrm.index.duplicated().any():
             print(f'   ... Feature merger for successful.')
