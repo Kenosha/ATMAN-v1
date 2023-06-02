@@ -136,6 +136,17 @@ class StreamFeaturesBase:
     def get_frames(self):
         return list(self.streamDict.keys())   
     
+    def random_choice(self, how_many = 1000):
+        ### from a given stream feature, create a bool feature with how_many true entries, selected randomly
+        if how_many > self.length():
+            print(f'Can not select {how_many} keys randomly in a feature of size {self.length} without replacement.')
+            return None
+        else:
+            frames = self.get_frames()
+            chosen = np.random.choice(frames, size = how_many, replace = False)
+            boolDict = {frame: frame in chosen for frame in frames}
+            return BoolFeature(boolDict, name = f'random_{self.name}')
+    
     def to_dict(self):
         return self.streamDict
     

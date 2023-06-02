@@ -23,15 +23,17 @@ For example, the courtline homography is named 'H'.
 @author: gianl
 """
 
+import numpy as np
+
 from ATMANpy.types.Lines import CourtLines
+from ATMANpy.funcs.line_funcs import fit_frame_to_lines
 schemaLines = CourtLines.make().add_singles_netline()
+schemaFrm = fit_frame_to_lines(schemaLines)
 
 from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only, update_homography
 from ATMANpy.funcs.scoreboard_funcs import find_scoreboard
 
 from ATMANpy.types.Frames import BGRFrame, GreyFrame
-
-
 
 def find_courtlines(H, schemaLines = schemaLines):
     if H is None:
@@ -39,7 +41,6 @@ def find_courtlines(H, schemaLines = schemaLines):
     else:
         courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
     return courtLines
-    
 
 def track_courtlines(frameCache, featCache,
                      schemaLines = schemaLines, only_225 = True):
@@ -97,23 +98,9 @@ def iterative_redo(gFrm, courtLines, H, config, trackFlag,
             courtLines = find_courtlines(H, schemaLines)
         return courtLines, H, config, trackFlag
         
-# def plug_hole_in_homographies(mySF):
-        
-#     DISTANCE_THRESHOLD = 15
-#     inList = split_joint_features(sf)
-#     end_and_begin = [(max(sf_prev), min(sf_succ)) for sf_prev, sf_succ in zip(inList[:-1], inList[1:])]
-#     end_and_begin = [(end, beg) for end, beg in end_and_begin if beg - end < DISTANCE_THRESHOLD]
     
-#     to_redo = []
-#     for end, beg in end_and_begin:
-#         frames_missing_between = list(range(end + 1, beg))
-#         to_redo.extend(frames_missing_between)
-    
-#     for frm in to_redo:
-#         gFrm = GreyFrame.from_video(cap, frm)
-#         courtLines, netLines, H, config, outFlag = hlf.track_courtlines(gFrm, None, None, only_225 = False)
-        
-#         if not H is None:
-#             out_sf[frm] = {'H': H}
-            
-#     return out_sf
+def courtlines_to_schema(H, hFrm, schemaFrm = schemaFrm):
+    ######### APPLY INVERSE H TO FIT FRAME COLORS RELATIVE TO COURTLINES BACK TO SCHEMA #######
+    H_inv = np.linalg.inv(H)
+    wrpFrm = hFrm.warp(H, cols = schemaFrm.cols, rows = schemaFrm.rows)
+    return wrpFrm
