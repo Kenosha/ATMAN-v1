@@ -49,9 +49,6 @@ class Frames:
     def length(self):
         return self.array.shape[0]
     
-    # def __iter__(self):
-    #     return self.array.__iter__()
-    
     
 @dataclass(frozen = True)
 class GreyFrames(Frames):
@@ -72,6 +69,50 @@ class GreyFrames(Frames):
     
     def __iter__(self):
         return FramesIterator(self.array, GreyFrame)
+    
+    
+@dataclass(frozen = True)
+class BGRFrames(Frames):
+    name: str = 'bgr_frames'
+    
+    @staticmethod
+    def from_video(cap, start_frame, stop_frame):
+        frames = get_frames(cap, start_frame, stop_frame, color_space = 'bgr')
+        return BGRFrames(frames)
+    
+    @staticmethod
+    def from_list(cap, frameList):
+        frames = get_framelist(cap, frameList, color_space = 'bgr')
+        return BGRFrames(frames)
+    
+    def __repr__(self):
+        return f'BGRFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
+    
+    def __iter__(self):
+        return FramesIterator(self.array, BGRFrame)
+    
+    
+@dataclass(frozen = True)
+class HSVFrames(Frames):
+    name: str = 'hsv_frames'
+    
+    @staticmethod
+    def from_video(cap, start_frame, stop_frame):
+        frames = get_frames(cap, start_frame, stop_frame, color_space = 'hsv')
+        return HSVFrames(frames)
+    
+    @staticmethod
+    def from_list(cap, frameList):
+        frames = get_framelist(cap, frameList, color_space = 'hsv')
+        return HSVFrames(frames)
+    
+    def __repr__(self):
+        return f'HSVFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
+    
+    def __iter__(self):
+        return FramesIterator(self.array, HSVFrame)
+    
+    
     
 @dataclass(frozen = True)
 class _Frames:
