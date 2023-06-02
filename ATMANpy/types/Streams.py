@@ -11,10 +11,10 @@ import cv2 as cv
 from multiprocessing.pool import Pool, ThreadPool
 from collections import deque
 from random import randrange
-from typing import List
+from typing import List, Union
 
 from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame
-from ATMANpy.types.MultiFrames import GreyFrames
+from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames
 from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList
 from ATMANpy.types.Caches import Cache
 
@@ -62,7 +62,8 @@ class Stream:
         
     @staticmethod
     def from_SF(mySF, cap):
-        return Stream(cap, mySF.get_frames()[0], mySF.get_frames()[-1], mySF)
+        start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
+        return Stream(cap, start, stop, color_space = 'bgr', features = mySF)
     
     def __post_init__(self):
         total_frames = self.cap.get(cv.CAP_PROP_FRAME_COUNT)
@@ -84,7 +85,7 @@ class Stream:
     
     def __getitem__(self, frame_num):
         assert self.start_frame < frame_num < self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
-        return BGRFrame.from_video(cap, frame_num)
+        return BGRFrame.from_video(self.cap, frame_num)
        
     def argstrings_to_args(self, funcArgs, frmNum, myFrm):
         ### get arguments to plug into feature extraction function
@@ -109,7 +110,11 @@ class Stream:
         return self.__class__(self.cap, self.start_frame, self.stop_frame, features = mySF)
 
     def decap(self):
-        myFrms = GreyFrames.from_video(self.cap, self.start_frame, self.stop_frame) ### adapt to all color spaces
+        typeMap = {'bgr': BGRFrames,
+                   'grey': GreyFrames,
+                   'hsv': HSVFrames}
+        framesType = typeMap[self.color_space]
+        myFrms = framesType.from_video(self.cap, self.start_frame, self.stop_frame) ### adapt to all color spaces
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
@@ -436,7 +441,7 @@ class StreamList:
 @dataclass(frozen = True)
 class DecapStream:
     ### here, the Stream is dissociated from its videoCapture, which is turned into a MultiFrames object.
-    frames: GreyFrames
+    frames: Union[GreyFrames, BGRFrames, HSVFrames] # GreyFrames | BGRFrames | HSVFrames
     start_frame: int
     stop_frame: int
     features: StreamFeatures = StreamFeatures({})
@@ -467,7 +472,7 @@ class DecapStream:
 @dataclass(frozen = True)
 class NCDecapStream:
     ### Non-Consecutive Decapped Stream -> a collection of frames which do not have to be consecutive
-    frames: GreyFrames
+    frames: Union[GreyFrames, BGRFrames, HSVFrames]
     frameNums: List
     features: StreamFeatures = StreamFeatures({})
     
@@ -484,10 +489,14 @@ class NCDecapStream:
         return self.length() == 0
     
     @staticmethod
-    def from_bool(boolSF, cap):
+    def from_bool(boolSF, cap, color_space = 'bgr'):
+        typeMap = {'bgr': BGRFrames,
+                   'grey': GreyFrames,
+                   'hsv': HSVFrames}
+        framesType = typeMap[color_space]
         filterSF = boolSF.filter(boolSF) ## keep only true entries
         frameNums = list(filterSF.keys())
-        frames = GreyFrames.from_list(cap, frameNums) ### TODO: speed up the get_framelist function by threading.
+        frames = framesType.from_list(cap, frameNums) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, frameNums, filterSF)
     
     def attach(self, mySF: StreamFeatures):
@@ -499,7 +508,7 @@ class NCDecapStream:
             
             myFrm = yield frameNum, myFrm # take in frame, possibly altered, to show 
             if frame_counter:
-                myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
+                myFrm = myFrm.put(str(frameNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
                 still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
@@ -673,7 +682,11 @@ class CachedStream(Stream):
         return Stream(self.cap, self.start_frame, self.stop_frame, self.features)
     
     def decap(self):
-        myFrms = GreyFrames.from_video(self.cap, self.start_frame, self.stop_frame) ### adapt to all color spaces
+        typeMap = {'bgr': BGRFrames,
+                   'grey': GreyFrames,
+                   'hsv': HSVFrames}
+        framesType = typeMap[self.color_space]
+        myFrms = framesType.from_video(self.cap, self.start_frame, self.stop_frame) ### adapt to all color spaces
         return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, cache_size = self.cache_size)
 
     def show(self):
