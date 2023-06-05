@@ -8,6 +8,8 @@ Created on Sun May 14 11:45:37 2023
 import os
 import time
 
+import numpy as np
+
 ### GET VIDEO ###
 from ATMANpy.funcs.util_funcs import get_video
 
@@ -22,6 +24,11 @@ import ATMANpy.funcs.extract_funcs as ex
 from ATMANpy.types.Streams import Stream, CachedStream, NCDecapStream, StreamList
 from ATMANpy.types.Features import StreamFeatures
 from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
+
+# from ATMANpy.types.Lines import CourtLines
+# from ATMANpy.funcs.line_funcs import fit_frame_to_lines
+# schemaLines = CourtLines.make().add_singles_netline()
+# schemaFrm = fit_frame_to_lines(schemaLines)
 
 if __name__ == '__main__':
     ### PARAMETERS AND GLOBALS
@@ -43,17 +50,26 @@ if __name__ == '__main__':
     
     ### Make folders for feature storage
     featPath = ut.get_folder_struct('features_stored')['main']
-    vidPath = os.path.join(featPath, VIDEO_ID)
+    feat_vidPath = os.path.join(featPath, VIDEO_ID)
     try:
-        os.mkdir(vidPath)
+        os.mkdir(feat_vidPath)
     except FileExistsError:
         pass
     
-    storePath = os.path.join(vidPath, STORE_NAME)
+    storePath = os.path.join(feat_vidPath, STORE_NAME)
     try:
         os.mkdir(storePath)
     except FileExistsError:
         pass
+    
+    ### Make folders for burn in data
+    burnPath = ut.get_folder_struct('burn_in')['main']
+    burn_vidPath = os.path.join(burnPath, VIDEO_ID)
+    try:
+        os.mkdir(burn_vidPath)
+    except FileExistsError:
+        pass
+    
     
     ### Read in features which exist
     HSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['H']).squeeze()
@@ -86,7 +102,7 @@ if __name__ == '__main__':
         ### redo frames that were not found
         redoBF = sf.get_redo_frames(courtSF)
         print(f'Re-attempting {redoBF.true()} frames...')
-        redoNCD = NCDecapStream.from_bool(redoBF, cap)
+        redoNCD = NCDecapStream.from_bool(redoBF, cap, color_space = 'grey')
         redoNCD = redoNCD.attach(courtSF)
         redoSF = redoNCD.extract_mp(NUM_WORKERS, ex.redo_not_found)
         
@@ -98,7 +114,7 @@ if __name__ == '__main__':
         ### try to fix failures
         redoBF = courtSF['trackFlag'] == 'Failed'
         print(f'Re-attempting {redoBF.true()} frames...')
-        redoNCD = NCDecapStream.from_bool(redoBF, cap)
+        redoNCD = NCDecapStream.from_bool(redoBF, cap, color_space = 'grey')
         redoNCD = redoNCD.attach(courtSF)
         redoSF = redoNCD.extract(ex.iterative_redo)
         
@@ -111,7 +127,7 @@ if __name__ == '__main__':
         notBF = courtSF['trackFlag'] != 'Not Found'
         redoBF = sf.get_hole_frames(courtSF.filter(notBF))
         print(f'Re-attempting {redoBF.true()} frames...')
-        redoNCD = NCDecapStream.from_bool(redoBF, cap)
+        redoNCD = NCDecapStream.from_bool(redoBF, cap, color_space = 'grey')
         redoNCD = redoNCD.attach(courtSF)
         redoSF = redoNCD.extract(ex.redo_not_found)        
 
@@ -150,7 +166,7 @@ if __name__ == '__main__':
     ### Now that we have courtlines, we can work on segments
     courtSF = HSF.merge(HSF.apply(ex.find_courtlines))
     courtSFs = courtSF.split()
-    streamList = StreamList.from_SFList(courtSFs, cap)
+    grey_streamList = StreamList.from_SFList(courtSFs, cap, color_space = 'grey')
 
     if boardSF.is_empty():
             
@@ -161,7 +177,7 @@ if __name__ == '__main__':
                   'min_line_length_after_merge': 10,
                   'min_lines': 1}
         
-        boardSFs = streamList.extract_chunked_mp(NUM_WORKERS, ex.find_scoreboard, **params)
+        boardSFs = grey_streamList.extract_chunked_mp(NUM_WORKERS, ex.find_scoreboard, **params)
         boardSF = boardSFs.concatenate(axis = 0)
         boardSF.save(VIDEO_ID, STORE_NAME)
         
@@ -169,16 +185,65 @@ if __name__ == '__main__':
         
         streamList = StreamList.from_SFList(mySFs, cap)
         
-    ### BURN IN
-    # collect a set of courtlines and the corresponding frames (HSV!)
-    # separate out the 'weird' homographies (i think we might have done this already with the corner correction)
-    # warp the frame back onto the schema
-    # calculate median and pixel deviation across these warped frames for every channel
-    # save median and deviation pixel frames.
-
-    normBool = sf.get_normal_bool(courtSF) ### apparently, the burn in algo is much stricter than our corners...
-    ### TODO: for warping -> generalise frame types of streams!!! need HSV...
-
+    mySFs = courtSFs.merge(boardSF.split())
+    
+    try:
+        medFrm = HSVFrame.from_csv(burn_vidPath, name = 'median')
+        stdFrm = HSVFrame.from_csv(burn_vidPath, name = 'std')
+    except OSError:
+        ### BURN IN
+        # collect a set of courtlines and the corresponding frames (HSV!)
+        # separate out the 'weird' homographies (i think we might have done this already with the corner correction)
+        # warp the frame back onto the schema
+        # calculate median and pixel deviation across these warped frames for every channel
+        # save median and deviation pixel frames.
+        normBool = sf.get_normal_bool(courtSF) ### apparently, the burn in algo is much stricter than our corners...
+        chosenBool = normBool.filter(normBool).random_choice(how_many = 1000) ### choose 1000 out of the 'normal' frames
+        hsvNCD = NCDecapStream.from_bool(chosenBool, cap, color_space = 'hsv')
+        hsvNCD = hsvNCD.attach(courtSF)
+        wrpSF = hsvNCD.extract_mp(NUM_WORKERS, ex.courtlines_to_schema)
+        
+        medFrm, stdFrm = sf.get_median_and_deviation_frame(wrpSF)
+        
+        medFrm.to_csv(burn_vidPath)
+        stdFrm.to_csv(burn_vidPath)
+    
+    ### Get Burn-In Mask
+    featureName = 'foregroundMask'
+    burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, color_space = 'grey')
+    
+    if burnStms.length() == 0:
+        ### Calculate and Save Burn-In Mask
+        params = {'medFrm': medFrm,
+                  'stdFrm': stdFrm,
+                  'minimum_proportion': 0.0125,
+                  'minimum_step_gain': 0.002}
+        
+        hsv_streamList = StreamList.from_SFList(mySFs, cap, color_space = 'hsv')
+        burnSFs = hsv_streamList.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_burn_in_mask_iterative, **params)
+        
+        burnSFs.save(VIDEO_ID, STORE_NAME)
+        burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, color_space = 'grey')
+    
+    # # fileName = 'from_1024_to_1791.avi'
+    # # featureName = 'foregroundMask'
+    # # videoName = VIDEO_ID
+    # # storeName = STORE_NAME
+    
+    # # burnStm = Stream.from_store(fileName, featureName, videoName, storeName, color_space = 'grey')
+    
+    # # burnStm.show()
+    
+    # # burnDec = burnStm.decap()
+    
+    # # burnStm[1792]
+    # burnSF = hsv_
+    
+    # burnSFs = hsv_streamList[:1].extract_chunked_threaded(NUM_WORKERS, ex.get_burn_in_mask_iterative, **params)
+    
+    # burnSF = hsv_streamList.extract_chunked_mp(NUM_WORKERS, ex.get_burn_in_mask_iterative)
+    # burnSF = hsv_streamList[0].extract(ex.get_burn_in_mask_iterative, **params)
+    
     ###### Next Up ######
     
     ### (line_normalization.py)
