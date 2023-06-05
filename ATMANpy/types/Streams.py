@@ -6,8 +6,12 @@ Created on Mon May 15 10:03:08 2023
 """
 
 import time
-from dataclasses import dataclass
+import os
 import cv2 as cv
+
+from dataclasses import dataclass
+import multiprocessing
+# multiprocessing.set_start_method('spawn')
 from multiprocessing.pool import Pool, ThreadPool
 from collections import deque
 from random import randrange
@@ -19,7 +23,7 @@ from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList
 from ATMANpy.types.Caches import Cache
 
 from ATMANpy.funcs.draw_funcs import draw
-from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
+from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, get_folder_struct
 
 # @dataclass(frozen = True)
 # class StreamBase:
@@ -57,21 +61,37 @@ class Stream:
     cap: cv.VideoCapture
     start_frame: int
     stop_frame: int
+    is_truncated: bool = False ### if this is set to True, then the cap does not have to be set to start frame
     color_space: str = 'bgr'
     features: StreamFeatures = StreamFeatures({})
         
     @staticmethod
-    def from_SF(mySF, cap):
+    def from_SF(mySF, cap, color_space = 'bgr'):
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
-        return Stream(cap, start, stop, color_space = 'bgr', features = mySF)
+        return Stream(cap, start, stop, color_space = color_space, features = mySF)
     
+    @staticmethod
+    def from_store(fileName, featureName, videoName, storeName, color_space = 'bgr'):
+        featDict = get_folder_struct('features_stored')
+        featPath = featDict['main']
+        ### find video
+        videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
+        cap = cv.VideoCapture(videoPath)
+        
+        ### find start and end frame
+        fileStump = fileName.split('.')[0]
+        _, start, _, stop = fileStump.split('_')
+        start, stop = int(start), int(stop)
+        
+        return Stream(cap, start, stop, color_space = color_space, is_truncated = True)
+        
     def __post_init__(self):
         total_frames = self.cap.get(cv.CAP_PROP_FRAME_COUNT)
         if self.start_frame < 0:
             print(f'Negative start frame ({self.start_frame}) not available. Reinitializing with start_frame = 0...')
             object.__setattr__(self, 'start_frame', 0)
         
-        if self.stop_frame > total_frames:
+        if self.stop_frame > self.start_frame + total_frames:
             print(f'{self.stop_frame} not available in cap of length {total_frames}. Reinitializing with stop_frame = {total_frames}...')
             object.__setattr__(self, 'stop_frame', total_frames)
         
@@ -84,8 +104,12 @@ class Stream:
         object.__setattr__(self, 'features', mySF)
     
     def __getitem__(self, frame_num):
-        assert self.start_frame < frame_num < self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
-        return BGRFrame.from_video(self.cap, frame_num)
+        assert self.start_frame <= frame_num <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+        typeMap = {'bgr': BGRFrame,
+                   'grey': GreyFrame,
+                   'hsv': HSVFrame}
+        frameType = typeMap[self.color_space]
+        return frameType.from_video(self.cap, frame_num - self.start_frame)
        
     def argstrings_to_args(self, funcArgs, frmNum, myFrm):
         ### get arguments to plug into feature extraction function
@@ -96,7 +120,7 @@ class Stream:
         for argStr in funcArgs:
             if argStr in typeMap:
                 type_needed = typeMap[argStr]
-                assert isinstance(myFrm, type_needed), f'Extracting function that needs {argStr} with {type(myFrm)}'
+                assert isinstance(myFrm, type_needed), f'Extracting function that needs {type_needed} with {type(myFrm)}'
                 argObj = myFrm
             else:
                 try:
@@ -106,20 +130,31 @@ class Stream:
             args.append(argObj)
         return args
     
+    def recolor(self, new_color_space):
+        return self.__class__(self.cap, self.start_frame, self.stop_frame, features = self.features, color_space = new_color_space)
+    
     def attach(self, mySF: StreamFeatures):
-        return self.__class__(self.cap, self.start_frame, self.stop_frame, features = mySF)
+        return self.__class__(self.cap, self.start_frame, self.stop_frame, features = mySF, color_space = self.color_space)
 
     def decap(self):
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames}
         framesType = typeMap[self.color_space]
-        myFrms = framesType.from_video(self.cap, self.start_frame, self.stop_frame) ### adapt to all color spaces
+        if self.is_truncated:
+            cap_start, cap_stop = 0, self.stop_frame - self.start_frame
+        else:
+            cap_start, cap_stop = self.start_frame, self.stop_frame
+        myFrms = framesType.from_video(self.cap, cap_start, cap_stop) ### adapt to all color spaces
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
             
-        self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame)
+        if self.is_truncated:
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, 0)
+        else:
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame)
+            
         frmNum = self.start_frame
         
         while self.cap.isOpened() and (self.start_frame <= frmNum <= self.stop_frame):
@@ -141,7 +176,10 @@ class Stream:
                 if not still_showing:
                     break
             
-            frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES))
+            if self.is_truncated:
+                frmNum += 1
+            else:    
+                frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES))
         
         else:
             cv.destroyAllWindows()
@@ -153,11 +191,11 @@ class Stream:
         ### since the last frame is included, a chunk of size 10 with chunk_start 5 ends at 14 = 5 + 10 - 1
         
         while not chunk_stop == self.stop_frame:
-            yield Stream(self.cap, chunk_start, chunk_stop, self.features).decap()
+            yield Stream(self.cap, chunk_start, chunk_stop, features = self.features, color_space = self.color_space).decap()
             chunk_start = chunk_stop + 1
             chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame)
         else:
-            yield Stream(self.cap, chunk_start, chunk_stop, self.features).decap() ### yield one last time
+            yield Stream(self.cap, chunk_start, chunk_stop, features = self.features, color_space = self.color_space).decap() ### yield one last time
 
     def show(self, ms_between_frames = 25, frame_counter = False):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
@@ -321,7 +359,7 @@ class Stream:
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def _extract_chunked(self, poolCls, num_workers, chunksize, featureFunc, _join = True, **kwargs):
+    def _extract_chunked(self, poolCls, num_workers, chunksize, featureFunc, _split = False, **kwargs):
         ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
         # create a pool of chunks: 
         # chunk the Stream and let each chunk be worked by one worker.
@@ -333,7 +371,7 @@ class Stream:
         WAIT_SECS = 0.001
         
         ### Set up the pool
-        pool = Pool(processes = num_workers)
+        pool = poolCls(processes = num_workers)
         pending = deque()
         
         ### Initialize Generator
@@ -350,6 +388,7 @@ class Stream:
             if not generator_is_exhausted and len(pending) < num_workers:                
                 ### if there is space in the queue, add a task!
                 # print(f'Queueing {chunkStm}...')
+                # print(kwargs)
                 task = pool.apply_async(chunkStm.extract, [featureFunc], kwargs)
                 pending.append(task)
             else:
@@ -373,11 +412,13 @@ class Stream:
             if generator_is_exhausted and len(pending) == 0:
                 pool.terminate() ### once pending queue is zero, we can terminate the pool.
                 break
-         
-        if _join:
-            return SFList(sfList).concatenate(axis = 0)
+        
+        allSFs = SFList(sfList).concatenate(axis = 0)
+            
+        if _split:
+            return allSFs.split()
         else:
-            return SFList(sfList)
+            return allSFs
     
     @extract_mp_timer
     def extract_threaded(self, num_workers, featureFunc, where = None, **kwargs):
@@ -389,19 +430,23 @@ class Stream:
     
     @extract_mp_timer
     def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _join = True, **kwargs)
+        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
             
     @extract_mp_timer
     def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _join = True, **kwargs)
-            
+        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
+       
+# @dataclass(frozen = True):
+# class ParStream:
+#     capList: 
+        
 @dataclass(frozen = True)
 class StreamList:
     streams: List[Stream]
     
     @staticmethod
-    def from_SFList(sfList, cap):
-        return StreamList([Stream.from_SF(mySF, cap) for mySF in sfList])
+    def from_SFList(sfList, cap, color_space = 'bgr'):
+        return StreamList([Stream.from_SF(mySF, cap, color_space = color_space) for mySF in sfList])
     
     def __repr__(self):
         return f'StreamList({self.length()} Streams from {self[0].start_frame} to {self[-1].stop_frame})'
@@ -417,11 +462,19 @@ class StreamList:
         
     def length(self):
         return len(self.streams)
-        
-    def chunk_generator(self, chunksize = None): ### chunks are simply the elements!
+    
+    def recolor(self, new_color_space):
+        return StreamList([myStm.recolor(new_color_space) for myStm in self])
+    
+    def chunk_generator(self, chunksize = None): 
+        ### chunks are simply the elements!
+        ### UPDATE: If the chunks get too large, they can not be pickled anymore! In this case,
+        ### we get the weird 'OS ERROR: parameter is incorrect'
         for myStm in self:
-            yield myStm.decap()
-        
+            sub_generator = myStm.chunk_generator(chunksize = chunksize)
+            for chunkStm in sub_generator:
+                yield chunkStm
+            
     def extract(self, featureFunc, **kwargs):
         outList = []
         for myStm in self:
@@ -429,13 +482,13 @@ class StreamList:
             outList.append(mySF)
         return SFList(outList)
         
-    def extract_chunked_threaded(self, num_workers, featureFunc, **kwargs):
-        chunksize = None
-        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _join = False, **kwargs)
+    @extract_mp_timer
+    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
     
-    def extract_chunked_mp(self, num_workers, featureFunc, **kwargs):
-        chunksize = None
-        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _join = False, **kwargs)
+    @extract_mp_timer
+    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
         
         
 @dataclass(frozen = True)
@@ -445,6 +498,10 @@ class DecapStream:
     start_frame: int
     stop_frame: int
     features: StreamFeatures = StreamFeatures({})
+
+    def __getitem__(self, item):
+        assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+        return self.frames[item - self.start_frame]
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
@@ -462,7 +519,10 @@ class DecapStream:
         
         else:
             cv.destroyAllWindows()
-            
+           
+    def show(self, ms_between_frames = 30, frame_counter = False):
+        return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+           
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
     
@@ -518,6 +578,9 @@ class NCDecapStream:
         else:
             cv.destroyAllWindows()
     
+    def show(self, ms_between_frames = 30, frame_counter = False):
+        return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+           
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
     
