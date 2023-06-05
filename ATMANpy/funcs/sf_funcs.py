@@ -171,4 +171,26 @@ def get_normal_bool(courtSF, normalized_deviation_threshold = 1, verbose = False
     boolSF = BoolFeature(dict(zip(courtSF.keys(), all_corners_within)), name = 'all_corners_within')
     return boolSF
 
-
+def get_median_and_deviation_frame(wrpSF):
+    
+    from ATMANpy.types.Frames import HSVFrame
+    
+    wrpArrs = np.array([frm.array for frm in wrpSF.values()])
+    
+    ### prune away parts that are superfluous because they are completely dark
+    ## in the unimaginable case that we have black rows within the picture, (not at the edges), 
+    ## we'd be fucked.
+    row_is_not_dark = wrpArrs.any(axis = (0, 2, 3))
+    wrpArrs = wrpArrs[:, row_is_not_dark]
+    
+    
+    # avgArr = np.average(wrpArrs, axis = 0)
+    medArr = np.median(wrpArrs, axis = 0)
+    stdArr = np.std(wrpArrs, axis = 0) ### memory requirements for standard deviation are quite high.....
+                                         # check task manager while it runs; RAM usage increases a lot.
+    
+    # avgFrm = BGRFrame(avgArr.astype('uint8'))
+    medFrm = HSVFrame(medArr.astype('uint8'), name = 'median')
+    stdFrm = HSVFrame(stdArr.astype('uint8'), name = 'std')
+    
+    return medFrm, stdFrm
