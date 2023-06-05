@@ -4,6 +4,7 @@ papers/
 video_files/
 unused/
 trajectories_stored/
+features_stored/
 *.csv
 *.stats
 Todo.txt
