@@ -64,6 +64,12 @@ class GreyFrames(Frames):
         frames = get_framelist(cap, frameList, color_space = 'grey')
         return GreyFrames(frames)
     
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return GreyFrame(self.array[item])
+        else:
+            return GreyFrames(self.array[item])
+    
     def __repr__(self):
         return f'GreyFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
     
@@ -85,6 +91,12 @@ class BGRFrames(Frames):
         frames = get_framelist(cap, frameList, color_space = 'bgr')
         return BGRFrames(frames)
     
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return BGRFrame(self.array[item])
+        else:
+            return BGRFrames(self.array[item])
+    
     def __repr__(self):
         return f'BGRFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
     
@@ -105,6 +117,12 @@ class HSVFrames(Frames):
     def from_list(cap, frameList):
         frames = get_framelist(cap, frameList, color_space = 'hsv')
         return HSVFrames(frames)
+    
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return HSVFrame(self.array[item])
+        else:
+            return HSVFrames(self.array[item])
     
     def __repr__(self):
         return f'HSVFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
