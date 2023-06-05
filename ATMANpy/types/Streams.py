@@ -71,12 +71,10 @@ class Stream:
         return Stream(cap, start, stop, color_space = color_space, features = mySF)
     
     @staticmethod
-    def from_store(fileName, featureName, videoName, storeName, color_space = 'bgr'):
-        featDict = get_folder_struct('features_stored')
-        featPath = featDict['main']
-        ### find video
-        videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
-        cap = cv.VideoCapture(videoPath)
+    def from_file(filePath, color_space = 'bgr'):
+        cap = cv.VideoCapture(filePath)
+        
+        fileName = os.path.basename(filePath)
         
         ### find start and end frame
         fileStump = fileName.split('.')[0]
@@ -84,6 +82,14 @@ class Stream:
         start, stop = int(start), int(stop)
         
         return Stream(cap, start, stop, color_space = color_space, is_truncated = True)
+    
+    @staticmethod
+    def from_store(fileName, featureName, videoName, storeName, color_space = 'bgr'):
+        featDict = get_folder_struct('features_stored')
+        featPath = featDict['main']
+        ### find video
+        videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
+        return Stream.from_file(videoPath, color_space = color_space)
         
     def __post_init__(self):
         total_frames = self.cap.get(cv.CAP_PROP_FRAME_COUNT)
@@ -447,6 +453,23 @@ class StreamList:
     @staticmethod
     def from_SFList(sfList, cap, color_space = 'bgr'):
         return StreamList([Stream.from_SF(mySF, cap, color_space = color_space) for mySF in sfList])
+    
+    @staticmethod
+    def from_store(featureName, videoName, storeName, color_space = 'bgr'):
+        featDict = get_folder_struct('features_stored')
+        featPath = featDict['main']
+        storePath = os.path.join(featPath, videoName, storeName, featureName)
+        
+        ### find and sort files to read
+        files = os.listdir(storePath)
+        sortFunc = lambda myStr: int(myStr.split('_')[1]) ### sort by first frame
+        sorted_files = sorted(files, key = sortFunc)
+        
+        outList = []
+        for videoFile in sorted_files:
+            videoPath = os.path.join(storePath, videoFile)
+            outList.append(Stream.from_file(videoPath, color_space = color_space))
+        return StreamList(outList)
     
     def __repr__(self):
         return f'StreamList({self.length()} Streams from {self[0].start_frame} to {self[-1].stop_frame})'
