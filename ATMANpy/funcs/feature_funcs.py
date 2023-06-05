@@ -60,8 +60,7 @@ def extract_region_values(region):
         featValues = np.ravel(coords)
     return featValues
     
-def save_feature_frame(featFrm, featureName, videoName, storeName):
-        
+def get_and_make_save_path(featureName, videoName, storeName):
     import os
     featDict = atu.get_folder_struct('features_stored')
     storePath = os.path.join(featDict['main'], videoName, storeName)
@@ -72,7 +71,12 @@ def save_feature_frame(featFrm, featureName, videoName, storeName):
         print(f'    Creating new {featureName} data')
     except FileExistsError:
         print(f'    Adding to existing {featureName} data')
-        
+    
+    return savePath
+    
+def save_feature_frame(featFrm, featureName, videoName, storeName):
+    savePath = get_and_make_save_path(featureName, videoName, storeName)
+    
     import datetime as dt
     timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     randomInt = np.random.randint(999999999)

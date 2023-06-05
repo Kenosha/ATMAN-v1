@@ -598,7 +598,7 @@ class BGRFrame(Frame):
             
         colMap = {0: 'blue', 1: 'green', 2: 'red'}
         for idx, col in colMap.items():
-            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array, delimiter = ',')
+            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array[:, :, idx], delimiter = ',')
     ##################     
     
     def put(self, anyObj, 
@@ -693,9 +693,9 @@ class HSVFrame(Frame):
         if name is None:
             name = self.name
             
-        colMap = {0: 'hue', 1: 'saturation', 2: 'val'}
+        colMap = {0: 'hue', 1: 'saturation', 2: 'value'}
         for idx, col in colMap.items():
-            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array, delimiter = ',')
+            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array[:, :, idx], delimiter = ',')
     ##################     
     
     def put(self, anyObj, 

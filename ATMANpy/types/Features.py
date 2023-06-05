@@ -6,6 +6,8 @@ Created on Thu Apr 20 15:59:24 2023
 """
 
 from dataclasses import dataclass
+import os
+import cv2 as cv
 import numpy as np
 import pandas as pd
 from typing import List
@@ -58,6 +60,10 @@ class StreamFeaturesBase:
     
     def is_empty(self):
         return self.streamDict == {}
+
+    def is_contiguous(self):
+        frames = self.get_frames()
+        return self.length() == frames[-1] - frames[0] + 1
 
     def to_series(self):
         return pd.Series(self.streamDict, name = self.name)
@@ -311,6 +317,35 @@ class StreamFeature(StreamFeaturesBase):
         featFrm.columns = featLabels
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
+    def _save_as_video(self, videoName, storeName, monochrome = True):
+        ### the folder name has information about which feature...
+        savePath = ff.get_and_make_save_path(self.name, videoName, storeName)
+        
+        ### ... while the filename has info about the start and stop of the feature
+        # NOTE THAT THIS MEANS WE CAN ONLY HAVE CONTIGUOUS VIDEO FEATURES!!!
+        assert self.is_contiguous(), 'can only save contiguous video features as video!'
+        frames = self.get_frames()
+        fs, ls = frames[0], frames[-1]
+        fileName = f'from_{fs}_to_{ls}.avi'
+        
+        fullPath = os.path.join(savePath, fileName)
+        
+        ### get frame size
+        frame_height, frame_width = self[fs].rows, self[fs].cols
+        size = frame_width, frame_height
+        
+        if monochrome:
+            writer = cv.VideoWriter(fullPath, 
+                                    cv.VideoWriter_fourcc(*'XVID'),
+                                    20.0, size, 0)
+        else:
+            writer = None ### please implement if needed.
+            
+        for myFrm in self.values():
+            writer.write(myFrm.array)
+        
+        writer.release()
+    
     def save(self, videoName, storeName):
         contourNames = []
         homographyNames = ['H']
@@ -322,9 +357,15 @@ class StreamFeature(StreamFeaturesBase):
             self._save_homography(videoName, storeName)
         elif self.name in regionNames:
             self._save_region(videoName, storeName)
+        elif 'Mask' in self.name:
+            self._save_as_video(videoName, storeName, monochrome = True)
+        elif 'Frm' in self.name:
+            self._save_as_video(videoName, storeName, monochrome = False)
         else:
-            featFrm = self.to_series()
-            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+            print(f"Did not save {self.name}, don't know how!")
+        # else:
+        #     featFrm = self.to_series()
+        #     ff.save_feature_frame(featFrm, self.name, videoName, storeName)
         
     def unsqueeze(self):
         return StreamFeatures({frame: {self.name: feat} for frame, feat in self.items()})
@@ -696,6 +737,11 @@ class SFList:
             concatFunc = StreamFeaturesBase.extend if axis == 0 else StreamFeaturesBase.merge
             x, xs = self[0], self[1:]
         return concatFunc(x, xs.concatenate())
+    
+    def save(self, videoName, storeName):
+        for mySF in self:
+            mySF.save(videoName, storeName)
+        
         
 #%% Testing
 
