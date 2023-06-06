@@ -108,8 +108,7 @@ def courtlines_to_schema(H, hFrm, schemaFrm = schemaFrm):
     return wrpFrm
 
 
-def get_burn_in_mask_iterative(hFrm, H,
-                               medFrm = None, stdFrm = None, 
+def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm, 
                                minimum_proportion = 0.01, minimum_step_gain = 0.015,
                                verbose = False):
     
@@ -120,10 +119,10 @@ def get_burn_in_mask_iterative(hFrm, H,
     """
     
     # H_inv = np.linalg.inv(H)
-    wrpFrm = medFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
+    wrpFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
     # if verbose: wrpFrm.show()
     
-    stdwrpFrm = stdFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
+    stdwrpFrm = std_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
     # if verbose: stdwrpFrm.show()
     
     ### Background Differencing ###

@@ -190,7 +190,7 @@ def get_median_and_deviation_frame(wrpSF):
                                          # check task manager while it runs; RAM usage increases a lot.
     
     # avgFrm = BGRFrame(avgArr.astype('uint8'))
-    medFrm = HSVFrame(medArr.astype('uint8'), name = 'median')
-    stdFrm = HSVFrame(stdArr.astype('uint8'), name = 'std')
+    medFrm = HSVFrame(medArr.astype('uint8'), name = 'median_backFrm')
+    stdFrm = HSVFrame(stdArr.astype('uint8'), name = 'std_backFrm')
     
     return medFrm, stdFrm
