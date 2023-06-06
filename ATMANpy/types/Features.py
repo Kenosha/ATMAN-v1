@@ -317,7 +317,8 @@ class StreamFeature(StreamFeaturesBase):
         featFrm.columns = featLabels
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
-    def _save_as_video(self, videoName, storeName, monochrome = True):
+    def _save_as_video(self, videoName, storeName, 
+                       monochrome = True, lossless = True):
         ### the folder name has information about which feature...
         savePath = ff.get_and_make_save_path(self.name, videoName, storeName)
         
@@ -334,19 +335,33 @@ class StreamFeature(StreamFeaturesBase):
         frame_height, frame_width = self[fs].rows, self[fs].cols
         size = frame_width, frame_height
         
+        ### get codec ###
+        if lossless:
+            codec = cv.VideoWriter_fourcc(*'FFV1')
+        else:
+            codec = cv.VideoWriter_fourcc(*'XVID')
+        
+        ### set fps
+        fps = 25
+        
         if monochrome:
             writer = cv.VideoWriter(fullPath, 
-                                    cv.VideoWriter_fourcc(*'XVID'),
-                                    20.0, size, 0)
+                                    codec,
+                                    fps,
+                                    size, 
+                                    0)
         else:
-            writer = None ### please implement if needed.
+            writer = cv.VideoWriter(fullPath, 
+                                    codec,
+                                    fps,
+                                    size)
             
         for myFrm in self.values():
             writer.write(myFrm.array)
         
         writer.release()
     
-    def save(self, videoName, storeName):
+    def save(self, videoName, storeName, lossless = False):
         contourNames = []
         homographyNames = ['H']
         regionNames = ['scoreBoard']
@@ -358,9 +373,9 @@ class StreamFeature(StreamFeaturesBase):
         elif self.name in regionNames:
             self._save_region(videoName, storeName)
         elif 'Mask' in self.name:
-            self._save_as_video(videoName, storeName, monochrome = True)
+            self._save_as_video(videoName, storeName, monochrome = True, lossless = lossless)
         elif 'Frm' in self.name:
-            self._save_as_video(videoName, storeName, monochrome = False)
+            self._save_as_video(videoName, storeName, monochrome = False, lossless = lossless)
         else:
             print(f"Did not save {self.name}, don't know how!")
         # else:
