@@ -11,8 +11,10 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 
+import ATMANpy.funcs.util_funcs as atu
+
 from ATMANpy.funcs.type_funcs import typecheck, arraycheck
-from ATMANpy.funcs.cv_funcs import show, show_continuous, get_frame    
+from ATMANpy.funcs.cv_funcs import show, show_continuous, get_frame  
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
 from ATMANpy.types.Contours import Contour
@@ -60,6 +62,30 @@ class Frame:
         if len(self.array.shape) == 1:
             object.__setattr__(self, 'array', np.array([self.array]))
         #############################  
+    
+    ### CONSTRUCTORS ###
+    @classmethod
+    def from_video(cls, cap, frame_num, 
+                   cap_color_space = 'bgr', name = 'frame'):
+        typeMap = {'bgr': BGRFrame,
+                   'grey': GreyFrame,
+                   'hsv': HSVFrame}
+        capType = typeMap[cap_color_space]
+        
+        frame = get_frame(cap, frame_num)
+        
+        if name is None:
+            capFrm = capType(frame)
+        else:
+            capFrm = capType(frame, name = name)
+            
+        conversionFuncStr = cls.get_converter()
+        
+        if cap_color_space == cls.get_color():
+            return capFrm
+        else:
+            return getattr(capFrm, conversionFuncStr)()
+    ####################
     
     @staticmethod       
     def dispatch_arithmetic(x, y, func, *args, **kwargs):
@@ -419,11 +445,12 @@ class GreyFrame(Frame):
     #     return BoolFrame(self.array >= other)
     #####################
     
-    ### CONSTRUCTORS ###
-    @staticmethod
-    def from_video(cap, frame_num, name = 'frame'):
-        return GreyFrame(get_frame(cap, frame_num))
-    ####################
+    @classmethod
+    def get_converter(cls):
+        return 'to_grey'
+    @classmethod
+    def get_color(cls):
+        return 'grey'
     
     ### TRANSFORMS ###
     def to_BGR(self):
@@ -563,15 +590,6 @@ class BGRFrame(Frame):
             object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_GRAY2BGR))
         #############################  
     
-    ### CONSTRUCTORS ###
-    @staticmethod
-    def from_video(cap, frame_num, name = 'frame'):
-        if isinstance(cap, cv.VideoCapture):
-            return BGRFrame(get_frame(cap, frame_num))
-        else:
-            assert cap.color_space == 'bgr', f'Trying to create a bgrframe using a {cap.color_space} Frames object.'
-            return cap[frame_num] ### in this case, cap is likely a multiframe object!
-    
     @staticmethod
     def from_csv(readpath, name = 'frame'):
         colMap = {0: 'blue', 1: 'green', 2: 'red'}
@@ -582,6 +600,13 @@ class BGRFrame(Frame):
         arr = np.stack(arrList, axis = -1)
         return BGRFrame(arr, name = name)
     ####################
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_BGR'
+    @classmethod
+    def get_color(cls):
+        return 'bgr'
     
     ### TRANSFORMS ###
     def to_grey(self):
@@ -653,11 +678,6 @@ class HSVFrame(Frame):
             object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_GRAY2HSV))
         #############################  
     
-    ### CONSTRUCTORS ###
-    @staticmethod
-    def from_video(cap, frame_num, name = 'frame'):
-        return BGRFrame(get_frame(cap, frame_num)).to_HSV()
-    
     @staticmethod
     def from_csv(readpath, name = 'frame'):
         colMap = {0: 'hue', 1: 'saturation', 2: 'value'}
@@ -668,6 +688,13 @@ class HSVFrame(Frame):
         arr = np.stack(arrList, axis = -1)
         return HSVFrame(arr, name = name)
     ####################
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_HSV'
+    @classmethod
+    def get_color(cls):
+        return 'hsv'
     
     ### TRANSFORMS ###
     def H(self):
@@ -730,6 +757,25 @@ class HSVFrame(Frame):
     ###############
     
 
+if __name__ == '__main__':
+        
+    ### VIDEO ######
+    VIDEO_ID = 'pqxAmUWIoKc'
+    cap = atu.get_video(VIDEO_ID)
+    ################
+
+    frame = 3000
+    gFrm = GreyFrame.from_video(cap, frame)
+    cFrm = BGRFrame.from_video(cap, frame)
+    hFrm = HSVFrame.from_video(cap, frame)
+
+    print(gFrm.shape)
+    print(cFrm.shape)
+    print(hFrm.shape)
+
+    cFrm.show()
+    hFrm.show()
+    gFrm.show()
 
 
 

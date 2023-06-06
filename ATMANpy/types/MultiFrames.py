@@ -36,23 +36,50 @@ class FramesIterator:
 class Frames:
     array: np.array
     name: str = 'frames'
-    
-    
+
     @classmethod
-    def from_video(cls, cap, start_frame, stop_frame, name = None):
-        frames = get_frames(cap, start_frame, stop_frame, color_space = cls.get_color())
+    def from_video(cls, cap, start_frame, stop_frame, 
+                   cap_color_space = 'bgr', name = None):
+        typeMap = {'bgr': BGRFrames,
+                   'grey': GreyFrames,
+                   'hsv': HSVFrames}
+        capType = typeMap[cap_color_space]
+        
+        frames = get_frames(cap, start_frame, stop_frame)
+        
         if name is None:
-            return cls(frames)
+            capFrms = capType(frames)
         else:
-            return cls(frames, name = name)
-    
+            capFrms = capType(frames, name = name)
+        
+        conversionFuncStr = cls.get_converter()
+        
+        if cap_color_space == cls.get_color():
+            return capFrms
+        else:
+            return getattr(capFrms, conversionFuncStr)()
+        
     @classmethod
-    def from_list(cls, cap, frameList, name = None):
-        frames = get_framelist(cap, frameList, color_space = cls.get_color())
+    def from_list(cls, cap, frameList, 
+                  cap_color_space = 'bgr', name = None):
+        typeMap = {'bgr': BGRFrames,
+                   'grey': GreyFrames,
+                   'hsv': HSVFrames}
+        capType = typeMap[cap_color_space]
+        
+        frames = get_framelist(cap, frameList)
+        
         if name is None:
-            return cls(frames)
+            capFrms = capType(frames)
         else:
-            return cls(frames, name = name)
+            capFrms = capType(frames, name = name)
+        
+        conversionFuncStr = cls.get_converter()
+        
+        if cap_color_space == cls.get_color():
+            return capFrms
+        else:
+            return getattr(capFrms, conversionFuncStr)()
     
     def __getitem__(self, item):
         framesType = self.__class__
@@ -93,6 +120,19 @@ class GreyFrames(Frames):
     def get_color(cls):
         return 'grey'
     
+    @classmethod
+    def get_converter(cls):
+        return 'to_grey'
+    
+    def to_BGR(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2BGR) for imgArr in self.array])
+        return BGRFrames(convArr, name = self.name)
+    
+    def to_HSV(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2HSV) for imgArr in self.array])
+        return HSVFrames(convArr, name = self.name)
+        
+    
 @dataclass(frozen = True)
 class BGRFrames(Frames):
     name: str = 'bgr_frames'
@@ -105,6 +145,17 @@ class BGRFrames(Frames):
     def get_color(cls):
         return 'bgr'
     
+    @classmethod
+    def get_converter(cls):
+        return 'to_BGR'
+    
+    def to_grey(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.array])
+        return GreyFrames(convArr, name = self.name)
+    
+    def to_HSV(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2HSV) for imgArr in self.array])
+        return HSVFrames(convArr, name = self.name)
     
 @dataclass(frozen = True)
 class HSVFrames(Frames):
@@ -117,6 +168,18 @@ class HSVFrames(Frames):
     @classmethod
     def get_color(cls):
         return 'hsv'
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_HSV'
+    
+    def to_grey(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_HSV2GRAY) for imgArr in self.array])
+        return GreyFrames(convArr, name = self.name)
+    
+    def to_BGR(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_HSV2BGR) for imgArr in self.array])
+        return BGRFrames(convArr, name = self.name)
     
 if __name__ == '__main__':
         
@@ -134,3 +197,8 @@ if __name__ == '__main__':
     print(cFrms.shape())
     print(hFrms.shape())
 
+    cFrms[0].show()
+    hFrms[0].show()
+    gFrms[0].show()
+
+    cFrms.to_HSV()[0].show()

@@ -37,7 +37,7 @@ def get_frame(cap, frame_num):
     
     return frame
 
-def get_frames(cap, start_frame, stop_frame, color_space = 'bgr'):
+def get_frames(cap, start_frame, stop_frame):
     
     outFrames = []
     cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
@@ -46,10 +46,10 @@ def get_frames(cap, start_frame, stop_frame, color_space = 'bgr'):
     while cap.isOpened() and (start_frame <= frmNum <= stop_frame):
         ret, frame = cap.read()
         
-        if color_space == 'hsv':
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-        if color_space == 'grey':
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        # if color_space == 'hsv':
+        #     frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        # if color_space == 'grey':
+        #     frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             
         outFrames.append(frame)
         
@@ -57,7 +57,7 @@ def get_frames(cap, start_frame, stop_frame, color_space = 'bgr'):
         
     return np.array(outFrames)
 
-def get_framelist(cap, frameList, color_space = 'bgr'):
+def get_framelist(cap, frameList):
     
     outFrames = []
     
@@ -65,10 +65,10 @@ def get_framelist(cap, frameList, color_space = 'bgr'):
         cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
         ret, frame = cap.read()
         
-        if color_space == 'hsv':
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-        if color_space == 'grey':
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        # if color_space == 'hsv':
+        #     frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        # if color_space == 'grey':
+        #     frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             
         outFrames.append(frame)
         

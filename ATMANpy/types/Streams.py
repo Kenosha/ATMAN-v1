@@ -22,6 +22,7 @@ from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames
 from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList
 from ATMANpy.types.Caches import Cache
 
+from ATMANpy.funcs.cv_funcs import get_frame
 from ATMANpy.funcs.draw_funcs import draw
 from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, get_folder_struct
 
@@ -56,23 +57,48 @@ def extract_mp_timer(extractMethod):
 
     return timed
 
+def color_converter(imgArr, cap_color_space, target_color_space):
+    typeMap = {'bgr': BGRFrame,
+               'grey': GreyFrame,
+               'hsv': HSVFrame}
+    
+    methodMap = {'bgr': 'to_BGR',
+                 'grey': 'to_grey',
+                 'hsv': 'to_HSV'}
+    
+    frameType = typeMap[cap_color_space]
+    conversionFuncStr = methodMap[target_color_space]
+    
+    origFrm = frameType(imgArr)
+    
+    if cap_color_space == target_color_space:
+        return origFrm
+    else:
+        return getattr(origFrm, conversionFuncStr)()
+
 @dataclass(frozen = True)
 class Stream:
     cap: cv.VideoCapture
     start_frame: int
     stop_frame: int
     is_truncated: bool = False ### if this is set to True, then the cap does not have to be set to start frame
-    color_space: str = 'bgr'
+    cap_color_space: str = 'bgr'
+    target_color_space: str = 'bgr'
     name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
     features: StreamFeatures = StreamFeatures({})
         
     @staticmethod
-    def from_SF(mySF, cap, color_space = 'bgr'):
+    def from_SF(mySF, cap, 
+                cap_color_space = 'bgr', target_color_space = 'bgr'):
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
-        return Stream(cap, start, stop, color_space = color_space, features = mySF, is_truncated = False)
+        return Stream(cap, start, stop, 
+                      cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                      is_truncated = False, 
+                      features = mySF, name = mySF.name)
     
     @staticmethod
-    def from_file(filePath, color_space = 'bgr'):
+    def from_file(filePath, name = None,
+                  cap_color_space = 'bgr', target_color_space = 'bgr'):
         cap = cv.VideoCapture(filePath)
         
         fileName = os.path.basename(filePath)
@@ -82,15 +108,20 @@ class Stream:
         _, start, _, stop = fileStump.split('_')
         start, stop = int(start), int(stop)
         
-        return Stream(cap, start, stop, color_space = color_space, is_truncated = True)
+        return Stream(cap, start, stop, 
+                      cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                      is_truncated = True, 
+                      name = name)
     
     @staticmethod
-    def from_store(fileName, featureName, videoName, storeName, color_space = 'bgr'):
+    def from_store(fileName, featureName, videoName, storeName, 
+                   cap_color_space = 'bgr', target_color_space = 'bgr'):
         featDict = get_folder_struct('features_stored')
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
-        return Stream.from_file(videoPath, color_space = color_space)
+        return Stream.from_file(videoPath, name = featureName,
+                                cap_color_space = cap_color_space, target_color_space = target_color_space)
         
     def __post_init__(self):
         ### CHECK FRAMES
@@ -109,7 +140,7 @@ class Stream:
                        'grey': 'gFrm',
                        'hsv': 'hFrm',
                        'bool': 'bFrm'}
-            object.__setattr__(self, 'name', nameMap[self.color_space])
+            object.__setattr__(self, 'name', nameMap[self.target_color_space])
         
         ### CHECK FEATURES
         mySF = self.features
@@ -121,13 +152,22 @@ class Stream:
         object.__setattr__(self, 'features', mySF)
     
     def __getitem__(self, frame_num):
+        ### TODO: allow for item to be a slice also! (this would yield a multiframes)
         assert self.start_frame <= frame_num <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         typeMap = {'bgr': BGRFrame,
                    'grey': GreyFrame,
                    'hsv': HSVFrame}
-        frameType = typeMap[self.color_space]
-        return frameType.from_video(self.cap, frame_num - self.start_frame)
-       
+        outType = typeMap[self.target_color_space]
+        
+        if self.is_truncated:
+            get_num = frame_num - self.start_frame
+        else:
+            get_num = frame_num
+        
+        return outType.from_video(cap, get_num, 
+                                  cap_color_space = self.cap_color_space, 
+                                  name = self.name)
+        
     def argstrings_to_args(self, funcArgs, frmNum, myFrm):
         ### get arguments to plug into feature extraction function
         
@@ -149,41 +189,37 @@ class Stream:
                     raise e
             args.append(argObj)
         return args
-    # def argstrings_to_args(self, funcArgs, frmNum, myFrm):
-    #     ### get arguments to plug into feature extraction function
-    #     typeMap = {'cFrm': BGRFrame,
-    #                'gFrm': GreyFrame,
-    #                'hFrm': HSVFrame}
-    #     args = []
-    #     for argStr in funcArgs:
-    #         if argStr in typeMap:
-    #             type_needed = typeMap[argStr]
-    #             assert isinstance(myFrm, type_needed), f'Extracting function that needs {type_needed} with {type(myFrm)}'
-    #             argObj = myFrm
-    #         else:
-    #             try:
-    #                 argObj = self.features[frmNum][argStr]
-    #             except KeyError as e:
-    #                 raise e
-    #         args.append(argObj)
-    #     return args
     
-    def recolor(self, new_color_space):
-        return self.__class__(self.cap, self.start_frame, self.stop_frame, features = self.features, color_space = new_color_space)
+    def recolor(self, new_target_color_space):
+        return self.__class__(self.cap, self.start_frame, self.stop_frame, 
+                              is_truncated = self.is_truncated, 
+                              cap_color_space = self.cap_color_space, 
+                              target_color_space = new_target_color_space,
+                              name = self.name,
+                              features = self.features)
     
     def attach(self, mySF: StreamFeatures):
-        return self.__class__(self.cap, self.start_frame, self.stop_frame, features = mySF, color_space = self.color_space)
+        return self.__class__(self.cap, self.start_frame, self.stop_frame, 
+                              is_truncated = self.is_truncated, 
+                              cap_color_space = self.cap_color_space, 
+                              target_color_space = new_target_color_space,
+                              name = self.name,
+                              features = mySF)
 
     def decap(self):
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames}
-        framesType = typeMap[self.color_space]
+        framesType = typeMap[self.target_color_space]
+        
         if self.is_truncated:
             cap_start, cap_stop = 0, self.stop_frame - self.start_frame
         else:
             cap_start, cap_stop = self.start_frame, self.stop_frame
-        myFrms = framesType.from_video(self.cap, cap_start, cap_stop, name = self.name) ### adapt to all color spaces
+            
+        myFrms = framesType.from_video(self.cap, cap_start, cap_stop,
+                                       cap_color_space = self.cap_color_space,
+                                       name = self.name)
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
@@ -198,12 +234,8 @@ class Stream:
         while self.cap.isOpened() and (self.start_frame <= frmNum <= self.stop_frame):
             ret, frame = self.cap.read()
             
-            myFrm = BGRFrame(frame, name = self.name)
-            if self.color_space == 'grey':
-                myFrm = myFrm.to_grey()
-            elif self.color_space == 'hsv':
-                myFrm = myFrm.to_HSV()
-                
+            myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
+    
             myFrm = yield frmNum, myFrm # take in frame, possibly altered, to show 
             
             if frame_counter:
@@ -230,13 +262,17 @@ class Stream:
         
         while not chunk_stop == self.stop_frame:
             yield Stream(self.cap, chunk_start, chunk_stop, 
-                         features = self.features, color_space = self.color_space,
+                         features = self.features, 
+                         cap_color_space = self.cap_color_space,
+                         target_color_space = self.target_color_space,
                          name = self.name).decap()
             chunk_start = chunk_stop + 1
             chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame)
         else:
             yield Stream(self.cap, chunk_start, chunk_stop, 
-                         features = self.features, color_space = self.color_space,
+                         features = self.features, 
+                         cap_color_space = self.cap_color_space,
+                         target_color_space = self.target_color_space,
                          name = self.name).decap() ### yield one last time
 
     def show(self, ms_between_frames = 25, frame_counter = False):
@@ -279,7 +315,7 @@ class Stream:
         while True:
             
             ### get arguments to plug into feature extraction function
-            args = Stream.argstrings_to_args(self, funcArgs, frmNum, myFrm) ### 
+            args = self.argstrings_to_args(funcArgs, frmNum, myFrm) ### 
                 
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
             assert len(args) == len(funcArgs)
@@ -493,6 +529,32 @@ class MulStream:
     def __iter__(self):
         return self.streams.__iter__()
     
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return self.streams[item]
+        else:
+            return MulStream(self.streams[item])
+        
+    def argstrings_to_args(self, funcArgs, frmNum, frameList):
+        ### get arguments to plug into feature extraction function
+        
+        # differentiate between function arguments that need a stream and those that need a feature
+        is_from_stream = lambda myStr: myStr.endswith('Mask') or myStr.endswith('Frm')
+        
+        args = []
+        for argStr in funcArgs:
+            if is_from_stream(argStr):
+                matching_frames = [myFrm for myFrm in frameList if myFrm.name == argStr]
+                assert len(matching_frames) == 1, f'There has to be one (and only one) frame corresponding to {argStr}, instead found {len(matching_frames)}!'
+                argObj = matching_frames[0]
+            else:
+                try:
+                    argObj = self[0].features[frmNum][argStr] ### NOTE: The features are stored in the first Stream!
+                except KeyError as e:
+                    raise e
+            args.append(argObj)
+        return args
+    
     def generator(self, ms_between_frames = 25, frame_counter = False):
         genList = [myStm.generator() for myStm in self]
         
@@ -504,11 +566,35 @@ class MulStream:
             yieldList.append(frame)
         
         assert len(set(numList)) == 1, 'Different frame numbers scheduled in parallel for {self}: {numList}'
+        frmNum = numList[0]
         
-        yield yieldList
+        yield frmNum, yieldList
+    
+    def extract(self, featureFunc, where = None, **kwargs):
+        return Stream.extract(self, featureFunc, where = where, **kwargs)
         
-    def extract(self, featureFunc, **kwargs):
-        pass
+    # def extract(self, featureFunc, **kwargs):
+                
+    #     ### Establish function arguments and return shape
+    #     funcArgs = get_positional_arguments(featureFunc)
+    #     funcVals = get_return_names(featureFunc)
+
+    #     ### Initialize Generator
+    #     gen = self.generator()
+    #     try:
+    #         frmNum, frameList = next(gen) ### prime the generator
+    #     except StopIteration:
+    #         return StreamFeatures({})
+        
+    #     streamDict = {}
+    #     while True:
+            
+    #         ### get arguments to plug into feature extraction function
+    #         args = MulStream.argstrings_to_args(self, funcArgs, frmNum, frameList) ### 
+                
+    #         ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
+    #         assert len(args) == len(funcArgs)
+        
         
         
 @dataclass(frozen = True)
@@ -519,11 +605,17 @@ class StreamList:
     streams: List[Stream]
     
     @staticmethod
-    def from_SFList(sfList, cap, color_space = 'bgr'):
-        return StreamList([Stream.from_SF(mySF, cap, color_space = color_space) for mySF in sfList])
+    def from_SFList(sfList, cap, 
+                    cap_color_space = 'bgr', 
+                    target_color_space = 'bgr'):
+        return StreamList([Stream.from_SF(mySF, cap, 
+                                          cap_color_space = cap_color_space, 
+                                          target_color_space = target_color_space) for mySF in sfList])
     
     @staticmethod
-    def from_store(featureName, videoName, storeName, color_space = 'bgr'):
+    def from_store(featureName, videoName, storeName, 
+                   cap_color_space = 'bgr', 
+                   target_color_space = 'bgr'):
         featDict = get_folder_struct('features_stored')
         featPath = featDict['main']
         storePath = os.path.join(featPath, videoName, storeName, featureName)
@@ -536,7 +628,9 @@ class StreamList:
         outList = []
         for videoFile in sorted_files:
             videoPath = os.path.join(storePath, videoFile)
-            outList.append(Stream.from_file(videoPath, color_space = color_space))
+            outList.append(Stream.from_file(videoPath, name = featureName,
+                                            cap_color_space = cap_color_space, 
+                                            target_color_space = target_color_space))
         return StreamList(outList)
     
     def __repr__(self):
@@ -554,8 +648,8 @@ class StreamList:
     def length(self):
         return len(self.streams)
     
-    def recolor(self, new_color_space):
-        return StreamList([myStm.recolor(new_color_space) for myStm in self])
+    def recolor(self, new_target_color_space):
+        return StreamList([myStm.recolor(new_target_color_space) for myStm in self])
     
     def chunk_generator(self, chunksize = None): 
         ### chunks are simply the elements!
@@ -593,6 +687,9 @@ class DecapStream:
     def __getitem__(self, item):
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         return self.frames[item - self.start_frame]
+
+    def argstrings_to_args(self, funcArgs, frmNum, myFrm):
+        return Stream.argstrings_to_args(self, funcArgs, frmNum, myFrm)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
@@ -640,19 +737,27 @@ class NCDecapStream:
         return self.length() == 0
     
     @staticmethod
-    def from_bool(boolSF, cap, color_space = 'bgr'):
+    def from_bool(boolSF, cap, 
+                  cap_color_space = 'bgr',
+                  target_color_space = 'bgr'):
+        
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames}
-        framesType = typeMap[color_space]
+        framesType = typeMap[target_color_space]
         filterSF = boolSF.filter(boolSF) ## keep only true entries
         frameNums = list(filterSF.keys())
-        frames = framesType.from_list(cap, frameNums, name = self.name) ### TODO: speed up the get_framelist function by threading.
+        frames = framesType.from_list(cap, frameNums, 
+                                      cap_color_space = cap_color_space,
+                                      name = boolSF.name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, frameNums, filterSF)
     
     def attach(self, mySF: StreamFeatures):
         return NCDecapStream(self.frames, self.frameNums, features = mySF)
     
+    def argstrings_to_args(self, funcArgs, frmNum, myFrm):
+        return Stream.argstrings_to_args(self, funcArgs, frmNum, myFrm)
+
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
         for frameNum, myFrm in zip(self.frameNums, self.frames):
@@ -733,11 +838,7 @@ class CachedStream(Stream):
 
             ret, frame = self.cap.read()
             
-            myFrm = BGRFrame(frame)
-            if self.color_space == 'grey':
-                myFrm = myFrm.to_grey()
-            elif self.color_space == 'hsv':
-                myFrm = myFrm.to_hsv()
+            myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
                 
             ### feed/build the caches
             frameCache = frameCache.add(myFrm)
@@ -839,8 +940,16 @@ class CachedStream(Stream):
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames}
-        framesType = typeMap[self.color_space]
-        myFrms = framesType.from_video(self.cap, self.start_frame, self.stop_frame, name = self.name) ### adapt to all color spaces
+        framesType = typeMap[self.target_color_space]
+        
+        if self.is_truncated:
+            cap_start, cap_stop = 0, self.stop_frame - self.start_frame
+        else:
+            cap_start, cap_stop = self.start_frame, self.stop_frame
+            
+        myFrms = framesType.from_video(self.cap, cap_start, cap_stop,
+                                       cap_color_space = self.cap_color_space,
+                                       name = self.name)
         return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, cache_size = self.cache_size)
 
     def show(self):
