@@ -30,7 +30,7 @@ class FramesIterator:
             raise StopIteration
         else:
             self._index += 1
-            return self._frameType(nextArr, name = self.name)
+            return self._frameType(nextArr, name = self._name)
         
 @dataclass(frozen = True)
 class Frames:
@@ -39,22 +39,28 @@ class Frames:
     
     
     @classmethod
-    def from_video(cls, cap, start_frame, stop_frame):
+    def from_video(cls, cap, start_frame, stop_frame, name = None):
         frames = get_frames(cap, start_frame, stop_frame, color_space = cls.get_color())
-        return cls(frames)
+        if name is None:
+            return cls(frames)
+        else:
+            return cls(frames, name = name)
     
     @classmethod
-    def from_list(cls, cap, frameList):
+    def from_list(cls, cap, frameList, name = None):
         frames = get_framelist(cap, frameList, color_space = cls.get_color())
-        return cls(frames)
+        if name is None:
+            return cls(frames)
+        else:
+            return cls(frames, name = name)
     
     def __getitem__(self, item):
         framesType = self.__class__
         frameType = framesType.get_constituent()
         if isinstance(item, int):
-            return frameType(self.array[item])
+            return frameType(self.array[item], name = self.name)
         else:
-            return framesType(self.array[item])
+            return framesType(self.array[item], name = self.name)
     
     def __repr__(self):
         framesType = self.__class__
@@ -124,7 +130,7 @@ if __name__ == '__main__':
     cFrms = BGRFrames.from_video(cap, start, stop)
     hFrms = HSVFrames.from_video(cap, start, stop)
 
-    print(gFrms.shape)
-    print(cFrms.shape)
-    print(hFrms.shape)
+    print(gFrms.shape())
+    print(cFrms.shape())
+    print(hFrms.shape())
 
