@@ -164,7 +164,7 @@ class Stream:
         else:
             get_num = frame_num
         
-        return outType.from_video(cap, get_num, 
+        return outType.from_video(self.cap, get_num, 
                                   cap_color_space = self.cap_color_space, 
                                   name = self.name)
         
@@ -235,7 +235,8 @@ class Stream:
             ret, frame = self.cap.read()
             
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
-    
+            myFrm = myFrm.rename(self.name)
+            
             myFrm = yield frmNum, myFrm # take in frame, possibly altered, to show 
             
             if frame_counter:
@@ -839,7 +840,8 @@ class CachedStream(Stream):
             ret, frame = self.cap.read()
             
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
-                
+            myFrm = myFrm.rename(self.name)
+            
             ### feed/build the caches
             frameCache = frameCache.add(myFrm)
             features = [self._mut_features.maybe_get(idx + cntNum) for idx in featIndices]

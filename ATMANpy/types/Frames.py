@@ -147,6 +147,10 @@ class Frame:
     def __iter__(self):
         return FrameIterator(self)
     
+    ### UTILITY METHODS ###
+    def rename(self, new_name):
+        return self.__class__(self.array, name = new_name)
+    
     ### SHOW METHODS ###
     def show(self):
         show(self.array, name = self.name)
