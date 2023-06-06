@@ -16,17 +16,12 @@ from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
 from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame
 
 
-# ### VIDEO ######
-# VIDEO_ID = 'pqxAmUWIoKc'
-# cap = atu.get_video(VIDEO_ID)
-# ################
-
-
 class FramesIterator:
-    def __init__(self, array, frameType):
+    def __init__(self, frameType, array, name):
         self._array = array
         self._frameType = frameType
         self._index = 0
+        self._name = name
 
     def __next__(self):
         try:
@@ -35,187 +30,101 @@ class FramesIterator:
             raise StopIteration
         else:
             self._index += 1
-            return self._frameType(nextArr)
+            return self._frameType(nextArr, name = self.name)
         
 @dataclass(frozen = True)
 class Frames:
     array: np.array
     name: str = 'frames'
     
+    
+    @classmethod
+    def from_video(cls, cap, start_frame, stop_frame):
+        frames = get_frames(cap, start_frame, stop_frame, color_space = cls.get_color())
+        return cls(frames)
+    
+    @classmethod
+    def from_list(cls, cap, frameList):
+        frames = get_framelist(cap, frameList, color_space = cls.get_color())
+        return cls(frames)
+    
+    def __getitem__(self, item):
+        framesType = self.__class__
+        frameType = framesType.get_constituent()
+        if isinstance(item, int):
+            return frameType(self.array[item])
+        else:
+            return framesType(self.array[item])
+    
+    def __repr__(self):
+        framesType = self.__class__
+        return f'{framesType}(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
+    
+    def __iter__(self):
+        framesType = self.__class__
+        frameType = framesType.get_constituent()
+        return FramesIterator(frameType, self.array, self.name)
+    
     def size(self, unit = 'GB'):
         unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
         return round(self.array.size / unitMap[unit], 1)
     
-    def length(self):
-        return self.array.shape[0]
+    def shape(self):
+        return self.array.shape
     
+    def length(self):
+        return self.shape[0]
     
 @dataclass(frozen = True)
 class GreyFrames(Frames):
     name: str = 'grey_frames'
     
-    @staticmethod
-    def from_video(cap, start_frame, stop_frame):
-        frames = get_frames(cap, start_frame, stop_frame, color_space = 'grey')
-        return GreyFrames(frames)
+    @classmethod
+    def get_constituent(cls):
+        return GreyFrame
     
-    @staticmethod
-    def from_list(cap, frameList):
-        frames = get_framelist(cap, frameList, color_space = 'grey')
-        return GreyFrames(frames)
-    
-    def __getitem__(self, item):
-        if isinstance(item, int):
-            return GreyFrame(self.array[item])
-        else:
-            return GreyFrames(self.array[item])
-    
-    def __repr__(self):
-        return f'GreyFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
-    
-    def __iter__(self):
-        return FramesIterator(self.array, GreyFrame)
-    
+    @classmethod
+    def get_color(cls):
+        return 'grey'
     
 @dataclass(frozen = True)
 class BGRFrames(Frames):
     name: str = 'bgr_frames'
     
-    @staticmethod
-    def from_video(cap, start_frame, stop_frame):
-        frames = get_frames(cap, start_frame, stop_frame, color_space = 'bgr')
-        return BGRFrames(frames)
+    @classmethod
+    def get_constituent(cls):
+        return BGRFrame
     
-    @staticmethod
-    def from_list(cap, frameList):
-        frames = get_framelist(cap, frameList, color_space = 'bgr')
-        return BGRFrames(frames)
-    
-    def __getitem__(self, item):
-        if isinstance(item, int):
-            return BGRFrame(self.array[item])
-        else:
-            return BGRFrames(self.array[item])
-    
-    def __repr__(self):
-        return f'BGRFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
-    
-    def __iter__(self):
-        return FramesIterator(self.array, BGRFrame)
+    @classmethod
+    def get_color(cls):
+        return 'bgr'
     
     
 @dataclass(frozen = True)
 class HSVFrames(Frames):
     name: str = 'hsv_frames'
     
-    @staticmethod
-    def from_video(cap, start_frame, stop_frame):
-        frames = get_frames(cap, start_frame, stop_frame, color_space = 'hsv')
-        return HSVFrames(frames)
+    @classmethod
+    def get_constituent(cls):
+        return HSVFrame
     
-    @staticmethod
-    def from_list(cap, frameList):
-        frames = get_framelist(cap, frameList, color_space = 'hsv')
-        return HSVFrames(frames)
+    @classmethod
+    def get_color(cls):
+        return 'hsv'
     
-    def __getitem__(self, item):
-        if isinstance(item, int):
-            return HSVFrame(self.array[item])
-        else:
-            return HSVFrames(self.array[item])
-    
-    def __repr__(self):
-        return f'HSVFrames(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
-    
-    def __iter__(self):
-        return FramesIterator(self.array, HSVFrame)
-    
-    
-    
-@dataclass(frozen = True)
-class _Frames:
-    video_id: str
-    start_frame: int
-    stop_frame: int
-    color_space: str
-    
-    def __post_init__(self):
+if __name__ == '__main__':
         
-        ### get the actual frame values ###
-        # start_cache = start_frame - cache_offset
-        # stop_cache = stop_frame + cache_offset
-        cap = atu.get_video(self.video_id)
-        frames = get_frames(cap, self.start_frame, self.stop_frame, color_space = self.color_space)
-        # cap.release()
-        
-        #### IMMUTABILITY BREAKS ####
-        object.__setattr__(self, 'frames', frames)
-        object.__setattr__(self, 'unitMap', {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3})
-        object.__setattr__(self, 'colorMap', {'hsv': HSVFrame, 'grey': GreyFrame, 'bgr': BGRFrame})
-        
-        ####
-    
-    def __getitem__(self, frmItem):
-        ### Note! We can only address items by their frame number!
-        
-        if type(frmItem) is slice:
-            arrSlice = slice(frmItem.start - self.start_frame, 
-                             frmItem.stop - self.start_frame, 
-                             frmItem.step - self.start_frame)
-            return self.frames[arrSlice] ### might potentially also return another Frames object?
-        else:
-            myType = self.colorMap[self.color_space]
-            arrItem = frmItem - self.start_frame
-            return myType(self.frames[arrItem])
-     
-    def __iter__(self):
-        return self.frames.__iter__()
-    
-    @staticmethod
-    def from_sf(video_id, sf, color_space = 'bgr'):
-        ks = sorted(sf.keys())
-        start, stop = ks[0], ks[-1]
-        return Frames(video_id, start, stop, color_space)
-        
-    
-    def to_generator(self):
-        frame_counter = self.start_frame
-        for frame in self:
-            yield frame_counter, frame
-            frame_counter += 1
-            
-    def size(self, unit = 'GB'):
-        divisor = self.unitMap[unit]
-        return self.frames.size / divisor
-        
-    
-    
-    
-# start_frame = 10200
-# stop_frame = 10500
-    
-# # myFrms = Frames.from_cap(cap, start_frame, stop_frame)
+    ### VIDEO ######
+    VIDEO_ID = 'pqxAmUWIoKc'
+    cap = atu.get_video(VIDEO_ID)
+    ################
 
+    start, stop = 3000, 3100
+    gFrms = GreyFrames.from_video(cap, start, stop)
+    cFrms = BGRFrames.from_video(cap, start, stop)
+    hFrms = HSVFrames.from_video(cap, start, stop)
 
-# myFrms = Frames(VIDEO_ID, start_frame, stop_frame, 'hsv')
-
-# myFrms[0]
-
-# # for f in myFrms:
-# #     print(f[0, 0])
-
-
-# myFrms[:2]
-
-# myGen = myFrms.to_generator()
-# for g in myGen:
-#     print(g)
-
-
-# myGen = myFrms.to_generator()
-# frmIdx, frm = next(myGen)
-
-# myGen.send('bizbaz') ##3 works!
-
-
+    print(gFrms.shape)
+    print(cFrms.shape)
+    print(hFrms.shape)
 
