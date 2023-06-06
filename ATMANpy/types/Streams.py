@@ -8,6 +8,7 @@ Created on Mon May 15 10:03:08 2023
 import time
 import os
 import cv2 as cv
+import numpy as np
 
 from dataclasses import dataclass
 import multiprocessing
@@ -202,7 +203,7 @@ class Stream:
         return self.__class__(self.cap, self.start_frame, self.stop_frame, 
                               is_truncated = self.is_truncated, 
                               cap_color_space = self.cap_color_space, 
-                              target_color_space = new_target_color_space,
+                              target_color_space = self.target_color_space,
                               name = self.name,
                               features = mySF)
 
@@ -516,6 +517,93 @@ class Stream:
         return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
        
 @dataclass(frozen = True)
+class StillStream:
+    ### instead of a cap, a StillStream has a single frame!
+    ### it displays a single picture for a certain duration
+    ### to initialize it: save a single picture frame lossless, and read it as a StillStream
+    stillFrm: Union[GreyFrame, BGRFrame, HSVFrame]
+    start_frame: int
+    stop_frame: int
+    name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
+    features: StreamFeatures = StreamFeatures({})
+       
+    @staticmethod
+    def from_file(framePath, name = None, cap_color_space = 'bgr', target_color_space = 'bgr'):
+        imgArr = np.load(framePath)
+        stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
+        
+        fileName = os.path.basename(framePath)
+        
+        ### find start and end frame
+        fileStump = fileName.split('.')[0]
+        _, start, _, stop = fileStump.split('_')
+        start, stop = int(start), int(stop)
+        
+        return StillStream(stillFrm, start, stop, name = name)
+    
+    @staticmethod
+    def from_store(fileName, featureName, videoName, storeName, 
+                   frame_color_space = 'bgr'):
+        featDict = get_folder_struct('features_stored')
+        featPath = featDict['main']
+        ### find video
+        videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
+        return StillStream.from_file(videoPath, name = featureName,
+                                     frame_color_space = frame_color_space)
+    
+    def __post_init__(self):
+        pass
+    
+    def __getitem__(self, frameNum):
+        assert self.start_frame <= frame_num <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+        return self.stillFrm
+    
+    def argstrings_to_args(self, funcArgs, frmNum, myFrm):
+        pass
+    
+    def recolor(self, new_color):
+        oldFrm = self.stillFrm
+        old_color = oldFrm.__class__.get_color()
+        newFrm = color_converter(oldFrm.array, old_color, new_color)
+        return StillStream(newFrm, self.start_frame, self.stop_frame, 
+                           name = self.name,
+                           features = self.features)
+    
+    def attach(self, mySF: StreamFeatures):
+        return StillStream(self.stillFrm, self.start_frame, self.stop_frame, 
+                           name = self.name,
+                           features = mySF)
+
+    def decap(self):
+        pass
+    
+    def generator(self, ms_between_frames = 25, frame_counter = False):
+        
+        frmNum = self.start_frame
+    
+        while self.start_frame <= frmNum <= self.stop_frame:
+            myFrm = self.stillFrm
+            
+            myFrm = yield frmNum, myFrm # take in frame, possibly altered, to show 
+            
+            if frame_counter:
+                myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
+            
+            if myFrm is not None:
+                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                if not still_showing:
+                    break
+            
+            frmNum += 1
+            
+        else:
+            cv.destroyAllWindows()
+    
+    def show(self, ms_between_frames = 25, frame_counter = False):
+        return Stream.show(self,  ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    
+    
+@dataclass(frozen = True)
 class MulStream:
     ### The MulStream holds many streams in parallel:
         # all contained streams differ (different cap, features, color space) 
@@ -626,12 +714,17 @@ class StreamList:
         sortFunc = lambda myStr: int(myStr.split('_')[1]) ### sort by first frame
         sorted_files = sorted(files, key = sortFunc)
         
+        suffixes = [file.split('.')[1] for file in sorted_files]
+        assert len(set(suffixes)) == 1, f'Mixed file types found in {storePath}'
+        suffix = suffixes[0]
+        readType = StillStream if suffix == 'npy' else Stream 
+        
         outList = []
         for videoFile in sorted_files:
             videoPath = os.path.join(storePath, videoFile)
-            outList.append(Stream.from_file(videoPath, name = featureName,
-                                            cap_color_space = cap_color_space, 
-                                            target_color_space = target_color_space))
+            outList.append(readType.from_file(videoPath, name = featureName,
+                                              cap_color_space = cap_color_space, 
+                                              target_color_space = target_color_space))
         return StreamList(outList)
     
     def __repr__(self):

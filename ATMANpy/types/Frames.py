@@ -103,7 +103,7 @@ class Frame:
         except:
             operant = op
         finally:
-            return operant   
+            return operant    
         
     def __add__(self, y):
         InstClass = self.__class__
@@ -150,6 +150,17 @@ class Frame:
     ### UTILITY METHODS ###
     def rename(self, new_name):
         return self.__class__(self.array, name = new_name)
+    
+    def save_like_feature(self, videoName, storeName, start_frame = None, stop_frame = None):
+        import ATMANpy.funcs.feature_funcs as ff
+        savePath = ff.get_and_make_save_path(self.name, videoName, storeName)
+    
+        if start_frame is not None and stop_frame is not None:
+            saveName = f'from_{start_frame}_to_{stop_frame}.npy'
+        else:
+            saveName = 'frame.npy'
+        
+        np.save(os.path.join(savePath, saveName), self.array)
     
     ### SHOW METHODS ###
     def show(self):
@@ -329,6 +340,9 @@ class BoolFrame(Frame):
         #            channel_number = 2, color_channel_length = None)
         #####################
 
+    def __repr__(self):
+        return f'BoolFrame({self.cols} by {self.rows}, name: {self.name})'
+    
     def _check_values(self):
         return set([0, 255]).issubset(self.unique())
 
@@ -436,6 +450,9 @@ class GreyFrame(Frame):
         if len(self.array.shape) == 3:
             object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
         #############################  
+    
+    def __repr__(self):
+        return f'GreyFrame({self.cols} by {self.rows}, name: {self.name})'
     
     # ### INEQUALITIES ###
     # #for a grey frame, these are defined with respect to integers, and return a boolean frame.
@@ -612,6 +629,9 @@ class BGRFrame(Frame):
     def get_color(cls):
         return 'bgr'
     
+    def __repr__(self):
+        return f'BGRFrame({self.cols} by {self.rows}, name: {self.name})'
+    
     ### TRANSFORMS ###
     def to_grey(self):
         self_copy = self.array.copy() # to preverve immutability of frame
@@ -699,6 +719,9 @@ class HSVFrame(Frame):
     @classmethod
     def get_color(cls):
         return 'hsv'
+    
+    def __repr__(self):
+        return f'HSVFrame({self.cols} by {self.rows}, name: {self.name})'
     
     ### TRANSFORMS ###
     def H(self):
