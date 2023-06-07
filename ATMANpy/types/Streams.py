@@ -191,6 +191,15 @@ class Stream:
             args.append(argObj)
         return args
     
+    def conform(self, start_frame, stop_frame):
+        ### TODO: conform also features!
+        return self.__class__(self.cap, start_frame, stop_frame, 
+                              is_truncated = self.is_truncated, 
+                              cap_color_space = self.cap_color_space, 
+                              target_color_space = self.target_color_space,
+                              name = self.name,
+                              features = self.features)
+    
     def recolor(self, new_target_color_space):
         return self.__class__(self.cap, self.start_frame, self.stop_frame, 
                               is_truncated = self.is_truncated, 
@@ -263,19 +272,11 @@ class Stream:
         ### since the last frame is included, a chunk of size 10 with chunk_start 5 ends at 14 = 5 + 10 - 1
         
         while not chunk_stop == self.stop_frame:
-            yield Stream(self.cap, chunk_start, chunk_stop, 
-                         features = self.features, 
-                         cap_color_space = self.cap_color_space,
-                         target_color_space = self.target_color_space,
-                         name = self.name).decap()
+            yield self.conform(chunk_start, chunk_stop).decap()
             chunk_start = chunk_stop + 1
             chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame)
         else:
-            yield Stream(self.cap, chunk_start, chunk_stop, 
-                         features = self.features, 
-                         cap_color_space = self.cap_color_space,
-                         target_color_space = self.target_color_space,
-                         name = self.name).decap() ### yield one last time
+            yield self.conform(chunk_start, chunk_stop).decap() ### yield one last time
 
     def show(self, ms_between_frames = 25, frame_counter = False):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
@@ -531,6 +532,7 @@ class StillStream:
     def from_file(framePath, name = None, cap_color_space = 'bgr', target_color_space = 'bgr'):
         imgArr = np.load(framePath)
         stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
+        stillFrm = stillFrm.rename(name)
         
         fileName = os.path.basename(framePath)
         
@@ -555,11 +557,16 @@ class StillStream:
         pass
     
     def __getitem__(self, frameNum):
-        assert self.start_frame <= frame_num <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+        assert self.start_frame <= frameNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         return self.stillFrm
     
     def argstrings_to_args(self, funcArgs, frmNum, myFrm):
-        pass
+        return Stream.argstrings_to_funcs(funcArgs, frmNum, myFrm)
+    
+    def conform(self, start_frame, stop_frame):
+        return StillStream(self.stillFrm, start_frame, stop_frame, 
+                           name = self.name,
+                           features = self.features)
     
     def recolor(self, new_color):
         oldFrm = self.stillFrm
@@ -575,7 +582,26 @@ class StillStream:
                            features = mySF)
 
     def decap(self):
-        pass
+        ### get type of multiframe
+        typeMap = {'grey': GreyFrames,   ### so ugly, but the alteratives as I see them are worse,
+                   'hsv': HSVFrames,     ### because we can not import MultiFrames into Frames module
+                   'bgr': BGRFrames}     ### due to circular imports. 
+                                            ### Otherwise, we could make an analogue to
+                                            ### the get_constituent class method that 
+                                            ### spits out the corresponding MultiFrames object
+        framesType = typeMap[self.stillFrm.__class__.get_color()]
+        
+        ### get length
+        num_elems = self.stop_frame - self.start_frame + 1
+        
+        ### get array
+        stillArr = self.stillFrm.array
+        ### expand array by repeating
+        expArr = np.array([stillArr for i in range(num_elems)])
+        ### turn into proper MultiFrame type
+        expFrms = framesType(expArr, name = self.name)
+        
+        return DecapStream(expFrms, self.start_frame, self.stop_frame, self.features)
     
     def generator(self, ms_between_frames = 25, frame_counter = False):
         
@@ -602,6 +628,9 @@ class StillStream:
     def show(self, ms_between_frames = 25, frame_counter = False):
         return Stream.show(self,  ms_between_frames = ms_between_frames, frame_counter = frame_counter)
     
+    def extract(self, featureFunc, where = None, **kwargs):
+        return Stream.extract(self, featureFunc, where = where, **kwargs)
+    
     
 @dataclass(frozen = True)
 class MulStream:
@@ -610,6 +639,16 @@ class MulStream:
         # EXCEPT for their start and end frames, which are the same.
     streams: List[Stream]
     
+    def __post_init__(self):
+        ### NOTE: The features, start and end frame taken for the entire MulStream are stored in the first Stream!
+        canonical_features = self[0].features
+        canonical_start_frame = self[0].start_frame ### this fucks things if there is a difference 
+        canonical_stop_frame = self[0].stop_frame   ### between starts and stops, but the generator will pick this up.
+        
+        object.__setattr__(self, 'features', canonical_features)
+        object.__setattr__(self, 'start_frame', canonical_start_frame)
+        object.__setattr__(self, 'stop_frame', canonical_stop_frame)
+        
     @staticmethod
     def from_streams(*streams):
         ### TODO: maybe include some integrity checks (same start and end, etc.)
@@ -624,6 +663,12 @@ class MulStream:
         else:
             return MulStream(self.streams[item])
         
+    def conform(self, start_frame, stop_frame):
+        return MulStream([myStm.conform(start_frame, stop_frame) for myStm in self])
+        
+    def decap(self):
+        return MulStream([myStm.decap() for myStm in self])
+    
     def argstrings_to_args(self, funcArgs, frmNum, frameList):
         ### get arguments to plug into feature extraction function
         
@@ -644,47 +689,64 @@ class MulStream:
             args.append(argObj)
         return args
     
+    def chunk_generator(self, chunksize = 100):
+        ### generate decapped chunks of the stream, one by one lazily
+        chunk_start = self.start_frame
+        chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame) 
+        ### since the last frame is included, a chunk of size 10 with chunk_start 5 ends at 14 = 5 + 10 - 1
+        
+        while not chunk_stop == self.stop_frame:
+            yield self.conform(chunk_start, chunk_stop).decap()
+            chunk_start = chunk_stop + 1
+            chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame)
+        else:
+            yield self.conform(chunk_start, chunk_stop).decap() ### yield one last time
+            
     def generator(self, ms_between_frames = 25, frame_counter = False):
+        def continue_generators(generator_states):
+            if all(generator_states):
+                return True
+            elif all([not state for state in generator_states]):
+                return False
+            else: ### somethign is messed up
+                raise Exception('Some generators are running, while others are not...')
+            
+        def step_generators(genList):
+            numList = []
+            yieldList = []
+            generator_states = []
+            for gen in genList:
+                try:
+                    frmNum, frame = next(gen)
+                except StopIteration:
+                    generator_states.append(False)
+                else:
+                    generator_states.append(True)
+                    numList.append(frmNum)
+                    yieldList.append(frame)
+                    
+            return numList, yieldList, generator_states
+        
+        ### initialize the generators
         genList = [myStm.generator() for myStm in self]
         
-        numList = []
-        yieldList = []
-        for gen in genList:
-            frmNum, frame = next(gen)
-            numList.append(frmNum)
-            yieldList.append(frame)
+        ### prime the generator and get the generator states
+        numList, yieldList, generator_states = step_generators(genList)
         
-        assert len(set(numList)) == 1, 'Different frame numbers scheduled in parallel for {self}: {numList}'
-        frmNum = numList[0]
+        while continue_generators(generator_states):
+            ### figure out unique frame number
+            assert len(set(numList)) == 1, f'Different frame numbers scheduled in parallel for {self}: {numList}'
+            frmNum = numList[0]
+            
+            ### yield previous result (guaranteed to be there, because continue generators is true!)
+            yield frmNum, yieldList
+            
+            ### get the new results (or a stop iteration)
+            numList, yieldList, generator_states = step_generators(genList)
+            
         
-        yield frmNum, yieldList
-    
     def extract(self, featureFunc, where = None, **kwargs):
         return Stream.extract(self, featureFunc, where = where, **kwargs)
-        
-    # def extract(self, featureFunc, **kwargs):
-                
-    #     ### Establish function arguments and return shape
-    #     funcArgs = get_positional_arguments(featureFunc)
-    #     funcVals = get_return_names(featureFunc)
-
-    #     ### Initialize Generator
-    #     gen = self.generator()
-    #     try:
-    #         frmNum, frameList = next(gen) ### prime the generator
-    #     except StopIteration:
-    #         return StreamFeatures({})
-        
-    #     streamDict = {}
-    #     while True:
-            
-    #         ### get arguments to plug into feature extraction function
-    #         args = MulStream.argstrings_to_args(self, funcArgs, frmNum, frameList) ### 
-                
-    #         ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
-    #         assert len(args) == len(funcArgs)
-        
-        
         
 @dataclass(frozen = True)
 class StreamList:
@@ -725,6 +787,15 @@ class StreamList:
             outList.append(readType.from_file(videoPath, name = featureName,
                                               cap_color_space = cap_color_space, 
                                               target_color_space = target_color_space))
+        return StreamList(outList)
+    
+    @staticmethod
+    def combine(*streamLists):
+        ### With this method, we can combine many streamLists into a single streamList of MulStreams
+        outList = []
+        for streams in zip(*streamLists):
+            mulStm = MulStream.from_streams(*streams)
+            outList.append(mulStm)
         return StreamList(outList)
     
     def __repr__(self):
