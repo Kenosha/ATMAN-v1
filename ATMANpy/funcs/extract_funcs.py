@@ -33,7 +33,7 @@ schemaFrm = fit_frame_to_lines(schemaLines)
 
 from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only, update_homography
 from ATMANpy.funcs.scoreboard_funcs import find_scoreboard
-from ATMANpy.funcs.player_funcs import find_best_expansion, stop_criterion
+from ATMANpy.funcs.player_funcs import find_best_expansion, stop_criterion, find_player_contour_with_overlap
 
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame
 
@@ -170,14 +170,13 @@ def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm,
     if verbose: hFrm.mask(foregroundMask).show()
     return foregroundMask
 
-def get_shadow_mask(hFrm, H,
-                    medFrm = None,
+def get_shadow_mask(hFrm, H, median_backFrm,
                     h_threshold = 5, s_threshold = 10, 
                     v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
                     v_threshold_upper = 0.97,
                     verbose = False):
     
-    wrpFrm = medFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
+    wrpFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
     if verbose: wrpFrm.show()
 
     diffFrm = hFrm - wrpFrm
@@ -208,24 +207,71 @@ def get_shadow_mask(hFrm, H,
     
     return shadowMask
 
+def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
+                        player_tracking_scale_factor = 1.2,
+                        min_bounding_height = 100,
+                        min_bounding_width = 40,
+                        halfcourtLine = None, keep_below_or_above = None):
+        
+    def get_projected_ROI(ROI, H):
+        return ROI.transform('apply_homography', H).transform('round_points')
 
-# def find_both_players_smart(hFrm, courtLines, H, topPlayer, botPlayer,
-#                             medFrm = None, stdFrm = None, 
-#                             roiMask_top = None, roiMask_bot = None,
-#                             verbose = False):
+    if playerContour is None:
+        initial_projROI = get_projected_ROI(initialROI, H)
     
-#     ### get the burned in mask for this specific homography
-#     burn_foreMask = match_specific_iterative_burn_in_func(hFrm, H, verbose = verbose)
-    
-#     ### remove shadows
-#     burn_shadowMask = match_specific_shadow_func(hFrm, H, verbose = verbose)
-    
-    
-#     topPlayer = find_player_contour_with_overlap(frame, burn_foreMask, roiMask_top, topPlayer,
-#                                                   shadowMask = burn_shadowMask)
-    
-#     botPlayer = find_player_contour_with_overlap(frame, burn_foreMask, roiMask_bot, botPlayer,
-#                                                   shadowMask = burn_shadowMask)
+    if playerContour is None:
+        roiMask = hFrm.within_region(initial_projROI)
+    else:
+        enclReg = playerContour.enclosing_region()
+        updated_projROI = enclReg.scale_equal(player_tracking_scale_factor)
+        updated_projROI = updated_projROI.enlarge(to_min_height = min_bounding_height, to_min_width = min_bounding_width)
+        roiMask = hFrm.within_region(updated_projROI)
+        
+    # if not halfcourtROI is None:
+    #     ### to prevent adaptive ROIs to spill over into the other player's court
+    #     ### we can impose a half court mask
+    #     proj_halfcourtROI = get_projected_ROI(halfcourtROI, H)
+    #     halfcourtMask = hFrm.within_region(proj_halfcourtROI)
+    #     roiMask = roiMask & halfcourtMask
+        
+    if not halfcourtLine is None:
+        ### to prevent adaptive ROIs to spill over into the other player's court
+        ### we can impose a half court mask
+        if not keep_below_or_above in ['below', 'above']:
+            raise Exception('When specifying halfcourt boundary in player selection, specify whether to keep everything above or below.')
+        else:
+            proj_halfcourtLine = halfcourtLine.apply_homography(H).round_points()
+            halfMask = getattr(hFrm, keep_below_or_above)(proj_halfcourtLine)
+            roiMask = roiMask & halfMask
+        
+    return roiMask
 
-#     return topPlayer, botPlayer
+def find_both_players_smart(hFrm, courtLines, H, topPlayer, botPlayer,
+                            foregroundMask, shadowMask,
+                            initial_ROI_upper = None, initial_ROI_lower = None,
+                            halfcourtLine_upper = None, halfcourtLine_lower = None,
+                            player_tracking_scale_factor = 1.2,
+                            bot_min_bounding_height = 100, bot_min_bounding_width = 40,
+                            top_min_bounding_height = 100, top_min_bounding_width = 40,
+                            verbose = False):
+    
+    top_ROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
+                                  player_tracking_scale_factor = player_tracking_scale_factor,
+                                  min_bounding_height = top_min_bounding_height,
+                                  min_bounding_width = top_min_bounding_width,
+                                  halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
+    
+    bot_ROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
+                                  player_tracking_scale_factor = player_tracking_scale_factor,
+                                  min_bounding_height = bot_min_bounding_height,
+                                  min_bounding_width = bot_min_bounding_width,
+                                  halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
+    
+    topPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, top_ROI, topPlayer, 
+                                                 shadowMask = shadowMask)
+    
+    botPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, bot_ROI, botPlayer,
+                                                 shadowMask = shadowMask)
+
+    return topPlayer, botPlayer, topROI, botROI
 
