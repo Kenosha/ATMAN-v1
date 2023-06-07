@@ -662,6 +662,10 @@ class MulStream:
             return self.streams[item]
         else:
             return MulStream(self.streams[item])
+    
+    def attach(self, mySF):
+        fsStm, othStms = self.streams[0], self.streams[1:]
+        return MulStream([fsStm.attach(mySF), *othStms])
         
     def conform(self, start_frame, stop_frame):
         return MulStream([myStm.conform(start_frame, stop_frame) for myStm in self])
@@ -799,7 +803,14 @@ class StreamList:
         return StreamList(outList)
     
     def __repr__(self):
-        return f'StreamList({self.length()} Streams from {self[0].start_frame} to {self[-1].stop_frame})'
+        repStm = self[0]
+        if isinstance(repStm, Stream):
+            stmType = 'Stream'
+            nameStr = repStm.name
+        elif isinstance(repStm, MulStream):
+            stmType = 'MulStream'
+            nameStr = ', '.join([subStm.name for subStm in repStm])
+        return f'StreamList({self.length()} {stmType}s (named {nameStr}) from {self[0].start_frame} to {self[-1].stop_frame})'
     
     def __iter__(self):
         return self.streams.__iter__()
@@ -951,6 +962,15 @@ class NCDecapStream:
 @dataclass(frozen = True) ### despite a frozen dataclass, within the functions below, the features attribute is treated as mutable, so we can update it and use it dynamically for subsequent iterations
 class CachedStream(Stream):
     cache_size: int = 1 ### number of frames before and after the current frame (e.g.: cache size 1 -> three frames in cache.)
+    
+    @staticmethod
+    def from_stream(someStm, cache_size = 1):
+        return CachedStream(someStm.cap, someStm.start_frame, someStm.stop_frame,
+                            is_truncated = someStm.is_truncated, 
+                            cap_color_space = someStm.cap_color_space,
+                            target_color_space = someStm.target_color_space, 
+                            name = someStm.name, features = someStm.features, 
+                            cache_size = cache_size)
     
     def _set_mut_features(self, features_needed = None):
         ### set the mutable features attribute

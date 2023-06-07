@@ -738,6 +738,9 @@ class SFList:
     def apply_whole(self, func):
         return SFList([func(mySF) for mySF in self])
     
+    def add(self, key, value):
+        return SFList([mySF.add(key, value) for mySF in self])
+    
     def merge(self, otherSFList):
         assert self.length() == otherSFList.length(), 'Lists to be merged have to be of same length!'
         return SFList([aSF.merge(bSF) for aSF, bSF in zip(self, otherSFList)])
