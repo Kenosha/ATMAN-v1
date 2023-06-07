@@ -20,9 +20,10 @@ import ATMANpy.funcs.util_funcs as ut
 import ATMANpy.funcs.sf_funcs as sf
 import ATMANpy.funcs.sf_apply_funcs as sa
 import ATMANpy.funcs.extract_funcs as ex
+import ATMANpy.funcs.feature_funcs as ff
 
-from ATMANpy.types.Streams import Stream, CachedStream, NCDecapStream, StreamList
-from ATMANpy.types.Features import StreamFeatures
+from ATMANpy.types.Streams import Stream, CachedStream, NCDecapStream, StreamList, MulStream
+from ATMANpy.types.Features import StreamFeature, StreamFeatures
 from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
 
 # from ATMANpy.types.Lines import CourtLines
@@ -166,7 +167,7 @@ if __name__ == '__main__':
     ### Now that we have courtlines, we can work on segments
     courtSF = HSF.merge(HSF.apply(ex.find_courtlines))
     courtSFs = courtSF.split()
-    grey_streamList = StreamList.from_SFList(courtSFs, cap, color_space = 'grey')
+    grey_streamList = StreamList.from_SFList(courtSFs, cap, target_color_space = 'grey')
 
     if boardSF.is_empty():
             
@@ -188,9 +189,11 @@ if __name__ == '__main__':
     mySFs = courtSFs.merge(boardSF.split())
     
     try:
-        medFrm = HSVFrame.from_csv(burn_vidPath, name = 'median')
-        stdFrm = HSVFrame.from_csv(burn_vidPath, name = 'std')
-    except OSError:
+        medStms = StreamList.from_store('median_backFrm', VIDEO_ID, STORE_NAME, 
+                                        cap_color_space = 'hsv', target_color_space = 'hsv')
+        stdStms = StreamList.from_store('std_backFrm', VIDEO_ID, STORE_NAME, 
+                                        cap_color_space = 'hsv', target_color_space = 'hsv')
+    except FileNotFoundError:
         ### BURN IN
         # collect a set of courtlines and the corresponding frames (HSV!)
         # separate out the 'weird' homographies (i think we might have done this already with the corner correction)
@@ -205,25 +208,53 @@ if __name__ == '__main__':
         
         medFrm, stdFrm = sf.get_median_and_deviation_frame(wrpSF)
         
-        medFrm.to_csv(burn_vidPath)
-        stdFrm.to_csv(burn_vidPath)
+        # medFrm = HSVFrame.from_csv(burn_vidPath, name = 'median_backFrm')
+        # stdFrm = HSVFrame.from_csv(burn_vidPath, name = 'std_backFrm')
+        
+        for someSF in mySFs:
+            start, stop = someSF.get_frames()[0], someSF.get_frames()[-1]
+            medFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = start, stop_frame = stop)
+            stdFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = start, stop_frame = stop)
+            
+        # ### save these frames as a stream! 
+        # # naturally, right now, this is useless and makes things slower.
+        # # however, we make it so that all frames that go into functions are read as Streams, which makes things more elegant.
+        # # Also, down the line, we can have the background adapt and change 
+        # # (like for example to reflect moving shadows of the roof or the stands)
+        # for someSF in mySFs:
+        #     medSF = StreamFeature({frame: medFrm for frame in someSF.get_frames()}, name = 'median_backFrm')
+        #     stdSF = StreamFeature({frame: stdFrm for frame in someSF.get_frames()}, name = 'std_backFrm')
+        #     medSF.save(VIDEO_ID, STORE_NAME, lossless = True) ### need lossless for these, since the margins are small
+        #     stdSF.save(VIDEO_ID, STORE_NAME, lossless = True) ### need lossless for these, since the margins are small
+        #     ### TODO: Lossless saving with FFV1 codec takes ages... try HEVC (aka H265) --> fourcc = HVC1
+        #     ### TODO: Even better: have a PseudoStream class which, instead of a cap, has a single frame!
+        #         ### to initialize it: save a single picture frame lossless, and read it as a stream.
+        #         ### -> we will then automatically get a pseudostream.
     
+        medStms = StreamList.from_store('median_backFrm', VIDEO_ID, STORE_NAME, 
+                                        cap_color_space = 'hsv', target_color_space = 'hsv')
+        stdStms = StreamList.from_store('std_backFrm', VIDEO_ID, STORE_NAME, 
+                                        cap_color_space = 'hsv', target_color_space = 'hsv')
+        
+
     ### Get Burn-In Mask
     featureName = 'foregroundMask'
-    burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, color_space = 'grey')
-    
-    if burnStms.length() == 0:
-        ### Calculate and Save Burn-In Mask
-        params = {'medFrm': medFrm,
-                  'stdFrm': stdFrm,
-                  'minimum_proportion': 0.0125,
+    try:
+        burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
+                                         cap_color_space = 'grey', target_color_space = 'grey')
+    except FileNotFoundError:
+        hsvStms = StreamList.from_SFList(mySFs, cap, 
+                                         cap_color_space = 'bgr', target_color_space = 'hsv')
+        mulStms = StreamList.combine(hsvStms, medStms, stdStms)
+        
+        params = {'minimum_proportion': 0.0125,
                   'minimum_step_gain': 0.002}
-        
-        hsv_streamList = StreamList.from_SFList(mySFs, cap, color_space = 'hsv')
-        burnSFs = hsv_streamList.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_burn_in_mask_iterative, **params)
-        
+        burnSFs = mulStms.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_burn_in_mask_iterative, **params)
+    
         burnSFs.save(VIDEO_ID, STORE_NAME)
-        burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, color_space = 'grey')
+        burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
+                                         cap_color_space = 'grey', target_color_space = 'grey')
+    
     
     # # fileName = 'from_1024_to_1791.avi'
     # # featureName = 'foregroundMask'
