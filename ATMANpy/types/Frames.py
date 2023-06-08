@@ -68,8 +68,9 @@ class Frame:
     def from_video(cls, cap, frame_num, 
                    cap_color_space = 'bgr', name = 'frame'):
         typeMap = {'bgr': BGRFrame,
+                   'hsv': HSVFrame,
                    'grey': GreyFrame,
-                   'hsv': HSVFrame}
+                   'bool': BoolFrame}
         capType = typeMap[cap_color_space]
         
         frame = get_frame(cap, frame_num)
@@ -336,8 +337,16 @@ class BoolFrame(Frame):
         super(BoolFrame, self).__post_init__()
 
         #### TYPE CHECKS ####
-        # arraycheck(self, member_type = 'bool', 
-        #            channel_number = 2, color_channel_length = None)
+        # we can actually deal with a three dim array, by turning it back to Grey
+        arraycheck(self, channel_number = 3, color_channel_length = None)
+        ########################  
+        
+        #### IMMUTABILITY BREAKS ####        
+        ### convert BGR to Grey
+        if len(self.array.shape) == 3:
+            object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
+        #############################  
+    
         #####################
 
     def __repr__(self):
@@ -355,6 +364,13 @@ class BoolFrame(Frame):
     def __invert__(self):
         return BoolFrame(cv.bitwise_not(self.array)) 
 
+    @classmethod
+    def get_converter(cls):
+        return 'to_bool'
+    @classmethod
+    def get_color(cls):
+        return 'bool'
+    
     # def any(self, axes):
     #     return BoolFrame(np.any(self.array, axis = axes))
     # def all(self, axes):

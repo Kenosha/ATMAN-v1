@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import ATMANpy.funcs.util_funcs as atu
 from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
-from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame
+from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame
 
 
 class FramesIterator:
@@ -109,31 +109,6 @@ class Frames:
         return self.shape[0]
     
 @dataclass(frozen = True)
-class GreyFrames(Frames):
-    name: str = 'grey_frames'
-    
-    @classmethod
-    def get_constituent(cls):
-        return GreyFrame
-    
-    @classmethod
-    def get_color(cls):
-        return 'grey'
-    
-    @classmethod
-    def get_converter(cls):
-        return 'to_grey'
-    
-    def to_BGR(self):
-        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2BGR) for imgArr in self.array])
-        return BGRFrames(convArr, name = self.name)
-    
-    def to_HSV(self):
-        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2HSV) for imgArr in self.array])
-        return HSVFrames(convArr, name = self.name)
-        
-    
-@dataclass(frozen = True)
 class BGRFrames(Frames):
     name: str = 'bgr_frames'
     
@@ -181,6 +156,53 @@ class HSVFrames(Frames):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_HSV2BGR) for imgArr in self.array])
         return BGRFrames(convArr, name = self.name)
     
+@dataclass(frozen = True)
+class GreyFrames(Frames):
+    name: str = 'grey_frames'
+    
+    @classmethod
+    def get_constituent(cls):
+        return GreyFrame
+    
+    @classmethod
+    def get_color(cls):
+        return 'grey'
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_grey'
+    
+    def to_BGR(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2BGR) for imgArr in self.array])
+        return BGRFrames(convArr, name = self.name)
+    
+    def to_HSV(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2HSV) for imgArr in self.array])
+        return HSVFrames(convArr, name = self.name)
+        
+    # def to_bool(self): 
+    #     return BoolFrames(self.array, name = self.name) ### NO!! Does not guarantee a true 0/255 boolean frame
+        
+
+@dataclass(frozen = True)
+class BoolFrames(Frames):
+    name: str = 'bool_frames'
+    
+    @classmethod
+    def get_constituent(cls):
+        return BoolFrame
+
+    @classmethod
+    def get_color(cls):
+        return 'bool'
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_bool'
+    
+    def to_grey(self):
+        return GreyFrames(self.array, name = self.name)
+        
 if __name__ == '__main__':
         
     ### VIDEO ######

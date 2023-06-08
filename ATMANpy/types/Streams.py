@@ -18,8 +18,8 @@ from collections import deque
 from random import randrange
 from typing import List, Union
 
-from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame
-from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames
+from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame, BoolFrame
+from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames, BoolFrames
 from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList
 from ATMANpy.types.Caches import Cache
 
@@ -34,6 +34,16 @@ from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names,
 
 #     def length(self):
 #         return stop_frame - start_frame + 1 ### stream contains both start and stop frame!
+
+frameTypeMap = {'bgr': BGRFrame,
+                'grey': GreyFrame,
+                'hsv': HSVFrame,
+                'bool': BoolFrame}
+
+framesTypeMap = {'bgr': BGRFrames,
+                 'grey': GreyFrames,
+                 'hsv': HSVFrames,
+                 'bool': BoolFrames}
 
 def extract_mp_timer(extractMethod):
 
@@ -59,22 +69,18 @@ def extract_mp_timer(extractMethod):
     return timed
 
 def color_converter(imgArr, cap_color_space, target_color_space):
-    typeMap = {'bgr': BGRFrame,
-               'grey': GreyFrame,
-               'hsv': HSVFrame}
-    
     methodMap = {'bgr': 'to_BGR',
                  'grey': 'to_grey',
-                 'hsv': 'to_HSV'}
-    
-    frameType = typeMap[cap_color_space]
-    conversionFuncStr = methodMap[target_color_space]
+                 'hsv': 'to_HSV'} ### note: there is no to_bool! -> unclear how this method would behave!
+                                  ### therefore, boolean frames have to be read in as booleans, without converting!
+    frameType = frameTypeMap[cap_color_space]
     
     origFrm = frameType(imgArr)
     
     if cap_color_space == target_color_space:
         return origFrm
     else:
+        conversionFuncStr = methodMap[target_color_space]
         return getattr(origFrm, conversionFuncStr)()
 
 @dataclass(frozen = True)
@@ -155,10 +161,7 @@ class Stream:
     def __getitem__(self, frame_num):
         ### TODO: allow for item to be a slice also! (this would yield a multiframes)
         assert self.start_frame <= frame_num <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
-        typeMap = {'bgr': BGRFrame,
-                   'grey': GreyFrame,
-                   'hsv': HSVFrame}
-        outType = typeMap[self.target_color_space]
+        outType = frameTypeMap[self.target_color_space]
         
         if self.is_truncated:
             get_num = frame_num - self.start_frame
@@ -217,10 +220,7 @@ class Stream:
                               features = mySF)
 
     def decap(self):
-        typeMap = {'bgr': BGRFrames,
-                   'grey': GreyFrames,
-                   'hsv': HSVFrames}
-        framesType = typeMap[self.target_color_space]
+        framesType = framesTypeMap[self.target_color_space]
         
         if self.is_truncated:
             cap_start, cap_stop = 0, self.stop_frame - self.start_frame
@@ -246,6 +246,11 @@ class Stream:
             
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
             myFrm = myFrm.rename(self.name)
+            
+            try:
+                myDict = self.features[frmNum]
+            except:
+                myDict = {}
             
             myFrm = yield frmNum, myFrm # take in frame, possibly altered, to show 
             
@@ -582,14 +587,7 @@ class StillStream:
                            features = mySF)
 
     def decap(self):
-        ### get type of multiframe
-        typeMap = {'grey': GreyFrames,   ### so ugly, but the alteratives as I see them are worse,
-                   'hsv': HSVFrames,     ### because we can not import MultiFrames into Frames module
-                   'bgr': BGRFrames}     ### due to circular imports. 
-                                            ### Otherwise, we could make an analogue to
-                                            ### the get_constituent class method that 
-                                            ### spits out the corresponding MultiFrames object
-        framesType = typeMap[self.stillFrm.__class__.get_color()]
+        framesType = framesTypeMap[self.stillFrm.__class__.get_color()]
         
         ### get length
         num_elems = self.stop_frame - self.start_frame + 1
@@ -917,10 +915,7 @@ class NCDecapStream:
                   cap_color_space = 'bgr',
                   target_color_space = 'bgr'):
         
-        typeMap = {'bgr': BGRFrames,
-                   'grey': GreyFrames,
-                   'hsv': HSVFrames}
-        framesType = typeMap[target_color_space]
+        framesType = framesTypeMap[target_color_space]
         filterSF = boolSF.filter(boolSF) ## keep only true entries
         frameNums = list(filterSF.keys())
         frames = framesType.from_list(cap, frameNums, 
@@ -1123,10 +1118,7 @@ class CachedStream(Stream):
         return Stream(self.cap, self.start_frame, self.stop_frame, self.features)
     
     def decap(self):
-        typeMap = {'bgr': BGRFrames,
-                   'grey': GreyFrames,
-                   'hsv': HSVFrames}
-        framesType = typeMap[self.target_color_space]
+        framesType = framesTypeMap[self.target_color_space]
         
         if self.is_truncated:
             cap_start, cap_stop = 0, self.stop_frame - self.start_frame
