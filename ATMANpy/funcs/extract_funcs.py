@@ -246,7 +246,37 @@ def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
         
     return roiMask
 
-def find_both_players_smart(hFrm, courtLines, H, topPlayer, botPlayer,
+# def find_both_players_smart(hFrm, courtLines, H, topPlayer, botPlayer,
+#                             foregroundMask, shadowMask,
+#                             initial_ROI_upper = None, initial_ROI_lower = None,
+#                             halfcourtLine_upper = None, halfcourtLine_lower = None,
+#                             player_tracking_scale_factor = 1.2,
+#                             bot_min_bounding_height = 100, bot_min_bounding_width = 40,
+#                             top_min_bounding_height = 100, top_min_bounding_width = 40,
+#                             verbose = False):
+    
+#     topROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
+#                                  player_tracking_scale_factor = player_tracking_scale_factor,
+#                                  min_bounding_height = top_min_bounding_height,
+#                                  min_bounding_width = top_min_bounding_width,
+#                                  halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
+    
+#     botROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
+#                                  player_tracking_scale_factor = player_tracking_scale_factor,
+#                                  min_bounding_height = bot_min_bounding_height,
+#                                  min_bounding_width = bot_min_bounding_width,
+#                                  halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
+    
+#     topPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, topROI, topPlayer, 
+#                                                  shadowMask = shadowMask)
+    
+#     botPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, botROI, botPlayer,
+#                                                  shadowMask = shadowMask)
+
+#     return topPlayer, botPlayer, topROI, botROI
+
+
+def find_both_players_smart(hCache, featCache,
                             foregroundMask, shadowMask,
                             initial_ROI_upper = None, initial_ROI_lower = None,
                             halfcourtLine_upper = None, halfcourtLine_lower = None,
@@ -255,23 +285,28 @@ def find_both_players_smart(hFrm, courtLines, H, topPlayer, botPlayer,
                             top_min_bounding_height = 100, top_min_bounding_width = 40,
                             verbose = False):
     
-    top_ROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
-                                  player_tracking_scale_factor = player_tracking_scale_factor,
-                                  min_bounding_height = top_min_bounding_height,
-                                  min_bounding_width = top_min_bounding_width,
-                                  halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
+    hFrm = hCache[0]
+    courtLines = featCache[0]['courtLines']
+    H = featCache[0]['H']
+    topPlayer = featCache[-1]['topPlayer']
+    botPlayer = featCache[-1]['botPlayer']
     
-    bot_ROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
-                                  player_tracking_scale_factor = player_tracking_scale_factor,
-                                  min_bounding_height = bot_min_bounding_height,
-                                  min_bounding_width = bot_min_bounding_width,
-                                  halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
+    topROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
+                                 player_tracking_scale_factor = player_tracking_scale_factor,
+                                 min_bounding_height = top_min_bounding_height,
+                                 min_bounding_width = top_min_bounding_width,
+                                 halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
     
-    topPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, top_ROI, topPlayer, 
+    botROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
+                                 player_tracking_scale_factor = player_tracking_scale_factor,
+                                 min_bounding_height = bot_min_bounding_height,
+                                 min_bounding_width = bot_min_bounding_width,
+                                 halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
+    
+    topPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, topROI, topPlayer, 
                                                  shadowMask = shadowMask)
     
-    botPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, bot_ROI, botPlayer,
+    botPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, botROI, botPlayer,
                                                  shadowMask = shadowMask)
 
     return topPlayer, botPlayer, topROI, botROI
-

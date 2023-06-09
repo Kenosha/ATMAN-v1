@@ -14,12 +14,13 @@ class Cache:
     ### Cache of size 0 -> 1 member; cache of size 1: 1 + 1 + 1 = 3 members, cache of size 2: 2 + 1 + 2 = 5 members.
     size: int 
     elements: list
+    name: str = 'cache'
     
     @staticmethod
-    def from_list(someList):
+    def from_list(someList, name = 'cache'):
         assert len(someList) % 2 == 1, 'Building a cache from a list requires an uneven number of list members'
         cache_size = (len(someList) - 1) // 2
-        return Cache(cache_size, someList) ### build a full cache from a list!
+        return Cache(cache_size, someList, name = name) ### build a full cache from a list!
     
     def __getitem__(self, item):
         if abs(item) > self.size:
@@ -40,8 +41,8 @@ class Cache:
     
     def add(self, el):
         if self.is_full():
-            return Cache(self.size, [*self.elements[1:], el])
+            return Cache(self.size, [*self.elements[1:], el], name = self.name)
         else:
-            return Cache(self.size, [*self.elements, el])
+            return Cache(self.size, [*self.elements, el], name = self.name)
         
     

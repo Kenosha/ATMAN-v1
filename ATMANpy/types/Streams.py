@@ -172,7 +172,8 @@ class Stream:
                                   cap_color_space = self.cap_color_space, 
                                   name = self.name)
         
-    def argstrings_to_args(self, funcArgs, frmNum, myFrm):
+    @staticmethod
+    def argstrings_to_args(funcArgs, myFrm, myDict):
         ### get arguments to plug into feature extraction function
         
         # differentiate between function arguments that need a stream and those that need a feature
@@ -188,7 +189,7 @@ class Stream:
                 argObj = myFrm
             else:
                 try:
-                    argObj = self.features[frmNum][argStr]
+                    argObj = myDict[argStr]
                 except KeyError as e:
                     raise e
             args.append(argObj)
@@ -244,15 +245,15 @@ class Stream:
         while self.cap.isOpened() and (self.start_frame <= frmNum <= self.stop_frame):
             ret, frame = self.cap.read()
             
+            ### Get the frame in the correct color type
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
             myFrm = myFrm.rename(self.name)
             
-            try:
-                myDict = self.features[frmNum]
-            except:
-                myDict = {}
+            ### Get the feature dictionary
+            myDict = self.features.maybe_get(frmNum)
+            ### if frmNum not found, we get {feat: None for feat in self.get_features()}
             
-            myFrm = yield frmNum, myFrm # take in frame, possibly altered, to show 
+            myFrm = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
             
             if frame_counter:
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
@@ -285,19 +286,14 @@ class Stream:
 
     def show(self, ms_between_frames = 25, frame_counter = False):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
-        frmNum, myFrm = next(gen) ### prime the generator
+        frmNum, myFrm, myDict = next(gen) ### prime the generator
         drawFunc = draw(self.features.get_features())
         
         while True:
-            try:
-                featDict = self.features[frmNum]
-            except KeyError:
-                sendFrm = myFrm
-            else:
-                sendFrm = drawFunc({'cFrm': myFrm}, featDict) ### TODO: Clean this up! myFrm is not always cFrm!
+            sendFrm = drawFunc({'cFrm': myFrm}, myDict) ### TODO: Clean this up! myFrm is not always cFrm!
                  
             try:
-                frmNum, myFrm = gen.send(sendFrm)
+                frmNum, myFrm, myDict = gen.send(sendFrm)
             except StopIteration:
                 cv.destroyAllWindows()
                 break 
@@ -312,7 +308,7 @@ class Stream:
         ### Initialize Generator
         gen = self.generator()
         try:
-            frmNum, myFrm = next(gen) ### prime the generator
+            frmNum, myFrm, myDict = next(gen) ### prime the generator
         except StopIteration:
             return StreamFeatures({})
         
@@ -323,7 +319,7 @@ class Stream:
         while True:
             
             ### get arguments to plug into feature extraction function
-            args = self.argstrings_to_args(funcArgs, frmNum, myFrm) ### 
+            args = self.__class__.argstrings_to_args(funcArgs, myFrm, myDict) ### 
                 
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
             assert len(args) == len(funcArgs)
@@ -356,7 +352,7 @@ class Stream:
                 
             ### iterate the generator.
             try:
-                frmNum, myFrm = gen.send(None) ### sending None -> nothing is shown! TODO: "Loud" option -> extract + show.
+                frmNum, myFrm, myDict = gen.send(None) ### sending None -> nothing is shown! TODO: "Loud" option -> extract + show.
             except StopIteration:
                 break 
         
@@ -383,7 +379,7 @@ class Stream:
         ### Initialize Generator
         gen = self.generator()
         try:
-            frmNum, myFrm = next(gen) ### prime the generator
+            frmNum, myFrm, myDict = next(gen) ### prime the generator
             generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
         except StopIteration:
             pool.close()
@@ -398,7 +394,7 @@ class Stream:
             if not generator_is_exhausted and len(pending) < num_workers: #if there is space in the queue...
                 if where is None or where[frmNum]: #and we actually want to calculate the function...
                     ### get arguments to plug into feature extraction function
-                    args = Stream.argstrings_to_args(self, funcArgs, frmNum, myFrm)
+                    args = self.__class__.argstrings_to_args(funcArgs, myFrm, myDict)
                         
                     ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
                     assert len(args) == len(funcArgs)
@@ -421,7 +417,7 @@ class Stream:
             if not generator_is_exhausted and len(pending) < num_workers: ### only when there is space in the queue
                 ### iterate the generator.
                 try:
-                    frmNum, myFrm = gen.send(None) ### sending None -> nothing is shown! TODO: "Loud" option -> extract + show.
+                    frmNum, myFrm, myDict = gen.send(None) ### sending None -> nothing is shown! TODO: "Loud" option -> extract + show.
                 except StopIteration:
                     pool.close() ### pool closed once generator has nothing to yield --> no new elements will be added.
                     generator_is_exhausted = True
@@ -533,6 +529,9 @@ class StillStream:
     name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
     features: StreamFeatures = StreamFeatures({})
        
+    def __post_init__(self):
+        pass
+    
     @staticmethod
     def from_file(framePath, name = None, cap_color_space = 'bgr', target_color_space = 'bgr'):
         imgArr = np.load(framePath)
@@ -558,15 +557,13 @@ class StillStream:
         return StillStream.from_file(videoPath, name = featureName,
                                      frame_color_space = frame_color_space)
     
-    def __post_init__(self):
-        pass
+    @staticmethod
+    def argstrings_to_args(funcArgs, myFrm, myDict):
+        return Stream.argstrings_to_funcs(funcArgs, myFrm, myDict)
     
-    def __getitem__(self, frameNum):
-        assert self.start_frame <= frameNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+    def __getitem__(self, frmNum):
+        assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         return self.stillFrm
-    
-    def argstrings_to_args(self, funcArgs, frmNum, myFrm):
-        return Stream.argstrings_to_funcs(funcArgs, frmNum, myFrm)
     
     def conform(self, start_frame, stop_frame):
         return StillStream(self.stillFrm, start_frame, stop_frame, 
@@ -606,9 +603,13 @@ class StillStream:
         frmNum = self.start_frame
     
         while self.start_frame <= frmNum <= self.stop_frame:
+            ### get the frame
             myFrm = self.stillFrm
             
-            myFrm = yield frmNum, myFrm # take in frame, possibly altered, to show 
+            ### get the features
+            myDict = self.features.maybe_get(frmNum)
+            
+            myFrm = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
             
             if frame_counter:
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
@@ -639,13 +640,28 @@ class MulStream:
     
     def __post_init__(self):
         ### NOTE: The features, start and end frame taken for the entire MulStream are stored in the first Stream!
+        # leadStm = self[0]
+        # object.__setattr__(self, 'leadStm', leadStm)
+        ### TODO: Something smarter. 
+            # canonical features -> union of all.
+            # ... start_frame -> check if they all agree (mindful of caching), take any 
+            # ... stop_frame -> same 
+            # ... cache_size -> check all CachedStreams, take largest
+        
         canonical_features = self[0].features
         canonical_start_frame = self[0].start_frame ### this fucks things if there is a difference 
         canonical_stop_frame = self[0].stop_frame   ### between starts and stops, but the generator will pick this up.
-        
+
         object.__setattr__(self, 'features', canonical_features)
         object.__setattr__(self, 'start_frame', canonical_start_frame)
         object.__setattr__(self, 'stop_frame', canonical_stop_frame)
+        
+        try:
+            canonical_cache_size = self[0].cache_size
+        except:
+            pass
+        else:
+            object.__setattr__(self, 'cache_size', canonical_cache_size)
         
     @staticmethod
     def from_streams(*streams):
@@ -661,6 +677,28 @@ class MulStream:
         else:
             return MulStream(self.streams[item])
     
+    ### So that a MulStream may be extracted from with caching
+    def _set_mut_features(self, features_needed = None):
+        for myStm in self:
+            try: ### this will work for all cached streams
+                myStm._set_mut_features(features_needed = features_needed)
+            except AttributeError:
+                pass
+    
+    def _update_mut_features(self, frmNum, updDict):
+        for myStm in self:
+            try: ### this will work for all cached streams
+                myStm._update_mut_features(frmNum, updDict)
+            except AttributeError:
+                pass
+    
+    def _delete_mut_features(self):
+        for myStm in self:
+            try: ### this will work for all cached streams
+                myStm._delete_mut_features()
+            except AttributeError:
+                pass
+        
     def attach(self, mySF):
         fsStm, othStms = self.streams[0], self.streams[1:]
         return MulStream([fsStm.attach(mySF), *othStms])
@@ -671,11 +709,12 @@ class MulStream:
     def decap(self):
         return MulStream([myStm.decap() for myStm in self])
     
-    def argstrings_to_args(self, funcArgs, frmNum, frameList):
+    @staticmethod
+    def argstrings_to_args(funcArgs, frameList, featDict_or_Cache):
         ### get arguments to plug into feature extraction function
-        
         # differentiate between function arguments that need a stream and those that need a feature
         is_from_stream = lambda myStr: myStr.endswith('Mask') or myStr.endswith('Frm')
+        is_a_cache = lambda myStr: myStr.endswith('Cache')
         
         args = []
         for argStr in funcArgs:
@@ -683,9 +722,16 @@ class MulStream:
                 matching_frames = [myFrm for myFrm in frameList if myFrm.name == argStr]
                 assert len(matching_frames) == 1, f'There has to be one (and only one) frame corresponding to {argStr}, instead found {len(matching_frames)}!'
                 argObj = matching_frames[0]
+            elif is_a_cache(argStr):
+                if argStr == 'featCache':
+                    argObj = featDict_or_Cache ### typecheck here? or just let it fail?
+                else:
+                    matching_caches = [myCache for myCache in frameList if myCache.name == argStr]
+                    assert len(matching_caches) == 1, f'There has to be one (and only one) cache corresponding to {argStr}, instead found {len(matching_frames)}!'
+                    argObj = matching_caches[0]
             else:
                 try:
-                    argObj = self[0].features[frmNum][argStr] ### NOTE: The features are stored in the first Stream!
+                    argObj = featDict[argStr]
                 except KeyError as e:
                     raise e
             args.append(argObj)
@@ -715,25 +761,28 @@ class MulStream:
             
         def step_generators(genList):
             numList = []
-            yieldList = []
+            yieldList_frames = []
+            yieldList_feats  = []
             generator_states = []
             for gen in genList:
                 try:
-                    frmNum, frame = next(gen)
+                    frmNum, myFrm, myFeat = next(gen)    ### the yielded feature dictionaries are ignored! 
+                                                         ### all that matters is the first feature (see post_init).
                 except StopIteration:
                     generator_states.append(False)
                 else:
                     generator_states.append(True)
                     numList.append(frmNum)
-                    yieldList.append(frame)
-                    
-            return numList, yieldList, generator_states
+                    yieldList_frames.append(myFrm)
+                    yieldList_feats.append(myFeat)
+                   
+            return numList, yieldList_frames, yieldList_feats, generator_states
         
         ### initialize the generators
         genList = [myStm.generator() for myStm in self]
         
         ### prime the generator and get the generator states
-        numList, yieldList, generator_states = step_generators(genList)
+        numList, yieldList_frames, yieldList_feats, generator_states = step_generators(genList)
         
         while continue_generators(generator_states):
             ### figure out unique frame number
@@ -741,14 +790,18 @@ class MulStream:
             frmNum = numList[0]
             
             ### yield previous result (guaranteed to be there, because continue generators is true!)
-            yield frmNum, yieldList
+            yield frmNum, yieldList_frames, yieldList_feats[0] ### first stream is canonical!
+                                                                ## this could be a featDict or a Cache of featDicts.
             
             ### get the new results (or a stop iteration)
-            numList, yieldList, generator_states = step_generators(genList)
+            numList, yieldList_frames, yieldList_feats, generator_states = step_generators(genList)
             
         
-    def extract(self, featureFunc, where = None, **kwargs):
-        return Stream.extract(self, featureFunc, where = where, **kwargs)
+    def extract(self, featureFunc, **kwargs):
+        canonicalType = self[0].__class__ ### if the first object is a Stream, we use normal extraction
+                                            # if the first object is a CachedStream, we use cached extraction
+                                            # (with mutable features, etc.)
+        return canonicalType.extract(self, featureFunc, **kwargs)
         
 @dataclass(frozen = True)
 class StreamList:
@@ -760,10 +813,16 @@ class StreamList:
     @staticmethod
     def from_SFList(sfList, cap, 
                     cap_color_space = 'bgr', 
-                    target_color_space = 'bgr'):
-        return StreamList([Stream.from_SF(mySF, cap, 
-                                          cap_color_space = cap_color_space, 
-                                          target_color_space = target_color_space) for mySF in sfList])
+                    target_color_space = 'bgr',
+                    cache_size = None):
+        if cache_size is None:
+            return StreamList([Stream.from_SF(mySF, cap, 
+                                              cap_color_space = cap_color_space, 
+                                              target_color_space = target_color_space) for mySF in sfList])
+        else:
+            return StreamList([CachedStream.from_SF(mySF, cap, cache_size = cache_size,
+                                                    cap_color_space = cap_color_space, 
+                                                    target_color_space = target_color_space) for mySF in sfList])
     
     @staticmethod
     def from_store(featureName, videoName, storeName, 
@@ -862,14 +921,18 @@ class DecapStream:
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         return self.frames[item - self.start_frame]
 
-    def argstrings_to_args(self, funcArgs, frmNum, myFrm):
-        return Stream.argstrings_to_args(self, funcArgs, frmNum, myFrm)
+    @staticmethod
+    def argstrings_to_args(funcArgs, myFrm, myDict):
+        return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
         for idx, myFrm in enumerate(self.frames):
             frmNum = self.start_frame + idx
-            myFrm = yield frmNum, myFrm # take in frame, possibly altered, to show 
+            
+            myDict = self.features.maybe_get(frmNum)
+            
+            myFrm = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
 
             if frame_counter:
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
@@ -895,14 +958,14 @@ class DecapStream:
 class NCDecapStream:
     ### Non-Consecutive Decapped Stream -> a collection of frames which do not have to be consecutive
     frames: Union[GreyFrames, BGRFrames, HSVFrames]
-    frameNums: List
+    frmNums: List
     features: StreamFeatures = StreamFeatures({})
     
     def __repr__(self):
         if self.is_empty():
             return 'NCDecapStream({})'
         else:
-            return f'NCDecapStream(frames = {self.frames}, frameNums = {self.frameNums[0]} ... {self.frameNums[-1]}, features = {self.features})'
+            return f'NCDecapStream(frames = {self.frames}, frmNums = {self.frmNums[0]} ... {self.frmNums[-1]}, features = {self.features})'
     
     def length(self):
         return self.frames.length()
@@ -917,25 +980,27 @@ class NCDecapStream:
         
         framesType = framesTypeMap[target_color_space]
         filterSF = boolSF.filter(boolSF) ## keep only true entries
-        frameNums = list(filterSF.keys())
-        frames = framesType.from_list(cap, frameNums, 
+        frmNums = list(filterSF.keys())
+        frames = framesType.from_list(cap, frmNums, 
                                       cap_color_space = cap_color_space,
                                       name = boolSF.name) ### TODO: speed up the get_framelist function by threading.
-        return NCDecapStream(frames, frameNums, filterSF)
+        return NCDecapStream(frames, frmNums, filterSF)
     
-    def attach(self, mySF: StreamFeatures):
-        return NCDecapStream(self.frames, self.frameNums, features = mySF)
-    
-    def argstrings_to_args(self, funcArgs, frmNum, myFrm):
-        return Stream.argstrings_to_args(self, funcArgs, frmNum, myFrm)
+    @staticmethod
+    def argstrings_to_args(self, funcArgs, myFrm, myDict):
+        return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
 
+    def attach(self, mySF: StreamFeatures):
+        return NCDecapStream(self.frames, self.frmNums, features = mySF)
+    
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
-        for frameNum, myFrm in zip(self.frameNums, self.frames):
+        for frmNum, myFrm in zip(self.frmNums, self.frames):
+            myDict = self.features.maybe_get(frmNum)
             
-            myFrm = yield frameNum, myFrm # take in frame, possibly altered, to show 
+            myFrm = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
             if frame_counter:
-                myFrm = myFrm.put(str(frameNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
+                myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
                 still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
@@ -957,6 +1022,15 @@ class NCDecapStream:
 @dataclass(frozen = True) ### despite a frozen dataclass, within the functions below, the features attribute is treated as mutable, so we can update it and use it dynamically for subsequent iterations
 class CachedStream(Stream):
     cache_size: int = 1 ### number of frames before and after the current frame (e.g.: cache size 1 -> three frames in cache.)
+    
+    @staticmethod
+    def from_SF(mySF, cap, cache_size = 1, 
+                cap_color_space = 'bgr', target_color_space = 'bgr'):
+        start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
+        return CachedStream(cap, start, stop, cache_size = cache_size,
+                            cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                            is_truncated = False, 
+                            features = mySF, name = mySF.name)
     
     @staticmethod
     def from_stream(someStm, cache_size = 1):
@@ -998,11 +1072,27 @@ class CachedStream(Stream):
     def _delete_mut_features(self):
         object.__delattr__(self, '_mut_features')
         
+    @staticmethod
+    def argstrings_to_args(funcArgs, frameCache, featCache):
+        ### get arguments to plug into feature extraction function
+        
+        # differentiate between function arguments that need a stream and those that need a feature
+        is_from_stream = lambda myStr: myStr.endswith('Mask') or myStr.endswith('Frm')
+        
+        args = []
+        for argStr in funcArgs:
+            if argStr == frameCache.name:
+                args.append(frameCache)
+            elif argStr == featCache.name:
+                args.append(featCache)
+        return args
+    
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
-            # 2) the featCache -> current feature at center, with future and past features around    
-        frameCache = Cache(self.cache_size, [])
+            # 2) the featCache -> current feature at center, with future and past features around   
+        framecacheName = self.name.replace('Frm', '').replace('Mask', '') + 'Cache'
+        frameCache = Cache(self.cache_size, [], name = framecacheName)
         # featCache = Cache(self.cache_size, [])
         ### Update: The featCache is not updated, but rebuilt, so that changes to past features can be used by featFunc.
         featIndices = frameCache.get_indices()
@@ -1024,7 +1114,7 @@ class CachedStream(Stream):
             ### feed/build the caches
             frameCache = frameCache.add(myFrm)
             features = [self._mut_features.maybe_get(idx + cntNum) for idx in featIndices]
-            featCache = Cache.from_list(features)
+            featCache = Cache.from_list(features, name = 'featCache')
             
             ### check if we are supposed to yield -> only once cache is full!
             if frameCache.is_full():
@@ -1073,7 +1163,7 @@ class CachedStream(Stream):
         ### Establish function arguments and return shape
         funcArgs = get_positional_arguments(featureFunc)
         funcVals = get_return_names(featureFunc)
-        assert funcArgs == ['frameCache', 'featCache'], f'Function passed in to CachedStream.extract should have *["frameCache", "featCache"] as positional arguments, not *{funcArgs}'
+        # assert funcArgs == ['frameCache', 'featCache'], f'Function passed in to CachedStream.extract should have *["frameCache", "featCache"] as positional arguments, not *{funcArgs}'
         
         self._set_mut_features(features_needed = funcVals)
         
@@ -1083,8 +1173,14 @@ class CachedStream(Stream):
         
         streamDict = {}
         while True:
+            ### get arguments to plug into feature extraction function
+            args = self.__class__.argstrings_to_args(funcArgs, frameCache, featCache) ### 
+                
+            ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
+            assert len(args) == len(funcArgs)
+            
             ### call extraction function
-            funcOut = featureFunc(frameCache, featCache, **kwargs)
+            funcOut = featureFunc(*args, **kwargs)
             
             ### assign to a dictionary, depending on whether we get one or multiple return values
             if len(funcVals) == 1:
@@ -1200,7 +1296,15 @@ class RandStream(Stream):
             self.cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
             ret, frame = self.cap.read()
             
-            frame = yield frmNum, frame # take in frame, possibly altered, to show 
+            ### Get the frame in the correct color type
+            myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
+            myFrm = myFrm.rename(self.name)
+            
+            ### Get the feature dictionary
+            myDict = self.features.maybe_get(frmNum)
+            ### if frmNum not found, we get {feat: None for feat in self.get_features()}
+            
+            frame = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
             # frame = yield frame 
             ## TODO: include featDict as a thing the generator yields!
             
