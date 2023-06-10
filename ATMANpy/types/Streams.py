@@ -88,20 +88,22 @@ class Stream:
     cap: cv.VideoCapture
     start_frame: int
     stop_frame: int
-    is_truncated: bool = False ### if this is set to True, then the cap does not have to be set to start frame
+    truncation_anchor: int = 0 ### instead of a truncation flag. this anchor frame allows comparison between truncated streams and non-truncated streams by specifying the first frame of truncation.
     cap_color_space: str = 'bgr'
     target_color_space: str = 'bgr'
     name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
     features: StreamFeatures = StreamFeatures({})
         
     @staticmethod
-    def from_SF(mySF, cap, 
+    def from_SF(mySF, cap, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr'):
+        if name is None:
+            name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return Stream(cap, start, stop, 
+                      truncation_anchor = 0, 
                       cap_color_space = cap_color_space, target_color_space = target_color_space, 
-                      is_truncated = False, 
-                      features = mySF, name = mySF.name)
+                      features = mySF, name = name)
     
     @staticmethod
     def from_file(filePath, name = None,
@@ -116,8 +118,8 @@ class Stream:
         start, stop = int(start), int(stop)
         
         return Stream(cap, start, stop, 
+                      truncation_anchor = start, ### NOTE: truncation anchor is the first frame given in file name! 
                       cap_color_space = cap_color_space, target_color_space = target_color_space, 
-                      is_truncated = True, 
                       name = name)
     
     @staticmethod
@@ -158,15 +160,12 @@ class Stream:
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
     
-    def __getitem__(self, frame_num):
+    def __getitem__(self, frmNum):
         ### TODO: allow for item to be a slice also! (this would yield a multiframes)
-        assert self.start_frame <= frame_num <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+        assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         outType = frameTypeMap[self.target_color_space]
         
-        if self.is_truncated:
-            get_num = frame_num - self.start_frame
-        else:
-            get_num = frame_num
+        get_num = frmNum - self.truncation_anchor
         
         return outType.from_video(self.cap, get_num, 
                                   cap_color_space = self.cap_color_space, 
@@ -198,7 +197,7 @@ class Stream:
     def conform(self, start_frame, stop_frame):
         ### TODO: conform also features!
         return self.__class__(self.cap, start_frame, stop_frame, 
-                              is_truncated = self.is_truncated, 
+                              truncation_anchor = self.truncation_anchor,
                               cap_color_space = self.cap_color_space, 
                               target_color_space = self.target_color_space,
                               name = self.name,
@@ -206,7 +205,7 @@ class Stream:
     
     def recolor(self, new_target_color_space):
         return self.__class__(self.cap, self.start_frame, self.stop_frame, 
-                              is_truncated = self.is_truncated, 
+                              truncation_anchor = self.truncation_anchor,
                               cap_color_space = self.cap_color_space, 
                               target_color_space = new_target_color_space,
                               name = self.name,
@@ -214,7 +213,7 @@ class Stream:
     
     def attach(self, mySF: StreamFeatures):
         return self.__class__(self.cap, self.start_frame, self.stop_frame, 
-                              is_truncated = self.is_truncated, 
+                              truncation_anchor = self.truncation_anchor, 
                               cap_color_space = self.cap_color_space, 
                               target_color_space = self.target_color_space,
                               name = self.name,
@@ -223,23 +222,17 @@ class Stream:
     def decap(self):
         framesType = framesTypeMap[self.target_color_space]
         
-        if self.is_truncated:
-            cap_start, cap_stop = 0, self.stop_frame - self.start_frame
-        else:
-            cap_start, cap_stop = self.start_frame, self.stop_frame
-            
+        cap_start = self.start_frame - self.truncation_anchor
+        cap_stop = self.stop_frame - self.truncation_anchor
+        
         myFrms = framesType.from_video(self.cap, cap_start, cap_stop,
                                        cap_color_space = self.cap_color_space,
                                        name = self.name)
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
-            
-        if self.is_truncated:
-            self.cap.set(cv.CAP_PROP_POS_FRAMES, 0)
-        else:
-            self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame)
-            
+        
+        self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame - self.truncation_anchor)        
         frmNum = self.start_frame
         
         while self.cap.isOpened() and (self.start_frame <= frmNum <= self.stop_frame):
@@ -263,10 +256,7 @@ class Stream:
                 if not still_showing:
                     break
             
-            if self.is_truncated:
-                frmNum += 1
-            else:    
-                frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES))
+            frmNum += 1
         
         else:
             cv.destroyAllWindows()
@@ -727,11 +717,11 @@ class MulStream:
                     argObj = featDict_or_Cache ### typecheck here? or just let it fail?
                 else:
                     matching_caches = [myCache for myCache in frameList if myCache.name == argStr]
-                    assert len(matching_caches) == 1, f'There has to be one (and only one) cache corresponding to {argStr}, instead found {len(matching_frames)}!'
+                    assert len(matching_caches) == 1, f'There has to be one (and only one) cache corresponding to {argStr}, instead found {len(matching_caches)}!'
                     argObj = matching_caches[0]
             else:
                 try:
-                    argObj = featDict[argStr]
+                    argObj = featDict_or_Cache[argStr]
                 except KeyError as e:
                     raise e
             args.append(argObj)
@@ -803,6 +793,15 @@ class MulStream:
                                             # (with mutable features, etc.)
         return canonicalType.extract(self, featureFunc, **kwargs)
         
+    @extract_mp_timer
+    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
+    
+    @extract_mp_timer
+    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
+        
+    
 @dataclass(frozen = True)
 class StreamList:
     ### The StreamList holds many streams in series:
@@ -811,16 +810,17 @@ class StreamList:
     streams: List[Stream]
     
     @staticmethod
-    def from_SFList(sfList, cap, 
+    def from_SFList(sfList, cap, name = None,
                     cap_color_space = 'bgr', 
                     target_color_space = 'bgr',
                     cache_size = None):
         if cache_size is None:
-            return StreamList([Stream.from_SF(mySF, cap, 
+            return StreamList([Stream.from_SF(mySF, cap, name = name,
                                               cap_color_space = cap_color_space, 
                                               target_color_space = target_color_space) for mySF in sfList])
         else:
-            return StreamList([CachedStream.from_SF(mySF, cap, cache_size = cache_size,
+            return StreamList([CachedStream.from_SF(mySF, cap, name = name,
+                                                    cache_size = cache_size,
                                                     cap_color_space = cap_color_space, 
                                                     target_color_space = target_color_space) for mySF in sfList])
     
@@ -916,6 +916,7 @@ class DecapStream:
     start_frame: int
     stop_frame: int
     features: StreamFeatures = StreamFeatures({})
+    name: str = None
 
     def __getitem__(self, item):
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
@@ -960,6 +961,7 @@ class NCDecapStream:
     frames: Union[GreyFrames, BGRFrames, HSVFrames]
     frmNums: List
     features: StreamFeatures = StreamFeatures({})
+    name: str = None
     
     def __repr__(self):
         if self.is_empty():
@@ -1023,19 +1025,33 @@ class NCDecapStream:
 class CachedStream(Stream):
     cache_size: int = 1 ### number of frames before and after the current frame (e.g.: cache size 1 -> three frames in cache.)
     
+    def __post_init__(self):
+        ### Here, important to check that the cache size is actually available within the stream!
+        total_frames = self.cap.get(cv.CAP_PROP_FRAME_COUNT)  ### total number of frames
+        fs_avail, ls_avail = self.truncation_anchor, self.truncation_anchor + total_frames ### available frames, in absolute terms (relative to the master cap)
+        
+        start_cap, stop_cap = self.start_frame - self.cache_size, self.stop_frame + self.cache_size
+        
+        if not fs_avail <= start_cap <= ls_avail:
+            raise Exception(f'Starting frame {start_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
+        if not fs_avail <= stop_cap <= ls_avail:
+            raise Exception(f'Stop frame {stop_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
+            
     @staticmethod
-    def from_SF(mySF, cap, cache_size = 1, 
+    def from_SF(mySF, cap, cache_size = 1, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr'):
+        if name is None:
+            name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return CachedStream(cap, start, stop, cache_size = cache_size,
+                            truncation_anchor = 0,
                             cap_color_space = cap_color_space, target_color_space = target_color_space, 
-                            is_truncated = False, 
-                            features = mySF, name = mySF.name)
+                            features = mySF, name = name)
     
     @staticmethod
     def from_stream(someStm, cache_size = 1):
         return CachedStream(someStm.cap, someStm.start_frame, someStm.stop_frame,
-                            is_truncated = someStm.is_truncated, 
+                            truncation_anchor = someStm.truncation_anchor, 
                             cap_color_space = someStm.cap_color_space,
                             target_color_space = someStm.target_color_space, 
                             name = someStm.name, features = someStm.features, 
@@ -1100,9 +1116,8 @@ class CachedStream(Stream):
         ### mutable features always have to exist here!
         assert hasattr(self, '_mut_features'), 'To create a generator for a CachedStream, mutable features always have to exist!'
     
-        self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame - self.cache_size)
         frmNum = self.start_frame - self.cache_size
-        
+        self.cap.set(cv.CAP_PROP_POS_FRAMES, frmNum - self.truncation_anchor)       
         while self.cap.isOpened() and (self.start_frame - self.cache_size <= frmNum <= self.stop_frame + self.cache_size):
             cntNum = frmNum - self.cache_size ### the central frame in the current iteration
 
@@ -1118,7 +1133,7 @@ class CachedStream(Stream):
             
             ### check if we are supposed to yield -> only once cache is full!
             if frameCache.is_full():
-                myFrm = yield frmNum - frameCache.size, frameCache, featCache # take in frame, possibly altered, to show
+                myFrm = yield cntNum, frameCache, featCache # take in frame, possibly altered, to show
             else:
                 myFrm = None
             
@@ -1214,17 +1229,24 @@ class CachedStream(Stream):
         return Stream(self.cap, self.start_frame, self.stop_frame, self.features)
     
     def decap(self):
+        ### Update: When decapping a cached stream, the start_frame and stop_frame refer
+        # to the first and last yielded frames. Hence, the Frames object needs to include 
+        # a cache to the left and right of start_frame and stop_frame resp.
+        # in principle, this is how the CachedStream behaves: 
+        # Its generator begins cycling before start frame, and ends after stop_frame. 
+        
+        ### get starting and ending frames including cache
+        # (the existence of which is guaranteed by post_init!)
+        start_cap = self.start_frame - self.cache_size - self.truncation_anchor
+        stop_cap = self.stop_frame + self.cache_size - self.truncation_anchor
+            
         framesType = framesTypeMap[self.target_color_space]
         
-        if self.is_truncated:
-            cap_start, cap_stop = 0, self.stop_frame - self.start_frame
-        else:
-            cap_start, cap_stop = self.start_frame, self.stop_frame
-            
-        myFrms = framesType.from_video(self.cap, cap_start, cap_stop,
+        myFrms = framesType.from_video(self.cap, start_cap, stop_cap,
                                        cap_color_space = self.cap_color_space,
                                        name = self.name)
-        return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, cache_size = self.cache_size)
+        return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, 
+                                 cache_size = self.cache_size, name = self.name)
 
     def show(self):
         self.decache().show()
@@ -1242,7 +1264,8 @@ class DecapCachedStream(DecapStream):
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
             # 2) the featCache -> current feature at center, with future and past features around    
-        frameCache = Cache(self.cache_size, [])
+        framecacheName = self.name.replace('Frm', '').replace('Mask', '') + 'Cache'
+        frameCache = Cache(self.cache_size, [], name = framecacheName)
         # featCache = Cache(self.cache_size, [])
         ### Update: The featCache is not updated, but rebuilt, so that changes to past features can be used by featFunc.
         featIndices = frameCache.get_indices()
@@ -1251,17 +1274,17 @@ class DecapCachedStream(DecapStream):
         assert hasattr(self, '_mut_features'), 'To create a generator for a CachedStream, mutable features always have to exist!'
     
         for idx, myFrm in enumerate(self.frames):
-            frmNum = self.start_frame + idx            
+            frmNum = self.start_frame + idx - self.cache_size ### the frame we are currently getting!
             cntNum = frmNum - self.cache_size ### the central frame in the current iteration
 
             ### feed/build the caches
             frameCache = frameCache.add(myFrm)
             features = [self._mut_features.maybe_get(idx + cntNum) for idx in featIndices]
-            featCache = Cache.from_list(features)
+            featCache = Cache.from_list(features, name = 'featCache')
             
             ### check if we are supposed to yield -> only once cache is full!
             if frameCache.is_full():
-                myFrm = yield frmNum - frameCache.size, frameCache, featCache # take in frame, possibly altered, to show
+                myFrm = yield cntNum, frameCache, featCache # take in frame, possibly altered, to show
             else:
                 myFrm = None
             
