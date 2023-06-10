@@ -568,7 +568,7 @@ def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame):
         return max(ovlp_sum / refn_sum, LOWER_BOUND_WEIGHT)
     
 
-def find_player_contour_with_overlap(hFrm, burninMask, roiMask, playerContour_prev, shadowMask = None, 
+def find_player_contour_with_overlap(gFrm, burninMask, roiMask, playerContour_prev, shadowMask = None, 
                                      verbose = False):
     
     MIN_PLAYER_SIZE = 50 ### minimum size of player, in pixels.
@@ -584,7 +584,7 @@ def find_player_contour_with_overlap(hFrm, burninMask, roiMask, playerContour_pr
     
     if len(cntList) > 0:
         weight_func = partial(calculate_contour_overlap_factor, 
-                              frame = hFrm, cnt_reference = playerContour_prev)
+                              frame = gFrm, cnt_reference = playerContour_prev)
         
         cntList = [Contour(c) for c in cntList]
         

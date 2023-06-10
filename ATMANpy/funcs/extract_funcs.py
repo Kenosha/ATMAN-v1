@@ -207,7 +207,7 @@ def get_shadow_mask(hFrm, H, median_backFrm,
     
     return shadowMask
 
-def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
+def adaptive_player_ROI(playerContour, initialROI, H, gFrm,
                         player_tracking_scale_factor = 1.2,
                         min_bounding_height = 100,
                         min_bounding_width = 40,
@@ -220,18 +220,18 @@ def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
         initial_projROI = get_projected_ROI(initialROI, H)
     
     if playerContour is None:
-        roiMask = hFrm.within_region(initial_projROI)
+        roiMask = gFrm.within_region(initial_projROI)
     else:
         enclReg = playerContour.enclosing_region()
         updated_projROI = enclReg.scale_equal(player_tracking_scale_factor)
         updated_projROI = updated_projROI.enlarge(to_min_height = min_bounding_height, to_min_width = min_bounding_width)
-        roiMask = hFrm.within_region(updated_projROI)
+        roiMask = gFrm.within_region(updated_projROI)
         
     # if not halfcourtROI is None:
     #     ### to prevent adaptive ROIs to spill over into the other player's court
     #     ### we can impose a half court mask
     #     proj_halfcourtROI = get_projected_ROI(halfcourtROI, H)
-    #     halfcourtMask = hFrm.within_region(proj_halfcourtROI)
+    #     halfcourtMask = gFrm.within_region(proj_halfcourtROI)
     #     roiMask = roiMask & halfcourtMask
         
     if not halfcourtLine is None:
@@ -241,42 +241,12 @@ def adaptive_player_ROI(playerContour, initialROI, H, hFrm,
             raise Exception('When specifying halfcourt boundary in player selection, specify whether to keep everything above or below.')
         else:
             proj_halfcourtLine = halfcourtLine.apply_homography(H).round_points()
-            halfMask = getattr(hFrm, keep_below_or_above)(proj_halfcourtLine)
+            halfMask = getattr(gFrm, keep_below_or_above)(proj_halfcourtLine)
             roiMask = roiMask & halfMask
         
     return roiMask
 
-# def find_both_players_smart(hFrm, courtLines, H, topPlayer, botPlayer,
-#                             foregroundMask, shadowMask,
-#                             initial_ROI_upper = None, initial_ROI_lower = None,
-#                             halfcourtLine_upper = None, halfcourtLine_lower = None,
-#                             player_tracking_scale_factor = 1.2,
-#                             bot_min_bounding_height = 100, bot_min_bounding_width = 40,
-#                             top_min_bounding_height = 100, top_min_bounding_width = 40,
-#                             verbose = False):
-    
-#     topROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
-#                                  player_tracking_scale_factor = player_tracking_scale_factor,
-#                                  min_bounding_height = top_min_bounding_height,
-#                                  min_bounding_width = top_min_bounding_width,
-#                                  halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
-    
-#     botROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
-#                                  player_tracking_scale_factor = player_tracking_scale_factor,
-#                                  min_bounding_height = bot_min_bounding_height,
-#                                  min_bounding_width = bot_min_bounding_width,
-#                                  halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
-    
-#     topPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, topROI, topPlayer, 
-#                                                  shadowMask = shadowMask)
-    
-#     botPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, botROI, botPlayer,
-#                                                  shadowMask = shadowMask)
-
-#     return topPlayer, botPlayer, topROI, botROI
-
-
-def find_both_players_smart(hCache, featCache,
+def find_both_players_smart(gCache, featCache,
                             foregroundMask, shadowMask,
                             initial_ROI_upper = None, initial_ROI_lower = None,
                             halfcourtLine_upper = None, halfcourtLine_lower = None,
@@ -285,28 +255,28 @@ def find_both_players_smart(hCache, featCache,
                             top_min_bounding_height = 100, top_min_bounding_width = 40,
                             verbose = False):
     
-    hFrm = hCache[0]
+    gFrm = gCache[0]
     courtLines = featCache[0]['courtLines']
     H = featCache[0]['H']
     topPlayer = featCache[-1]['topPlayer']
     botPlayer = featCache[-1]['botPlayer']
     
-    topROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, hFrm,
+    topROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, gFrm,
                                  player_tracking_scale_factor = player_tracking_scale_factor,
                                  min_bounding_height = top_min_bounding_height,
                                  min_bounding_width = top_min_bounding_width,
                                  halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
     
-    botROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, hFrm,
+    botROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, gFrm,
                                  player_tracking_scale_factor = player_tracking_scale_factor,
                                  min_bounding_height = bot_min_bounding_height,
                                  min_bounding_width = bot_min_bounding_width,
                                  halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
     
-    topPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, topROI, topPlayer, 
+    topPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, topROI, topPlayer, 
                                                  shadowMask = shadowMask)
     
-    botPlayer = find_player_contour_with_overlap(hFrm, foregroundMask, botROI, botPlayer,
+    botPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, botROI, botPlayer,
                                                  shadowMask = shadowMask)
 
-    return topPlayer, botPlayer, topROI, botROI
+    return topPlayer, botPlayer
