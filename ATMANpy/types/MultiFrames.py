@@ -42,7 +42,8 @@ class Frames:
                    cap_color_space = 'bgr', name = None):
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
-                   'hsv': HSVFrames}
+                   'hsv': HSVFrames,
+                   'bool': BoolFrames}
         capType = typeMap[cap_color_space]
         
         frames = get_frames(cap, start_frame, stop_frame)
@@ -64,7 +65,8 @@ class Frames:
                   cap_color_space = 'bgr', name = None):
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
-                   'hsv': HSVFrames}
+                   'hsv': HSVFrames,
+                   'bool': BoolFrames}
         capType = typeMap[cap_color_space]
         
         frames = get_framelist(cap, frameList)
@@ -100,7 +102,7 @@ class Frames:
     
     def size(self, unit = 'GB'):
         unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
-        return round(self.array.size / unitMap[unit], 1)
+        return round(self.array.size / unitMap[unit], 2)
     
     def shape(self):
         return self.array.shape
@@ -160,6 +162,11 @@ class HSVFrames(Frames):
 class GreyFrames(Frames):
     name: str = 'grey_frames'
     
+    def __post_init__(self):
+        if len(self.array.shape) == 4: ### need to convert to gray...
+            convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.array])
+            object.__setattr__(self, 'array', convArr)
+    
     @classmethod
     def get_constituent(cls):
         return GreyFrame
@@ -188,6 +195,11 @@ class GreyFrames(Frames):
 class BoolFrames(Frames):
     name: str = 'bool_frames'
     
+    def __post_init__(self):
+        if len(self.array.shape) == 4: ### need to convert to gray...
+            convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.array])
+            object.__setattr__(self, 'array', convArr)
+            
     @classmethod
     def get_constituent(cls):
         return BoolFrame
