@@ -194,6 +194,27 @@ class Stream:
             args.append(argObj)
         return args
     
+    def length(self):
+        return self.stop_frame - self.start_frame + 1
+    
+    def dims(self):
+        width  = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH)) 
+        height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+        return width, height
+    
+    def size(self, unit = 'GB'):
+        ### size of raw video in stream
+        unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
+        
+        if self.target_color_space in ['hsv', 'bgr']:
+            mult = 3
+        else:
+            mult = 1
+            
+        width, height = self.dims()
+        length = self.length()
+        return round(length * width * height * mult / unitMap[unit], 2)
+    
     def conform(self, start_frame, stop_frame):
         ### TODO: conform also features!
         return self.__class__(self.cap, start_frame, stop_frame, 
@@ -513,7 +534,7 @@ class StillStream:
     ### instead of a cap, a StillStream has a single frame!
     ### it displays a single picture for a certain duration
     ### to initialize it: save a single picture frame lossless, and read it as a StillStream
-    stillFrm: Union[GreyFrame, BGRFrame, HSVFrame]
+    stillFrm: Union[GreyFrame, BGRFrame, HSVFrame, BoolFrame]
     start_frame: int
     stop_frame: int
     name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
@@ -554,6 +575,27 @@ class StillStream:
     def __getitem__(self, frmNum):
         assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         return self.stillFrm
+    
+    def length(self):
+        return self.stop_frame - self.start_frame + 1
+    
+    def dims(self):
+        width  = self.stillFrm.cols
+        height = self.stillFrm.rows
+        return width, height
+    
+    def size(self, unit = 'GB'):
+        ### size of raw video in stream, if decapped
+        unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
+        
+        try:
+            mult = self.stillFrm.shape[2]
+        except IndexError:
+            mult = 1
+            
+        width, height = self.dims()
+        length = self.length()
+        return round(length * width * height * mult / unitMap[unit], 2)
     
     def conform(self, start_frame, stop_frame):
         return StillStream(self.stillFrm, start_frame, stop_frame, 
@@ -689,6 +731,16 @@ class MulStream:
             except AttributeError:
                 pass
         
+    def length(self):
+        return self.stop_frame - self.start_frame + 1
+        
+    def dims(self):
+        return self[0].dims()
+    
+    def size(self, unit = 'GB'):
+        ### size of raw video in stream, if decapped
+        return sum([myStm.size(unit = unit) for myStm in self])
+    
     def attach(self, mySF):
         fsStm, othStms = self.streams[0], self.streams[1:]
         return MulStream([fsStm.attach(mySF), *othStms])
@@ -912,7 +964,7 @@ class StreamList:
 @dataclass(frozen = True)
 class DecapStream:
     ### here, the Stream is dissociated from its videoCapture, which is turned into a MultiFrames object.
-    frames: Union[GreyFrames, BGRFrames, HSVFrames] # GreyFrames | BGRFrames | HSVFrames
+    frames: Union[GreyFrames, BGRFrames, HSVFrames, BoolFrames] # GreyFrames | BGRFrames | HSVFrames | BoolFrames
     start_frame: int
     stop_frame: int
     features: StreamFeatures = StreamFeatures({})
@@ -925,7 +977,17 @@ class DecapStream:
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
-
+    
+    def length(self):
+        return self.stop_frame - self.start_frame + 1
+    
+    def dims(self):
+        height, width = self.frames.shape()
+        return width, height
+    
+    def size(self, unit = 'GB'):
+        return self.frames.size(unit = unit)
+        
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
         for idx, myFrm in enumerate(self.frames):
@@ -971,6 +1033,13 @@ class NCDecapStream:
     
     def length(self):
         return self.frames.length()
+    
+    def dims(self):
+        height, width = self.frames.shape()
+        return width, height
+    
+    def size(self, unit = 'GB'):
+        return self.frames.size(unit = unit)
     
     def is_empty(self):
         return self.length() == 0
@@ -1047,7 +1116,7 @@ class CachedStream(Stream):
                             truncation_anchor = 0,
                             cap_color_space = cap_color_space, target_color_space = target_color_space, 
                             features = mySF, name = name)
-    
+
     @staticmethod
     def from_stream(someStm, cache_size = 1):
         return CachedStream(someStm.cap, someStm.start_frame, someStm.stop_frame,
@@ -1087,7 +1156,13 @@ class CachedStream(Stream):
     
     def _delete_mut_features(self):
         object.__delattr__(self, '_mut_features')
-        
+    
+    def length(self, including_cache = True):
+        if including_cache:
+            return Stream.length(self) + self.cache_size * 2
+        else:
+            return Stream.length(self)
+    
     @staticmethod
     def argstrings_to_args(funcArgs, frameCache, featCache):
         ### get arguments to plug into feature extraction function
@@ -1308,6 +1383,9 @@ class DecapCachedStream(DecapStream):
 @dataclass(frozen = True)
 class RandStream(Stream):
     number_of_frames: int = 100
+    
+    def length(self):
+        return number_of_frames
     
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
             
