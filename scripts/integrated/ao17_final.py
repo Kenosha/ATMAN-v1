@@ -26,10 +26,10 @@ from ATMANpy.types.Streams import Stream, CachedStream, NCDecapStream, StreamLis
 from ATMANpy.types.Features import StreamFeature, StreamFeatures
 from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
 
-# from ATMANpy.types.Lines import CourtLines
-# from ATMANpy.funcs.line_funcs import fit_frame_to_lines
-# schemaLines = CourtLines.make().add_singles_netline()
-# schemaFrm = fit_frame_to_lines(schemaLines)
+from ATMANpy.types.Lines import CourtLines
+from ATMANpy.funcs.line_funcs import fit_frame_to_lines
+schemaLines = CourtLines.make().add_singles_netline()
+schemaFrm = fit_frame_to_lines(schemaLines)
 
 if __name__ == '__main__':
     ### PARAMETERS AND GLOBALS
@@ -187,6 +187,7 @@ if __name__ == '__main__':
         streamList = StreamList.from_SFList(mySFs, cap)
         
     mySFs = courtSFs.merge(boardSF.split())
+    del courtSF, courtSFs, boardSF
     
     try:
         medStms = StreamList.from_store('median_backFrm', VIDEO_ID, STORE_NAME, 
@@ -241,7 +242,7 @@ if __name__ == '__main__':
     featureName = 'foregroundMask'
     try:
         burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
-                                         cap_color_space = 'grey', target_color_space = 'grey')
+                                         cap_color_space = 'bool', target_color_space = 'bool')
     except FileNotFoundError:
         hsvStms = StreamList.from_SFList(mySFs, cap, 
                                          cap_color_space = 'bgr', target_color_space = 'hsv')
@@ -253,8 +254,94 @@ if __name__ == '__main__':
     
         burnSFs.save(VIDEO_ID, STORE_NAME)
         burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
-                                         cap_color_space = 'grey', target_color_space = 'grey')
+                                         cap_color_space = 'bool', target_color_space = 'bool')
     
+    ### Get Shadow Mask
+    featureName = 'shadowMask'
+    try: 
+        shadStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
+                                         cap_color_space = 'bool', target_color_space = 'bool')
+    except FileNotFoundError:
+        hsvStms = StreamList.from_SFList(mySFs, cap, 
+                                         cap_color_space = 'bgr', target_color_space = 'hsv')
+        mulStms = StreamList.combine(hsvStms, medStms)
+        
+        params = {'h_threshold': 5,
+                  's_threshold': 10,
+                  'v_threshold_lower': 0.75,
+                  'v_threshold_upper': 0.97}
+        shadSFs = mulStms.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_shadow_mask, **params)
+    
+        shadSFs.save(VIDEO_ID, STORE_NAME)
+        shadStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
+                                         cap_color_space = 'bool', target_color_space = 'bool')
+    
+    
+    # a) Get some constant shapes: the initial ROIs...
+    params = {'width_factor': 1,
+              'depth_factor': 1,
+              'add_depth_factor_bottom': 0.3}
+    from ATMANpy.funcs.player_funcs import get_service_ROIs
+    initial_ROI_lower, initial_ROI_upper = get_service_ROIs(schemaLines, **params)
+
+    # ... and the bounding lines above and below.
+    from ATMANpy.funcs.player_funcs import get_half_court_Lines
+    halfcourtLine_lower, halfcourtLine_upper = get_half_court_Lines(schemaLines)
+
+    # b) extract ROIs and players simultaneously, in cached fashion.
+    params = {'player_tracking_scale_factor': 1.5,
+              'bot_min_bounding_height': 200,
+              'bot_min_bounding_width': 80,
+              'top_min_bounding_height': 150,
+              'top_min_bounding_width': 60,
+              'initial_ROI_upper': initial_ROI_upper,
+              'initial_ROI_lower': initial_ROI_lower,
+              'halfcourtLine_upper': halfcourtLine_upper,
+              'halfcourtLine_lower': halfcourtLine_lower}
+    
+    mySFs = mySFs.add('topPlayer', None).add('botPlayer', None)
+    greyCtms = StreamList.from_SFList(mySFs, cap, cache_size = 1, name = 'gFrm',
+                                     cap_color_space = 'bgr', target_color_space = 'grey')
+    mulStms = StreamList.combine(greyCtms, burnStms, shadStms)
+    
+    plSFs = mulStms[2:4].extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.find_both_players_smart, **params)
+    
+    plSFs[1]['topROIMask'].save(VIDEO_ID, STORE_NAME)
+    
+    plSFs.save(VIDEO_ID, STORE_NAME)
+    
+    # Stream.from_SF(plSFs[5], cap).show()
+    
+    # CHUNKSIZE = 750
+    
+    # for el in mulStms[:4].chunk_generator(chunksize = CHUNKSIZE):
+    #     print(el.length())
+    
+    # plSFs
+    
+    # testStm = mulStms[2]
+    # # chkSFs = testStm.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.find_both_players_smart, **params)
+    # chkSF = chkSFs[0]
+    # Stream.from_SF(chkSF, cap).show()
+    
+    # # for 
+    # # mulStms[2].stop_frame - mulStms[2].start_frame
+    
+    # testStm[1].size(unit = 'MB')
+    # testStm[1].decap().size(unit = 'MB')
+    
+    # testStm[0].features
+    
+    
+    # for el in testStm.chunk_generator():
+    #     print(el[1].start_frame)
+    #     print(el[1].stop_frame)
+    #     print(el.features)
+        
+    # from ATMANpy.funcs.cv_funcs import show_continuous
+    # for el in testStm.chunk_generator():
+    #     for frame in el[1].frames:
+    #         show_continuous(frame.array)
     
     # # fileName = 'from_1024_to_1791.avi'
     # # featureName = 'foregroundMask'

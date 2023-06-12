@@ -256,27 +256,27 @@ def find_both_players_smart(gCache, featCache,
                             verbose = False):
     
     gFrm = gCache[0]
-    courtLines = featCache[0]['courtLines']
     H = featCache[0]['H']
     topPlayer = featCache[-1]['topPlayer']
     botPlayer = featCache[-1]['botPlayer']
     
-    topROI = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, gFrm,
-                                 player_tracking_scale_factor = player_tracking_scale_factor,
-                                 min_bounding_height = top_min_bounding_height,
-                                 min_bounding_width = top_min_bounding_width,
-                                 halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
+    topROIMask = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, gFrm,
+                                     player_tracking_scale_factor = player_tracking_scale_factor,
+                                     min_bounding_height = top_min_bounding_height,
+                                     min_bounding_width = top_min_bounding_width,
+                                     halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
     
-    botROI = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, gFrm,
+    botROIMask = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, gFrm,
                                  player_tracking_scale_factor = player_tracking_scale_factor,
                                  min_bounding_height = bot_min_bounding_height,
                                  min_bounding_width = bot_min_bounding_width,
                                  halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
     
-    topPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, topROI, topPlayer, 
+    topPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, topROIMask, topPlayer, 
                                                  shadowMask = shadowMask)
     
-    botPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, botROI, botPlayer,
+    botPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, botROIMask, botPlayer,
                                                  shadowMask = shadowMask)
 
-    return topPlayer, botPlayer
+    ### ROI Masks are returned only for checking...
+    return topPlayer, botPlayer, topROIMask, botROIMask 

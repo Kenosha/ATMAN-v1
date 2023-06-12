@@ -7,6 +7,7 @@ Functions to compress, save and retrieve features to/from disc.
 @author: gianl
 """
 
+import os
 import numpy as np
 import pandas as pd
 
@@ -61,7 +62,6 @@ def extract_region_values(region):
     return featValues
     
 def get_and_make_save_path(featureName, videoName, storeName):
-    import os
     featDict = atu.get_folder_struct('features_stored')
     storePath = os.path.join(featDict['main'], videoName, storeName)
     savePath = os.path.join(storePath, featureName)
