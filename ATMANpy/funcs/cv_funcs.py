@@ -46,11 +46,6 @@ def get_frames(cap, start_frame, stop_frame):
     while cap.isOpened() and (start_frame <= frmNum <= stop_frame):
         ret, frame = cap.read()
         
-        # if color_space == 'hsv':
-        #     frame = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-        # if color_space == 'grey':
-        #     frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-            
         outFrames.append(frame)
         
         frmNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
