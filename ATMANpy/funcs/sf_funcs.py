@@ -79,7 +79,8 @@ def get_hole_frames(mySF):
         frames_missing_between = list(range(end + 1, beg))
         to_retry.extend(frames_missing_between)
         
-    streamDict = {frame: frame in to_retry for frame in mySF.keys()}
+    # streamDict = {frame: frame in to_retry for frame in mySF.keys()}
+    streamDict = {frame: True for frame in to_retry}
     
     return BoolFeature(streamDict, name = 'to_retry')
 

@@ -31,16 +31,24 @@ NET_FACTOR = 0.9
 NET_POINTS_TO_SEARCH = 100
 #####
 
-def find_homography_225_only(gFrm, verbose = False):
+def find_homography_225_only(gFrm,
+                             width_of_line = COURT_LINE_WIDTH, 
+                             int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
+                             white_thresh = WHITE_PIXEL_THRESHOLD,
+                             rho = RHO, theta = THETA, min_votes = MIN_VOTES,
+                             minLineLength = MIN_LINE_LENGTH, maxLineGap = MAX_LINE_GAP,
+                             merge_threshold = MERGE_THRESHOLD, 
+                             filter_margin = MARGIN_TO_CUT_HORIZONTAL,
+                             verbose = False):
     from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
     allBFrm = get_white_lines_fast(gFrm, 
-                                   width_of_line = COURT_LINE_WIDTH,
-                                   int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
-                                   white_thresh = WHITE_PIXEL_THRESHOLD)
+                                   width_of_line = width_of_line,
+                                   int_diff_thresh = int_diff_thresh,
+                                   white_thresh = white_thresh)
     
-    houghLines = allBFrm.prob_hough(rho = 3, theta = np.pi/180, min_votes = 500, 
-                                    minLineLength = COURT_LINE_WIDTH + 1, maxLineGap = 1)
+    houghLines = allBFrm.prob_hough(rho = rho, theta = theta, min_votes = min_votes, 
+                                    minLineLength = minLineLength, maxLineGap = maxLineGap)
     
     if len(houghLines) < 9:
         return None, None
@@ -61,10 +69,10 @@ def find_homography_225_only(gFrm, verbose = False):
     l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
 
     l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                threshold = MERGE_THRESHOLD)   
+                                                                threshold = merge_threshold)   
     
     l_v_Lines, r_v_Lines, h_Lines = filter_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                 margin = MARGIN_TO_CUT_HORIZONTAL)  
+                                                                 margin = filter_margin)  
     if verbose: 
         gFrm.zero().to_BGR().put(r_v_Lines).show()
         gFrm.zero().to_BGR().put(l_v_Lines).show()
@@ -86,7 +94,6 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
                     minLineLength = MIN_LINE_LENGTH, maxLineGap = MAX_LINE_GAP,
                     merge_threshold = MERGE_THRESHOLD, 
                     filter_margin = MARGIN_TO_CUT_HORIZONTAL,
-                    
                     verbose = False):
     
     from ATMANpy.funcs.line_funcs import get_white_lines_fast

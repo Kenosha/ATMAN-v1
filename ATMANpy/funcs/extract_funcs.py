@@ -44,23 +44,47 @@ def find_courtlines(H, schemaLines = schemaLines):
         courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
     return courtLines
 
-def track_courtlines(frameCache, featCache,
+def track_courtlines(gCache, featCache,
+                     width_of_line = 8, 
+                     int_diff_thresh = 30,
+                     white_thresh = 150,
+                     rho = 3, theta = np.pi / 180, min_votes = 500,
+                     minLineLength = 8 + 1, maxLineGap = 1,
+                     merge_threshold = 2 * 8, 
+                     filter_margin = 40,
+                     points_on_line = 100, acceptable_failure_rate = 0.5,
                      schemaLines = schemaLines, only_225 = True):
     
     ### extract values from cache
-    curr_gFrm = BGRFrame(frameCache[0]).to_grey()
+    curr_gFrm = gCache[0]
     prev_H = featCache[-1]['H']
     prev_config = featCache[-1]['config']
     
     if prev_H is None or prev_config is None:
         if only_225:
-            H, config = find_homography_225_only(curr_gFrm)
+            H, config = find_homography_225_only(curr_gFrm,
+                                                 width_of_line = width_of_line,
+                                                 int_diff_thresh = int_diff_thresh,
+                                                 white_thresh = white_thresh,
+                                                 rho = rho, theta = theta, min_votes = min_votes,
+                                                 minLineLength = minLineLength, maxLineGap = maxLineGap,
+                                                 merge_threshold = merge_threshold, 
+                                                 filter_margin = filter_margin)
         else:
-            H, config = find_homography(curr_gFrm)
+            H, config = find_homography(curr_gFrm,
+                                        width_of_line = width_of_line,
+                                        int_diff_thresh = int_diff_thresh,
+                                        white_thresh = white_thresh,
+                                        rho = rho, theta = theta, min_votes = min_votes,
+                                        minLineLength = minLineLength, maxLineGap = maxLineGap,
+                                        merge_threshold = merge_threshold, 
+                                        filter_margin = filter_margin)
         trackFlag = 'Found'
     else:
         # print('Courtlines found, updating homography...')
-        H, config = update_homography(curr_gFrm, prev_H, prev_config)
+        H, config = update_homography(curr_gFrm, prev_H, prev_config,
+                                      points_on_line = points_on_line, 
+                                      acceptable_failure_rate = acceptable_failure_rate)
         trackFlag = 'Tracked'
         
     if not H is None:
@@ -85,12 +109,12 @@ def redo_not_found(gFrm, courtLines, H, config, trackFlag, **kwargs):
     return courtLines, H, config, trackFlag
             
 def iterative_redo(gFrm, courtLines, H, config, trackFlag, 
-                   min_votes = 500):
+                   min_votes = 500, vote_threshold = 100):
     try:
         H, config = find_homography(gFrm, min_votes = min_votes)
     except Exception as e:
         # print(e)
-        if min_votes > 100:
+        if min_votes > vote_threshold:
             courtLines, H, config, trackFlag = iterative_redo(gFrm, courtLines, H, config, trackFlag, 
                                                               min_votes = min_votes // 2)
         return courtLines, H, config, trackFlag 
