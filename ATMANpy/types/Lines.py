@@ -236,7 +236,10 @@ class Line:
         orthLine = Line(aPt, aPt + lineVec.find_perpendicular())
         nearestPt = self.weak_intersect(orthLine, to_int = False)
         return aPt.distance_to(nearestPt)
-
+    
+    def rescale(self, scale_factor):
+        return Line(self.leftPt.rescale(scale_factor), self.rightPt.rescale(scale_factor), name = self.name)
+    
 @dataclass(frozen = True)
 class Lines:
     """
@@ -396,7 +399,8 @@ class Lines:
                 extremum = extremum_candidate
         return extremum
     
-    
+    def rescale(self, scale_factor):
+        return Lines([ln.rescale(scale_factor) for ln in self.lineList], name = self.name)
 
 @dataclass(frozen = True)
 class CourtLines(Lines):

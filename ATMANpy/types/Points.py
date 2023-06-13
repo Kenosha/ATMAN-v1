@@ -179,6 +179,8 @@ class Point2D:
         v1, v2 = self.coords
         return Point2D((-v2, v1))
     
+    def rescale(self, scale_factor):
+        return (self * scale_factor).round_point()
     
 @dataclass(frozen = True)
 class SafePoint2D(Point2D):
@@ -218,5 +220,10 @@ class SafePoint2D(Point2D):
         else:
             raise TypeError("Move point by an integer amount!")
 
+
+if __name__ == '__main__':
+    aPt = Point2D((20, 30))
+    
+    aPt.rescale(0.3)
 
     

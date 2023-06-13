@@ -257,10 +257,14 @@ class StreamFeature(StreamFeaturesBase):
         return self.__class__(reinstDict, name = self.name)
     
     def resize(self, new_thickness):
-        reinstDict = {frame: try_getattr(obj, 'recolor')(new_thickness) for frame, obj in self.streamDict.items()}
+        reinstDict = {frame: try_getattr(obj, 'resize')(new_thickness) for frame, obj in self.streamDict.items()}
         return self.__class__(reinstDict, name = self.name)
     
-    def apply(self, func, where = None): ### TODO: at some point, allow *args, **kwargs
+    def rescale(self, scale_factor):
+        reinstDict = {frame: try_getattr(obj, 'rescale')(scale_factor) for frame, obj in self.streamDict.items()}
+        return self.__class__(reinstDict, name = self.name)
+      
+    def apply(self, func, where = None, **kwargs): ### TODO: at some point, allow *args, **kwargs
         ### This method allows for function application to single features, element by element
         ### func takes in features (H, courtLines, etc) and returns features
         
@@ -282,7 +286,7 @@ class StreamFeature(StreamFeaturesBase):
         applyDict = {}
         for frame in self:
             if where is None or where[frame]:
-                funcOut = func(self[frame])
+                funcOut = func(self[frame], **kwargs)
                 
                 if len(funcVals) == 1:
                     applyDict[frame] = {name: funcOut}
@@ -294,12 +298,14 @@ class StreamFeature(StreamFeaturesBase):
                 # ... we don't apply the function, instead look for the function values in the SF itself.
                 
         return StreamFeatures(applyDict, name = name).squeeze()
-            
-        
-    def _save_contours(self, videoName, storeName, compression = None):
-        exFunc = partial(ff.extract_contour_values, compression = compression)
-        changedSF = self.apply(exFunc) 
-        # changedFrm = pd.
+      
+    def _save_contours(self, videoName, storeName, compression = 24):
+        exFunc = ff.extract_contour_values
+        outSF = self.apply(exFunc, compression = compression) 
+        featFrm = pd.DataFrame(outSF.streamDict).T
+        featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
+        featFrm.columns = featLabels
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
     def _save_homography(self, videoName, storeName):
         exFunc = ff.extract_homography_values
@@ -315,6 +321,10 @@ class StreamFeature(StreamFeaturesBase):
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(4)]) ### region has four corners.
         featFrm.columns = featLabels
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+    
+    def _save_text(self, videoName, storeName):
+        featFrm = self.to_series()
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
     def _save_as_video(self, videoName, storeName, 
@@ -362,7 +372,7 @@ class StreamFeature(StreamFeaturesBase):
         writer.release()
     
     def save(self, videoName, storeName, lossless = False):
-        contourNames = []
+        contourNames = ['topPlayer', 'botPlayer']
         homographyNames = ['H']
         regionNames = ['scoreBoard']
         
@@ -376,11 +386,10 @@ class StreamFeature(StreamFeaturesBase):
             self._save_as_video(videoName, storeName, monochrome = True, lossless = lossless)
         elif 'Frm' in self.name:
             self._save_as_video(videoName, storeName, monochrome = False, lossless = lossless)
+        elif 'Flag' in self.name: ### all text has to be called Flag!
+            self._save_text(videoName, storeName)
         else:
             print(f"Did not save {self.name}, don't know how!")
-        # else:
-        #     featFrm = self.to_series()
-        #     ff.save_feature_frame(featFrm, self.name, videoName, storeName)
         
     def unsqueeze(self):
         return StreamFeatures({frame: {self.name: feat} for frame, feat in self.items()})
@@ -558,6 +567,10 @@ class StreamFeatures(StreamFeaturesBase):
         renamedDict = {frame: rename_dictFunc(featDict) for frame, featDict in self.streamDict.items()}
         return StreamFeatures(renamedDict)
 
+    def rescale(self, scale_factor):
+        featList = [self[featName].rescale(scale_factor) for featName in self.get_features()]
+        return SFList(featList).concatenate(axis = 1)
+
     def length(self):
         return len(self.streamDict)
     
@@ -619,9 +632,9 @@ class StreamFeatures(StreamFeaturesBase):
         else:
             return self
     
-    def save(self):
+    def save(self, videoName, storeName, lossless = False):
         for feat in self.get_features():
-            self[feat].save()
+            self[feat].save(videoName, storeName, lossless = lossless)
     
     def to_bool(self):
         return BoolFeatures(self.streamDict, name = self.name)
@@ -754,7 +767,7 @@ class SFList:
         else:    
             concatFunc = StreamFeaturesBase.extend if axis == 0 else StreamFeaturesBase.merge
             x, xs = self[0], self[1:]
-        return concatFunc(x, xs.concatenate())
+        return concatFunc(x, xs.concatenate(axis = axis))
     
     def save(self, videoName, storeName):
         for mySF in self:

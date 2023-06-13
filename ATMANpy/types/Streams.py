@@ -9,6 +9,7 @@ import time
 import os
 import cv2 as cv
 import numpy as np
+import psutil
 
 from dataclasses import dataclass
 import multiprocessing
@@ -45,6 +46,21 @@ framesTypeMap = {'bgr': BGRFrames,
                  'hsv': HSVFrames,
                  'bool': BoolFrames}
 
+def color_converter(imgArr, cap_color_space, target_color_space):
+    methodMap = {'bgr': 'to_BGR',
+                 'grey': 'to_grey',
+                 'hsv': 'to_HSV'} ### note: there is no to_bool! -> unclear how this method would behave!
+                                  ### therefore, boolean frames have to be read in as booleans, without converting!
+    frameType = frameTypeMap[cap_color_space]
+    
+    origFrm = frameType(imgArr)
+    
+    if cap_color_space == target_color_space:
+        return origFrm
+    else:
+        conversionFuncStr = methodMap[target_color_space]
+        return getattr(origFrm, conversionFuncStr)()
+
 def extract_mp_timer(extractMethod):
 
     def timed(*args, **kw):
@@ -68,21 +84,6 @@ def extract_mp_timer(extractMethod):
 
     return timed
 
-def color_converter(imgArr, cap_color_space, target_color_space):
-    methodMap = {'bgr': 'to_BGR',
-                 'grey': 'to_grey',
-                 'hsv': 'to_HSV'} ### note: there is no to_bool! -> unclear how this method would behave!
-                                  ### therefore, boolean frames have to be read in as booleans, without converting!
-    frameType = frameTypeMap[cap_color_space]
-    
-    origFrm = frameType(imgArr)
-    
-    if cap_color_space == target_color_space:
-        return origFrm
-    else:
-        conversionFuncStr = methodMap[target_color_space]
-        return getattr(origFrm, conversionFuncStr)()
-
 @dataclass(frozen = True)
 class Stream:
     cap: cv.VideoCapture
@@ -91,23 +92,27 @@ class Stream:
     truncation_anchor: int = 0 ### instead of a truncation flag. this anchor frame allows comparison between truncated streams and non-truncated streams by specifying the first frame of truncation.
     cap_color_space: str = 'bgr'
     target_color_space: str = 'bgr'
+    scale_factor: float = 1 ### ability to shrink the image relative to the cap dimensions
     name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
     features: StreamFeatures = StreamFeatures({})
         
     @staticmethod
     def from_SF(mySF, cap, name = None,
-                cap_color_space = 'bgr', target_color_space = 'bgr'):
+                cap_color_space = 'bgr', target_color_space = 'bgr',
+                scale_factor = 1):
         if name is None:
             name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return Stream(cap, start, stop, 
-                      truncation_anchor = 0, 
+                      truncation_anchor = 0,
                       cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                      scale_factor = scale_factor,
                       features = mySF, name = name)
     
     @staticmethod
     def from_file(filePath, name = None,
-                  cap_color_space = 'bgr', target_color_space = 'bgr'):
+                  cap_color_space = 'bgr', target_color_space = 'bgr',
+                  scale_factor = 1):
         cap = cv.VideoCapture(filePath)
         
         fileName = os.path.basename(filePath)
@@ -120,17 +125,20 @@ class Stream:
         return Stream(cap, start, stop, 
                       truncation_anchor = start, ### NOTE: truncation anchor is the first frame given in file name! 
                       cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                      scale_factor = scale_factor,
                       name = name)
     
     @staticmethod
     def from_store(fileName, featureName, videoName, storeName, 
-                   cap_color_space = 'bgr', target_color_space = 'bgr'):
+                   cap_color_space = 'bgr', target_color_space = 'bgr',
+                   scale_factor = 1):
         featDict = get_folder_struct('features_stored')
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
         return Stream.from_file(videoPath, name = featureName,
-                                cap_color_space = cap_color_space, target_color_space = target_color_space)
+                                cap_color_space = cap_color_space, target_color_space = target_color_space,
+                                scale_factor = scale_factor)
         
     def __post_init__(self):
         ### CHECK FRAMES
@@ -167,9 +175,15 @@ class Stream:
         
         get_num = frmNum - self.truncation_anchor
         
-        return outType.from_video(self.cap, get_num, 
-                                  cap_color_space = self.cap_color_space, 
-                                  name = self.name)
+        outFrm = outType.from_video(self.cap, get_num, 
+                                    cap_color_space = self.cap_color_space, 
+                                    scale_factor = self.scale_factor,
+                                    name = self.name)
+        
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[frmNum][feat])
+            
+        return outFrm
         
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
@@ -221,6 +235,7 @@ class Stream:
                               truncation_anchor = self.truncation_anchor,
                               cap_color_space = self.cap_color_space, 
                               target_color_space = self.target_color_space,
+                              scale_factor = self.scale_factor,
                               name = self.name,
                               features = self.features)
     
@@ -229,6 +244,16 @@ class Stream:
                               truncation_anchor = self.truncation_anchor,
                               cap_color_space = self.cap_color_space, 
                               target_color_space = new_target_color_space,
+                              scale_factor = self.scale_factor,
+                              name = self.name,
+                              features = self.features)
+    
+    def rescale(self, new_scale_factor):
+        return self.__class__(self.cap, self.start_frame, self.stop_frame, 
+                              truncation_anchor = self.truncation_anchor,
+                              cap_color_space = self.cap_color_space, 
+                              target_color_space = self.target_color_space,
+                              scale_factor = new_scale_factor,
                               name = self.name,
                               features = self.features)
     
@@ -237,6 +262,7 @@ class Stream:
                               truncation_anchor = self.truncation_anchor, 
                               cap_color_space = self.cap_color_space, 
                               target_color_space = self.target_color_space,
+                              scale_factor = self.scale_factor,
                               name = self.name,
                               features = mySF)
 
@@ -248,6 +274,7 @@ class Stream:
         
         myFrms = framesType.from_video(self.cap, cap_start, cap_stop,
                                        cap_color_space = self.cap_color_space,
+                                       scale_factor = self.scale_factor,
                                        name = self.name)
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
@@ -262,6 +289,10 @@ class Stream:
             ### Get the frame in the correct color type
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
             myFrm = myFrm.rename(self.name)
+            
+            ### rescale if necessary
+            if self.scale_factor != 1:
+                myFrm = myFrm.rescale(self.scale_factor)
             
             ### Get the feature dictionary
             myDict = self.features.maybe_get(frmNum)
@@ -282,7 +313,16 @@ class Stream:
         else:
             cv.destroyAllWindows()
 
+    def maxchunk(self, critical_value = 4, safety_margin = 0.1): 
+        ### critical_value = 4 -> larger than 4 GB, we can not pickle!
+        ### safety_margin = 0.1 -> want to be 10% below critical value
+        size_per_unit = self.size(unit = 'GB') / self.length()
+        admissible_units = int((1 - safety_margin) * critical_value / size_per_unit)
+        return admissible_units
+    
     def chunk_generator(self, chunksize = 100):
+        chunksize = min(chunksize, self.maxchunk())
+        
         ### generate decapped chunks of the stream, one by one lazily
         chunk_start = self.start_frame
         chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame) 
@@ -461,7 +501,18 @@ class Stream:
         # With pooled parallelism, we can not guarantee that the frame before is already done
         # when the task for a given frame is dispatched, so that functions that track (needing prior frame information)
         # can not be applied.
+                
+        def ram_is_ok(max_size_of_stream = 4, buffer_needed_gb = 8):
+            ### max size of stream is due to the impossibility of pickling an object larger than 4GB
+            ### check if an stream, which we want to decap, fits into RAM, allowing for a buffer.
+            available_gb = psutil.virtual_memory().available / 1024 ** 3
+            return max_size_of_stream < available_gb - buffer_needed_gb
+        
         WAIT_SECS = 0.001
+        MESSAGE_FREQUENCY = 10
+        VERBOSE = False
+        if VERBOSE:
+            time_of_last_message = time.time()
         
         ### Set up the pool
         pool = poolCls(processes = num_workers)
@@ -478,7 +529,7 @@ class Stream:
     
         sfList = []
         while True:
-            if not generator_is_exhausted and len(pending) < num_workers:                
+            if not generator_is_exhausted and len(pending) < num_workers and ram_is_ok():                
                 ### if there is space in the queue, add a task!
                 # print(f'Queueing {chunkStm}...')
                 # print(kwargs)
@@ -491,7 +542,7 @@ class Stream:
                 mySF = pending.popleft().get()
                 sfList.append(mySF)
             
-            if not generator_is_exhausted and len(pending) < num_workers: ### only when there is space in the queue
+            if not generator_is_exhausted and len(pending) < num_workers and ram_is_ok(): ### only when there is space in the queue
                 ### iterate the generator.
                 try:
                     chunkStm = next(gen) ### iterate the generator
@@ -505,6 +556,14 @@ class Stream:
             if generator_is_exhausted and len(pending) == 0:
                 pool.terminate() ### once pending queue is zero, we can terminate the pool.
                 break
+            else: # not done! communicate status
+                if VERBOSE:
+                    time_since_last_message = time.time() - time_of_last_message
+                    if time_since_last_message > MESSAGE_FREQUENCY:
+                        len_queue = len(pending)
+                        ram_pct = psutil.virtual_memory().percent
+                        print(f'   ... length of queue: {len(pending)}. Ram utilization: {ram_pct}%')
+                        time_of_last_message = time.time()
         
         allSFs = SFList(sfList).concatenate(axis = 0)
             
@@ -537,6 +596,7 @@ class StillStream:
     stillFrm: Union[GreyFrame, BGRFrame, HSVFrame, BoolFrame]
     start_frame: int
     stop_frame: int
+    scale_factor: int = 1
     name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
     features: StreamFeatures = StreamFeatures({})
        
@@ -544,7 +604,8 @@ class StillStream:
         pass
     
     @staticmethod
-    def from_file(framePath, name = None, cap_color_space = 'bgr', target_color_space = 'bgr'):
+    def from_file(framePath, name = None, cap_color_space = 'bgr', target_color_space = 'bgr',
+                  scale_factor = 1):
         imgArr = np.load(framePath)
         stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
         stillFrm = stillFrm.rename(name)
@@ -556,17 +617,20 @@ class StillStream:
         _, start, _, stop = fileStump.split('_')
         start, stop = int(start), int(stop)
         
-        return StillStream(stillFrm, start, stop, name = name)
+        return StillStream(stillFrm, start, stop, 
+                           scale_factor = scale_factor,
+                           name = name)
     
     @staticmethod
     def from_store(fileName, featureName, videoName, storeName, 
-                   frame_color_space = 'bgr'):
+                   frame_color_space = 'bgr', scale_factor = 1):
         featDict = get_folder_struct('features_stored')
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
         return StillStream.from_file(videoPath, name = featureName,
-                                     frame_color_space = frame_color_space)
+                                     frame_color_space = frame_color_space,
+                                     scale_factor = scale_factor)
     
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
@@ -574,7 +638,11 @@ class StillStream:
     
     def __getitem__(self, frmNum):
         assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
-        return self.stillFrm
+        if self.scale_factor != 1:
+            outFrm = self.stillFrm.rescale(self.scale_factor)
+        else:
+            outFrm = self.stillFrm
+        return outFrm
     
     def length(self):
         return self.stop_frame - self.start_frame + 1
@@ -741,6 +809,13 @@ class MulStream:
         ### size of raw video in stream, if decapped
         return sum([myStm.size(unit = unit) for myStm in self])
     
+    def maxchunk(self, critical_value = 4, safety_margin = 0.1): 
+        ### critical_value = 4 -> larger than 4 GB, we can not pickle!
+        ### safety_margin = 0.1 -> want to be 10% below critical value
+        size_per_unit = self.size(unit = 'GB') / self.length()
+        admissible_units = int((1 - safety_margin) * critical_value / size_per_unit)
+        return admissible_units
+    
     def attach(self, mySF):
         fsStm, othStms = self.streams[0], self.streams[1:]
         return MulStream([fsStm.attach(mySF), *othStms])
@@ -780,6 +855,8 @@ class MulStream:
         return args
     
     def chunk_generator(self, chunksize = 100):
+        chunksize = min(chunksize, self.maxchunk())
+        
         ### generate decapped chunks of the stream, one by one lazily
         chunk_start = self.start_frame
         chunk_stop = min(chunk_start + chunksize - 1, self.stop_frame) 
@@ -865,21 +942,25 @@ class StreamList:
     def from_SFList(sfList, cap, name = None,
                     cap_color_space = 'bgr', 
                     target_color_space = 'bgr',
+                    scale_factor = 1,
                     cache_size = None):
         if cache_size is None:
             return StreamList([Stream.from_SF(mySF, cap, name = name,
                                               cap_color_space = cap_color_space, 
-                                              target_color_space = target_color_space) for mySF in sfList])
+                                              target_color_space = target_color_space,
+                                              scale_factor = scale_factor) for mySF in sfList])
         else:
             return StreamList([CachedStream.from_SF(mySF, cap, name = name,
                                                     cache_size = cache_size,
                                                     cap_color_space = cap_color_space, 
-                                                    target_color_space = target_color_space) for mySF in sfList])
+                                                    target_color_space = target_color_space,
+                                                    scale_factor = scale_factor) for mySF in sfList])
     
     @staticmethod
     def from_store(featureName, videoName, storeName, 
                    cap_color_space = 'bgr', 
-                   target_color_space = 'bgr'):
+                   target_color_space = 'bgr',
+                   scale_factor = 1):
         featDict = get_folder_struct('features_stored')
         featPath = featDict['main']
         storePath = os.path.join(featPath, videoName, storeName, featureName)
@@ -899,7 +980,8 @@ class StreamList:
             videoPath = os.path.join(storePath, videoFile)
             outList.append(readType.from_file(videoPath, name = featureName,
                                               cap_color_space = cap_color_space, 
-                                              target_color_space = target_color_space))
+                                              target_color_space = target_color_space,
+                                              scale_factor = scale_factor))
         return StreamList(outList)
     
     @staticmethod
@@ -936,15 +1018,26 @@ class StreamList:
     def recolor(self, new_target_color_space):
         return StreamList([myStm.recolor(new_target_color_space) for myStm in self])
     
-    def chunk_generator(self, chunksize = None): 
+    # def chunk_generator(self, chunksize = None): 
+    #     ### chunks are simply the elements!
+    #     ### UPDATE: If the chunks get too large, they can not be pickled anymore! In this case,
+    #     ### we get the weird 'OS ERROR: parameter is incorrect'
+    #     for myStm in self:
+    #         sub_generator = myStm.chunk_generator(chunksize = chunksize)
+    #         for chunkStm in sub_generator:
+    #             yield chunkStm
+    
+    def chunk_generator(self, chunksize = 100): 
         ### chunks are simply the elements!
-        ### UPDATE: If the chunks get too large, they can not be pickled anymore! In this case,
-        ### we get the weird 'OS ERROR: parameter is incorrect'
+        CRITICAL_VALUE = 4 ### beyond 4 GB, we can not pickle!
         for myStm in self:
-            sub_generator = myStm.chunk_generator(chunksize = chunksize)
-            for chunkStm in sub_generator:
-                yield chunkStm
-            
+            if myStm.size(unit = 'GB') >= CRITICAL_VALUE:
+                sub_generator = myStm.chunk_generator(chunksize = chunksize)
+                for chunkStm in sub_generator:
+                    yield chunkStm
+            else:
+                yield myStm.decap()
+    
     def extract(self, featureFunc, **kwargs):
         outList = []
         for myStm in self:
@@ -1047,18 +1140,23 @@ class NCDecapStream:
     @staticmethod
     def from_bool(boolSF, cap, 
                   cap_color_space = 'bgr',
-                  target_color_space = 'bgr'):
+                  target_color_space = 'bgr',
+                  scale_factor = 1,
+                  name = None):
         
         framesType = framesTypeMap[target_color_space]
         filterSF = boolSF.filter(boolSF) ## keep only true entries
         frmNums = list(filterSF.keys())
+        if name is None:
+            name = boolSF.name
         frames = framesType.from_list(cap, frmNums, 
                                       cap_color_space = cap_color_space,
-                                      name = boolSF.name) ### TODO: speed up the get_framelist function by threading.
+                                      scale_factor = scale_factor,
+                                      name = name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, frmNums, filterSF)
     
     @staticmethod
-    def argstrings_to_args(self, funcArgs, myFrm, myDict):
+    def argstrings_to_args(funcArgs, myFrm, myDict):
         return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
 
     def attach(self, mySF: StreamFeatures):
@@ -1106,15 +1204,26 @@ class CachedStream(Stream):
         if not fs_avail <= stop_cap <= ls_avail:
             raise Exception(f'Stop frame {stop_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
             
+        ### CHECK NAME
+        if self.name is None:
+            nameMap = {'bgr': 'cFrm',
+                       'grey': 'gFrm',
+                       'hsv': 'hFrm',
+                       'bool': 'bFrm'}
+            object.__setattr__(self, 'name', nameMap[self.target_color_space])
+        
+            
     @staticmethod
     def from_SF(mySF, cap, cache_size = 1, name = None,
-                cap_color_space = 'bgr', target_color_space = 'bgr'):
+                cap_color_space = 'bgr', target_color_space = 'bgr',
+                scale_factor = 1):
         if name is None:
             name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return CachedStream(cap, start, stop, cache_size = cache_size,
                             truncation_anchor = 0,
                             cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                            scale_factor = scale_factor,
                             features = mySF, name = name)
 
     @staticmethod
@@ -1123,6 +1232,7 @@ class CachedStream(Stream):
                             truncation_anchor = someStm.truncation_anchor, 
                             cap_color_space = someStm.cap_color_space,
                             target_color_space = someStm.target_color_space, 
+                            scale_factor = someStm.scale_factor,
                             name = someStm.name, features = someStm.features, 
                             cache_size = cache_size)
     
@@ -1201,6 +1311,10 @@ class CachedStream(Stream):
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
             myFrm = myFrm.rename(self.name)
             
+            ### rescale if necessary
+            if self.scale_factor != 1:
+                myFrm = myFrm.rescale(self.scale_factor)
+                
             ### feed/build the caches
             frameCache = frameCache.add(myFrm)
             features = [self._mut_features.maybe_get(idx + cntNum) for idx in featIndices]
@@ -1227,27 +1341,9 @@ class CachedStream(Stream):
         else:
             cv.destroyAllWindows()
         
-    def chunk_generator(self, chunksize):
-        assert chunksize > 2 * self.cache_size, f'Chunks have to be large enough to accomodate the cache! With cache size {self.cache_size}, a minimum chunk size of {self.cache_size * 2 + 1} is needed!'
+    def chunk_generator(self, chunksize = 100):
+        return Stream.chunk_generator(self, chunksize = chunksize)
         
-        start_frame_with_cache = self.start_frame - self.cache_size
-        stop_frame_with_cache = self.stop_frame + self.cache_size
-        
-        ### generate decapped chunks of the stream, one by one lazily
-        chunk_start = start_frame_with_cache
-        chunk_stop = min(chunk_start + chunksize - 1, stop_frame_with_cache) 
-        ### since the last frame is included, a chunk of size 10 with chunk_start 5 ends at 14 = 5 + 10 - 1
-        
-        while not chunk_stop == stop_frame_with_cache:
-            yield CachedStream(self.cap, chunk_start, chunk_stop, self.features, cache_size = self.cache_size).decap()
-            last_proper_frame = chunk_stop - self.cache_size ### this is the last frame that we can expect to be done properly, with full cache.
-            next_proper_frame = last_proper_frame + 1 ### for the next chunk, this is the first frame we want to be done properly.
-            chunk_start = next_proper_frame - self.cache_size ### importantly, the next chunk does not start right after the previous chunk, but there is some overlap, so we can include the cache specific frames!
-            chunk_stop = min(chunk_start + chunksize - 1, stop_frame_with_cache)
-        else:
-            ### yield one last time
-            yield CachedStream(self.cap, chunk_start, chunk_stop, self.features, cache_size = self.cache_size).decap() 
-       
     def extract(self, featureFunc, **kwargs):
         
         ### Establish function arguments and return shape
@@ -1301,7 +1397,7 @@ class CachedStream(Stream):
         return Stream.extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs)
                  
     def decache(self):
-        return Stream(self.cap, self.start_frame, self.stop_frame, self.features)
+        return Stream(**{k: v for k, v in self.__dict__.items() if k in Stream.__annotations__})
     
     def decap(self):
         ### Update: When decapping a cached stream, the start_frame and stop_frame refer
@@ -1319,6 +1415,7 @@ class CachedStream(Stream):
         
         myFrms = framesType.from_video(self.cap, start_cap, stop_cap,
                                        cap_color_space = self.cap_color_space,
+                                       scale_factor = self.scale_factor,
                                        name = self.name)
         return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, 
                                  cache_size = self.cache_size, name = self.name)
@@ -1335,6 +1432,10 @@ class DecapCachedStream(DecapStream):
     _update_mut_features = CachedStream._update_mut_features        
     _delete_mut_features = CachedStream._delete_mut_features
         
+    @staticmethod
+    def argstrings_to_args(funcArgs, myFrm, myDict):
+        return CachedStream.argstrings_to_args(funcArgs, myFrm, myDict)
+    
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
@@ -1385,7 +1486,7 @@ class RandStream(Stream):
     number_of_frames: int = 100
     
     def length(self):
-        return number_of_frames
+        return self.number_of_frames
     
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
             
@@ -1401,6 +1502,10 @@ class RandStream(Stream):
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
             myFrm = myFrm.rename(self.name)
             
+            ### rescale if necessary
+            if self.scale_factor != 1:
+                myFrm = myFrm.rescale(self.scale_factor)
+                
             ### Get the feature dictionary
             myDict = self.features.maybe_get(frmNum)
             ### if frmNum not found, we get {feat: None for feat in self.get_features()}

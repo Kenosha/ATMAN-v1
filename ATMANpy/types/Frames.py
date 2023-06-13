@@ -66,7 +66,8 @@ class Frame:
     ### CONSTRUCTORS ###
     @classmethod
     def from_video(cls, cap, frame_num, 
-                   cap_color_space = 'bgr', name = 'frame'):
+                   cap_color_space = 'bgr', name = 'frame',
+                   scale_factor = 1):
         typeMap = {'bgr': BGRFrame,
                    'hsv': HSVFrame,
                    'grey': GreyFrame,
@@ -79,13 +80,21 @@ class Frame:
             capFrm = capType(frame)
         else:
             capFrm = capType(frame, name = name)
-            
+        
+        ### convert color
         conversionFuncStr = cls.get_converter()
         
         if cap_color_space == cls.get_color():
-            return capFrm
+            convFrm = capFrm
         else:
-            return getattr(capFrm, conversionFuncStr)()
+            convFrm = getattr(capFrm, conversionFuncStr)()
+        
+        ### rescale
+        if scale_factor != 1:
+            convFrm = convFrm.rescale(scale_factor)
+        
+        return convFrm
+        
     ####################
     
     @staticmethod       
@@ -322,6 +331,17 @@ class Frame:
         dimArr = (self_copy * dimming_factor)
         return InstClass(dimArr.astype('uint8'))
     
+    def rescale(self, scale_factor):
+        InstClass = self.__class__
+        self_copy = self.array.copy()
+        
+        new_width = round(self.cols * scale_factor)
+        new_height = round(self.rows * scale_factor)
+        dim = (new_width, new_height)
+        
+        resArr = cv.resize(self_copy, dim, interpolation = cv.INTER_AREA)
+        return InstClass(resArr.astype('uint8'), name = self.name)
+    
     ###############
 
 @dataclass(frozen = True)
@@ -377,9 +397,10 @@ class BoolFrame(Frame):
     #     return BoolFrame(np.all(self.array, axis = axes))
     
     def put(self, anyObj, 
-            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1):
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
         return put(self.to_grey(), anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size)
+                   color = color, radius = radius, thickness = thickness, where = where, size = size,
+                   verbose = verbose)
     
     def any_channel(self):
         c1, c2, c3 = cv.split(self.array)
@@ -505,9 +526,10 @@ class GreyFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1):
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
         return put(self, anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size)
+                   color = color, radius = radius, thickness = thickness, where = where, size = size, 
+                   verbose = verbose)
         
     def zero(self):
         return GreyFrame(np.zeros(self.shape, dtype = 'uint8'))
@@ -528,15 +550,19 @@ class GreyFrame(Frame):
         self_copy = self.array.copy()
         grad = cv.Sobel(self_copy, cv.CV_64F, 1, 0)
         grad = np.abs(grad)
-        grad_norm = (grad * 255 / grad.max()).astype(np.uint8)
-        return GreyFrame(grad_norm)
+        ### Update: Do not normalize under the hood! keep the normalisation factor!
+        normaliser = grad.max() / 255
+        grad_norm = (grad / normaliser).astype(np.uint8)
+        return GreyFrame(grad_norm), normaliser
     
     def sobel_y(self):
         self_copy = self.array.copy()
         grad = cv.Sobel(self_copy, cv.CV_64F, 0, 1)
         grad = np.abs(grad)
-        grad_norm = (grad * 255 / grad.max()).astype(np.uint8)
-        return GreyFrame(grad_norm)
+        ### Update: Do not normalize under the hood! keep the normalisation factor!
+        normaliser = grad.max() / 255
+        grad_norm = (grad / normaliser).astype(np.uint8)
+        return GreyFrame(grad_norm), normaliser
     
     def sobel_dirs(self, toward_high_intensity = True):
         ### how: atan or atan2
@@ -667,9 +693,10 @@ class BGRFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1):
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
         return put(self, anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size)
+                   color = color, radius = radius, thickness = thickness, where = where, size = size, 
+                   verbose = verbose)
         
     def zero(self):
         return BGRFrame(np.zeros(self.shape[:2], dtype = 'uint8'))
@@ -769,9 +796,10 @@ class HSVFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1):
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
         return put(self, anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size)
+                   color = color, radius = radius, thickness = thickness, where = where, size = size,
+                   verbose = False)
         
     def zero(self):
         return HSVFrame(np.zeros(self.shape[:2], dtype = 'uint8'))

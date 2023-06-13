@@ -37,9 +37,19 @@ class Frames:
     array: np.array
     name: str = 'frames'
 
+    def __repr__(self):
+        framesType = self.__class__.__name__
+        if self.cols() is None and self.rows() is None:
+            dimStr = 'None'
+        else:
+            dimStr = f'{self.cols()} x {self.rows()}'
+        return f'{framesType}(name = {self.name}, length = {self.length()}, size = {self.size(unit = "MB")} MB, dims = {dimStr})'
+    
     @classmethod
     def from_video(cls, cap, start_frame, stop_frame, 
-                   cap_color_space = 'bgr', name = None):
+                   cap_color_space = 'bgr', 
+                   scale_factor = 1,
+                   name = None):
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames,
@@ -53,6 +63,9 @@ class Frames:
         else:
             capFrms = capType(frames, name = name)
         
+        if scale_factor != 1:
+            capFrms = capFrms.rescale(scale_factor)
+        
         conversionFuncStr = cls.get_converter()
         
         if cap_color_space == cls.get_color():
@@ -62,7 +75,9 @@ class Frames:
         
     @classmethod
     def from_list(cls, cap, frameList, 
-                  cap_color_space = 'bgr', name = None):
+                  cap_color_space = 'bgr', 
+                  scale_factor = 1,
+                  name = None):
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames,
@@ -79,9 +94,17 @@ class Frames:
         conversionFuncStr = cls.get_converter()
         
         if cap_color_space == cls.get_color():
-            return capFrms
+            convFrms = capFrms
         else:
-            return getattr(capFrms, conversionFuncStr)()
+            convFrms = getattr(capFrms, conversionFuncStr)()
+        
+        if convFrms.is_empty():
+            return convFrms
+        
+        if scale_factor != 1:
+            convFrms = convFrms.rescale(scale_factor)
+        
+        return convFrms
     
     def __getitem__(self, item):
         framesType = self.__class__
@@ -90,10 +113,6 @@ class Frames:
             return frameType(self.array[item], name = self.name)
         else:
             return framesType(self.array[item], name = self.name)
-    
-    def __repr__(self):
-        framesType = self.__class__
-        return f'{framesType}(length = {self.length()}, size = {self.size(unit = "MB")} MB)'
     
     def __iter__(self):
         framesType = self.__class__
@@ -108,11 +127,38 @@ class Frames:
         return self.array.shape
     
     def length(self):
-        return self.shape[0]
+        return self.shape()[0]
     
+    def rows(self):
+        try:
+            return self.shape()[1]
+        except IndexError: ### happens if the Frames Object is empty
+            return None
+    
+    def cols(self):
+        try:
+            return self.shape()[2]
+        except IndexError: ### happens if the Frames Object is empty
+            return None
+    
+    def is_empty(self):
+        return self.length() == 0
+    
+    def rescale(self, scale_factor):
+        framesType = self.__class__
+        
+        width, height = self.cols(), self.rows()
+        dim = round(width * scale_factor), round(height * scale_factor)
+        
+        resArr = np.array([cv.resize(imgArr, dim, interpolation = cv.INTER_AREA) for imgArr in self.array])
+        return framesType(resArr, name = self.name)
+        
 @dataclass(frozen = True)
 class BGRFrames(Frames):
     name: str = 'bgr_frames'
+    
+    def __repr__(self):
+        return Frames.__repr__(self)
     
     @classmethod
     def get_constituent(cls):
@@ -137,6 +183,9 @@ class BGRFrames(Frames):
 @dataclass(frozen = True)
 class HSVFrames(Frames):
     name: str = 'hsv_frames'
+    
+    def __repr__(self):
+        return Frames.__repr__(self)
     
     @classmethod
     def get_constituent(cls):
@@ -166,6 +215,9 @@ class GreyFrames(Frames):
         if len(self.array.shape) == 4: ### need to convert to gray...
             convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.array])
             object.__setattr__(self, 'array', convArr)
+    
+    def __repr__(self):
+        return Frames.__repr__(self)
     
     @classmethod
     def get_constituent(cls):
@@ -200,6 +252,9 @@ class BoolFrames(Frames):
             convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.array])
             object.__setattr__(self, 'array', convArr)
             
+    def __repr__(self):
+        return Frames.__repr__(self)
+    
     @classmethod
     def get_constituent(cls):
         return BoolFrame
