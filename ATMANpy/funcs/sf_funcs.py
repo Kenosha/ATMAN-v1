@@ -11,6 +11,8 @@ that call for treating all features as a whole, across frames
 
 import numpy as np
 
+import ATMANpy.auxil.constants as const
+
 from ATMANpy.types.Features import StreamFeatures, StreamFeature, BoolFeatures, BoolFeature
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
@@ -143,7 +145,6 @@ def median_corner_regions(inSF, how_many_unilateral = 8):
         dictList.append(featDict)
     
     return StreamFeatures(dict(zip(mySF.get_frames(), dictList)), name = 'median_corner_regions')
-   
     
 def get_normal_bool(courtSF, normalized_deviation_threshold = 1, verbose = False):
     
@@ -171,6 +172,25 @@ def get_normal_bool(courtSF, normalized_deviation_threshold = 1, verbose = False
 
     boolSF = BoolFeature(dict(zip(courtSF.keys(), all_corners_within)), name = 'all_corners_within')
     return boolSF
+
+def get_nonserve_bool(courtSF, first_seconds_to_disqualify = 5):
+    frames = courtSF.get_frames()
+    disq_num = 25 * first_seconds_to_disqualify
+    disq_frames = frames[0: disq_num]
+    
+    boolDict = {frame: frame not in disq_frames for frame in courtSF.get_frames()}
+    return BoolFeature(boolDict, name = f'not_in_first_{first_seconds_to_disqualify}_seconds')
+
+def get_play_bool(courtSF, last_seconds_to_take = 3, min_length_of_sequence = 13):
+    frames = courtSF.get_frames()
+    take_num, length_num = 25 * last_seconds_to_take, 25 * min_length_of_sequence
+    if len(frames) < length_num:
+        take_frames = []
+    else:
+        take_frames = frames[-take_num:]
+    
+    boolDict = {frame: frame in take_frames for frame in frames}
+    return BoolFeature(boolDict, name = f'last_{last_seconds_to_take}_seconds_of_long_sequence')
 
 def get_median_and_deviation_frame(wrpSF):
     

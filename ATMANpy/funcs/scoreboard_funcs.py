@@ -9,7 +9,6 @@ Created on Thu Jun 16 23:17:50 2022
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
 
-from ATMANpy.funcs.line_funcs import merge_horizontal_lines
 from functools import partial
 
 
@@ -53,48 +52,59 @@ def merge_horizontal_lines(aLn, bLn):
 
 def get_horizontal_lines(gFrm, scoreROI,
                          sobel_threshold = 30, slope_threshold = 0.0001,
-                         merge_lines = True, min_line_length_after_merge = 50):
+                         # merge_lines = True, min_line_length_after_merge = 50
+                         ):
     
     myFrm = gFrm.crop(scoreROI)
     blur_myFrm = myFrm.gaussian_blur((3, 3))
     
-    # (gFrm.sobel_x() > SOBEL_THRESHOLD).show()
-    # (gFrm.sobel_y() > SOBEL_THRESHOLD).show()
+    ### apply sobel gradients to find edges, taking into account the normalisation
+    # (sobelFrm fits into 0 to 255, by construction!!)
+    sobelFrm, normalizer = blur_myFrm.sobel_y()
+    horiBool = sobelFrm > sobel_threshold / normalizer
     
-    # vertBool = blur_myFrm.sobel_x() > SOBEL_THRESHOLD
-    horiBool = blur_myFrm.sobel_y() > sobel_threshold
-    
-    # vertBool.show()
-    # horiBool.show()
-    
-    # vertLns = vertBool.prob_hough(minLineLength = 5, maxLineGap = 10)
+    ### create hough lines
     horiLns = horiBool.prob_hough(minLineLength = 5, maxLineGap = 5)
     
-    # myFrm.to_BGR().put(vertLns).show() ### strange...
-    # myFrm.to_BGR().put(lns2).show() ### ok! 
-    
+    ### keep only lines which are parallel to edge!
     straightLns = []
     for ln in horiLns:
         if ln.slope() is not None:
             if -slope_threshold < ln.slope() < slope_threshold:
                 straightLns.append(ln)
-    # myFrm.to_BGR().put(straightLns).show()
     
     # adjust for score region cropping
     tlPt = scoreROI.to_points()[0]
     straightLns = Lines([ln.right(tlPt.x).down(tlPt.y) for ln in straightLns])
     
-    # gFrm.to_BGR().put(straightLns).show()
-    
-    ### merge horizontal lines
-    if merge_lines:
-        straightLns = straightLns.sort('left_point', 't2b', 'l2r').merge(merge_horizontal_lines)
+    # ### merge horizontal lines
+    # if merge_lines:
+    #     straightLns = straightLns.sort('left_point', 't2b', 'l2r').merge(merge_horizontal_lines)
         
-        straightLns = [l for l in straightLns if l.length() > min_line_length_after_merge]
-    
-    # gFrm.to_BGR().put(straightLns).show()
+    #     straightLns = [l for l in straightLns if l.length() > min_line_length_after_merge]
     
     return straightLns
+
+def filter_horizontal_lines(straightLns, outlier_percentile = 0.8,
+                            min_lines_for_filtering = 4):
+    ### idea: throw away all lines whose left points are 
+        # to the right of outlier_percentile the right points ...
+        # of all right points, seen from left-to-right
+        # and vice versa, ("whose right points are to the left...")
+    rightLns = straightLns.sort('right_point', 'l2r', 't2b')
+    leftLns = straightLns.sort('left_point', 'r2l', 't2b')
+    
+    critical_value = round(outlier_percentile * len(straightLns))
+    crit_rightLn = rightLns[critical_value]
+    crit_leftLn = leftLns[critical_value]
+    
+    rightmost_acceptable = crit_rightLn.rightPt.x
+    leftmost_acceptable = crit_leftLn.leftPt.x
+    
+    is_outlier_func = lambda someLn: someLn.is_strictly_right(rightmost_acceptable) or someLn.is_strictly_left(leftmost_acceptable)
+    
+    filterLns = Lines([someLn for someLn in straightLns if not is_outlier_func(someLn)], name = straightLns.name)
+    return filterLns
 
 def lines_to_reg(lns):
     left_xs = [ln.leftPt.x for ln in lns]
@@ -113,8 +123,7 @@ def lines_to_reg(lns):
 
 def find_scoreboard(gFrm, 
                     sobel_threshold = 30, slope_threshold = 0.0001,
-                    merge_lines = True, min_line_length_after_merge = 50, 
-                    min_lines = 2, 
+                    outlier_percentile = 0.8, min_lines_for_filtering = 4,
                     verbose = False):
     
     scoreROI = construct_scoreboard_prior(gFrm.cols, gFrm.rows)
@@ -122,11 +131,17 @@ def find_scoreboard(gFrm,
     scoreLns = get_horizontal_lines(gFrm, scoreROI, 
                                     sobel_threshold = sobel_threshold, 
                                     slope_threshold = slope_threshold,
-                                    merge_lines = merge_lines,
-                                    min_line_length_after_merge = min_line_length_after_merge)
+                                    # merge_lines = merge_lines,
+                                    # min_line_length_after_merge = min_line_length_after_merge
+                                    )
+    
+    if len(scoreLns) >= min_lines_for_filtering:
+        filterLns = filter_horizontal_lines(scoreLns, outlier_percentile = outlier_percentile)
+    else:
+        filterLns = scoreLns
 
-    if len(scoreLns) >= min_lines:
-        scoreBoard = lines_to_reg(scoreLns)
+    if len(scoreLns) >= 2:
+        scoreBoard = lines_to_reg(filterLns)
     else:
         return None
 
