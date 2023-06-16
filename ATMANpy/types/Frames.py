@@ -61,6 +61,14 @@ class Frame:
         
         if len(self.array.shape) == 1:
             object.__setattr__(self, 'array', np.array([self.array]))
+        
+        try:
+            channels = self.array.shape[2]
+        except:
+            channels = 1
+    
+        object.__setattr__(self, 'channels', channels)
+        
         #############################  
     
     ### CONSTRUCTORS ###
@@ -358,19 +366,32 @@ class BoolFrame(Frame):
 
         #### TYPE CHECKS ####
         # we can actually deal with a three dim array, by turning it back to Grey
-        arraycheck(self, channel_number = 3, color_channel_length = None)
+        arraycheck(self, channel_number = 3, color_channel_length = 3)
         ########################  
         
-        #### IMMUTABILITY BREAKS ####        
-        ### convert BGR to Grey
-        if len(self.array.shape) == 3:
-            object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
+        # #### IMMUTABILITY BREAKS ####        
+        # ### convert BGR to Grey
+        # if len(self.array.shape) == 3:
+        #     object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
+        ### NO! WE WANT THE THING TO HAVE UP TO THREE CHANNELS!
         #############################  
     
         #####################
 
+    @staticmethod
+    def true(likeFrm):
+        return BoolFrame(np.ones(likeFrm.shape, dtype = 'uint8') * 255, name = likeFrm.name)
+    
+    @staticmethod
+    def false(likeFrm):
+        return BoolFrame(np.zeros(likeFrm.shape, dtype = 'uint8'), name = likeFrm.name)
+    ####################
+    
     def __repr__(self):
-        return f'BoolFrame({self.cols} by {self.rows}, name: {self.name})'
+        if self.channels > 1:
+            return f'BoolFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
+        else:
+            return f'BoolFrame({self.cols} by {self.rows}, name: {self.name})'
     
     def _check_values(self):
         return set([0, 255]).issubset(self.unique())
@@ -662,7 +683,6 @@ class BGRFrame(Frame):
             arrList.append(arr)
         arr = np.stack(arrList, axis = -1)
         return BGRFrame(arr, name = name)
-    ####################
     
     @classmethod
     def get_converter(cls):
@@ -672,7 +692,7 @@ class BGRFrame(Frame):
         return 'bgr'
     
     def __repr__(self):
-        return f'BGRFrame({self.cols} by {self.rows}, name: {self.name})'
+        return f'BGRFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
     
     ### TRANSFORMS ###
     def to_grey(self):
@@ -764,7 +784,7 @@ class HSVFrame(Frame):
         return 'hsv'
     
     def __repr__(self):
-        return f'HSVFrame({self.cols} by {self.rows}, name: {self.name})'
+        return f'HSVFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
     
     ### TRANSFORMS ###
     def H(self):
