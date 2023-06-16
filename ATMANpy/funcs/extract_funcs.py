@@ -35,7 +35,8 @@ from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only,
 from ATMANpy.funcs.scoreboard_funcs import find_scoreboard
 from ATMANpy.funcs.player_funcs import find_best_expansion, stop_criterion, find_player_contour_with_overlap
 
-from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame
+from ATMANpy.types.Frames import Frame, BoolFrame, GreyFrame, BGRFrame, HSVFrame
+from ATMANpy.types.Contours import Contour
 
 def find_courtlines(H, schemaLines = schemaLines):
     if H is None:
@@ -303,4 +304,81 @@ def find_both_players_smart(gCache, featCache,
                                                  shadowMask = shadowMask)
 
     ### ROI Masks are returned only for checking...
-    return topPlayer, botPlayer, topROIMask, botROIMask 
+    return topPlayer, botPlayer
+
+def find_motion_mask(gCache, 
+                     intensity_threshold = 10,
+                     relevant_indices = [4, 6, 8]):
+    centralFrm = gCache[0]
+    
+    motFunc = lambda othFrm: centralFrm - othFrm > intensity_threshold 
+    
+    motMask = BoolFrame.true(centralFrm)
+    for idx in relevant_indices:
+        othFrm_bef, othFrm_aft = gCache[-idx], gCache[idx]
+        motMask = motMask & motFunc(othFrm_bef) & motFunc(othFrm_aft)
+   
+    return motMask
+
+def refine_motion_mask(motMask, topPlayer, botPlayer,
+                       dil_kernel_dims = (20, 10),
+                       open_kernel_dims = (5, 5)):
+    
+    ### Dilated player mask
+    dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, dil_kernel_dims)
+    
+    if not topPlayer is None:
+        topMask = motMask.within_contour(topPlayer).dilate(dil_kernel)
+    else:
+        topMask = BoolFrame.false(motMask)
+        
+    if not botPlayer is None:
+        botMask = motMask.within_contour(botPlayer).dilate(dil_kernel)
+    else:
+        botMask = BoolFrame.false(motMask)
+    
+    playerMask = topMask | botMask
+    
+    ### Opened Motion Mask
+    open_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, open_kernel_dims)
+    motMask = motMask.open(open_kernel)
+    
+    ### Player and Motion Mask
+    intMask = ~playerMask & motMask
+    
+    return intMask
+
+def find_ball_candidates(intMask, hFrm, gFrm, svmDict = None, max_number_of_contours = 40):
+    from ATMANpy.funcs.ball_funcs import make_feature_frame
+    
+    ### find movement contours
+    movCnts, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    movCnts = [Contour(c) for c in movCnts if len(c) > 2] ### need at least three points for a contour
+    
+    ### if there is an excessive amount of contours, we likely have camera panning...
+    if len(movCnts) > max_number_of_contours:
+        return None
+    
+    ### if there are no contours, there is nothing we can do...
+    if len(movCnts) == 0:
+        return None
+    
+    ### make a feature frame
+    cntFrm = make_feature_frame(movCnts, hFrm, gFrm, intMask).dropna()
+    
+    ### it can be that features can not be calculated for a contour...
+    if len(cntFrm) == 0:
+        return None
+    
+    ### Using the SVM estimated, predict whether a contour is a ball.
+    clf, features, mean, std = svmDict['svm'], svmDict['features'], svmDict['mean'], svmDict['std']
+    cntFrm = (cntFrm - mean) / std
+    cntFrm['isBall'] = clf.predict(cntFrm[features].values)
+    
+    ### get all True predictions
+    ballIdx = list(cntFrm[cntFrm.isBall == 1].index)
+    ball_candidates = [c for i, c in enumerate(movCnts) if i in ballIdx]
+
+    return ball_candidates
+    
+
