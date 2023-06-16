@@ -400,7 +400,7 @@ class Lines:
         return extremum
     
     def rescale(self, scale_factor):
-        return Lines([ln.rescale(scale_factor) for ln in self.lineList], name = self.name)
+        return self.__class__([ln.rescale(scale_factor) for ln in self.lineList], name = self.name)
 
 @dataclass(frozen = True)
 class CourtLines(Lines):

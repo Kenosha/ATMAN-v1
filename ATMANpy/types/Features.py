@@ -745,11 +745,15 @@ class SFList:
     def length(self):
         return len(self.sfList)
     
+    def rescale(self, scale_factor):
+        featList = [myFrm.rescale(scale_factor) for myFrm in self]
+        return SFList(featList)
+    
     def apply(self, func, assignArgs = None, assignVals = None, where = None):
         return SFList([mySF.apply(func, assignArgs = assignArgs, assignVals = assignVals, where = where) for mySF in self])
     
-    def apply_whole(self, func):
-        return SFList([func(mySF) for mySF in self])
+    def apply_whole(self, func, *args, **kwargs):
+        return SFList([func(mySF, *args, **kwargs) for mySF in self])
     
     def add(self, key, value):
         return SFList([mySF.add(key, value) for mySF in self])

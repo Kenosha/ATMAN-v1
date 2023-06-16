@@ -36,6 +36,9 @@ class Contour:
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
         return Point2D((cX, cY))
+
+    def rescale(self, scale_factor):
+        return Contour((self.points * scale_factor).astype(int))
     
     def enclosing_region(self, margin = 0):
         x, y, w, h = cv.boundingRect(self.points)
