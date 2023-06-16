@@ -84,6 +84,17 @@ def extract_mp_timer(extractMethod):
 
     return timed
 
+def get_updated_attribute_dictionary(someObj, updDict):
+    currDict = someObj.__dict__
+    
+    def maybe_update(attr):
+        try:
+            return updDict[attr]
+        except KeyError:
+            return currDict[attr]
+    
+    return {attr: maybe_update(attr) for attr in currDict}
+
 @dataclass(frozen = True)
 class Stream:
     cap: cv.VideoCapture
@@ -230,41 +241,24 @@ class Stream:
         return round(length * width * height * mult / unitMap[unit], 2)
     
     def conform(self, start_frame, stop_frame):
-        ### TODO: conform also features!
-        return self.__class__(self.cap, start_frame, stop_frame, 
-                              truncation_anchor = self.truncation_anchor,
-                              cap_color_space = self.cap_color_space, 
-                              target_color_space = self.target_color_space,
-                              scale_factor = self.scale_factor,
-                              name = self.name,
-                              features = self.features)
+        updDict = {'start_frame': start_frame, 'stop_frame': stop_frame}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
     def recolor(self, new_target_color_space):
-        return self.__class__(self.cap, self.start_frame, self.stop_frame, 
-                              truncation_anchor = self.truncation_anchor,
-                              cap_color_space = self.cap_color_space, 
-                              target_color_space = new_target_color_space,
-                              scale_factor = self.scale_factor,
-                              name = self.name,
-                              features = self.features)
+        updDict = {'target_color_space': new_target_color_space}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
     def rescale(self, new_scale_factor):
-        return self.__class__(self.cap, self.start_frame, self.stop_frame, 
-                              truncation_anchor = self.truncation_anchor,
-                              cap_color_space = self.cap_color_space, 
-                              target_color_space = self.target_color_space,
-                              scale_factor = new_scale_factor,
-                              name = self.name,
-                              features = self.features)
+        updDict = {'scale_factor': new_scale_factor}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
     def attach(self, mySF: StreamFeatures):
-        return self.__class__(self.cap, self.start_frame, self.stop_frame, 
-                              truncation_anchor = self.truncation_anchor, 
-                              cap_color_space = self.cap_color_space, 
-                              target_color_space = self.target_color_space,
-                              scale_factor = self.scale_factor,
-                              name = self.name,
-                              features = mySF)
+        updDict = {'features': mySF}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     def decap(self):
         framesType = framesTypeMap[self.target_color_space]
@@ -529,7 +523,11 @@ class Stream:
     
         sfList = []
         while True:
-            if not generator_is_exhausted and len(pending) < num_workers and ram_is_ok():                
+            ram_ok = ram_is_ok() ### have to check it once! 
+                                 ### so we dont queue the generator twice without scheduling 
+                                 ### or queue the same task twice...
+            
+            if not generator_is_exhausted and len(pending) < num_workers and ram_ok:                
                 ### if there is space in the queue, add a task!
                 # print(f'Queueing {chunkStm}...')
                 # print(kwargs)
@@ -542,7 +540,7 @@ class Stream:
                 mySF = pending.popleft().get()
                 sfList.append(mySF)
             
-            if not generator_is_exhausted and len(pending) < num_workers and ram_is_ok(): ### only when there is space in the queue
+            if not generator_is_exhausted and len(pending) < num_workers and ram_ok: ### only when there is space in the queue
                 ### iterate the generator.
                 try:
                     chunkStm = next(gen) ### iterate the generator
@@ -666,23 +664,20 @@ class StillStream:
         return round(length * width * height * mult / unitMap[unit], 2)
     
     def conform(self, start_frame, stop_frame):
-        return StillStream(self.stillFrm, start_frame, stop_frame, 
-                           name = self.name,
-                           features = self.features)
-    
+        return Stream.conform(self, start_frame, stop_frame)
+        
     def recolor(self, new_color):
         oldFrm = self.stillFrm
         old_color = oldFrm.__class__.get_color()
         newFrm = color_converter(oldFrm.array, old_color, new_color)
-        return StillStream(newFrm, self.start_frame, self.stop_frame, 
-                           name = self.name,
-                           features = self.features)
-    
+        
+        updDict = {'stillFrm': newFrm}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return StillStream(**newDict)
+        
     def attach(self, mySF: StreamFeatures):
-        return StillStream(self.stillFrm, self.start_frame, self.stop_frame, 
-                           name = self.name,
-                           features = mySF)
-
+        return Stream.attach(self, mySF)
+        
     def decap(self):
         framesType = framesTypeMap[self.stillFrm.__class__.get_color()]
         
@@ -748,16 +743,16 @@ class MulStream:
             # ... stop_frame -> same 
             # ... cache_size -> check all CachedStreams, take largest
         
-        canonical_features = self[0].features
-        canonical_start_frame = self[0].start_frame ### this fucks things if there is a difference 
-        canonical_stop_frame = self[0].stop_frame   ### between starts and stops, but the generator will pick this up.
+        canonical_features = self.streams[0].features
+        canonical_start_frame = self.streams[0].start_frame ### this fucks things if there is a difference 
+        canonical_stop_frame = self.streams[0].stop_frame   ### between starts and stops, but the generator will pick this up.
 
         object.__setattr__(self, 'features', canonical_features)
         object.__setattr__(self, 'start_frame', canonical_start_frame)
         object.__setattr__(self, 'stop_frame', canonical_stop_frame)
         
         try:
-            canonical_cache_size = self[0].cache_size
+            canonical_cache_size = self.streams[0].cache_size
         except:
             pass
         else:
@@ -773,9 +768,9 @@ class MulStream:
     
     def __getitem__(self, item):
         if isinstance(item, int):
-            return self.streams[item]
+            return [myStm[item] for myStm in self]
         else:
-            return MulStream(self.streams[item])
+            return MulStream([myStm[item] for myStm in self])
     
     ### So that a MulStream may be extracted from with caching
     def _set_mut_features(self, features_needed = None):
@@ -803,7 +798,7 @@ class MulStream:
         return self.stop_frame - self.start_frame + 1
         
     def dims(self):
-        return self[0].dims()
+        return self.streams[0].dims()
     
     def size(self, unit = 'GB'):
         ### size of raw video in stream, if decapped
@@ -917,7 +912,7 @@ class MulStream:
             
         
     def extract(self, featureFunc, **kwargs):
-        canonicalType = self[0].__class__ ### if the first object is a Stream, we use normal extraction
+        canonicalType = self.streams[0].__class__ ### if the first object is a Stream, we use normal extraction
                                             # if the first object is a CachedStream, we use cached extraction
                                             # (with mutable features, etc.)
         return canonicalType.extract(self, featureFunc, **kwargs)
@@ -1018,6 +1013,13 @@ class StreamList:
     def recolor(self, new_target_color_space):
         return StreamList([myStm.recolor(new_target_color_space) for myStm in self])
     
+    def rescale(self, new_scale_factor):
+        return StreamList([myStm.rescale(new_scale_factor) for myStm in self])
+    
+    def attach(self, sfList):
+        assert self.length() == sfList.length(), f'Trying to attach SFList of length {sfList.length()} to StreamList of length {self.length()}'
+        return StreamList([myStm.attach(mySF) for myStm, mySF in zip(self, sfList)])
+    
     # def chunk_generator(self, chunksize = None): 
     #     ### chunks are simply the elements!
     #     ### UPDATE: If the chunks get too large, they can not be pickled anymore! In this case,
@@ -1065,8 +1067,13 @@ class DecapStream:
 
     def __getitem__(self, item):
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
-        return self.frames[item - self.start_frame]
-
+        outFrm = self.frames[item - self.start_frame]
+        
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[item][feat])
+        
+        return outFrm
+    
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
@@ -1118,6 +1125,14 @@ class NCDecapStream:
     features: StreamFeatures = StreamFeatures({})
     name: str = None
     
+    def __post_init__(self):
+        ### CHECK FEATURES
+        mySF = self.features
+        if isinstance(self.features, StreamFeature):
+            ### transform StreamFeature into StreamFeatures
+            mySF = mySF.unsqueeze()
+        object.__setattr__(self, 'features', mySF)
+    
     def __repr__(self):
         if self.is_empty():
             return 'NCDecapStream({})'
@@ -1159,8 +1174,17 @@ class NCDecapStream:
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
 
+    def __getitem__(self, item):
+        assert item in self.frmNums, f'Frame requested has to be in self.frmNums!'
+        outFrm = self.frames[self.frmNums.index(item)]
+        
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[item][feat])
+            
+        return outFrm
+    
     def attach(self, mySF: StreamFeatures):
-        return NCDecapStream(self.frames, self.frmNums, features = mySF)
+        return Stream.attach(self, mySF)
     
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
@@ -1212,6 +1236,14 @@ class CachedStream(Stream):
                        'bool': 'bFrm'}
             object.__setattr__(self, 'name', nameMap[self.target_color_space])
         
+        ### CHECK FEATURES
+        mySF = self.features
+        if isinstance(self.features, StreamFeature):
+            ### transform StreamFeature into StreamFeatures
+            mySF = mySF.unsqueeze()
+        ### conform StreamFeatures to start and stop frame
+        # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
+        object.__setattr__(self, 'features', mySF)
             
     @staticmethod
     def from_SF(mySF, cap, cache_size = 1, name = None,
