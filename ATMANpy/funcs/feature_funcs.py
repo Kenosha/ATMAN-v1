@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 import ATMANpy.funcs.util_funcs as atu 
-from ATMANpy.types.Contours import Contour
+from ATMANpy.types.Contours import Contour, Contours
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 
@@ -36,6 +36,16 @@ def extract_contour_values(contour, compression = None):
     if number_of_missing_values > 0:
         featValues = [*featValues, *[MISSING_SENTINEL_VALUE for _ in range(number_of_missing_values)]]
     return featValues
+
+def extract_contours_values(contours, compression = None):
+    if contours is None:
+        featValues = [[]]
+    else:
+        featValues = [extract_contour_values(cnt, compression = compression) for cnt in contours]
+    
+    featFrm = pd.DataFrame(featValues)  
+    featFrm.index.name = 'idx1'
+    return featFrm
 
 def extract_homography_values(H):
     if H is None:
@@ -149,13 +159,19 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
     import os
     featDict = atu.get_folder_struct('features_stored')
     savePath = os.path.join(featDict['main'], videoName, storeName, featureName)
-    
-    
+
     if os.path.isdir(savePath):
         frmList = []
         for file in os.listdir(savePath):
+            ### read file
             filePath = os.path.join(savePath, file)
-            myFrm = pd.read_csv(filePath, index_col = 0)
+            myFrm = pd.read_csv(filePath, index_col = False)
+            
+            ### figure out index
+            idx_cols = [col for col in myFrm if col.startswith('Unnamed') or col.startswith('idx')]
+            myFrm = myFrm.set_index(idx_cols)
+            myFrm.index.names = [f'idx{i}' for i in range(len(myFrm.index.names))]
+            
             frmList.append(myFrm)
         
         if frmList == []:
@@ -241,16 +257,16 @@ def single_3D_feature_to_object(singlefeatSeries, featName):
         x, y, z = singlefeatSeries
         return Player.make((x, y, z)) 
     
-       
 def load_stored_features(videoName, storeName, featnameList = None, keep_which = 'last'):
+    import os
+    featDict = atu.get_folder_struct('features_stored')
+    featPath = os.path.join(featDict['main'], videoName, storeName)
     
     ### if no list is given, read all available features
     if featnameList is None: 
-        import os
-        featDict = atu.get_folder_struct('features_stored')
-        featPath = os.path.join(featDict['main'], videoName, storeName)
-
         featnameList = [f for f in os.listdir(featPath) if not f.endswith('.csv')]
+    else:
+        featnameList = [f for f in featnameList if f in os.listdir(featPath)]
     
     ### collect all feature frames
     frameDict = {}
@@ -258,8 +274,9 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
     for featName in featnameList:
         featureFrame = read_feature_frame(featName, videoName, storeName, keep_which = keep_which)
         frameDict[featName] = featureFrame
-        indexList.extend(featureFrame.index.to_list())  ### construct the set of all frames (indices)
-                                                        ### for which we have at least one feature.
+        frame_index_levels = featureFrame.index.get_level_values('idx0').unique().to_list()
+        indexList.extend(frame_index_levels)    ### construct the set of all frames (indices)
+                                                ### for which we have at least one feature.
         
     ### keep unique frames. These will be our dictionary keys!
     indexList = sorted(list(set(indexList)))
@@ -273,10 +290,18 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
             except KeyError:
                 stream_features[idx][featName] = None
             else:
-                if featName.startswith('3D'):
-                    featObj = single_3D_feature_to_object(featSeries, featName)
-                else:    
-                    featObj = single_2D_feature_to_object(featSeries)
+                if isinstance(featSeries, pd.DataFrame):    ### yes, this is weird. 
+                                                            ### usually, we always have a series, but
+                                                            ### we can also save indistinct tables, which are read as such.
+                    if featName.endswith('Cnts'): ## -> list of contours
+                        featObj = Contours.from_frame(featSeries)
+                    else:                                        
+                        featObj = featSeries
+                else:                                       ### we have a single feature! -> normal case
+                    if featName.startswith('3D'):
+                        featObj = single_3D_feature_to_object(featSeries, featName)
+                    else:    
+                        featObj = single_2D_feature_to_object(featSeries)
                 stream_features[idx][featName] = featObj
                 
     return stream_features

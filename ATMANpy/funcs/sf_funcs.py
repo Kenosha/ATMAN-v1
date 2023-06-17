@@ -16,6 +16,7 @@ import ATMANpy.auxil.constants as const
 from ATMANpy.types.Features import StreamFeatures, StreamFeature, BoolFeatures, BoolFeature
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
+from ATMANpy.types.Contours import Contours
 
 import ATMANpy.funcs.sf_apply_funcs as sf
 
@@ -215,3 +216,46 @@ def get_median_and_deviation_frame(wrpSF):
     stdFrm = HSVFrame(stdArr.astype('uint8'), name = 'std_backFrm')
     
     return medFrm, stdFrm
+
+def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
+                         probability_threshold = None):
+    ballTable = contSF['ballTable'].to_frame()
+    
+    ### get the SVM and the features used
+    svm = svmDict['svm']
+    features = svmDict['features']
+    
+    ### figure out normalising moments
+    if use_training_moments:
+        mean = svmDict['mean']
+        std = svmDict['std']
+    else:
+        mean = ballTable.mean()
+        std = ballTable.std()
+        
+    normTable = (ballTable - mean) / std
+    
+    ### Using the SVM estimated, predict whether a contour is a ball.
+    normTable['isBall_proba'] = svm.predict_proba(normTable[features].values)[:,1]
+    if probability_threshold is None:
+        normTable['isBall'] = svm.predict(normTable[features].values)
+    else:
+        normTable['isBall'] = (normTable['isBall_proba'] > probability_threshold).astype(int)
+    
+    ### get all True predictions
+    trueTable = normTable[normTable.isBall == 1]
+    
+    trueDict = {}
+    for frmNum, cnts in contSF['movCnts'].items():
+        try:
+            myTable = trueTable.loc[frmNum]
+        except KeyError:
+            trueDict[frmNum] = None
+        else:
+            true_contours = []
+            for true_idx in myTable.index:
+                true_contours.append(cnts[true_idx])
+            trueDict[frmNum] = Contours(true_contours)
+
+    return StreamFeature(trueDict, name = 'candCnts')
+    

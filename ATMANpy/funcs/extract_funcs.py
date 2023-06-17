@@ -35,8 +35,8 @@ from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only,
 from ATMANpy.funcs.scoreboard_funcs import find_scoreboard
 from ATMANpy.funcs.player_funcs import find_best_expansion, stop_criterion, find_player_contour_with_overlap
 
-from ATMANpy.types.Frames import Frame, BoolFrame, GreyFrame, BGRFrame, HSVFrame
-from ATMANpy.types.Contours import Contour
+from ATMANpy.types.Frames import Frame, BoolFrame, MaskFrame, GreyFrame, BGRFrame, HSVFrame
+from ATMANpy.types.Contours import Contour, Contours
 
 def find_courtlines(H, schemaLines = schemaLines):
     if H is None:
@@ -313,7 +313,7 @@ def find_motion_mask(gCache,
     
     motFunc = lambda othFrm: centralFrm - othFrm > intensity_threshold 
     
-    motMask = BoolFrame.true(centralFrm)
+    motMask = MaskFrame.true(centralFrm)
     for idx in relevant_indices:
         othFrm_bef, othFrm_aft = gCache[-idx], gCache[idx]
         motMask = motMask & motFunc(othFrm_bef) & motFunc(othFrm_aft)
@@ -330,12 +330,12 @@ def refine_motion_mask(motMask, topPlayer, botPlayer,
     if not topPlayer is None:
         topMask = motMask.within_contour(topPlayer).dilate(dil_kernel)
     else:
-        topMask = BoolFrame.false(motMask)
+        topMask = MaskFrame.false(motMask)
         
     if not botPlayer is None:
         botMask = motMask.within_contour(botPlayer).dilate(dil_kernel)
     else:
-        botMask = BoolFrame.false(motMask)
+        botMask = MaskFrame.false(motMask)
     
     playerMask = topMask | botMask
     
@@ -348,37 +348,88 @@ def refine_motion_mask(motMask, topPlayer, botPlayer,
     
     return intMask
 
-def find_ball_candidates(intMask, hFrm, gFrm, svmDict = None, max_number_of_contours = 40):
+def get_contours_from_mask(intMask, max_number_of_contours = 40):
+    ### find movement contours
+    cntArr, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    movCnts = Contours([Contour(c) for c in cntArr if len(c) > 2]) ### need at least three points for a contour
+    
+    if 0 < movCnts.length() < max_number_of_contours:
+        ### if there are no contours, there is nothing we can do...
+        ### if there is an excessive amount of contours, we likely have camera panning...
+        return movCnts
+    
+def get_movement_contours(gCache, featCache, 
+                          intensity_threshold = 10, relevant_indices = [4, 6, 8],
+                          dil_kernel_dims = (20, 10), open_kernel_dims = (5, 5),
+                          max_number_of_contours = 40):
+    
+    topPlayer = featCache[0]['topPlayer']
+    botPlayer = featCache[0]['botPlayer']
+    
+    motMask = find_motion_mask(gCache, 
+                               intensity_threshold = intensity_threshold, 
+                               relevant_indices = relevant_indices)
+    
+    intMask = refine_motion_mask(motMask, topPlayer, botPlayer, 
+                                 dil_kernel_dims = dil_kernel_dims,
+                                 open_kernel_dims = open_kernel_dims)
+    
+    movCnts = get_contours_from_mask(intMask, 
+                                     max_number_of_contours = max_number_of_contours)
+    
+    return movCnts
+
+def get_feature_frames(hFrm, gFrm, intMask, movCnts):
     from ATMANpy.funcs.ball_funcs import make_feature_frame
     
-    ### find movement contours
-    movCnts, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    movCnts = [Contour(c) for c in movCnts if len(c) > 2] ### need at least three points for a contour
-    
-    ### if there is an excessive amount of contours, we likely have camera panning...
-    if len(movCnts) > max_number_of_contours:
-        return None
-    
-    ### if there are no contours, there is nothing we can do...
-    if len(movCnts) == 0:
-        return None
-    
     ### make a feature frame
-    cntFrm = make_feature_frame(movCnts, hFrm, gFrm, intMask).dropna()
+    ballTable = make_feature_frame(movCnts, hFrm, gFrm, intMask).dropna()
+    ballTable.index.name = 'idx1'
     
     ### it can be that features can not be calculated for a contour...
-    if len(cntFrm) == 0:
+    if len(ballTable) == 0:
         return None
+    else:
+        return ballTable
     
+def get_movement_contours_and_frame(gCache, hCache, featCache, 
+                                    intensity_threshold = 10, relevant_indices = [4, 6, 8],
+                                    dil_kernel_dims = (20, 10), open_kernel_dims = (5, 5),
+                                    max_number_of_contours = 40):
+    
+    topPlayer = featCache[0]['topPlayer']
+    botPlayer = featCache[0]['botPlayer']
+    gFrm = gCache[0]
+    hFrm = hCache[0]
+    
+    motMask = find_motion_mask(gCache, 
+                               intensity_threshold = intensity_threshold, 
+                               relevant_indices = relevant_indices)
+    
+    intMask = refine_motion_mask(motMask, topPlayer, botPlayer, 
+                                 dil_kernel_dims = dil_kernel_dims,
+                                 open_kernel_dims = open_kernel_dims)
+    
+    movCnts = get_contours_from_mask(intMask, 
+                                     max_number_of_contours = max_number_of_contours)
+    
+    if movCnts is None:
+        ballTable = None
+    else:
+        ballTable = get_feature_frames(hFrm, gFrm, intMask, movCnts)
+    
+    return movCnts, ballTable
+    
+
+def find_ball_candidates(ballTable, movCnts, svm = None, features = None, mean = None, std = None):
     ### Using the SVM estimated, predict whether a contour is a ball.
-    clf, features, mean, std = svmDict['svm'], svmDict['features'], svmDict['mean'], svmDict['std']
-    cntFrm = (cntFrm - mean) / std
-    cntFrm['isBall'] = clf.predict(cntFrm[features].values)
+    normTable = (ballTable - mean) / std
+    normTable['isBall_proba'] = clf.predict_proba(normTable[features].values)
+    normTable['isBall'] = clf.predict(normTable[features].values)
     
     ### get all True predictions
-    ballIdx = list(cntFrm[cntFrm.isBall == 1].index)
-    ball_candidates = [c for i, c in enumerate(movCnts) if i in ballIdx]
-
-    return ball_candidates
+    ballIdx = list(normTable[normTable.isBall == 1].index)
+    candCnts = [c for i, c in enumerate(movCnts) if i in ballIdx]
+    return candCnts
     
 
