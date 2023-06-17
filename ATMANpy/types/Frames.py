@@ -17,7 +17,7 @@ from ATMANpy.funcs.type_funcs import typecheck, arraycheck
 from ATMANpy.funcs.cv_funcs import show, show_continuous, get_frame  
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
-from ATMANpy.types.Contours import Contour
+from ATMANpy.types.Contours import Contour, Contours
 
 from ATMANpy.types.PutDispatcher import put
 
@@ -264,7 +264,12 @@ class Frame:
     def within_contour(self, contour: Contour):
         zeroArr = np.zeros((self.rows, self.cols), dtype = 'uint8')
         cntMask = cv.fillPoly(zeroArr, [contour.points], 255)
-        return BoolFrame(cntMask)
+        return MaskFrame(cntMask)
+    
+    def within_contours(self, contours: Contours):
+        zeroArr = np.zeros((self.rows, self.cols), dtype = 'uint8')
+        cntMask = cv.fillPoly(zeroArr, [contour.points], 255)
+        return MaskFrame(cntMask)
     
     def roll(self, how = 'down', shift = 1, nan_sentinel = np.nan):
         if shift < 0:
@@ -356,6 +361,8 @@ class Frame:
 class BoolFrame(Frame):
     ### amended 14.04.22 to contain only 0 and 255, not bools or 0 and 1.
     ### this makes it predictable, and fit for fast cv arithmetic and logical funcs
+    ### amended 16.06.23 to contain three color channels always!
+        ### BoolFrame is then used to test color channels against a condition each!
     
     array: np.ndarray
     name: str = 'frame'
@@ -365,34 +372,28 @@ class BoolFrame(Frame):
         super(BoolFrame, self).__post_init__()
 
         #### TYPE CHECKS ####
-        # we can actually deal with a three dim array, by turning it back to Grey
+        ## bool frame always has three color channels!!!
         arraycheck(self, channel_number = 3, color_channel_length = 3)
         ########################  
         
-        # #### IMMUTABILITY BREAKS ####        
-        # ### convert BGR to Grey
-        # if len(self.array.shape) == 3:
-        #     object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
-        ### NO! WE WANT THE THING TO HAVE UP TO THREE CHANNELS!
-        #############################  
-    
         #####################
 
     @staticmethod
-    def true(likeFrm):
-        return BoolFrame(np.ones(likeFrm.shape, dtype = 'uint8') * 255, name = likeFrm.name)
+    def false(likeFrm):
+        shape = likeFrm.shape
+        if len(shape) == 2:
+            shape = tuple([*shape, 3])
+        return BoolFrame(np.zeros(shape, dtype = 'uint8'), name = likeFrm.name)
     
     @staticmethod
-    def false(likeFrm):
-        return BoolFrame(np.zeros(likeFrm.shape, dtype = 'uint8'), name = likeFrm.name)
+    def true(likeFrm):
+        return ~BoolFrame.false()
+    
     ####################
     
-    def __repr__(self):
-        if self.channels > 1:
-            return f'BoolFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
-        else:
-            return f'BoolFrame({self.cols} by {self.rows}, name: {self.name})'
-    
+    def __repr__(self):    
+        return f'BoolFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
+        
     def _check_values(self):
         return set([0, 255]).issubset(self.unique())
 
@@ -412,45 +413,45 @@ class BoolFrame(Frame):
     def get_color(cls):
         return 'bool'
     
-    # def any(self, axes):
-    #     return BoolFrame(np.any(self.array, axis = axes))
-    # def all(self, axes):
-    #     return BoolFrame(np.all(self.array, axis = axes))
-    
-    def put(self, anyObj, 
-            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
-        return put(self.to_grey(), anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size,
-                   verbose = verbose)
-    
-    def any_channel(self):
-        c1, c2, c3 = cv.split(self.array)
-        return BoolFrame(cv.bitwise_or(cv.bitwise_or(c1, c2), c3))
-    def all_channels(self):
-        c1, c2, c3 = cv.split(self.array)
-        return BoolFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
+    def zero(self):
+        return BoolFrame(np.zeros(self.shape, dtype = 'uint8'), name = self.name)
 
-    # def to_grey(self):
-    #     if 255 in self.unique(): ### this is a problem... unify the values of bool frames!
-    #         return GreyFrame(self.array.astype('uint8'))
-    #     else:
-    #         return GreyFrame(self.array.astype('uint8') * 255)
+    def to_mask(self):
+        return MaskFrame(self.array, name = self.name)
 
     def to_grey(self):
-        return GreyFrame(self.array)
-
-    def zero(self):
-        return BoolFrame(np.zeros(self.shape, dtype = 'uint8'))
-
+        return GreyFrame(self.array, name = self.name)
+    
+    def to_BGR(self):
+        return BGRFrame(self.array, name = self.name)
+    
     def to_false(self):
-        return BoolFrame(self.zero().array, name = self.name)
+        return self.zero()
+    
     def to_true(self):
         return ~self.to_false()
+
     def to_csv(self, savePath, name = None):
         if name == None:
             name = self.name
         np.savetxt(os.path.join(savePath, f'{name}_bool.csv'), self.array, delimiter = ',')
         
+    def put(self, anyObj, 
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None, 
+            verbose = False):
+        return put(self.to_grey(), anyObj, 
+                   color = color, radius = radius, thickness = thickness, 
+                   where = where, size = size, annotation = annotation,
+                   verbose = verbose)
+    
+    def any_channel(self):
+        c1, c2, c3 = cv.split(self.array)
+        return BoolFrame(cv.bitwise_or(cv.bitwise_or(c1, c2), c3))
+    
+    def all_channels(self):
+        c1, c2, c3 = cv.split(self.array)
+        return BoolFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
+
     def open(self, kernel):
         self_copy = self.array.copy()
         arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, kernel)
@@ -471,6 +472,125 @@ class BoolFrame(Frame):
         arr = cv.erode(self_copy, kernel)
         return BoolFrame(arr)
         
+    def prob_hough(self, 
+                   rho = 1,  ### the resolution of parameter r in pixels
+                   theta = np.pi/180, ### the resolution of parameter theta in radians
+                   min_votes = 100, ### the minimum number of intersections to detect a line,
+                   minLineLength = 50,  ### the minimum length of a candidate line 
+                   maxLineGap = 10): ### the maximum gap between two points to be considered the same line
+        
+        hough_lines = cv.HoughLinesP(self.array, rho, theta, min_votes, 
+                                     minLineLength = minLineLength, maxLineGap = maxLineGap)
+        hough_lines = Lines.from_coordList(hough_lines)
+        return hough_lines
+
+    ## override show
+    def show(self):
+        show(self.array, name = self.name)
+        
+@dataclass(frozen = True)
+class MaskFrame(Frame):
+    ### Introduced 16.06.2023 -> This is a BoolFrame with one channel! BoolFrame itself always has three
+    
+    array: np.ndarray
+    name: str = 'frame'
+    
+    def __post_init__(self):
+        ### call post init of super class
+        super(MaskFrame, self).__post_init__()
+
+        #### TYPE CHECKS ####
+        arraycheck(self, channel_number = 3, color_channel_length = None)
+        ########################  
+        
+        #### IMMUTABILITY BREAKS ####        
+        ### convert BGR to Grey
+        if len(self.array.shape) == 3:
+            object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
+        #############################  
+    
+    
+    @staticmethod
+    def false(likeFrm):
+        shape = likeFrm.shape[:2]
+        return MaskFrame(np.zeros(shape, dtype = 'uint8'), name = likeFrm.name)
+    
+    @staticmethod
+    def true(likeFrm):
+        return ~MaskFrame.false(likeFrm)
+    
+    ####################
+    
+    def __repr__(self):    
+        return f'MaskFrame({self.cols} by {self.rows}, name: {self.name})'
+        
+    def _check_values(self):
+        return set([0, 255]).issubset(self.unique())
+
+    def __or__(self, other):
+        return MaskFrame(cv.bitwise_or(self.array, other.array))
+
+    def __and__(self, other):
+        return MaskFrame(cv.bitwise_and(self.array, other.array))
+    
+    def __invert__(self):
+        return MaskFrame(cv.bitwise_not(self.array)) 
+
+    @classmethod
+    def get_converter(cls):
+        return 'to_mask'
+    @classmethod
+    def get_color(cls):
+        return 'mask'
+    
+    def zero(self):
+        return MaskFrame(np.zeros(self.shape, dtype = 'uint8'), name = self.name)
+
+    def to_bool(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return BoolFrame(cv.cvtColor(self_copy, cv.COLOR_GRAY2BGR), name = self.name)
+
+    def to_grey(self):
+        return GreyFrame(self.array)
+    
+    def to_false(self):
+        return self.zero()
+    
+    def to_true(self):
+        return ~self.to_false()
+
+    def to_csv(self, savePath, name = None):
+        if name == None:
+            name = self.name
+        np.savetxt(os.path.join(savePath, f'{name}_mask.csv'), self.array, delimiter = ',')
+        
+    def put(self, anyObj, 
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None,
+            verbose = False):
+        return put(self.to_grey(), anyObj, 
+                   color = color, radius = radius, thickness = thickness, 
+                   where = where, size = size, annotation = annotation,
+                   verbose = verbose)
+    
+    def open(self, kernel):
+        self_copy = self.array.copy()
+        arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, kernel)
+        return MaskFrame(arr)
+        
+    def close(self, kernel):
+        self_copy = self.array.copy()
+        arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
+        return MaskFrame(arr)
+    
+    def dilate(self, kernel):
+        self_copy = self.array.copy()
+        arr = cv.dilate(self_copy, kernel)
+        return MaskFrame(arr)
+    
+    def erode(self, kernel):
+        self_copy = self.array.copy()
+        arr = cv.erode(self_copy, kernel)
+        return MaskFrame(arr)
         
     def prob_hough(self, 
                    rho = 1,  ### the resolution of parameter r in pixels
@@ -547,9 +667,11 @@ class GreyFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None,
+            verbose = False):
         return put(self, anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size, 
+                   color = color, radius = radius, thickness = thickness, 
+                   where = where, size = size, annotation = annotation, 
                    verbose = verbose)
         
     def zero(self):
@@ -713,9 +835,11 @@ class BGRFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None,
+            verbose = False):
         return put(self, anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size, 
+                   color = color, radius = radius, thickness = thickness, 
+                   where = where, size = size, annotation = annotation,
                    verbose = verbose)
         
     def zero(self):
@@ -816,9 +940,11 @@ class HSVFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, verbose = False):
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None, 
+            verbose = False):
         return put(self, anyObj, 
-                   color = color, radius = radius, thickness = thickness, where = where, size = size,
+                   color = color, radius = radius, thickness = thickness, 
+                   where = where, size = size, annotation = annotation,
                    verbose = False)
         
     def zero(self):

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import ATMANpy.funcs.util_funcs as atu
 from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
-from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame
+from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame, MaskFrame
 
 
 class FramesIterator:
@@ -206,7 +206,7 @@ class HSVFrames(Frames):
     def to_BGR(self):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_HSV2BGR) for imgArr in self.array])
         return BGRFrames(convArr, name = self.name)
-    
+     
 @dataclass(frozen = True)
 class GreyFrames(Frames):
     name: str = 'grey_frames'
@@ -239,19 +239,10 @@ class GreyFrames(Frames):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2HSV) for imgArr in self.array])
         return HSVFrames(convArr, name = self.name)
         
-    # def to_bool(self): 
-    #     return BoolFrames(self.array, name = self.name) ### NO!! Does not guarantee a true 0/255 boolean frame
-        
-
 @dataclass(frozen = True)
 class BoolFrames(Frames):
     name: str = 'bool_frames'
     
-    def __post_init__(self):
-        if len(self.array.shape) == 4: ### need to convert to gray...
-            convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.array])
-            object.__setattr__(self, 'array', convArr)
-            
     def __repr__(self):
         return Frames.__repr__(self)
     
@@ -269,7 +260,38 @@ class BoolFrames(Frames):
     
     def to_grey(self):
         return GreyFrames(self.array, name = self.name)
-        
+    
+    def to_mask(self):
+        return MaskFrames(self.array, name = self.name)
+           
+
+@dataclass(frozen = True)
+class MaskFrames(Frames):
+    name: str = 'mask_frames'
+    
+    def __post_init__(self):
+        if len(self.array.shape) == 4: ### need to convert to gray...
+            convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.array])
+            object.__setattr__(self, 'array', convArr)
+            
+    def __repr__(self):
+        return Frames.__repr__(self)
+    
+    @classmethod
+    def get_constituent(cls):
+        return MaskFrame
+
+    @classmethod
+    def get_color(cls):
+        return 'mask'
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_mask'
+    
+    def to_grey(self):
+        return GreyFrames(self.array, name = self.name)
+    
 if __name__ == '__main__':
         
     ### VIDEO ######
