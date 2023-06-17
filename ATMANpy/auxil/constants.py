@@ -67,3 +67,7 @@ RGB = {'ball_yellow': (223, 255, 79),
 
 BGR = {name: (val[2], val[1], val[0]) for name, val in RGB.items()}
 
+
+MISSING_SENTINEL_VALUE = 9999 ### if an integer is missing, we add this value. 
+                                # can't be np.nan, because np.nan is not an integer.
+  

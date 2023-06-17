@@ -14,7 +14,7 @@ from typing import List
 from functools import partial
 
 import ATMANpy.funcs.feature_funcs as ff
-from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
+from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, prepend_index_level
 
 from ATMANpy.types.Lines import Line
 from ATMANpy.types.Shapes3D import Line3D
@@ -298,21 +298,33 @@ class StreamFeature(StreamFeaturesBase):
                 # ... we don't apply the function, instead look for the function values in the SF itself.
                 
         return StreamFeatures(applyDict, name = name).squeeze()
-      
-    def _save_contours(self, videoName, storeName, compression = 24):
+    
+    def _save_contour(self, videoName, storeName, compression = 24):
         exFunc = ff.extract_contour_values
         outSF = self.apply(exFunc, compression = compression) 
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
         featFrm.columns = featLabels
+        featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
+    def _save_contours(self, videoName, storeName, compression = 24):
+        exFunc = ff.extract_contours_values
+        outSF = self.apply(exFunc, compression = compression) 
+        
+        featFrm = outSF.to_frame()
+        if not featFrm.empty:
+            featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
+            featFrm.columns = featLabels
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        
     def _save_homography(self, videoName, storeName):
         exFunc = ff.extract_homography_values
         outSF = self.apply(exFunc)
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = [f'{dim}_{idx}' for dim in ['x', 'y', 'z'] for idx in range(3)][:8]
         featFrm.columns = featLabels
+        featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
     def _save_region(self, videoName, storeName):
@@ -321,12 +333,19 @@ class StreamFeature(StreamFeaturesBase):
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(4)]) ### region has four corners.
         featFrm.columns = featLabels
+        featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
     def _save_text(self, videoName, storeName):
         featFrm = self.to_series()
+        featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
+    def _save_table(self, videoName, storeName):
+        featFrm = self.to_frame()
+        if not featFrm.empty:
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        
     def _save_as_video(self, videoName, storeName, 
                        monochrome = True, lossless = True):
         ### the folder name has information about which feature...
@@ -371,23 +390,27 @@ class StreamFeature(StreamFeaturesBase):
         
         writer.release()
     
-    def save(self, videoName, storeName, lossless = False):
+    def save(self, videoName, storeName, lossless = False, compression = None):
         contourNames = ['topPlayer', 'botPlayer']
         homographyNames = ['H']
         regionNames = ['scoreBoard']
         
         if self.name in contourNames:
-            self._save_contours(videoName, storeName)
+            self._save_contour(videoName, storeName)
         elif self.name in homographyNames:
             self._save_homography(videoName, storeName)
         elif self.name in regionNames:
             self._save_region(videoName, storeName)
+        elif self.name.endswith('Cnts'):
+            self._save_contours(videoName, storeName, compression = compression)
         elif 'Mask' in self.name:
             self._save_as_video(videoName, storeName, monochrome = True, lossless = lossless)
         elif 'Frm' in self.name:
             self._save_as_video(videoName, storeName, monochrome = False, lossless = lossless)
         elif 'Flag' in self.name: ### all text has to be called Flag!
             self._save_text(videoName, storeName)
+        elif 'Table' in self.name:
+            self._save_table(videoName, storeName)
         else:
             print(f"Did not save {self.name}, don't know how!")
         
@@ -399,6 +422,14 @@ class StreamFeature(StreamFeaturesBase):
 
     def to_series(self):
         return pd.Series(self.streamDict, name = self.name)
+    
+    def to_frame(self):
+        ### ONLY IF THE FEATURES CONTAINED ARE THEMSELVES FRAMES!
+        frameList = [prepend_index_level(myFrm, 'idx0', frmNum) for frmNum, myFrm in self.items() if myFrm is not None]
+        if len(frameList) == 0:
+            return pd.DataFrame()
+        else:
+            return pd.concat(frameList, axis = 0)
 
     def value_counts(self):
         return self.to_series().value_counts()
@@ -632,9 +663,10 @@ class StreamFeatures(StreamFeaturesBase):
         else:
             return self
     
-    def save(self, videoName, storeName, lossless = False):
+    def save(self, videoName, storeName, compression = None, lossless = False):
         for feat in self.get_features():
-            self[feat].save(videoName, storeName, lossless = lossless)
+            self[feat].save(videoName, storeName, 
+                            compression = compression, lossless = lossless)
     
     def to_bool(self):
         return BoolFeatures(self.streamDict, name = self.name)
@@ -773,9 +805,9 @@ class SFList:
             x, xs = self[0], self[1:]
         return concatFunc(x, xs.concatenate(axis = axis))
     
-    def save(self, videoName, storeName):
+    def save(self, videoName, storeName, lossless = False):
         for mySF in self:
-            mySF.save(videoName, storeName)
+            mySF.save(videoName, storeName, lossless = lossless)
         
         
 #%% Testing

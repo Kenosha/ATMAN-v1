@@ -9,7 +9,9 @@ import os
 import cv2 as cv
 import numpy as np
 from dataclasses import dataclass
+from typing import List
 
+import ATMANpy.auxil.constants as const
 from ATMANpy.funcs.type_funcs import typecheck, arraycheck
 from ATMANpy.funcs.cv_funcs import show, get_frame    
 from ATMANpy.types.Points import Point2D
@@ -22,6 +24,19 @@ from multipledispatch import dispatch
 class Contour:
     points: np.ndarray
     
+    @staticmethod
+    def from_series(mySer):
+        singlefeatDict = mySer.to_dict()
+                      
+        x_vals = [v for k, v in singlefeatDict.items() if k.startswith('x') if not v == const.MISSING_SENTINEL_VALUE]
+        y_vals = [v for k, v in singlefeatDict.items() if k.startswith('y') if not v == const.MISSING_SENTINEL_VALUE]
+        
+        assert len(x_vals) == len(y_vals)
+        num_points = len(x_vals)
+        
+        myPoints = np.dstack([x_vals, y_vals]).reshape((num_points, 1, 2)) ### bring them into shape
+        return Contour(myPoints)
+        
     def moments(self):
         return cv.moments(self.points)
     
@@ -67,5 +82,56 @@ class Contour:
             return Contour(samplePoints)
 
 
+@dataclass(frozen = True)
+class Contours:
+    contourList: List[Contour]
+    
+    @staticmethod
+    def from_frame(myFrm):
+        outList = []
+        for idx, rowSer in myFrm.iterrows():
+            outList.append(Contour.from_series(rowSer))
+        return Contours(outList)
+    
+    def __repr__(self):
+        return f'Contours(length = {self.length()})'
+    
+    def __iter__(self):
+        return self.contourList.__iter__()
+        
+    def __getitem__(self, item):
+        return self.contourList[item]
+    
+    def length(self):
+        return len(self.contourList)
+    
+    def moments(self):
+        return [cnt.moments() for cnt in self]
+    
+    def area(self):
+        return [cnt.area() for cnt in self]
+    
+    def perimeter(self, closedBool = True):
+        return [cnt.perimeter() for cnt in self]
+    
+    def center(self):
+        return [cnt.center() for cnt in self] ### this should be a list of Point2D --> Points2D class!!!
+
+    def rescale(self, scale_factor):
+        return Contours([cnt.rescale(scale_factor) for cnt in self])
+    
+    def enclosing_region(self, margin = 0):
+        return [cnt.enclosing_region() for cnt in self]
+        
+    def fit_ellipse(self):
+        ## returns: centerCoords, majminAxis, rotAngle 
+        ## -> parameters of the rotated rectangle in which the ellipse is inscribed
+        # centerCoords: center or rectangle and ellipse
+        # majminAxis: major and minor axis of the rectangle, i.e: width and heigth!
+        # rotAngle: theta, the rotation angle of the rectangle.
+        return [cnt.fit_ellipse() for cnt in self]
+
+    def compress(self, target_number_of_points):
+        return Contours([cnt.compress(target_number_of_points) for cnt in self])
 
 
