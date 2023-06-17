@@ -5,16 +5,20 @@ Created on Wed Apr 13 00:15:10 2022
 @author: gianl
 """
 
-import ATMANpy.utils as atu
+import os
 
 import pandas as pd
 import numpy as np
 
+import pickle
+import datetime as dt
+
+import ATMANpy.funcs.util_funcs as ut
+
 ### Path to labelled data
 VIDEO_ID = 'pqxAmUWIoKc'
 
-import os
-ballDict = atu.get_folder_struct('ball_svm')
+ballDict = ut.get_folder_struct('ball_svm')
 readPath  = os.path.join(ballDict['main'], VIDEO_ID, 'raw_data')
 writePath = os.path.join(ballDict['main'], VIDEO_ID, 'fitted_svms')
 
@@ -70,6 +74,8 @@ mean, std = X_train.mean(), X_train.std()
 ### scale
 X_train = scale(X_train)
 X_test = scale(X_test)
+
+N = len(X_train)
 
 ###### Training SVC ###### 
 
@@ -129,20 +135,54 @@ plot_confusion_matrix(optimal_params_weighted, X_test, y_test, normalize = None,
 plot_confusion_matrix(optimal_params_weighted, X_test, y_test, normalize = 'true', 
                       display_labels = ['Not Ball', 'Ball'])
 
+
+# 1.6a) Optimised Balance-Weighted
+
+optimal_params_weighted_a = GridSearchCV(SVC(class_weight = 'balanced'), param_grid, 
+                              cv = 5, scoring = 'accuracy')
+
+optimal_params_weighted_a.fit(X_train, y_train)
+print(f'Weighted SVM, best params: {optimal_params_weighted.best_params_}')
+
+plot_confusion_matrix(optimal_params_weighted_a, X_test, y_test, normalize = None, 
+                      display_labels = ['Not Ball', 'Ball'])
+
+plot_confusion_matrix(optimal_params_weighted_a, X_test, y_test, normalize = 'true', 
+                      display_labels = ['Not Ball', 'Ball'])
+
+
+# 1.6a) Optimised Balance-Weighted with computed balanced weights
+
+weightArr = N / (2 * np.bincount(y_train))
+weightDict = dict(zip([0, 1], weightArr))
+
+optimal_params_weighted_b = GridSearchCV(SVC(class_weight = weightDict), param_grid, 
+                              cv = 5, scoring = 'accuracy')
+
+optimal_params_weighted_b.fit(X_train, y_train)
+print(f'Weighted SVM, best params: {optimal_params_weighted.best_params_}')
+
+plot_confusion_matrix(optimal_params_weighted_b, X_test, y_test, normalize = None, 
+                      display_labels = ['Not Ball', 'Ball'])
+
+plot_confusion_matrix(optimal_params_weighted_b, X_test, y_test, normalize = 'true', 
+                      display_labels = ['Not Ball', 'Ball'])
+
 # optimal_params_weighted.predict([[1, 1, 1, 2, 3, 2, 1, 1]])
 
 #### Pickle the best model ########
 
-best_SVC = SVC(class_weight = {1: BALL_FACTOR}, **optimal_params_weighted.best_params_)
-best_SVC.fit(X_train, y_train)
-
-import datetime as dt
 timestamp = dt.datetime.now().strftime('%Y-%m-%d')
+
+### without probability prediction...
+best_class_weight = optimal_params_weighted_b.estimator.class_weight
+best_params = optimal_params_weighted_b.best_params_
+
+best_SVC = SVC(class_weight = best_class_weight, **best_params)
+best_SVC.fit(X_train, y_train)
 
 fileName = f'svm_dict_{timestamp}.pickle'
 savePath = os.path.join(writePath, fileName)
-
-import pickle
 
 pickleDict = {'features': features,
               'mean': mean,
@@ -151,6 +191,23 @@ pickleDict = {'features': features,
 
 with open(savePath, 'wb') as f:
     pickle.dump(pickleDict, f, pickle.HIGHEST_PROTOCOL)
+
+### with probability prediction...
+
+best_SVC = SVC(class_weight = best_class_weight, **best_params, probability = True)
+best_SVC.fit(X_train, y_train)
+
+fileName = f'svm_proba_dict_{timestamp}.pickle'
+savePath = os.path.join(writePath, fileName)
+
+pickleDict = {'features': features,
+              'mean': mean,
+              'std': std,
+              'svm': best_SVC}
+
+with open(savePath, 'wb') as f:
+    pickle.dump(pickleDict, f, pickle.HIGHEST_PROTOCOL)
+
 
 # FOR READ-IN
 # with open(savePath, 'rb') as f:
