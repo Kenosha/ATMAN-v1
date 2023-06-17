@@ -19,8 +19,8 @@ from collections import deque
 from random import randrange
 from typing import List, Union
 
-from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame, BoolFrame
-from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames, BoolFrames
+from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame
+from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames, BoolFrames, MaskFrames
 from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList
 from ATMANpy.types.Caches import Cache
 
@@ -39,18 +39,22 @@ from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names,
 frameTypeMap = {'bgr': BGRFrame,
                 'grey': GreyFrame,
                 'hsv': HSVFrame,
-                'bool': BoolFrame}
+                'bool': BoolFrame,
+                'mask': MaskFrame}
 
 framesTypeMap = {'bgr': BGRFrames,
                  'grey': GreyFrames,
                  'hsv': HSVFrames,
-                 'bool': BoolFrames}
+                 'bool': BoolFrames,
+                 'mask': MaskFrames}
 
 def color_converter(imgArr, cap_color_space, target_color_space):
     methodMap = {'bgr': 'to_BGR',
                  'grey': 'to_grey',
-                 'hsv': 'to_HSV'} ### note: there is no to_bool! -> unclear how this method would behave!
-                                  ### therefore, boolean frames have to be read in as booleans, without converting!
+                 'hsv': 'to_HSV',
+                 'bool': 'to_bool',
+                 'mask': 'to_mask'} 
+    
     frameType = frameTypeMap[cap_color_space]
     
     origFrm = frameType(imgArr)
@@ -367,7 +371,7 @@ class Stream:
             args = self.__class__.argstrings_to_args(funcArgs, myFrm, myDict) ### 
                 
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
-            assert len(args) == len(funcArgs)
+            assert len(args) == len(funcArgs), f'Required arguments ({funcArgs}) have to match supplied arguments ({args})'
             
             # ### assign to a dictionary, depending on whether we get one or multiple return values
             # if len(funcVals) == 1:
@@ -442,7 +446,8 @@ class Stream:
                     args = self.__class__.argstrings_to_args(funcArgs, myFrm, myDict)
                         
                     ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
-                    assert len(args) == len(funcArgs)
+                    assert len(args) == len(funcArgs), f'Required arguments ({funcArgs}) have to match supplied arguments ({args})'
+                    
                     
                     task = pool.apply_async(featureFunc, args, kwargs)
                     pending.append((frmNum, task))
@@ -1168,7 +1173,7 @@ class NCDecapStream:
                                       cap_color_space = cap_color_space,
                                       scale_factor = scale_factor,
                                       name = name) ### TODO: speed up the get_framelist function by threading.
-        return NCDecapStream(frames, frmNums, filterSF)
+        return NCDecapStream(frames, frmNums, filterSF, name = name)
     
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
@@ -1395,7 +1400,8 @@ class CachedStream(Stream):
             args = self.__class__.argstrings_to_args(funcArgs, frameCache, featCache) ### 
                 
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
-            assert len(args) == len(funcArgs)
+            assert len(args) == len(funcArgs), f'Required arguments ({funcArgs}) have to match supplied arguments ({args})'
+            
             
             ### call extraction function
             funcOut = featureFunc(*args, **kwargs)
@@ -1563,5 +1569,180 @@ class RandStream(Stream):
         else:
             cv.destroyAllWindows()
     
-     
+@dataclass(frozen = True)
+class NCStream:
+    cap: cv.VideoCapture
+    frmNums: List
+    truncation_anchor: int = 0 ### instead of a truncation flag. this anchor frame allows comparison between truncated streams and non-truncated streams by specifying the first frame of truncation.
+    cap_color_space: str = 'bgr'
+    target_color_space: str = 'bgr'
+    scale_factor: float = 1 ### ability to shrink the image relative to the cap dimensions
+    name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
+    features: StreamFeatures = StreamFeatures({})
+        
+    def __repr__(self):
+        return f'NCStream(cap = {self.cap}, frmNums = {self.frmNums[0]} ... {self.frmNums[-1]} (length = {self.length()}), features = {self.features})'
+    
+    
+    @staticmethod
+    def from_SF(mySF, cap, name = None,
+                cap_color_space = 'bgr', target_color_space = 'bgr',
+                scale_factor = 1):
+        if name is None:
+            name = mySF.name
+        frmNums = mySF.get_frames()
+        return NCStream(cap, frmNums, 
+                      truncation_anchor = 0,
+                      cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                      scale_factor = scale_factor,
+                      features = mySF, name = name)
+    
+    def __post_init__(self):
+        ### CHECK NAME
+        if self.name is None:
+            nameMap = {'bgr': 'cFrm',
+                       'grey': 'gFrm',
+                       'hsv': 'hFrm',
+                       'bool': 'bFrm'}
+            object.__setattr__(self, 'name', nameMap[self.target_color_space])
+        
+        ### CHECK FEATURES
+        mySF = self.features
+        if isinstance(self.features, StreamFeature):
+            ### transform StreamFeature into StreamFeatures
+            mySF = mySF.unsqueeze()
+        ### conform StreamFeatures to start and stop frame
+        # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
+        object.__setattr__(self, 'features', mySF)
+    
+    def __getitem__(self, frmNum):
+        ### TODO: allow for item to be a slice also! (this would yield a multiframes)
+        assert frmNum in self.frmNums, f'Frame requested has to be in frmNums: [{self.frmNums[0]} ... {self.frmNums[-1]}]'
+        outType = frameTypeMap[self.target_color_space]
+        
+        get_num = frmNum - self.truncation_anchor
+        
+        outFrm = outType.from_video(self.cap, get_num, 
+                                    cap_color_space = self.cap_color_space, 
+                                    scale_factor = self.scale_factor,
+                                    name = self.name)
+        
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[frmNum][feat])
+            
+        return outFrm
+        
+    @staticmethod
+    def argstrings_to_args(funcArgs, myFrm, myDict):
+        return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
+    
+    def length(self):
+        return len(self.frmNums)
+    
+    def dims(self):
+        return Stream.dims(self)
+    
+    def size(self, unit = 'GB'):
+        return Stream.size(self, unit = unit)
+    
+    def conform(self, new_frmNums):
+        updDict = {'frmNums': new_frmNums}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def recolor(self, new_target_color_space):
+        return Stream.recolor(self, new_target_color_space)
+    
+    def rescale(self, new_target_color_space):
+        return Stream.rescale(self, new_target_color_space)
+    
+    def attach(self, mySF):
+        return Stream.attach(self, mySF)
+
+    def decap(self):
+        framesType = framesTypeMap[self.target_color_space]
+        frames = framesType.from_list(cap, self.frmNums, 
+                                      cap_color_space = self.cap_color_space,
+                                      scale_factor = self.scale_factor,
+                                      name = self.name) ### TODO: speed up the get_framelist function by threading.
+        return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
+
+    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    
+        for frmNum in self.frmNums:
+            
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
+            ret, frame = self.cap.read()
+            
+            ### Get the frame in the correct color type
+            myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
+            myFrm = myFrm.rename(self.name)
+            
+            ### rescale if necessary
+            if self.scale_factor != 1:
+                myFrm = myFrm.rescale(self.scale_factor)
+            
+            ### Get the feature dictionary
+            myDict = self.features.maybe_get(frmNum)
+            ### if frmNum not found, we get {feat: None for feat in self.get_features()}
+            
+            myFrm = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
+            
+            if frame_counter:
+                myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
+            
+            if myFrm is not None:
+                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                if not still_showing:
+                    break
+            
+            frmNum += 1
+        
+        else:
+            cv.destroyAllWindows()
+
+    def maxchunk(self, critical_value = 4, safety_margin = 0.1): 
+        ### critical_value = 4 -> larger than 4 GB, we can not pickle!
+        ### safety_margin = 0.1 -> want to be 10% below critical value
+        size_per_unit = self.size(unit = 'GB') / self.length()
+        admissible_units = int((1 - safety_margin) * critical_value / size_per_unit)
+        return admissible_units
+    
+    def chunk_generator(self, chunksize = 100):
+        chunksize = min(chunksize, self.maxchunk())
+
+        ### generate decapped chunks of the stream, one by one lazily
+        slice_start, slice_stop = 0, chunksize
+        while slice_stop < self.length():
+            chunkNums = self.frmNums[slice_start: slice_stop]
+            yield self.conform(chunkNums).decap()
+            slice_start, slice_stop = slice_stop, slice_stop + chunksize
+        else:
+            chunkNums = self.frmNums[slice_start: slice_stop]
+            yield self.conform(chunkNums).decap()
+
+    def show(self, ms_between_frames = 25, frame_counter = False):
+        Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+          
+    def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
+        return Stream.extract(self, featureFunc, where = None, **kwargs)
+    
+    @extract_mp_timer
+    def extract_threaded(self, num_workers, featureFunc, where = None, **kwargs):
+        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, where = None, **kwargs)
+    
+    @extract_mp_timer
+    def extract_mp(self, num_workers, featureFunc, where = None, **kwargs):
+        return Stream._extract_pool(self, Pool, num_workers, featureFunc, where = None, **kwargs)
+    
+    @extract_mp_timer
+    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
+            
+    @extract_mp_timer
+    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
+        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
+       
+
+    
     
