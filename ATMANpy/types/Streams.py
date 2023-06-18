@@ -74,7 +74,7 @@ def extract_mp_timer(extractMethod):
         time_after = time.time()
 
         timeStr = round(time_after - time_before, 2) 
-        selfObj, otherArgs, exFunc = args[0], args[1:-1], args[-1]
+        selfObj, exFunc, otherArgs = args[0], args[1], args[2:] 
         
         if len(otherArgs) == 1:
             num_workers = otherArgs[0]
@@ -385,7 +385,11 @@ class Stream:
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def _extract_pool(self, poolCls, num_workers, featureFunc, **kwargs):
+    def extract_to_disc(self, featureFunc, videoName, storeName, savekwargs, **kwargs):
+        outSF = self.extract(featureFunc, **kwargs)
+        outSF.save(videoName, storeName, **savekwargs)
+    
+    def _extract_pool(self, featureFunc, poolCls, num_workers, **kwargs):
         """
         Auxiliary extract method for parallelisation 
             -> pass in a threadPool to do threaded extraction
@@ -455,7 +459,11 @@ class Stream:
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def _extract_chunked(self, poolCls, num_workers, chunksize, featureFunc, _split = False, **kwargs):
+    def _extract_pool_to_disc(self, featureFunc, poolCls, num_workers, videoName, storeName, savekwargs, **kwargs):
+        outSF = self._extract_pool(self, featureFunc, poolCls, num_workers, **kwargs)
+        outSF.save(videoName, storeName, **savekwargs)
+    
+    def _extract_chunked(self, featureFunc, poolCls, num_workers, chunksize, _split = False, **kwargs):
         ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
         # create a pool of chunks: 
         # chunk the Stream and let each chunk be worked by one worker.
@@ -539,21 +547,111 @@ class Stream:
         else:
             return allSFs
     
+    def _extract_chunked_to_disc(self, featureFunc, poolCls, num_workers, chunksize, videoName, storeName, 
+                                 savekwargs, **kwargs):
+        ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
+        # create a pool of chunks: 
+        # chunk the Stream and let each chunk be worked by one worker.
+        # This is especially important for CachedStream, below, where we need sequential doing of tasks
+        # but still want the speedup of parallel computing. 
+        # With pooled parallelism, we can not guarantee that the frame before is already done
+        # when the task for a given frame is dispatched, so that functions that track (needing prior frame information)
+        # can not be applied.
+                
+        def ram_is_ok(max_size_of_stream = 4, buffer_needed_gb = 8):
+            ### max size of stream is due to the impossibility of pickling an object larger than 4GB
+            ### check if an stream, which we want to decap, fits into RAM, allowing for a buffer.
+            available_gb = psutil.virtual_memory().available / 1024 ** 3
+            return max_size_of_stream < available_gb - buffer_needed_gb
+        
+        WAIT_SECS = 0.001
+        MESSAGE_FREQUENCY = 10
+        VERBOSE = False
+        if VERBOSE:
+            time_of_last_message = time.time()
+        
+        ### Set up the pool
+        pool = poolCls(processes = num_workers)
+        pending = deque()
+        
+        ### Initialize Generator
+        gen = self.chunk_generator(chunksize = chunksize)
+        try:
+            chunkStm = next(gen) ### prime the generator
+            generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+        except StopIteration:
+            pool.close()
+            generator_is_exhausted = True
+    
+        while True:
+            ram_ok = ram_is_ok() ### have to check it once! 
+                                 ### so we dont queue the generator twice without scheduling 
+                                 ### or queue the same task twice...
+            
+            if not generator_is_exhausted and len(pending) < num_workers and ram_ok:                
+                ### if there is space in the queue, add a task!
+                # print(f'Queueing {chunkStm}...')
+                # print(kwargs)
+                task = pool.apply_async(chunkStm.extract_to_disc, [featureFunc, videoName, storeName, savekwargs], kwargs)
+                pending.append(task)
+            else:
+                time.sleep(WAIT_SECS) ### need this to give the leftmost task time to finish!
+            
+            while len(pending) > 0 and pending[0].ready():
+                pending.popleft().get()
+                
+            if not generator_is_exhausted and len(pending) < num_workers and ram_ok: ### only when there is space in the queue
+                ### iterate the generator.
+                try:
+                    chunkStm = next(gen) ### iterate the generator
+                    generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+                except StopIteration:
+                    pool.close() ### pool closed once generator has nothing to yield --> no new elements will be added.
+                    generator_is_exhausted = True
+                    continue ### stop condition is not here anymore! we have to keep going until pending is empty and all tasks are done
+                
+            ### stop condition
+            if generator_is_exhausted and len(pending) == 0:
+                pool.terminate() ### once pending queue is zero, we can terminate the pool.
+                break
+            else: # not done! communicate status
+                if VERBOSE:
+                    time_since_last_message = time.time() - time_of_last_message
+                    if time_since_last_message > MESSAGE_FREQUENCY:
+                        len_queue = len(pending)
+                        ram_pct = psutil.virtual_memory().percent
+                        print(f'   ... length of queue: {len(pending)}. Ram utilization: {ram_pct}%')
+                        time_of_last_message = time.time()
+        
+        
     @extract_mp_timer
-    def extract_threaded(self, num_workers, featureFunc, **kwargs):
-        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, **kwargs)
+    def extract_threaded(self, featureFunc, num_workers, **kwargs):
+        return Stream._extract_pool(self, featureFunc, ThreadPool, num_workers, **kwargs)
     
     @extract_mp_timer
-    def extract_mp(self, num_workers, featureFunc, **kwargs):
-        return Stream._extract_pool(self, Pool, num_workers, featureFunc, **kwargs)
+    def extract_mp(self, featureFunc, num_workers, **kwargs):
+        return Stream._extract_pool(self, featureFunc, Pool, num_workers, **kwargs)
     
     @extract_mp_timer
-    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
+    def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, _split = False, **kwargs)
             
     @extract_mp_timer
-    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
+    def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, _split = False, **kwargs)
+       
+    @extract_mp_timer
+    def extract_chunked_threaded_to_disc(self, featureFunc, num_workers, chunksize, 
+                                         videoName, storeName, savekwargs, **kwargs):
+        return Stream._extract_chunked_to_disc(self, featureFunc, ThreadPool, num_workers, chunksize, 
+                                               videoName, storeName, savekwargs, **kwargs)
+    
+    @extract_mp_timer
+    def extract_chunked_mp_to_disc(self, featureFunc, num_workers, chunksize, 
+                                   videoName, storeName, savekwargs, **kwargs):
+        return Stream._extract_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize, 
+                                               videoName, storeName, savekwargs, **kwargs)
+        
        
 @dataclass(frozen = True)
 class StillStream:
@@ -887,12 +985,12 @@ class MulStream:
         return canonicalType.extract(self, featureFunc, **kwargs)
         
     @extract_mp_timer
-    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
+    def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, _split = False, **kwargs)
     
     @extract_mp_timer
-    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
+    def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, _split = False, **kwargs)
         
     
 @dataclass(frozen = True)
@@ -1017,12 +1115,24 @@ class StreamList:
         return SFList(outList)
         
     @extract_mp_timer
-    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
+    def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, _split = True, **kwargs)
     
     @extract_mp_timer
-    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = True, **kwargs)
+    def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, _split = True, **kwargs)
+        
+    @extract_mp_timer
+    def extract_chunked_threaded_to_disc(self, featureFunc, num_workers, chunksize, 
+                                         videoName, storeName, savekwargs, **kwargs):
+        return Stream._extract_chunked_to_disc(self, featureFunc, ThreadPool, num_workers, chunksize, 
+                                               videoName, storeName, savekwargs, **kwargs)
+    
+    @extract_mp_timer
+    def extract_chunked_mp_to_disc(self, featureFunc, num_workers, chunksize, 
+                                   videoName, storeName, savekwargs, **kwargs):
+        return Stream._extract_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize,  
+                                               videoName, storeName, savekwargs, **kwargs)
         
         
 @dataclass(frozen = True)
@@ -1083,8 +1193,12 @@ class DecapStream:
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
     
-    def extract_mp(self, num_workers, featureFunc, **kwargs):
-        return Stream.extract_mp(self, num_workers, featureFunc, **kwargs)
+    def extract_to_disc(self, featureFunc, videoName, storeName, savekwargs, **kwargs):
+        return Stream.extract_to_disc(self, featureFunc, videoName, storeName, savekwargs, **kwargs)
+    
+    def extract_mp(self, featureFunc, num_workers, **kwargs):
+        return Stream.extract_mp(self, featureFunc, num_workers, **kwargs)
+    
     
 @dataclass(frozen = True)
 class NCDecapStream:
@@ -1178,8 +1292,8 @@ class NCDecapStream:
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
     
-    def extract_mp(self, num_workers, featureFunc, **kwargs):
-        return Stream.extract_mp(self, num_workers, featureFunc, **kwargs)
+    def extract_mp(self, featureFunc, num_workers, **kwargs):
+        return Stream.extract_mp(self, featureFunc, num_workers, **kwargs)
     
 @dataclass(frozen = True) ### despite a frozen dataclass, within the functions below, the features attribute is treated as mutable, so we can update it and use it dynamically for subsequent iterations
 class CachedStream(Stream):
@@ -1392,11 +1506,11 @@ class CachedStream(Stream):
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
        
-    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream.extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs)
+    def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream.extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs)
             
-    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream.extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs)
+    def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream.extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs)
                  
     def decache(self):
         return Stream(**{k: v for k, v in self.__dict__.items() if k in Stream.__annotations__})
@@ -1692,20 +1806,20 @@ class NCStream:
         return Stream.extract(self, featureFunc, **kwargs)
     
     @extract_mp_timer
-    def extract_threaded(self, num_workers, featureFunc, **kwargs):
-        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, **kwargs)
+    def extract_threaded(self, featureFunc, num_workers, **kwargs):
+        return Stream._extract_pool(self, featureFunc, ThreadPool, num_workers, **kwargs)
     
     @extract_mp_timer
-    def extract_mp(self, num_workers, featureFunc, **kwargs):
-        return Stream._extract_pool(self, Pool, num_workers, featureFunc, **kwargs)
+    def extract_mp(self, featureFunc, num_workers, **kwargs):
+        return Stream._extract_pool(self, featureFunc, Pool, num_workers, **kwargs)
     
     @extract_mp_timer
-    def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, ThreadPool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
+    def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, _split = False, **kwargs)
             
     @extract_mp_timer
-    def extract_chunked_mp(self, num_workers, chunksize, featureFunc, **kwargs):
-        return Stream._extract_chunked(self, Pool, num_workers, chunksize, featureFunc, _split = False, **kwargs)
+    def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, _split = False, **kwargs)
        
 
     
