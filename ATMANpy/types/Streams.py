@@ -347,9 +347,7 @@ class Stream:
                 cv.destroyAllWindows()
                 break 
           
-    def extract(self, featureFunc, where = None, **kwargs): ### cv_funcs.get_stream_features
-        ### where --> BoolFeature: give the option to apply the function not everywhere
-        
+    def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
         ### Establish function arguments and return shape
         funcArgs = get_positional_arguments(featureFunc)
         funcVals = get_return_names(featureFunc)
@@ -361,9 +359,6 @@ class Stream:
         except StopIteration:
             return StreamFeatures({})
         
-        if where is not None:
-            where = where.conform(self.features)
-        
         streamDict = {}
         while True:
             
@@ -373,32 +368,14 @@ class Stream:
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
             assert len(args) == len(funcArgs), f'Required arguments ({funcArgs}) have to match supplied arguments ({args})'
             
-            # ### assign to a dictionary, depending on whether we get one or multiple return values
-            # if len(funcVals) == 1:
-            #     myFeature = featureFunc(*args, **kwargs)
-            #     streamDict[frmNum] = {funcVals[0]: myFeature}
-            # else:
-            #     myFeatures = featureFunc(*args, **kwargs)
-            #     streamDict[frmNum] = dict(zip(funcVals, myFeatures))
+            ### assign to a dictionary, depending on whether we get one or multiple return values
+            if len(funcVals) == 1:
+                myFeature = featureFunc(*args, **kwargs)
+                streamDict[frmNum] = {funcVals[0]: myFeature}
+            else:
+                myFeatures = featureFunc(*args, **kwargs)
+                streamDict[frmNum] = dict(zip(funcVals, myFeatures))
             
-            if where is None or where[frmNum]: ### if where is not given or is true at this position, we calculate the function value
-                ### assign to a dictionary, depending on whether we get one or multiple return values
-                if len(funcVals) == 1:
-                    myFeature = featureFunc(*args, **kwargs)
-                    streamDict[frmNum] = {funcVals[0]: myFeature}
-                else:
-                    myFeatures = featureFunc(*args, **kwargs)
-                    streamDict[frmNum] = dict(zip(funcVals, myFeatures))
-            else: ### if where is false, we just take the features in the stream
-                selfDict = self.features.maybe_get(frmNum)
-                combDict = {}
-                for feat in funcVals:
-                    if feat in selfDict:
-                        combDict[feat] = selfDict[feat]
-                    else:
-                        combDict[feat] = None
-                streamDict[frmNum] = combDict
-                
             ### iterate the generator.
             try:
                 frmNum, myFrm, myDict = gen.send(None) ### sending None -> nothing is shown! TODO: "Loud" option -> extract + show.
@@ -408,7 +385,7 @@ class Stream:
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
-    def _extract_pool(self, poolCls, num_workers, featureFunc, where = None, **kwargs):
+    def _extract_pool(self, poolCls, num_workers, featureFunc, **kwargs):
         """
         Auxiliary extract method for parallelisation 
             -> pass in a threadPool to do threaded extraction
@@ -434,23 +411,19 @@ class Stream:
             pool.close()
             generator_is_exhausted = True
         
-        if where is not None:
-            where = where.conform(self.features)
-            
         streamDict = {}
         while True:
             
             if not generator_is_exhausted and len(pending) < num_workers: #if there is space in the queue...
-                if where is None or where[frmNum]: #and we actually want to calculate the function...
-                    ### get arguments to plug into feature extraction function
-                    args = self.__class__.argstrings_to_args(funcArgs, myFrm, myDict)
-                        
-                    ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
-                    assert len(args) == len(funcArgs), f'Required arguments ({funcArgs}) have to match supplied arguments ({args})'
+                ### get arguments to plug into feature extraction function
+                args = self.__class__.argstrings_to_args(funcArgs, myFrm, myDict)
                     
-                    
-                    task = pool.apply_async(featureFunc, args, kwargs)
-                    pending.append((frmNum, task))
+                ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
+                assert len(args) == len(funcArgs), f'Required arguments ({funcArgs}) have to match supplied arguments ({args})'
+                
+                
+                task = pool.apply_async(featureFunc, args, kwargs)
+                pending.append((frmNum, task))
             else:
                 time.sleep(WAIT_SECS) ### need this to give the leftmost task time to finish!
             
@@ -479,15 +452,6 @@ class Stream:
                 pool.terminate() ### once pending queue is zero, we can terminate the pool.
                 break
         
-        if where is not None:
-            outDict = {}
-            for frmNum in self.features.get_frames():
-                if where[frmNum]:
-                    outDict[frmNum] = streamDict[frmNum]
-                else:
-                    outDict[frmNum] = {featName: feat for featName, feat in self.features[frmNum].items() if featName in funcVals}
-            streamDict = outDict.copy()
-         
         ### write to StreamFeature or StreamFeatures, depending on the number of return values.
         return StreamFeatures(streamDict).squeeze()
     
@@ -576,12 +540,12 @@ class Stream:
             return allSFs
     
     @extract_mp_timer
-    def extract_threaded(self, num_workers, featureFunc, where = None, **kwargs):
-        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, where = None, **kwargs)
+    def extract_threaded(self, num_workers, featureFunc, **kwargs):
+        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, **kwargs)
     
     @extract_mp_timer
-    def extract_mp(self, num_workers, featureFunc, where = None, **kwargs):
-        return Stream._extract_pool(self, Pool, num_workers, featureFunc, where = None, **kwargs)
+    def extract_mp(self, num_workers, featureFunc, **kwargs):
+        return Stream._extract_pool(self, Pool, num_workers, featureFunc, **kwargs)
     
     @extract_mp_timer
     def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
@@ -727,8 +691,8 @@ class StillStream:
     def show(self, ms_between_frames = 25, frame_counter = False):
         return Stream.show(self,  ms_between_frames = ms_between_frames, frame_counter = frame_counter)
     
-    def extract(self, featureFunc, where = None, **kwargs):
-        return Stream.extract(self, featureFunc, where = where, **kwargs)
+    def extract(self, featureFunc, **kwargs):
+        return Stream.extract(self, featureFunc, **kwargs)
     
     
 @dataclass(frozen = True)
@@ -1725,15 +1689,15 @@ class NCStream:
         Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter)
           
     def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
-        return Stream.extract(self, featureFunc, where = None, **kwargs)
+        return Stream.extract(self, featureFunc, **kwargs)
     
     @extract_mp_timer
-    def extract_threaded(self, num_workers, featureFunc, where = None, **kwargs):
-        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, where = None, **kwargs)
+    def extract_threaded(self, num_workers, featureFunc, **kwargs):
+        return Stream._extract_pool(self, ThreadPool, num_workers, featureFunc, **kwargs)
     
     @extract_mp_timer
-    def extract_mp(self, num_workers, featureFunc, where = None, **kwargs):
-        return Stream._extract_pool(self, Pool, num_workers, featureFunc, where = None, **kwargs)
+    def extract_mp(self, num_workers, featureFunc, **kwargs):
+        return Stream._extract_pool(self, Pool, num_workers, featureFunc, **kwargs)
     
     @extract_mp_timer
     def extract_chunked_threaded(self, num_workers, chunksize, featureFunc, **kwargs):
