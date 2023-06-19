@@ -264,18 +264,10 @@ class StreamFeature(StreamFeaturesBase):
         reinstDict = {frame: try_getattr(obj, 'rescale')(scale_factor) for frame, obj in self.streamDict.items()}
         return self.__class__(reinstDict, name = self.name)
       
-    def apply(self, func, where = None, **kwargs): ### TODO: at some point, allow *args, **kwargs
+    def apply(self, func, **kwargs): ### TODO: at some point, allow *args, **kwargs
         ### This method allows for function application to single features, element by element
         ### func takes in features (H, courtLines, etc) and returns features
-        
-        # if assignArgs is None:
-        #     funcArgs = get_positional_arguments(func)
-        # else: ### give the option to directly assign function arguments, regardless of name
-        #     funcArgs = assignArgs
-            
         funcVals = get_return_names(func)
-    
-        # assert funcArgs == self.get_features(), f'Expected function arguments ({funcArgs}) have to be same as available features ({self.get_features()})'
     
         ### figure out name
         if len(funcVals) == 1:
@@ -285,17 +277,12 @@ class StreamFeature(StreamFeaturesBase):
             
         applyDict = {}
         for frame in self:
-            if where is None or where[frame]:
-                funcOut = func(self[frame], **kwargs)
-                
-                if len(funcVals) == 1:
-                    applyDict[frame] = {name: funcOut}
-                else:
-                    applyDict[frame] = dict(zip(funcVals, funcOut))
-                    
-            else: ### if where is not None AND where[frame] is False...
-                applyDict[frame] = {self.name: self[frame]} 
-                # ... we don't apply the function, instead look for the function values in the SF itself.
+            funcOut = func(self[frame], **kwargs)
+            
+            if len(funcVals) == 1:
+                applyDict[frame] = {name: funcOut}
+            else:
+                applyDict[frame] = dict(zip(funcVals, funcOut))
                 
         return StreamFeatures(applyDict, name = name).squeeze()
     
@@ -615,22 +602,16 @@ class StreamFeatures(StreamFeaturesBase):
             first_frame = self.get_frames()[0]
             return list(self.streamDict[first_frame].keys())
     
-    def apply(self, func, assignArgs = None, assignVals = None, where = None): ###TODO: at some point, allow *args, **kwargs
+    def apply(self, func, **kwargs): ###TODO: at some point, allow *args, **kwargs
         ### This method allows for function application to single features, element by element
         ### func takes in features (H, courtLines, etc) and returns features
         ### assignArgs --> List: give the option to directly assign function arguments, regardless of name
         ### assignVals --> List: give the option to rename the result features
         ### where --> BoolFeature: give the option to apply the function not everywhere
     
-        if assignArgs is None:
-            funcArgs = get_positional_arguments(func)
-        else: ### give the option to directly assign function arguments, regardless of name
-            funcArgs = assignArgs
-        if assignVals is None:
-            funcVals = get_return_names(func)
-        else:
-            funcVals = assignVals
-    
+        funcArgs = get_positional_arguments(func)
+        funcVals = get_return_names(func)
+        
         assert set(funcArgs).issubset(set(self.get_features())), f'Expected function arguments ({funcArgs}) have to be contained in available features ({self.get_features()})'
         
         ### figure out name
@@ -642,18 +623,12 @@ class StreamFeatures(StreamFeaturesBase):
         applyDict = {}
         for frame in self:
             
-            if where is None or where[frame]:
-                funcOut = func(*[self[frame][arg] for arg in funcArgs])
-                
-                if len(funcVals) == 1:
-                    applyDict[frame] = {name: funcOut}
-                else:
-                    applyDict[frame] = dict(zip(funcVals, funcOut))
-                    
-            else: ### if where is not None AND where[frame] is False...
-                applyDict[frame] = {val: self[frame][val] for val in funcVals} 
-                # ... we don't apply the function, instead look for the function values in the SF itself.
-                    
+            funcOut = func(*[self[frame][arg] for arg in funcArgs])
+            
+            if len(funcVals) == 1:
+                applyDict[frame] = {name: funcOut}
+            else:
+                applyDict[frame] = dict(zip(funcVals, funcOut))
     
         return StreamFeatures(applyDict, name = name).squeeze()
     
@@ -774,6 +749,9 @@ class SFList:
         else:
             return SFList(self.sfList[item])
     
+    def get_feature(self, feature):
+        return SFList([mySF[feature] for mySF in self])
+    
     def length(self):
         return len(self.sfList)
     
@@ -781,8 +759,8 @@ class SFList:
         featList = [myFrm.rescale(scale_factor) for myFrm in self]
         return SFList(featList)
     
-    def apply(self, func, assignArgs = None, assignVals = None, where = None):
-        return SFList([mySF.apply(func, assignArgs = assignArgs, assignVals = assignVals, where = where) for mySF in self])
+    def apply(self, func, **kwargs):
+        return SFList([mySF.apply(func, **kwargs) for mySF in self])
     
     def apply_whole(self, func, *args, **kwargs):
         return SFList([func(mySF, *args, **kwargs) for mySF in self])
