@@ -97,7 +97,7 @@ def get_updated_attribute_dictionary(someObj, updDict):
         except KeyError:
             return currDict[attr]
     
-    return {attr: maybe_update(attr) for attr in currDict}
+    return {attr: maybe_update(attr) for attr in currDict if not attr.startswith('_')}
 
 @dataclass(frozen = True)
 class Stream:
@@ -171,7 +171,8 @@ class Stream:
             nameMap = {'bgr': 'cFrm',
                        'grey': 'gFrm',
                        'hsv': 'hFrm',
-                       'bool': 'bFrm'}
+                       'bool': 'bFrm',
+                       'mask': 'mFrm'}
             object.__setattr__(self, 'name', nameMap[self.target_color_space])
         
         ### CHECK FEATURES
@@ -195,8 +196,8 @@ class Stream:
                                     scale_factor = self.scale_factor,
                                     name = self.name)
         
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[frmNum][feat])
+        # for feat in self.features.get_features():
+        #     outFrm = outFrm.put(self.features[frmNum][feat])
             
         return outFrm
         
@@ -1020,6 +1021,7 @@ class StreamList:
     
     @staticmethod
     def from_store(featureName, videoName, storeName, 
+                   cache_size = None,
                    cap_color_space = 'bgr', 
                    target_color_space = 'bgr',
                    scale_factor = 1):
@@ -1032,18 +1034,30 @@ class StreamList:
         sortFunc = lambda myStr: int(myStr.split('_')[1]) ### sort by first frame
         sorted_files = sorted(files, key = sortFunc)
         
+        ### understand file ending
         suffixes = [file.split('.')[1] for file in sorted_files]
         assert len(set(suffixes)) == 1, f'Mixed file types found in {storePath}'
         suffix = suffixes[0]
-        readType = StillStream if suffix == 'npy' else Stream 
+        
+        ### figure out arguments for reading
+        params = {'name': featureName,
+                  'cap_color_space': cap_color_space,
+                  'target_color_space': target_color_space,
+                  'scale_factor': scale_factor}
+        
+        if suffix == 'npy':
+            readType = StillStream
+        elif cache_size is not None:
+            params['cache_size'] = cache_size
+            readType = CachedStream
+        else:
+            readType = Stream
+            
         
         outList = []
         for videoFile in sorted_files:
             videoPath = os.path.join(storePath, videoFile)
-            outList.append(readType.from_file(videoPath, name = featureName,
-                                              cap_color_space = cap_color_space, 
-                                              target_color_space = target_color_space,
-                                              scale_factor = scale_factor))
+            outList.append(readType.from_file(videoPath, **params))
         return StreamList(outList)
     
     @staticmethod
@@ -1148,8 +1162,8 @@ class DecapStream:
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         outFrm = self.frames[item - self.start_frame]
         
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[item][feat])
+        # for feat in self.features.get_features():
+        #     outFrm = outFrm.put(self.features[item][feat])
         
         return outFrm
     
@@ -1261,8 +1275,8 @@ class NCDecapStream:
         assert item in self.frmNums, f'Frame requested has to be in self.frmNums!'
         outFrm = self.frames[self.frmNums.index(item)]
         
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[item][feat])
+        # for feat in self.features.get_features():
+        #     outFrm = outFrm.put(self.features[item][feat])
             
         return outFrm
     
@@ -1301,22 +1315,34 @@ class CachedStream(Stream):
     
     def __post_init__(self):
         ### Here, important to check that the cache size is actually available within the stream!
-        total_frames = self.cap.get(cv.CAP_PROP_FRAME_COUNT)  ### total number of frames
-        fs_avail, ls_avail = self.truncation_anchor, self.truncation_anchor + total_frames ### available frames, in absolute terms (relative to the master cap)
-        
+        total_frames = int(self.cap.get(cv.CAP_PROP_FRAME_COUNT))  ### total number of frames
+        fs_avail, ls_avail = self.truncation_anchor, self.truncation_anchor + total_frames - 1 ### available frames, in absolute terms (relative to the master cap). Note that if there are 2 frames, the indices are 0 and 1 -> hence, we subtract 1 from num_frames
         start_cap, stop_cap = self.start_frame - self.cache_size, self.stop_frame + self.cache_size
         
         if not fs_avail <= start_cap <= ls_avail:
-            raise Exception(f'Starting frame {start_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
+            print(f'Starting frame {self.start_frame} not available in {self.cap} from {fs_avail} to {ls_avail} and cache_size {self.cache_size}')
+            earliest_start = fs_avail + self.cache_size
+            object.__setattr__(self, 'start_frame', earliest_start)
+            print(f'Reset starting frame to {earliest_start}.')
+        
         if not fs_avail <= stop_cap <= ls_avail:
-            raise Exception(f'Stop frame {stop_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
+            print(f'Stop frame {self.stop_frame} not available in {self.cap} from {fs_avail} to {ls_avail} and cache_size {self.cache_size}')
+            latest_stop = ls_avail - self.cache_size
+            object.__setattr__(self, 'stop_frame', latest_stop)
+            print(f'Reset stopping frame to {latest_stop}.')
+        
+        # if not fs_avail <= start_cap <= ls_avail:
+        #     raise Exception(f'Starting frame {start_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
+        # if not fs_avail <= stop_cap <= ls_avail:
+        #     raise Exception(f'Stop frame {stop_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
             
         ### CHECK NAME
         if self.name is None:
             nameMap = {'bgr': 'cFrm',
                        'grey': 'gFrm',
                        'hsv': 'hFrm',
-                       'bool': 'bFrm'}
+                       'bool': 'bFrm',
+                       'mask': 'mFrm'}
             object.__setattr__(self, 'name', nameMap[self.target_color_space])
         
         ### CHECK FEATURES
@@ -1350,6 +1376,41 @@ class CachedStream(Stream):
                             scale_factor = someStm.scale_factor,
                             name = someStm.name, features = someStm.features, 
                             cache_size = cache_size)
+    
+    @staticmethod
+    def from_file(filePath, cache_size = 1,
+                  name = None,
+                  cap_color_space = 'bgr', target_color_space = 'bgr',
+                  scale_factor = 1):
+        cap = cv.VideoCapture(filePath)
+        
+        fileName = os.path.basename(filePath)
+        
+        ### find start and end frame
+        fileStump = fileName.split('.')[0]
+        _, start, _, stop = fileStump.split('_')
+        start, stop = int(start), int(stop)
+        
+        return CachedStream(cap, start, stop, cache_size = cache_size,
+                            truncation_anchor = start, ### NOTE: truncation anchor is the first frame given in file name! 
+                            cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                            scale_factor = scale_factor,
+                            name = name)
+    
+    @staticmethod
+    def from_store(fileName, featureName, videoName, storeName, 
+                   cache_size = 1,
+                   cap_color_space = 'bgr', target_color_space = 'bgr',
+                   scale_factor = 1):
+        featDict = get_folder_struct('features_stored')
+        featPath = featDict['main']
+        ### find video
+        videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
+        return CachedStream.from_file(videoPath, cache_size = cache_size,
+                                      name = featureName,
+                                      cap_color_space = cap_color_space, target_color_space = target_color_space,
+                                      scale_factor = scale_factor)
+        
     
     def _set_mut_features(self, features_needed = None):
         ### set the mutable features attribute
@@ -1452,7 +1513,7 @@ class CachedStream(Stream):
                     if not still_showing:
                         break
                     
-            frmNum = int(self.cap.get(cv.CAP_PROP_POS_FRAMES)) ### the latest frame being read
+            frmNum += 1 ### the latest frame being read
         else:
             cv.destroyAllWindows()
         
@@ -1705,8 +1766,8 @@ class NCStream:
                                     scale_factor = self.scale_factor,
                                     name = self.name)
         
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[frmNum][feat])
+        # for feat in self.features.get_features():
+        #     outFrm = outFrm.put(self.features[frmNum][feat])
             
         return outFrm
         
@@ -1739,7 +1800,7 @@ class NCStream:
 
     def decap(self):
         framesType = framesTypeMap[self.target_color_space]
-        frames = framesType.from_list(cap, self.frmNums, 
+        frames = framesType.from_list(self.cap, self.frmNums, 
                                       cap_color_space = self.cap_color_space,
                                       scale_factor = self.scale_factor,
                                       name = self.name) ### TODO: speed up the get_framelist function by threading.
