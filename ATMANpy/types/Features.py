@@ -7,6 +7,7 @@ Created on Thu Apr 20 15:59:24 2023
 
 from dataclasses import dataclass
 import os
+import time
 import cv2 as cv
 import numpy as np
 import pandas as pd
@@ -35,6 +36,29 @@ def try_getattr(obj, methodStr):
         def noneFunc(*args, **kwargs):
             return None
         return noneFunc
+
+def extract_mp_timer(extractMethod):
+
+    def timed(*args, **kw):
+
+        time_before = time.time()
+        result = extractMethod(*args, **kw)
+        time_after = time.time()
+
+        timeStr = round(time_after - time_before, 2) 
+        selfObj, exFunc, otherArgs = args[0], args[1], args[2:] 
+        
+        if len(otherArgs) == 1:
+            num_workers = otherArgs[0]
+            paramStr = f'{num_workers} workers'
+        if len(otherArgs) == 2:
+            num_workers, chunksize = otherArgs
+            paramStr = f'{num_workers} workers and chunks of {chunksize}'
+        print(f'{extractMethod.__name__} on {selfObj.__class__.__name__} with {exFunc.__name__} using {paramStr}: took {timeStr} seconds')
+
+        return result
+
+    return timed
 
 ### TODO: Safety -> ensure stream features to be monotonously increasing! (don't have to be contiguous)
 
@@ -383,11 +407,13 @@ class StreamFeature(StreamFeaturesBase):
         regionNames = ['scoreBoard']
         
         if self.name in contourNames:
-            self._save_contour(videoName, storeName)
+            self._save_contour(videoName, storeName, compression = compression)
         elif self.name in homographyNames:
             self._save_homography(videoName, storeName)
         elif self.name in regionNames:
             self._save_region(videoName, storeName)
+        elif self.name.endswith('Cnt'):
+            self._save_contour(videoName, storeName, compression = compression)
         elif self.name.endswith('Cnts'):
             self._save_contours(videoName, storeName, compression = compression)
         elif 'Mask' in self.name:
@@ -756,7 +782,7 @@ class SFList:
         return len(self.sfList)
     
     def rescale(self, scale_factor):
-        featList = [myFrm.rescale(scale_factor) for myFrm in self]
+        featList = [mySF.rescale(scale_factor) for mySF in self]
         return SFList(featList)
     
     def apply(self, func, **kwargs):
@@ -764,6 +790,18 @@ class SFList:
     
     def apply_whole(self, func, *args, **kwargs):
         return SFList([func(mySF, *args, **kwargs) for mySF in self])
+    
+    @extract_mp_timer
+    def apply_whole_mp(self, func, num_workers, **kwargs):
+        from multiprocessing.pool import Pool
+        from functools import partial
+        
+        partFunc = partial(func, **kwargs)
+        
+        with Pool(num_workers) as p:
+            outList = p.map(partFunc, self.sfList, )
+    
+        return SFList(outList)
     
     def add(self, key, value):
         return SFList([mySF.add(key, value) for mySF in self])
