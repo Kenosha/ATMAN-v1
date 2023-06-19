@@ -23,6 +23,8 @@ from ATMANpy.types.Lines import Region
 from ATMANpy.types.Lines import CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
 
+import ATMANpy.funcs.particle_funcs_vectorized as pf
+
 def get_court_corner_points(courtLines):
     tl, tr, bl, br = courtLines.get_court_region().to_points()
     return tl, tr, bl, br
@@ -45,3 +47,7 @@ def calculate_homography(tl, tr, bl, br):
 def replace_trackflag(trackFlag, replace_value):
     return ''
         
+def choose_ball_contour(smooth_particles, candCnts, likelihood_threshold = 10 ** (-15)):
+    ballCnt = pf.choose_likely_ball_contour(smooth_particles, candCnts, l_threshold = likelihood_threshold)
+    return ballCnt
+    

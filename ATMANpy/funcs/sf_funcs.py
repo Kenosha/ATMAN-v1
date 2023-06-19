@@ -271,10 +271,11 @@ def find_particles(mySF,
     modelHistories = None
     particles = pf.initialize_particles(dims, pixel_in_meter = pixel_in_meter, N = N, fps = fps)
     
-    partDict = {}
+    partDict = {} ### we need particles, first and foremost
+    histDict = {} ### but we also need the final index histories, for smoothing
     for frame, featDict in mySF.items():
         ### write to frame!
-        partDict[frame] = particles
+        partDict[frame] = particles.astype(int) ### for memory reasons, save as integer
         
         chamferCnts = featDict['chamferCnts']
         ballContours = featDict['candCnts']
@@ -294,8 +295,42 @@ def find_particles(mySF,
         indexHistories, closeHistories, modelHistories = pf.update_histories(indexHistories, closeHistories, modelHistories,
                                                                              particleIdxs, closeBools, modelBools) 
 
-    partDict[frame + 1] = particles
+    partDict[frame + 1] = particles.astype(int) ### for memory reasons, save as integer
+    histDict[frame + 1] = indexHistories ### these are only needed at the very end, 
+                                           # since indexHistories update and accumulate
     
-    return StreamFeature(partDict, name = 'particles')
+    partSF = StreamFeature(partDict, name = 'particles')
+    histSF = StreamFeature(histDict, name = 'idxHistories')
+    return partSF.merge(histSF)
     
 
+def kitagawa_smooth(mySF):    
+    ##### Let's go backwards.
+    ## -> u = T - t - 1: Essentially, we now kitagawa-smooth from recent to old.
+    ## this is easier since we can get the direct parent recursively.
+        
+    last_frame, idx_history = mySF['idxHistories'].last()
+    T, N = idx_history.shape
+    
+    # initialize for last period
+    k_iT_u = np.arange(start = 0, stop = N)
+    
+    smoothDict = {}
+    for u in range(T):
+        curr_frame = last_frame - u
+        
+        ### select the particles based on previous indices
+        s_i = mySF['particles'][curr_frame]
+        selected_s_i = s_i[k_iT_u]
+        
+        smoothDict[curr_frame] = selected_s_i
+        
+        ### select the corresponding indices based on previous indices
+        parentIdxs = idx_history[u]
+        k_iT_u = parentIdxs[k_iT_u]
+    
+    ### reverse the dictionary, so frames are in order
+    smoothDict = {frame: smoothDict[frame] for frame in sorted(smoothDict)}
+    
+    return StreamFeature(smoothDict, name = 'smooth_particles')
+    

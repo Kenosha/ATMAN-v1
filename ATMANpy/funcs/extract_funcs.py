@@ -420,16 +420,62 @@ def get_movement_contours_and_frame(gCache, hCache, featCache,
     
     return movCnts, ballTable
     
+def get_chamfer_mask(gFrm, topPlayer, botPlayer, threshold = 50):
+    import ATMANpy.funcs.particle_funcs_vectorized as pf
+    
+    ########## DECIDE PARTICLE PROPAGATION #########
+    if topPlayer is None or botPlayer is None:
+        chamferMask = MaskFrame.false(gFrm)
+    else:
+        chamferMask = pf.chamfer_distance(gFrm, topPlayer, botPlayer,
+                                          threshold = threshold) 
+        
+    return chamferMask
 
-def find_ball_candidates(ballTable, movCnts, svm = None, features = None, mean = None, std = None):
-    ### Using the SVM estimated, predict whether a contour is a ball.
-    normTable = (ballTable - mean) / std
-    normTable['isBall_proba'] = clf.predict_proba(normTable[features].values)
-    normTable['isBall'] = clf.predict(normTable[features].values)
+def get_chamfer_contours(gFrm, topPlayer, botPlayer, threshold = 50):
+    chamferMask = get_chamfer_mask(gFrm, topPlayer, botPlayer, threshold = threshold)
+    chamferCnts, _ = chamferMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    return chamferCnts
+
+def find_particles(chamferCache, featCache, 
+                   pixel_in_meter = (200, 100), N = 1000, fps = 25,
+                   chamfer_threshold = None,
+                   normal_propagation = None, close_propagation = None, switch_probability = None,):
+
+    import ATMANpy.funcs.particle_funcs_vectorized as pf
     
-    ### get all True predictions
-    ballIdx = list(normTable[normTable.isBall == 1].index)
-    candCnts = [c for i, c in enumerate(movCnts) if i in ballIdx]
-    return candCnts
+    ### Frame ###
+    chamferMask = chamferCache[-1]
     
+    ### Exogenous Features ###
+    # topPlayer = featCache[-1]['topPlayer']
+    # botPlayer = featCache[-1]['botPlayer']
+    ballContours = featCache[-1]['ballContours']
+    
+    ### Endogenous Features ###
+    particles = featCache[-1]['particles']
+    indexHistories = featCache[-1]['indexHistories']
+    closeHistories = featCache[-1]['closeHistories']
+    modelHistories = featCache[-1]['modelHistories']
+    
+    
+    if particles is None:
+        particles = pf.initialize_particles(chamferMask, pixel_in_meter = pixel_in_meter, N = N, fps = fps)
+    
+    propagation_models, closeBools, modelBools = pf.get_motion_model(particles, chamferMask,
+                                                                     closeHistories = closeHistories,
+                                                                     modelHistories = modelHistories,
+                                                                     normal_propagation = normal_propagation, 
+                                                                     close_propagation = close_propagation, 
+                                                                     switch_probability = switch_probability)    
+
+    ########### UPDATE PARTICLES #########
+    mDict, wDict = pf.get_means_and_weights(particles, propagation_models, ballContours) ### means_and_weights updates last periods particles, and compares to evidence in this period!
+    particles, particleIdxs, _ = pf.resample(mDict, wDict)
+    
+    ########### UPDATE HISTORIES #########
+    indexHistories, closeHistories, modelHistories = pf.update_histories(indexHistories, closeHistories, modelHistories,
+                                                                         particleIdxs, closeBools, modelBools) 
+
+    return particles, indexHistories, closeHistories, modelHistories
 

@@ -76,13 +76,30 @@ CHAMFER_THRESH = 50
 ########## FUNCTIONS ###########
 
 
-def initialize_particles(gFrm, courtLines, N = 1000, fps = 25):
+def initialize_particles_old(gFrm, courtLines, N = 1000, fps = 25):
     # particles are four dimensional vectors, representing location and speed in x and y coords resp.
     MIN_LOC_X, MIN_LOC_Y = 0, 0
     MAX_LOC_X, MAX_LOC_Y = gFrm.cols, gFrm.rows
     MIN_SPEED_X, MIN_SPEED_Y = 0, 0
     
     conv_X, conv_Y = courtLines.pixel_in_meter(horiLine = 'Top Baseline', vertLine = 'Top Center Line')  
+    meter_per_frame = 70 / fps ### 260 km/h -> 70 m/s
+    MAX_SPEED_X, MAX_SPEED_Y = conv_X * meter_per_frame, conv_Y * meter_per_frame
+    
+    min_vec = [MIN_LOC_X, MIN_LOC_Y, MIN_SPEED_X, MIN_SPEED_Y]
+    max_vec = [MAX_LOC_X, MAX_LOC_Y, MAX_SPEED_X, MAX_SPEED_Y]
+    
+    initial_particles = np.random.uniform(min_vec, max_vec, (N, 4))
+    
+    return initial_particles
+
+def initialize_particles(dims, pixel_in_meter = (200, 100), N = 1000, fps = 25):
+    # particles are four dimensional vectors, representing location and speed in x and y coords resp.
+    MIN_LOC_X, MIN_LOC_Y = 0, 0
+    MAX_LOC_X, MAX_LOC_Y = dims
+    MIN_SPEED_X, MIN_SPEED_Y = 0, 0
+    
+    conv_X, conv_Y = pixel_in_meter
     meter_per_frame = 70 / fps ### 260 km/h -> 70 m/s
     MAX_SPEED_X, MAX_SPEED_Y = conv_X * meter_per_frame, conv_Y * meter_per_frame
     
@@ -204,6 +221,64 @@ def get_motion_model(S, chamferMask, closeHistories = None, modelHistories = Non
     return As, closeBools, modelBools
 
 
+##### define markov process and observation rules #####
+def get_motion_model_with_contours(S, chamferCnts, closeHistories = None, modelHistories = None,
+                                   normal_propagation = None, close_propagation = None, switch_probability = None):
+    if normal_propagation is None:
+        normal_propagation = A
+    if close_propagation is None:
+        close_propagation = A_primeprime
+    if switch_probability is None:
+        switch_probability = P_PRIME
+    
+    ### Check the histories for the particle, to see if it would qualify for a model switch
+    if closeHistories is None and modelHistories is None:
+        propagation_rules = np.ones(len(S), dtype = 'bool') ### if we have no history,
+                                                            ### every particle can potentially 
+                                                            ### be moved with A or A' (if it's close)
+    else:
+        propagation_rules = compare_histories(closeHistories, modelHistories)
+    
+    ### Find Chamfer-Appropriate Model
+    As = []
+    closeBools = np.array([], dtype = 'bool')
+    modelBools = np.array([], dtype = 'bool')
+    for s, switchBool in zip(S, propagation_rules):
+        ### determine closeness
+        x, y = s[:2].squeeze()
+        sPt = Point2D((round(x), round(y)))
+        
+        if chamferCnts is None:
+            ball_is_close = False
+        else:
+            ball_is_close = not chamferCnts.contains(sPt)
+            
+        ### assign models depending on closeness    
+        if not ball_is_close:   ### not close to player
+            model_is_prime = False    
+            A_star = normal_propagation   
+        else:                   ### close to player
+            if switchBool: ### particle qualifies for a model switch! 
+                if np.random.rand() < switch_probability:
+                    A_star = close_propagation
+                    model_is_prime = True
+                else:
+                    A_star = normal_propagation
+                    model_is_prime = False
+            else:          ### independent of whether the particle is close or not, 
+                           ### it must be moved with the normal model A
+                A_star = normal_propagation
+                model_is_prime = False
+                         
+        As.append(A_star)
+        closeBools = np.append(closeBools, ball_is_close)
+        modelBools = np.append(modelBools, model_is_prime)
+
+    As = np.array(As)
+    return As, closeBools, modelBools
+
+
+
 # S = initialize_particles(gFrm, courtLines)
 # chamferMask = chamfer_distance(gFrm, topplayerRegion, botplayerRegion)
 # As, closeBools, modelBools = get_motion_model(S, chamferMask)
@@ -224,7 +299,7 @@ def get_means_and_weights(S, As, ballContours,
     ### the upper two elements of the m0 vector -> location of updated particles.
     m0_loc = m0[:, :2]
     
-    if ballContours == []:
+    if ballContours is None or ballContours == []:
         m = m0[:, :, np.newaxis]
         w = np.zeros((m.shape[0], 1)) + beta
     
@@ -271,7 +346,7 @@ def get_means_and_weights(S, As, ballContours,
     ### then, normalize weights so they add up to one
     w = w / w.sum() 
     
-    return m,w
+    return m, w
 
 
 def resample(m, w, Q = Q, C = C):
@@ -376,7 +451,7 @@ def choose_likely_ball_contour(S, ballContours, l_threshold = 1/10,
                                likelihood_denominator = likelihood_denominator,
                                return_likelihood = False,
                                verbose = False):
-    if ballContours == []:
+    if ballContours is None or ballContours == []:
         if verbose: print('No Contours!')
         if return_likelihood:
             return None, None, None
@@ -882,8 +957,8 @@ def interpolate_ball_features_smart_circle(cnt_before, cnt_after,
 ########## DRAW FUNCTIONS #########
 
 def particles_to_points(S, particles_to_produce = None):
-    def round_tup(tup):
-        return round(tup[0]), round(tup[1])
+    
+    round_tup = lambda tup: (round(tup[0]), round(tup[1]))
     
     if not particles_to_produce is None:
         to_draw = S[:particles_to_produce]
@@ -894,6 +969,12 @@ def particles_to_points(S, particles_to_produce = None):
     return points
 
 
+def particles_to_frame(S):
+    import pandas as pd
+    partTable = pd.DataFrame(S, columns = ['x', 'y', 'dx', 'dy'])
+    partTable.index.name = 'idx1'
+    return partTable
+    
 def particles_to_area(S, particles_to_produce = None):
     def round_tup(tup):
         return round(tup[0]), round(tup[1])
