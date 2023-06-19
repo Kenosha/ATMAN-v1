@@ -783,9 +783,9 @@ class SFList:
             x, xs = self[0], self[1:]
         return concatFunc(x, xs.concatenate(axis = axis))
     
-    def save(self, videoName, storeName, lossless = False):
+    def save(self, videoName, storeName, compression = 24, lossless = False):
         for mySF in self:
-            mySF.save(videoName, storeName, lossless = lossless)
+            mySF.save(videoName, storeName, compression = compression, lossless = lossless)
         
         
 #%% Testing

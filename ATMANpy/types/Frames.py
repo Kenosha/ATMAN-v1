@@ -268,7 +268,7 @@ class Frame:
     
     def within_contours(self, contours: Contours):
         zeroArr = np.zeros((self.rows, self.cols), dtype = 'uint8')
-        cntMask = cv.fillPoly(zeroArr, [contour.points], 255)
+        cntMask = cv.fillPoly(zeroArr, [contours.points], 255)
         return MaskFrame(cntMask)
     
     def roll(self, how = 'down', shift = 1, nan_sentinel = np.nan):
@@ -324,6 +324,7 @@ class Frame:
         self_copy = self.array.copy()
         cts, hierarchy = cv.findContours(self_copy, 
                                          contour_retrieval_mode, contour_approx_mode)
+        cts = Contours([Contour(ct) for ct in cts])
         return cts, hierarchy
         
     def warp(self, H, cols = None, rows = None):

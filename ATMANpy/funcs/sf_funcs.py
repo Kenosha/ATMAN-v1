@@ -258,4 +258,44 @@ def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
             trueDict[frmNum] = Contours(true_contours)
 
     return StreamFeature(trueDict, name = 'candCnts')
+
+def find_particles(mySF, 
+                   dims = (1920, 1080), pixel_in_meter = (200, 100), N = 1000, fps = 25,
+                   chamfer_threshold = None,
+                   normal_propagation = None, close_propagation = None, switch_probability = None,):
+
+    import ATMANpy.funcs.particle_funcs_vectorized as pf
     
+    indexHistories = None
+    closeHistories = None
+    modelHistories = None
+    particles = pf.initialize_particles(dims, pixel_in_meter = pixel_in_meter, N = N, fps = fps)
+    
+    partDict = {}
+    for frame, featDict in mySF.items():
+        ### write to frame!
+        partDict[frame] = particles
+        
+        chamferCnts = featDict['chamferCnts']
+        ballContours = featDict['candCnts']
+        
+        propagation_models, closeBools, modelBools = pf.get_motion_model_with_contours(particles, chamferCnts,
+                                                                         closeHistories = closeHistories,
+                                                                         modelHistories = modelHistories,
+                                                                         normal_propagation = normal_propagation, 
+                                                                         close_propagation = close_propagation, 
+                                                                         switch_probability = switch_probability)    
+    
+        ########### UPDATE PARTICLES #########
+        mDict, wDict = pf.get_means_and_weights(particles, propagation_models, ballContours) ### means_and_weights updates last periods particles, and compares to evidence in this period!
+        particles, particleIdxs, _ = pf.resample(mDict, wDict)
+        
+        ########### UPDATE HISTORIES #########
+        indexHistories, closeHistories, modelHistories = pf.update_histories(indexHistories, closeHistories, modelHistories,
+                                                                             particleIdxs, closeBools, modelBools) 
+
+    partDict[frame + 1] = particles
+    
+    return StreamFeature(partDict, name = 'particles')
+    
+

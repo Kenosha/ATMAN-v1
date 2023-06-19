@@ -8,7 +8,7 @@ Created on Sun Apr 10 15:11:50 2022
 import cv2 as cv
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Lines, Region
-from ATMANpy.types.Contours import Contour
+from ATMANpy.types.Contours import Contour, Contours
 
 def put(someFrm, someObj, 
         color = None, radius = None, thickness = None, where = None, size = None,
@@ -64,7 +64,20 @@ def put(someFrm, someObj,
             else:
                 myFrm = myFrm.put(str(annotation), where = (cntPnt - offset_margin).coords)
         return myFrm
-                
+          
+    if isinstance(someObj, Contours):
+        if verbose: print('Contours!')
+        myFrm = InstClass(cv.drawContours(self_copy, [cnt.points for cnt in someObj], -1, color, thickness = thickness))
+        if annotation is not None:
+            for cnt in someObj:
+                try:
+                    cntPnt = cnt.center()
+                except ZeroDivisionError:
+                    pass
+                else:
+                    myFrm = myFrm.put(str(annotation), where = (cntPnt - offset_margin).coords)
+        return myFrm
+      
     if isinstance(someObj, str):
         if verbose: print('String!')
         font = cv.FONT_HERSHEY_SIMPLEX

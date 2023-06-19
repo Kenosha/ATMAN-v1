@@ -68,6 +68,9 @@ class Contour:
         # rotAngle: theta, the rotation angle of the rectangle.
         return cv.fitEllipse(self.points)
 
+    def contains(self, somePt):
+        return cv.pointPolygonTest(self.points, somePt.coords, False) == 1
+
     def compress(self, target_number_of_points):
                 
         current_number_of_points = self.points.shape[0]
@@ -130,6 +133,9 @@ class Contours:
         # majminAxis: major and minor axis of the rectangle, i.e: width and heigth!
         # rotAngle: theta, the rotation angle of the rectangle.
         return [cnt.fit_ellipse() for cnt in self]
+
+    def contains(self, somePt):
+        return any([myCnt.contains(somePt) for myCnt in self])
 
     def compress(self, target_number_of_points):
         return Contours([cnt.compress(target_number_of_points) for cnt in self])
