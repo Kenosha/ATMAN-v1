@@ -291,9 +291,9 @@ if __name__ == '__main__':
         burnSFs = mulStms.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_burn_in_mask_iterative, **params)
         burnSFs = burnSFs.rescale(1 / SCALE_FACTOR)
         
-        burnSFs.save(VIDEO_ID, STORE_NAME, lossless = True)
+        burnSFs.save(VIDEO_ID, STORE_NAME, lossless = True) ### TODO: SAVE THESE DIRECTLY ON EXTRACTION
         burnStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
-                                         cap_color_space = 'bool', target_color_space = 'mask')
+                                         cap_color_space = 'bool', target_color_space = 'mask') 
     
     ### Get Shadow Mask
     featureName = 'shadowMask'
@@ -319,7 +319,7 @@ if __name__ == '__main__':
         shadSFs = mulStms.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_shadow_mask, **params)
         shadSFs = shadSFs.rescale(1 / SCALE_FACTOR)
     
-        shadSFs.save(VIDEO_ID, STORE_NAME, lossless = True)
+        shadSFs.save(VIDEO_ID, STORE_NAME, lossless = True)  ### TODO: SAVE THESE DIRECTLY ON EXTRACTION
         shadStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
                                          cap_color_space = 'bool', target_color_space = 'mask')
     
@@ -370,9 +370,9 @@ if __name__ == '__main__':
         plSFs = plSFs.rescale(1 / SCALE_FACTOR)
         plSFs.save(VIDEO_ID, STORE_NAME)
     
-    ########################
-    ### Ball Recognition ###
-    ########################
+    ############################
+    #### Ball Candidate SVM ####
+    ############################
     contSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['movCnts', 'ballTable'])
     if contSF.is_empty():
         SCALE_FACTOR = 1
@@ -391,7 +391,7 @@ if __name__ == '__main__':
                   'dil_kernel_dims': (20 * SCALE_FACTOR, 10 * SCALE_FACTOR), 
                   'open_kernel_dims': (5 * SCALE_FACTOR, 5 * SCALE_FACTOR),
                   'max_number_of_contours': 60}
-        contSFs = mulCtms[:3].extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_movement_contours_and_frame, **params)
+        contSFs = mulCtms.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_movement_contours_and_frame, **params)
         
         contSF = contSFs.concatenate().dropna()
         contSF.save(VIDEO_ID, STORE_NAME, compression = 24)
@@ -426,6 +426,51 @@ if __name__ == '__main__':
         candSF = candSF.dropna()
         
         candSF.save(VIDEO_ID, STORE_NAME, compression = 24)
+    
+    #######################
+    ### Particle Filter ###
+    #######################
+    SCALE_FACTOR = 1
+    
+    ### Get Chamfer Contours
+    chamfSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['chamferCnts']).squeeze()
+    if chamfSF.is_empty():
+        greyStms = StreamList.from_SFList(plSFs.rescale(SCALE_FACTOR), cap, name = 'gFrm',
+                                          cap_color_space = 'bgr', target_color_space = 'grey',
+                                          scale_factor = SCALE_FACTOR)
+        
+        params = {'threshold': 50}
+        chamfSFs = greyStms.extract_chunked_mp(ex.get_chamfer_contours, NUM_WORKERS, CHUNKSIZE, **params)
+        
+        chamfSFs = chamfSFs.rescale(1 / SCALE_FACTOR)
+        chamfSFs.save(VIDEO_ID, STORE_NAME, compression = 24)
+    
+    
+    ballSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['ballCnt']).squeeze()
+    
+    if ballSF.is_empty():
+        
+        ### Find Particles
+        from ATMANpy.funcs.particle_funcs_vectorized import particles_to_frame, particles_to_points
+        
+        mySFs = candSF.merge(chamfSF).conform(HSF).split()
+            
+        params = {'dims': (1920 * SCALE_FACTOR, 1080 * SCALE_FACTOR),
+                  'pixel_in_meter': (70 * SCALE_FACTOR, 20 * SCALE_FACTOR),
+                  'N': 10000,
+                  'fps': 25}
+        partSFs = mySFs.apply_whole_mp(sf.find_particles, NUM_WORKERS, **params)
+        
+        ### Kitagawa Smoothing
+        kitaSFs = partSFs.apply_whole_mp(sf.kitagawa_smooth, NUM_WORKERS)
+        
+        ### Choose Ball Contour
+        mySFs = kitaSFs.merge(candSF.conform(HSF).split()[:3])
+        params = {'likelihood_threshold': 10 ** (-15)}
+        ballSFs = mySFs.apply(sa.choose_ball_contour, **params)
+        
+        ballSFs.save(VIDEO_ID, STORE_NAME, compression = 12)
+        
     
     ###### Next Up ######
     
