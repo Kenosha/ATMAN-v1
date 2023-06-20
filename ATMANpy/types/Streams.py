@@ -108,20 +108,21 @@ class Stream:
     cap_color_space: str = 'bgr'
     target_color_space: str = 'bgr'
     scale_factor: float = 1 ### ability to shrink the image relative to the cap dimensions
+    warp_dims: tuple = None ### ability to warp the stream using an H in features and dimensions supplied.
     name: str = None ### if none is left, it defaults to cFrm for bgr, gFrm for grey, hFrm for hsv, bFrm for bool
     features: StreamFeatures = StreamFeatures({})
         
     @staticmethod
     def from_SF(mySF, cap, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
-                scale_factor = 1):
+                scale_factor = 1, warp_dims = None):
         if name is None:
             name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return Stream(cap, start, stop, 
                       truncation_anchor = 0,
                       cap_color_space = cap_color_space, target_color_space = target_color_space, 
-                      scale_factor = scale_factor,
+                      scale_factor = scale_factor, warp_dims = warp_dims,
                       features = mySF, name = name)
     
     @staticmethod
@@ -184,6 +185,12 @@ class Stream:
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
     
+        if self.warp_dims is not None:
+            assert 'H' in self.features.get_features(), 'If warp dimensions are specified, we need a Homography in features to warp with!'
+            H = self.features['H']
+            assert H.dropna().length() == H.length() == self.length(), 'When warping is specified, all frames in stream must have a homography.'
+    
+    
     def __getitem__(self, frmNum):
         ### TODO: allow for item to be a slice also! (this would yield a multiframes)
         assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
@@ -195,10 +202,16 @@ class Stream:
                                     cap_color_space = self.cap_color_space, 
                                     scale_factor = self.scale_factor,
                                     name = self.name)
-        
+    
         # for feat in self.features.get_features():
         #     outFrm = outFrm.put(self.features[frmNum][feat])
             
+        if self.warp_dims is not None:
+            width, height = self.warp_dims
+            H = self.features['H'][frmNum]
+            H_inv = np.linalg.inv(H)
+            outFrm = outFrm.warp(H_inv, cols = width, rows = height)
+        
         return outFrm
         
     @staticmethod
@@ -275,6 +288,12 @@ class Stream:
                                        cap_color_space = self.cap_color_space,
                                        scale_factor = self.scale_factor,
                                        name = self.name)
+        ### warp if necessary
+        if self.warp_dims is not None:
+            width, height = self.warp_dims
+            HInvArr = self.features['H'].apply(np.linalg.inv).to_array()
+            myFrms = myFrms.warp(HInvArr, cols = width, rows = height)
+            
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
@@ -289,6 +308,13 @@ class Stream:
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
             myFrm = myFrm.rename(self.name)
             
+            ### Warp if necessary
+            if self.warp_dims is not None:
+                width, height = self.warp_dims
+                H = self.features['H'][frmNum]
+                H_inv = np.linalg.inv(H)
+                myFrm = myFrm.warp(H_inv, cols = width, rows = height)
+                
             ### rescale if necessary
             if self.scale_factor != 1:
                 myFrm = myFrm.rescale(self.scale_factor)
@@ -1006,18 +1032,21 @@ class StreamList:
                     cap_color_space = 'bgr', 
                     target_color_space = 'bgr',
                     scale_factor = 1,
+                    warp_dims = None,
                     cache_size = None):
         if cache_size is None:
             return StreamList([Stream.from_SF(mySF, cap, name = name,
                                               cap_color_space = cap_color_space, 
                                               target_color_space = target_color_space,
-                                              scale_factor = scale_factor) for mySF in sfList])
+                                              scale_factor = scale_factor,
+                                              warp_dims = warp_dims) for mySF in sfList])
         else:
             return StreamList([CachedStream.from_SF(mySF, cap, name = name,
                                                     cache_size = cache_size,
                                                     cap_color_space = cap_color_space, 
                                                     target_color_space = target_color_space,
-                                                    scale_factor = scale_factor) for mySF in sfList])
+                                                    scale_factor = scale_factor,
+                                                    warp_dims = warp_dims) for mySF in sfList])
     
     @staticmethod
     def from_store(featureName, videoName, storeName, 
@@ -1357,14 +1386,14 @@ class CachedStream(Stream):
     @staticmethod
     def from_SF(mySF, cap, cache_size = 1, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
-                scale_factor = 1):
+                scale_factor = 1, warp_dims = None):
         if name is None:
             name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return CachedStream(cap, start, stop, cache_size = cache_size,
                             truncation_anchor = 0,
                             cap_color_space = cap_color_space, target_color_space = target_color_space, 
-                            scale_factor = scale_factor,
+                            scale_factor = scale_factor, warp_dims = warp_dims,
                             features = mySF, name = name)
 
     @staticmethod
@@ -1487,6 +1516,13 @@ class CachedStream(Stream):
             myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
             myFrm = myFrm.rename(self.name)
             
+            ### warp if necessary
+            if self.warp_dims is not None:
+                width, height = self.warp_dims
+                H = self.features['H'][frmNum]
+                H_inv = np.linalg.inv(H)
+                myFrm = myFrm.warp(H_inv, cols = width, rows = height)
+                
             ### rescale if necessary
             if self.scale_factor != 1:
                 myFrm = myFrm.rescale(self.scale_factor)
@@ -1594,6 +1630,12 @@ class CachedStream(Stream):
                                        cap_color_space = self.cap_color_space,
                                        scale_factor = self.scale_factor,
                                        name = self.name)
+        ### warp if necessary
+        if self.warp_dims is not None:
+            width, height = self.warp_dims
+            HInvArr = self.features['H'].apply(np.linalg.inv).to_array()
+            myFrms = myFrms.warp(HInvArr, cols = width, rows = height)
+        
         return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, 
                                  cache_size = self.cache_size, name = self.name)
 

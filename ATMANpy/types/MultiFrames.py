@@ -153,6 +153,19 @@ class Frames:
         resArr = np.array([cv.resize(imgArr, dim, interpolation = cv.INTER_AREA) for imgArr in self.array])
         return framesType(resArr, name = self.name)
         
+    def warp(self, HArr, cols = None, rows = None):
+        assert len(HArr) == self.length(), f'Trying to warp MultiFrame of length {self.length()} with {len(HArr)} Homographies.'
+        
+        framesType = self.__class__
+        
+        if cols is None:
+            cols = self.cols
+        if rows is None:
+            rows = self.rows
+        
+        outArr = np.array([cv.warpPerspective(imgArr, H, (cols, rows)) for imgArr, H in zip(self.array, HArr)])
+        return framesType(outArr, name = self.name)
+    
 @dataclass(frozen = True)
 class BGRFrames(Frames):
     name: str = 'bgr_frames'
