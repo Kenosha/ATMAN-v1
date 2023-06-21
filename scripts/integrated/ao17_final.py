@@ -8,6 +8,7 @@ import os
 import time
 
 import numpy as np
+import pandas as pd
 
 ### GET VIDEO ###
 from ATMANpy.funcs.util_funcs import get_video
@@ -288,7 +289,7 @@ if __name__ == '__main__':
         
         params = {'minimum_proportion': 0.0125,
                   'minimum_step_gain': 0.002}
-        burnSFs = mulStms.extract_chunked_mp(NUM_WORKERS, CHUNKSIZE, ex.get_burn_in_mask_iterative, **params)
+        burnSFs = mulStms[:5].extract_chunked_mp(ex.get_burn_in_mask_iterative, NUM_WORKERS, CHUNKSIZE, **params)
         burnSFs = burnSFs.rescale(1 / SCALE_FACTOR)
         
         burnSFs.save(VIDEO_ID, STORE_NAME, lossless = True) ### TODO: SAVE THESE DIRECTLY ON EXTRACTION
@@ -430,25 +431,25 @@ if __name__ == '__main__':
     #######################
     ### Particle Filter ###
     #######################
-    SCALE_FACTOR = 1
-    
-    ### Get Chamfer Contours
-    chamfSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['chamferCnts']).squeeze()
-    if chamfSF.is_empty():
-        greyStms = StreamList.from_SFList(plSFs.rescale(SCALE_FACTOR), cap, name = 'gFrm',
-                                          cap_color_space = 'bgr', target_color_space = 'grey',
-                                          scale_factor = SCALE_FACTOR)
-        
-        params = {'threshold': 50}
-        chamfSFs = greyStms.extract_chunked_mp(ex.get_chamfer_contours, NUM_WORKERS, CHUNKSIZE, **params)
-        
-        chamfSFs = chamfSFs.rescale(1 / SCALE_FACTOR)
-        chamfSFs.save(VIDEO_ID, STORE_NAME, compression = 24)
-    
     
     ballSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['ballCnt']).squeeze()
     
     if ballSF.is_empty():
+        SCALE_FACTOR = 1
+        
+        ### Get Chamfer Contours
+        chamfSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['chamferCnts']).squeeze()
+        if chamfSF.is_empty():
+            greyStms = StreamList.from_SFList(plSFs.rescale(SCALE_FACTOR), cap, name = 'gFrm',
+                                              cap_color_space = 'bgr', target_color_space = 'grey',
+                                              scale_factor = SCALE_FACTOR)
+            
+            params = {'threshold': 50}
+            chamfSFs = greyStms.extract_chunked_mp(ex.get_chamfer_contours, NUM_WORKERS, CHUNKSIZE, **params)
+            
+            chamfSFs = chamfSFs.rescale(1 / SCALE_FACTOR)
+            chamfSFs.save(VIDEO_ID, STORE_NAME, compression = 24)
+        
         
         ### Find Particles
         from ATMANpy.funcs.particle_funcs_vectorized import particles_to_frame, particles_to_points
@@ -465,12 +466,89 @@ if __name__ == '__main__':
         kitaSFs = partSFs.apply_whole_mp(sf.kitagawa_smooth, NUM_WORKERS)
         
         ### Choose Ball Contour
-        mySFs = kitaSFs.merge(candSF.conform(HSF).split()[:3])
+        mySFs = kitaSFs.merge(candSF.conform(HSF).split())
         params = {'likelihood_threshold': 10 ** (-15)}
         ballSFs = mySFs.apply(sa.choose_ball_contour, **params)
         
         ballSFs.save(VIDEO_ID, STORE_NAME, compression = 12)
         
+    
+    
+    featureName = 'jointMask'
+    try:
+        motionStms = StreamList.from_store(featureName, VIDEO_ID, STORE_NAME, 
+                                           cap_color_space = 'bool', target_color_space = 'mask')
+    except FileNotFoundError:
+        mySFs = HSF.merge(HSF.apply(ex.find_courtlines)).merge(boardSF).merge(plSF).merge(ballSF).split()
+        greyCtms = StreamList.from_SFList(mySFs, cap, cache_size = 8, target_color_space = 'grey')
+        
+        savekwargs = {'lossless': True}
+        greyCtms.extract_chunked_threaded_to_disc(ex.get_joint_movement_mask, NUM_WORKERS, CHUNKSIZE, 
+                                                  VIDEO_ID, STORE_NAME, savekwargs)
+        
+    
+    ### Find Ballboy Contours
+    mulStms = StreamList.combine(motionStms, burnStms)
+    
+    params = {'area_threshold': 600}
+    outSFs = mulStms[:5].extract_chunked_mp(ex.get_large_contours, NUM_WORKERS, CHUNKSIZE, **params)
+    
+    dropBFs = outSFs.apply_whole(sf.calculate_contiguous_movement).apply_whole(sf.drop_movement_frames)
+    dropBF = dropBFs.concatenate()
+    
+    ### Re-Segment with Ballboy removal
+    ballSFs = ballSF.conform(dropBF).filter(dropBF.neg()).split()
+    
+    ### Interpolate ball movement
+    itplSFs = ballSFs.apply_whole(sf.smart_interpolate_ball_contours)
+    itplSF = itplSFs.concatenate()
+    
+    itplStms = StreamList.from_SFList(itplSFs, cap)
+    
+    courtSF = HSF.merge(HSF.apply(ex.find_courtlines))
+    courtSFs = courtSF.conform(itplSF).split()
+
+    mySFs = itplSFs.merge(courtSFs)
+    
+    nearSFs = mySFs.apply(sa.certainty_out_near_court)
+    farSFs = mySFs.apply(sa.certainty_out_far_court)
+    
+    hmmSFs = itplSFs.merge(nearSFs).merge(farSFs)
+    obsFrms = hmmSFs.apply_whole(sf.get_observation_frame)
+    
+    ######################
+    #### HMM INFERENCE ###
+    ######################
+    MODEL_NAME = 'embedded_cyc3_nrel85_inout_logit'
+    GRAMMAR_NAME = 'full_grammar_test'
+    
+    from ATMANpy.funcs.HMM.utils import read_hmm_params
+    hmmDict = read_hmm_params(MODEL_NAME)
+    
+    from ATMANpy.funcs.HMM.TokenPass import read_grammar, infer
+    grammar = read_grammar(GRAMMAR_NAME)
+    
+    obsFrm = obsFrms[2].dropna()
+    
+    grammatic_sequence = infer(obsFrm, hmmDict, grammar)
+        
+    itplStms[2].show(frame_counter = True, ms_between_frames = 100)
+    
+    from ATMANpy.funcs.HMM.HPost import expand_inferred_sequence
+    grammatic_expanded = expand_inferred_sequence(grammatic_sequence, 
+                                                  word_beginning_frame = obsFrm.index[0])
+    
+
+    ### Get Net Lines ###
+    gStms = StreamList.from_SFList(courtSFs, cap, name = 'gFrm', target_color_space = 'grey')
+    netSFs = gStms.extract(ex.find_netlines)
+    
+    ### Calibrate Camera ###
+    mySFs = courtSFs.merge(netSFs)
+    params = {'schemaLines': schemaLines, 
+              'add_coords_world': None,
+              'add_coords_image': None}
+    PSFs = mySFs.apply(ex.calibrate_camera)
     
     ###### Next Up ######
     
