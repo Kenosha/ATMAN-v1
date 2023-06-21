@@ -169,7 +169,8 @@ def find_netlines(gFrm, courtLines):
 
     return netLines
 
-def calibrate_camera(gFrm, schemaLines, H, 
+def calibrate_camera(courtLines, netLines, 
+                     schemaLines = None, 
                      add_coords_world = None, add_coords_image = None,
                      verbose = False):
     ### Based on youtube: Camera Calibration by Shree Nayar. 
@@ -179,8 +180,8 @@ def calibrate_camera(gFrm, schemaLines, H,
     if add_coords_image is None:
         add_coords_image = []
         
-    courtLines = find_courtlines(H, schemaLines)
-    netLines = find_netlines(gFrm, courtLines)
+    # courtLines = find_courtlines(H, schemaLines)
+    # netLines = find_netlines(gFrm, courtLines)
     
     # b) gather points in world and on image
     court_points_3D = schemaLines.get_3D_corner_points()
@@ -199,16 +200,16 @@ def calibrate_camera(gFrm, schemaLines, H,
     objpoints = np.array([*court_points_3D, *net_points_3D, *add_coords_world], dtype = np.float32)
     imgpoints =  np.array([*court_points_2D, *net_points_2D, *add_coords_image], dtype = np.float32)
 
-    if verbose:
-        from ATMANpy.types.Points import Point2D
-        from ATMANpy.funcs.line_funcs import fit_frame_to_lines
-        schemaFrm = fit_frame_to_lines(schemaLines)
-        for objP, imgP in zip(objpoints, imgpoints):
-            pt_3D = Point2D(tuple(objP[:2]))
-            pt_2D = Point2D(tuple(imgP))
+    # if verbose:
+    #     from ATMANpy.types.Points import Point2D
+    #     from ATMANpy.funcs.line_funcs import fit_frame_to_lines
+    #     schemaFrm = fit_frame_to_lines(schemaLines)
+    #     for objP, imgP in zip(objpoints, imgpoints):
+    #         pt_3D = Point2D(tuple(objP[:2]))
+    #         pt_2D = Point2D(tuple(imgP))
             
-            schemaFrm.to_BGR().put(pt_3D, thickness = 2, radius = 4).show()
-            gFrm.to_BGR().put(pt_2D, thickness = 2, radius = 4).show()
+    #         schemaFrm.to_BGR().put(pt_3D, thickness = 2, radius = 4).show()
+    #         gFrm.to_BGR().put(pt_2D, thickness = 2, radius = 4).show()
 
     # c) create matrix A
     def make_A_entry(objpoint, imgpoint):

@@ -333,4 +333,254 @@ def kitagawa_smooth(mySF):
     smoothDict = {frame: smoothDict[frame] for frame in sorted(smoothDict)}
     
     return StreamFeature(smoothDict, name = 'smooth_particles')
+
+
+def calculate_contiguous_movement(mySF):
+    ### Takes: StreamFeature(..., name = 'largeCnts') -> large movement contours
     
+    ### INIT ###
+    current_movement_index = 0
+    
+    idxDict = {}
+    
+    for frmNum, largeCnts in mySF.items():
+        
+        if largeCnts.length() > 0:
+            current_movement_index += 1
+        else:
+            current_movement_index = 0
+            
+        idxDict[frmNum] = current_movement_index 
+    
+    return StreamFeature(idxDict, name = 'contiguous_movement')
+    
+def drop_movement_frames(mySF, 
+                         minimum_length_of_contiguous_movement = 10, 
+                         keep_first_and_last_x_frames = 3):
+    ### Takes: StreamFeature(idxDict, name = 'contiguous_movement')
+    
+    ### INIT ###
+    prior_movement_index = 0
+    frames_to_toss = [] ### the overall list of lists, containing all continuous segments of extraneous movement on court.
+    current_frames_to_toss = [] ### a list containing a single contiguous segment of extraneous movement.
+    
+    for frmNum, current_movement_index in mySF.items():
+        
+        if current_movement_index > 0:
+            current_frames_to_toss.append(frmNum)
+            prior_movement_index = current_movement_index
+        else:
+            if prior_movement_index > minimum_length_of_contiguous_movement:
+                ### keep first and last few frames
+                start_idx = keep_first_and_last_x_frames
+                stop_idx = - keep_first_and_last_x_frames
+                current_frames_to_toss = current_frames_to_toss[start_idx:stop_idx]
+                ### add to list of lists
+                frames_to_toss.append(current_frames_to_toss)
+            
+            current_frames_to_toss = []
+            prior_movement_index = 0
+            
+    frames_to_toss.append(current_frames_to_toss) ### have to do one final append!
+            
+    flat_frames_to_toss = [el for ls in frames_to_toss for el in ls]
+    
+    return BoolFeature({frame: frame in flat_frames_to_toss for frame in mySF.get_frames()}, name = 'frames_to_toss')
+ 
+
+def find_next_item(mySF, startNum = None):
+    frames = mySF.get_frames()
+    
+    if startNum is None:
+        startNum = frames[0]
+    
+    for frmNum, item in mySF.items():
+        if frmNum < startNum:
+            continue
+        
+        if item is None:
+            continue
+        
+        return frmNum, item
+    
+    return None, None
+
+def find_last_item(mySF, startNum = None):
+    frames = mySF.get_frames()
+
+    if startNum is None:
+        startNum = frames[-1]
+        
+    for frmNum in sorted(frames, reverse = True):
+        if frmNum > startNum:
+            continue
+        
+        item = mySF[frmNum]
+        if item is None:
+            continue
+        
+        return frmNum, item
+    
+    return None, None
+
+def find_next_N_items(mySF, N = 3, startNum = None): 
+    frmNum, item = find_next_item(mySF, 
+                                  startNum = startNum)
+    
+    if not frmNum is None:
+        outList = [item]
+        frame_count = frmNum
+        while len(outList) < N:
+            frame_count += 1
+            add_item = mySF.maybe_get(frame_count)
+            outList.append(add_item)
+        return frmNum, outList
+    else:
+        return None, [None] * N
+
+def find_last_N_items(mySF, N = 3, startNum = None):
+    frmNum, item = find_last_item(mySF, 
+                                  startNum = startNum)
+
+    if not frmNum is None:
+        outList = [item]
+        frame_count = frmNum
+        while len(outList) < N:
+            frame_count -= 1
+            add_item = mySF.maybe_get(frame_count)
+            outList.append(add_item)
+        return frmNum, outList
+    else:
+        return None, [None] * N    
+
+
+def smart_interpolate_ball_contours(ballSF, verbose = False):
+    
+    import ATMANpy.funcs.particle_funcs_vectorized as pf
+    
+    def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3):
+        ### given three subsequent contours, calculate their speed and acceleration per frame
+        try:
+            speed1 = cnt2.center() - cnt1.center()
+        except:
+            speed1 = None
+        
+        try:
+            speed2 = cnt3.center() - cnt2.center()
+        except:
+            speed2 = None
+        
+        try:
+            accel = speed2 - speed1
+        except:
+            accel = None
+            
+        return speed1, speed2, accel
+    
+    outDict = {}
+    for frmNum, ballCnt in ballSF.items():
+
+        if ballCnt is not None:
+            outDict[frmNum] = ballCnt
+            continue
+        
+        ### determine the last found ball position
+        last_frame_with_ball, last_three_cnts = find_last_N_items(ballSF, N = 3,
+                                                                  startNum = frmNum)
+        
+        currCtr, currCtr_1, currCtr_2 = last_three_cnts
+        
+        if currCtr is None:
+            outDict[frmNum] = None
+            continue
+            
+        ### determine the next found ball position
+        next_frame_with_ball, next_three_ctrs = find_next_N_items(ballSF, N = 3,
+                                                                  startNum = frmNum)
+        
+        nextCtr, nextCtr_1, nextCtr_2 = next_three_ctrs
+        
+        if nextCtr is None:
+            outDict[frmNum] = None
+            continue
+        
+        ### determine speeds and accelerations before and after
+        _, currSpeed, currAccel = calculate_speeds_and_acceleration(currCtr_2, currCtr_1, currCtr)
+        nextSpeed, _, nextAccel = calculate_speeds_and_acceleration(nextCtr, nextCtr_1, nextCtr_2)
+
+        ### determine the time elapsed since the last ball and until the next ball
+        time_from_ball = frmNum - last_frame_with_ball
+        time_to_ball = next_frame_with_ball - frmNum
+        
+        if currSpeed is not None and nextSpeed is not None:
+            itplBall = pf.interpolate_ball_features_smart_circle(currCtr, nextCtr,
+                                                                 speed_before = currSpeed, 
+                                                                 speed_after = nextSpeed,
+                                                                 accel_before = currAccel,
+                                                                 accel_after = nextAccel,
+                                                                 frames_before = time_from_ball,
+                                                                 frames_after = time_to_ball,
+                                                                 verbose = verbose)
+        else:
+            itplBall = pf.interpolate_ball_features_circle(currCtr, nextCtr, 
+                                                           frames_before = time_from_ball,
+                                                           frames_after = time_to_ball)
+        outDict[frmNum] = itplBall
+        
+    return StreamFeature(outDict, name = 'ballCnt')
+
+
+
+def get_observation_frame(ballSF, velocity_shift = 3, acceleration_shift = 1):
+    import pandas as pd
+    
+    def get_ball(ballCnt):
+        if not ballCnt is None:
+            coords = ballCnt.center().coords
+        else:
+            coords = (np.nan, np.nan)
+        return coords
+    
+    ballFrm = pd.DataFrame.from_dict(ballSF.apply(get_ball).streamDict, orient = 'index', columns = ['x', 'y'])
+    
+    ###### SPEED #######
+    speedFrm = ballFrm.shift(-velocity_shift) - ballFrm.shift(velocity_shift) 
+    
+    ### help out with nans at beginning and end by using an approximate speed and accel formula
+    # a) only using information from earlier (for end of sequences.)
+    secondary_speedFrm = (ballFrm - ballFrm.shift(velocity_shift)) * 2
+    speedFrm = speedFrm.fillna(secondary_speedFrm)
+    
+    # b) only using information from later (for beginning of sequences.)
+    secondary_speedFrm = (ballFrm.shift(-velocity_shift) - ballFrm) * 2
+    speedFrm = speedFrm.fillna(secondary_speedFrm)
+    
+    #### ACCELERATION ####
+    accelFrm = speedFrm.shift(-acceleration_shift) - speedFrm.shift(acceleration_shift)
+    
+    ### help out with nans at beginning and end by using an approximate speed and accel formula
+    # a) only using information from earlier (for end of sequences.)
+    secondary_accelFrm = (speedFrm - speedFrm.shift(acceleration_shift)) * 2
+    accelFrm = accelFrm.fillna(secondary_accelFrm)
+    
+    # b) only using information from later (for beginning of sequences.)
+    secondary_accelFrm = (speedFrm.shift(-acceleration_shift) - speedFrm) * 2
+    accelFrm = accelFrm.fillna(secondary_accelFrm)
+    
+    #### PROJECTED DISTANCE TO COURTLINE ###
+    # idea: this is additional info for bounces: we give the perpendicular distance to the nearest courtline
+    # of the point, in 2D. In this way, the bounce HMMs will better be able to infer whether a ball is in or out.
+    ### for each distinct bounce event, we have to make a distance metric
+    # -> for BINSL/BONS(L), we have to make a distance of ball to the region of the near left service box
+    # -> for BINSR/BONS(R), we have to make a distance of ball to the region of the near right service box
+    # -> for BIN/BON, we have to make a distance of ball to the region of the near singles court
+    distance_features = ['dN', 'dF']
+    distFrm = pd.concat([ballSF[feat].to_series() for feat in distance_features], axis = 1)
+    
+    #### LABEL AND CONCAT
+    speedFrm.columns = ['v_x', 'v_y']
+    accelFrm.columns = ['a_x', 'a_y']
+    
+    obsFrm = pd.concat([ballFrm, speedFrm, accelFrm, distFrm], axis = 1)
+
+    return obsFrm

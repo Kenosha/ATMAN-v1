@@ -132,7 +132,6 @@ def courtlines_to_schema(H, hFrm, schemaFrm = schemaFrm):
     wrpFrm = hFrm.warp(H_inv, cols = schemaFrm.cols, rows = schemaFrm.rows)
     return wrpFrm
 
-
 def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm, 
                                minimum_proportion = 0.01, minimum_step_gain = 0.015,
                                verbose = False):
@@ -320,6 +319,7 @@ def find_motion_mask(gCache,
    
     return motMask
 
+
 def refine_motion_mask(motMask, topPlayer, botPlayer,
                        dil_kernel_dims = (20, 10),
                        open_kernel_dims = (5, 5)):
@@ -479,3 +479,99 @@ def find_particles(chamferCache, featCache,
 
     return particles, indexHistories, closeHistories, modelHistories
 
+
+def get_joint_movement_mask(gCache, featCache,
+                            intensity_threshold = 20,
+                            relevant_indices = [4, 6, 8],
+                            line_thickness = 10,
+                            top_player_kernel = (20, 10), bot_player_kernel = (20, 10),
+                            ball_kernel = (7, 7), score_board_kernel = (10, 10),
+                            open_kernel = (5, 5), close_kernel = (60, 60),
+                            verbose = False): 
+    ### detect movement contours in sf_postprocess_funcs.py
+    
+    courtLines = featCache[0]['courtLines']
+    topPlayer = featCache[0]['topPlayer']
+    botPlayer = featCache[0]['botPlayer']
+    ballCnt = featCache[0]['ballCnt']
+    scoreBoard = featCache[0]['scoreBoard']
+    
+    motionMask = find_motion_mask(gCache, 
+                                  intensity_threshold = intensity_threshold, 
+                                  relevant_indices = relevant_indices)
+    
+    zeroMask = motionMask.zero()
+    
+    courtlineMask = zeroMask.put(courtLines, thickness = line_thickness) > 0
+            
+    if not topPlayer is None:
+        dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, top_player_kernel)
+        topMask = zeroMask.within_contour(topPlayer).dilate(dil_kernel)
+    else:
+        topMask = zeroMask
+    
+    if not botPlayer is None:
+        dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, bot_player_kernel)
+        botMask = zeroMask.within_contour(botPlayer).dilate(dil_kernel)
+    else:
+        botMask = zeroMask
+    
+    if not ballCnt is None:
+        dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, ball_kernel)
+        ballMask = zeroMask.within_contour(ballCnt).dilate(dil_kernel)
+    else:
+        ballMask = zeroMask
+        
+    if not scoreBoard is None:
+        dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, score_board_kernel)
+        scoreMask = zeroMask.within_region(scoreBoard).dilate(dil_kernel)
+    else:
+        scoreMask = zeroMask
+    
+    jointMask = motionMask & ~courtlineMask & ~topMask & ~botMask & ~ballMask & ~scoreMask
+        
+    # ### Adding a blur stage!
+    # motionMask2 = motionMask2.gaussian_blur((7, 7))
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, open_kernel)
+    jointMask = jointMask.open(kernel)
+
+    ### Adding a closing stage
+    ### large kernel, so that we join blobs belonging to the same ball kid.
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, close_kernel)
+    jointMask = jointMask.close(kernel)
+
+    return jointMask
+
+def get_large_contours(jointMask, foregroundMask, area_threshold = 600):
+    ### foreground_mask -> burn in mask!
+    
+    finalMask = jointMask & foregroundMask
+        
+    myCnts, _ = finalMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    # largeCnts = Contours([Contour(ct) for ct in cts if len(ct) > 2]) ### need at least three points for a contour
+    largeCnts = Contours([myCnt for myCnt in myCnts if myCnt.area() > area_threshold])
+    
+    return largeCnts
+
+def find_netlines(gFrm, courtLines, net_factor = 0.9, net_points_to_search = 100):
+
+    from ATMANpy.funcs.net_funcs import find_net_points, remove_outlier_net_points
+    relPoints = find_net_points(courtLines, gFrm, 
+                                factor = net_factor, points_to_search = net_points_to_search)
+    relPoints = remove_outlier_net_points(relPoints)
+    
+    from ATMANpy.funcs.net_funcs import cubic_regress, make_net_cord_lines
+    b_0, b_1 = cubic_regress(relPoints)
+    netLines = make_net_cord_lines(courtLines, b_0, b_1)
+
+    return netLines
+
+def calibrate_camera(courtLines, netLines, schemaLines = schemaLines, 
+                     add_coords_world = None, add_coords_image = None):
+    from ATMANpy.funcs.court_funcs import calibrate_camera
+    
+    P = calibrate_camera(courtLines, netLines, schemaLines = schemaLines,
+                         add_coords_world = add_coords_world, 
+                         add_coords_image = add_coords_image)
+    return P
+    
