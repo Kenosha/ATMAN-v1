@@ -23,7 +23,7 @@ import ATMANpy.funcs.extract_funcs as ex
 import ATMANpy.funcs.feature_funcs as ff
 
 from ATMANpy.types.Streams import Stream, CachedStream, NCStream, NCDecapStream, StreamList, MulStream
-from ATMANpy.types.Features import StreamFeature, StreamFeatures
+from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, BoolFeatures
 from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
 
 from ATMANpy.types.Lines import CourtLines
@@ -487,14 +487,22 @@ if __name__ == '__main__':
                                                   VIDEO_ID, STORE_NAME, savekwargs)
         
     
-    ### Find Ballboy Contours
-    mulStms = StreamList.combine(motionStms, burnStms)
+    dropBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['frames_to_toss']).squeeze()
     
-    params = {'area_threshold': 600}
-    outSFs = mulStms[:5].extract_chunked_mp(ex.get_large_contours, NUM_WORKERS, CHUNKSIZE, **params)
+    if dropBF.is_empty():
+        ### Find Ballboy Contours
+        mulStms = StreamList.combine(motionStms, burnStms)
+        
+        params = {'area_threshold': 600}
+        outSFs = mulStms[:5].extract_chunked_mp(ex.get_large_contours, NUM_WORKERS, CHUNKSIZE, **params)
+        
+        dropBFs = outSFs.apply_whole(sf.calculate_contiguous_movement).apply_whole(sf.drop_movement_frames)
+        dropBF = dropBFs.concatenate()
+        dropBF.save(VIDEO_ID, STORE_NAME)
     
-    dropBFs = outSFs.apply_whole(sf.calculate_contiguous_movement).apply_whole(sf.drop_movement_frames)
-    dropBF = dropBFs.concatenate()
+    #######################
+    #### HMM DATA PREP ####
+    #######################
     
     ### Re-Segment with Ballboy removal
     ballSFs = ballSF.conform(dropBF).filter(dropBF.neg()).split()
@@ -503,7 +511,7 @@ if __name__ == '__main__':
     itplSFs = ballSFs.apply_whole(sf.smart_interpolate_ball_contours)
     itplSF = itplSFs.concatenate()
     
-    itplStms = StreamList.from_SFList(itplSFs, cap)
+    itplStms = StreamList.from_SFList(itplSFs, cap) ### TODO: rename these to itplCnts, and save them!!!
     
     courtSF = HSF.merge(HSF.apply(ex.find_courtlines))
     courtSFs = courtSF.conform(itplSF).split()
@@ -530,13 +538,16 @@ if __name__ == '__main__':
     
     obsFrm = obsFrms[2].dropna()
     
-    grammatic_sequence = infer(obsFrm, hmmDict, grammar)
+    def get_event_features(obsFrm, hmmDict, grammar): ### TODO: Parallelize application of this function across many obsFrms.
+        grammatic_sequence = infer(obsFrm, hmmDict, grammar) 
+            
+        from ATMANpy.funcs.HMM.HPost import expand_inferred_sequence
+        grammatic_expanded = expand_inferred_sequence(grammatic_sequence, 
+                                                      word_beginning_frame = obsFrm.index[0])
+        return StreamFeature(grammatic_expanded, name = 'eventFlag')
         
-    itplStms[2].show(frame_counter = True, ms_between_frames = 100)
-    
-    from ATMANpy.funcs.HMM.HPost import expand_inferred_sequence
-    grammatic_expanded = expand_inferred_sequence(grammatic_sequence, 
-                                                  word_beginning_frame = obsFrm.index[0])
+    evtSF = get_event_features(obsFrm, hmmDict, grammar)
+    evtSF.save(VIDEO_ID, STORE_NAME)
     
 
     ### Get Net Lines ###
@@ -549,6 +560,10 @@ if __name__ == '__main__':
               'add_coords_world': None,
               'add_coords_image': None}
     PSFs = mySFs.apply(ex.calibrate_camera)
+    
+    ### 3D Player Positions ###
+    mySFs = plSF.conform(PSFs.concatenate()).split().merge(PSFs)
+    plSFs_3D = mySFs.apply(sa.find_player_positions_3D)
     
     ###### Next Up ######
     
