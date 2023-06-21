@@ -148,19 +148,35 @@ class Frame:
 
     def __lt__(self, y):
         outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_LT)
-        return BoolFrame(outArr)
+        if len(outArr.shape) == 2:
+            return MaskFrame(outArr)
+        else:
+            return BoolFrame(outArr)
     def __le__(self, y):
         outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_LE)
-        return BoolFrame(outArr)
+        if len(outArr.shape) == 2:
+            return MaskFrame(outArr)
+        else:
+            return BoolFrame(outArr)
     def __gt__(self, y):
         outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_GT)
-        return BoolFrame(outArr)
+        if len(outArr.shape) == 2:
+            return MaskFrame(outArr)
+        else:
+            return BoolFrame(outArr)
     def __ge__(self, y):
         outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_GE)
-        return BoolFrame(outArr)
+        if len(outArr.shape) == 2:
+            return MaskFrame(outArr)
+        else:
+            return BoolFrame(outArr)
     def __eq__(self, y):
         outArr = Frame.dispatch_arithmetic(self.array, Frame.get_operant(y), cv.compare, cv.CMP_EQ)
-        return BoolFrame(outArr)
+        if len(outArr.shape) == 2:
+            return MaskFrame(outArr)
+        else:
+            return BoolFrame(outArr)
+       
     
     def __iter__(self):
         return FrameIterator(self)
@@ -354,6 +370,10 @@ class Frame:
         dim = (new_width, new_height)
         
         resArr = cv.resize(self_copy, dim, interpolation = cv.INTER_AREA)
+        
+        if InstClass in [BoolFrame, MaskFrame]:
+            _, resArr = cv.threshold(resArr, 127, 255, cv.THRESH_BINARY)
+        
         return InstClass(resArr.astype('uint8'), name = self.name)
     
     ###############
@@ -509,6 +529,8 @@ class MaskFrame(Frame):
         if len(self.array.shape) == 3:
             object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
         #############################  
+        
+        assert set(list(self.unique())).issubset({0, 255}), f'Inadmissible values in {self}: {self.unique()}'
     
     
     @staticmethod
