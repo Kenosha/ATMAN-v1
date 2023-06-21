@@ -781,6 +781,10 @@ class SFList:
     def length(self):
         return len(self.sfList)
     
+    def rename(self, new_name):
+        featList = [mySF.rename(new_name) for mySF in self]
+        return SFList(featList)
+    
     def rescale(self, scale_factor):
         featList = [mySF.rescale(scale_factor) for mySF in self]
         return SFList(featList)
@@ -789,7 +793,11 @@ class SFList:
         return SFList([mySF.apply(func, **kwargs) for mySF in self])
     
     def apply_whole(self, func, *args, **kwargs):
-        return SFList([func(mySF, *args, **kwargs) for mySF in self])
+        outList = [func(mySF, *args, **kwargs) for mySF in self] ### these dont necessarily have to be StreamFeatures!
+        if isinstance(outList[0], StreamFeature):
+            return SFList(outList)
+        else:
+            return outList
     
     @extract_mp_timer
     def apply_whole_mp(self, func, num_workers, **kwargs):
