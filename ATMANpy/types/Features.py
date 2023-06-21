@@ -455,7 +455,7 @@ class StreamFeatures(StreamFeaturesBase):
     @staticmethod
     def from_store(video_id, store_name, featnameList = None):
         featDict = ff.load_stored_features(video_id, store_name, featnameList = featnameList)
-        return StreamFeatures(featDict)
+        return BoolFeatures(featDict)
     
     @staticmethod
     def type_squeeze(): ### weird!
@@ -724,6 +724,11 @@ class BoolFeature(StreamFeature):
         return sum(self.values())
     def false(self):
         return self.length() - self.true()
+    
+    def save(self, videoName, storeName):
+        featFrm = self.to_series()
+        featFrm.index.name = 'idx0'
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
 
 @dataclass(frozen = True)
 class BoolFeatures(StreamFeatures):

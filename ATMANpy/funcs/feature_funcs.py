@@ -212,7 +212,16 @@ def single_2D_feature_to_object(singlefeatSeries):
     dx_vals = [v for k, v in singlefeatDict.items() if k.startswith('dx') if not v == MISSING_SENTINEL_VALUE]
     dy_vals = [v for k, v in singlefeatDict.items() if k.startswith('dy') if not v == MISSING_SENTINEL_VALUE]
     
-    if y_vals == []:
+    if x_vals == []:
+        ### the saved data does not have x, y, z as headers.
+        vals = [v for k, v in singlefeatDict.items() if not v == MISSING_SENTINEL_VALUE]
+        if len(vals) == 0:
+            return None
+        if len(vals) == 1:
+            return vals[0]
+        else:
+            return vals
+    elif y_vals == []:
         ### this means we have scalars --> array of values, or single value.
         # valArr = singlefeatSeries.values
         valArr = x_vals
