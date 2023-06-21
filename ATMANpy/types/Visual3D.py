@@ -12,9 +12,7 @@ from typing import Optional, List
 from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.ShapesTennis3D import Court, Net
 
-from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
-SCALE = 2 * SCHEMA_SIZE  ## times two, because there is a minimum scale factor... 
-
+import ATMANpy.auxil.constants as const
 
 @dataclass(frozen = True)
 class Scene:
@@ -173,37 +171,37 @@ class Camera:
     def right(self, feet):
         #### left-right motion occurs along the x-axis
         M_ext_new = self.M_ext
-        M_ext_new[0, 3] += feet * SCALE
+        M_ext_new[0, 3] += feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def left(self, feet):
         #### left-right motion occurs along the x-axis
         M_ext_new = self.M_ext
-        M_ext_new[0, 3] -= feet * SCALE
+        M_ext_new[0, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def down(self, feet):
         #### up-down motion occurs along the y-axis
         M_ext_new = self.M_ext
-        M_ext_new[1, 3] += feet * SCALE
+        M_ext_new[1, 3] += feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def up(self, feet):
         #### up-down motion occurs along the y-axis
         M_ext_new = self.M_ext
-        M_ext_new[1, 3] -= feet * SCALE
+        M_ext_new[1, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
     
     def into(self, feet):
         #### in-out motion occurs along the z-axis
         M_ext_new = self.M_ext
-        M_ext_new[2, 3] += feet * SCALE
+        M_ext_new[2, 3] += feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def out(self, feet):
         #### in-out motion occurs along the z-axis
         M_ext_new = self.M_ext
-        M_ext_new[2, 3] -= feet * SCALE
+        M_ext_new[2, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
     
     
