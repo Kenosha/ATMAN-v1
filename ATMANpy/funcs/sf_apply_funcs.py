@@ -121,3 +121,29 @@ def certainty_out_far_court(courtLines, ballCnt):
         dF = 1 / (1 + np.exp(-k * dist))
         return dF
     
+    
+def find_player_positions_3D(P, topPlayer, botPlayer):
+    from ATMANpy.funcs.court_funcs import make_P_cond_inv
+    cond_val = 0 ### feet are on the ground!
+    cond_dim = 2 ### axis is z dimension -> height!
+    P_cond_inv = make_P_cond_inv(P, cond_val, cond_dim)
+   
+    if topPlayer is None:   
+        topPlayer_3D = None
+    else:
+        top_x, top_y = topPlayer.enclosing_region()['Bottom'].center().coords
+        top_3D_homogeneous = P_cond_inv @ np.array([top_x, top_y, 1])
+        top_3D = top_3D_homogeneous[:2] / top_3D_homogeneous[2]
+        topPlayer_3D = np.insert(top_3D, cond_dim, cond_val)
+    
+    if botPlayer is None:
+        botPlayer_3D = None
+    else:
+        bot_x, bot_y = botPlayer.enclosing_region()['Bottom'].center().coords
+        bot_3D_homogeneous = P_cond_inv @ np.array([bot_x, bot_y, 1])
+        bot_3D = bot_3D_homogeneous[:2] / bot_3D_homogeneous[2]
+        botPlayer_3D = np.insert(bot_3D, cond_dim, cond_val)
+    
+    return topPlayer_3D, botPlayer_3D
+
+    
