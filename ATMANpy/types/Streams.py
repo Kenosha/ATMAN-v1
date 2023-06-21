@@ -1033,7 +1033,7 @@ class StreamList:
                     target_color_space = 'bgr',
                     scale_factor = 1,
                     warp_dims = None,
-                    cache_size = None):
+                    cache_size = None, force_fill_cache = False):
         if cache_size is None:
             return StreamList([Stream.from_SF(mySF, cap, name = name,
                                               cap_color_space = cap_color_space, 
@@ -1042,7 +1042,7 @@ class StreamList:
                                               warp_dims = warp_dims) for mySF in sfList])
         else:
             return StreamList([CachedStream.from_SF(mySF, cap, name = name,
-                                                    cache_size = cache_size,
+                                                    cache_size = cache_size, force_fill_cache = force_fill_cache,
                                                     cap_color_space = cap_color_space, 
                                                     target_color_space = target_color_space,
                                                     scale_factor = scale_factor,
@@ -1050,7 +1050,7 @@ class StreamList:
     
     @staticmethod
     def from_store(featureName, videoName, storeName, 
-                   cache_size = None,
+                   cache_size = None, force_fill_cache = False,
                    cap_color_space = 'bgr', 
                    target_color_space = 'bgr',
                    scale_factor = 1):
@@ -1078,6 +1078,7 @@ class StreamList:
             readType = StillStream
         elif cache_size is not None:
             params['cache_size'] = cache_size
+            params['force_fill_cache'] = force_fill_cache
             readType = CachedStream
         else:
             readType = Stream
@@ -1341,12 +1342,31 @@ class NCDecapStream:
 @dataclass(frozen = True) ### despite a frozen dataclass, within the functions below, the features attribute is treated as mutable, so we can update it and use it dynamically for subsequent iterations
 class CachedStream(Stream):
     cache_size: int = 1 ### number of frames before and after the current frame (e.g.: cache size 1 -> three frames in cache.)
+    force_fill_cache: bool = False ### whether the initial cache may be repeated instances of the first frame,
+                                    # or whether we just go before and after stop frames.
+                                    # THE ONLY WAY THIS INTERACTS WITH ANYTHING IS VIA TRUNCATE_FRAME_NUMBER!!!
     
     def __post_init__(self):
+        
+        ### Define a helper function which is only relevant if we want to force fill the cache.
+        def truncate_frame_number(frmNum):
+            if not self.force_fill_cache:
+                return frmNum
+            else:
+                if frmNum < self.start_frame:
+                    return self.start_frame
+                elif frmNum > self.stop_frame:
+                    return self.stop_frame
+                else:
+                    return frmNum
+        
         ### Here, important to check that the cache size is actually available within the stream!
         total_frames = int(self.cap.get(cv.CAP_PROP_FRAME_COUNT))  ### total number of frames
-        fs_avail, ls_avail = self.truncation_anchor, self.truncation_anchor + total_frames - 1 ### available frames, in absolute terms (relative to the master cap). Note that if there are 2 frames, the indices are 0 and 1 -> hence, we subtract 1 from num_frames
-        start_cap, stop_cap = self.start_frame - self.cache_size, self.stop_frame + self.cache_size
+        fs_avail = self.truncation_anchor
+        ls_avail = self.truncation_anchor + total_frames - 1 ### available frames, in absolute terms (relative to the master cap). Note that if there are 2 frames, the indices are 0 and 1 -> hence, we subtract 1 from num_frames
+        
+        start_cap = truncate_frame_number(self.start_frame - self.cache_size)
+        stop_cap = truncate_frame_number(self.stop_frame + self.cache_size)
         
         if not fs_avail <= start_cap <= ls_avail:
             print(f'Starting frame {self.start_frame} not available in {self.cap} from {fs_avail} to {ls_avail} and cache_size {self.cache_size}')
@@ -1384,31 +1404,32 @@ class CachedStream(Stream):
         object.__setattr__(self, 'features', mySF)
             
     @staticmethod
-    def from_SF(mySF, cap, cache_size = 1, name = None,
+    def from_SF(mySF, cap, name = None,
+                cache_size = 1, force_fill_cache = False,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
                 scale_factor = 1, warp_dims = None):
         if name is None:
             name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
-        return CachedStream(cap, start, stop, cache_size = cache_size,
+        return CachedStream(cap, start, stop, cache_size = cache_size, force_fill_cache = force_fill_cache,
                             truncation_anchor = 0,
                             cap_color_space = cap_color_space, target_color_space = target_color_space, 
                             scale_factor = scale_factor, warp_dims = warp_dims,
                             features = mySF, name = name)
 
     @staticmethod
-    def from_stream(someStm, cache_size = 1):
+    def from_stream(someStm, cache_size = 1, force_fill_cache = False):
         return CachedStream(someStm.cap, someStm.start_frame, someStm.stop_frame,
                             truncation_anchor = someStm.truncation_anchor, 
                             cap_color_space = someStm.cap_color_space,
                             target_color_space = someStm.target_color_space, 
                             scale_factor = someStm.scale_factor,
                             name = someStm.name, features = someStm.features, 
-                            cache_size = cache_size)
+                            cache_size = cache_size, force_fill_cache = force_fill_cache)
     
     @staticmethod
-    def from_file(filePath, cache_size = 1,
-                  name = None,
+    def from_file(filePath, name = None,
+                  cache_size = 1, force_fill_cache = False,
                   cap_color_space = 'bgr', target_color_space = 'bgr',
                   scale_factor = 1):
         cap = cv.VideoCapture(filePath)
@@ -1420,7 +1441,7 @@ class CachedStream(Stream):
         _, start, _, stop = fileStump.split('_')
         start, stop = int(start), int(stop)
         
-        return CachedStream(cap, start, stop, cache_size = cache_size,
+        return CachedStream(cap, start, stop, cache_size = cache_size, force_fill_cache = force_fill_cache,
                             truncation_anchor = start, ### NOTE: truncation anchor is the first frame given in file name! 
                             cap_color_space = cap_color_space, target_color_space = target_color_space, 
                             scale_factor = scale_factor,
@@ -1428,14 +1449,14 @@ class CachedStream(Stream):
     
     @staticmethod
     def from_store(fileName, featureName, videoName, storeName, 
-                   cache_size = 1,
+                   cache_size = 1, force_fill_cache = False,
                    cap_color_space = 'bgr', target_color_space = 'bgr',
                    scale_factor = 1):
         featDict = get_folder_struct('features_stored')
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
-        return CachedStream.from_file(videoPath, cache_size = cache_size,
+        return CachedStream.from_file(videoPath, cache_size = cache_size, force_fill_cache = force_fill_cache,
                                       name = featureName,
                                       cap_color_space = cap_color_space, target_color_space = target_color_space,
                                       scale_factor = scale_factor)
@@ -1502,13 +1523,31 @@ class CachedStream(Stream):
         # featCache = Cache(self.cache_size, [])
         ### Update: The featCache is not updated, but rebuilt, so that changes to past features can be used by featFunc.
         featIndices = frameCache.get_indices()
-    
+        
+        ### Define a helper function which is only relevant if we want to force fill the cache.
+        def truncate_frame_number(frmNum):
+            if not self.force_fill_cache:
+                return frmNum
+            else:
+                if frmNum < self.start_frame:
+                    return self.start_frame
+                elif frmNum > self.stop_frame:
+                    return self.stop_frame
+                else:
+                    return frmNum
+        
         ### mutable features always have to exist here!
         assert hasattr(self, '_mut_features'), 'To create a generator for a CachedStream, mutable features always have to exist!'
     
-        frmNum = self.start_frame - self.cache_size
-        self.cap.set(cv.CAP_PROP_POS_FRAMES, frmNum - self.truncation_anchor)       
-        while self.cap.isOpened() and (self.start_frame - self.cache_size <= frmNum <= self.stop_frame + self.cache_size):
+        cap_start = self.start_frame - self.cache_size
+        cap_stop = self.stop_frame + self.cache_size
+    
+        frmNum = cap_start ### think of this as a counter in the background -> goes from cap_start to cap_stop, increment of 1
+        getNum = truncate_frame_number(frmNum) ### if force_fill_cache -> this truncates frames before start and after stop to start and stop resp.
+        
+        self.cap.set(cv.CAP_PROP_POS_FRAMES, getNum - self.truncation_anchor)       
+
+        while self.cap.isOpened() and (cap_start <= frmNum <= cap_stop):
             cntNum = frmNum - self.cache_size ### the central frame in the current iteration
 
             ret, frame = self.cap.read()
@@ -1519,7 +1558,7 @@ class CachedStream(Stream):
             ### warp if necessary
             if self.warp_dims is not None:
                 width, height = self.warp_dims
-                H = self.features['H'][frmNum]
+                H = self.features['H'][getNum]
                 H_inv = np.linalg.inv(H)
                 myFrm = myFrm.warp(H_inv, cols = width, rows = height)
                 
@@ -1529,7 +1568,7 @@ class CachedStream(Stream):
                 
             ### feed/build the caches
             frameCache = frameCache.add(myFrm)
-            features = [self._mut_features.maybe_get(idx + cntNum) for idx in featIndices]
+            features = [self._mut_features.maybe_get(truncate_frame_number(idx + cntNum)) for idx in featIndices]
             featCache = Cache.from_list(features, name = 'featCache')
             
             ### check if we are supposed to yield -> only once cache is full!
@@ -1542,14 +1581,20 @@ class CachedStream(Stream):
             ### if None is sent to generator, do nothing.
             if myFrm is not None:
                 if frame_counter:
-                    myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
+                    myFrm = myFrm.put(str(getNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
                 
                 if myFrm is not None:
                     still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
                     if not still_showing:
                         break
                     
-            frmNum += 1 ### the latest frame being read
+            if frmNum != getNum: ### this will only occur if we force_fill_cache, at the beginning and end.
+                                 ### none of this is intuitive... there must be a better way.
+                self.cap.set(cv.CAP_PROP_POS_FRAMES, getNum - self.truncation_anchor)      
+                
+            frmNum += 1  ### the counter is incremented
+            getNum = truncate_frame_number(frmNum) ### the latest frame being read
+            
         else:
             cv.destroyAllWindows()
         
