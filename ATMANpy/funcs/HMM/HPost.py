@@ -11,7 +11,12 @@ import pandas as pd
 from ATMANpy.funcs.court_funcs import make_P_cond_inv
 import ATMANpy.auxil.constants as const
 
-def expand_inferred_sequence(inferred_sequence, word_beginning_frame = 0):
+def expand_inferred_sequence(inferred_sequence, word_beginning_frame = None):
+    if inferred_sequence == []:
+        return {}
+    
+    if word_beginning_frame is None:
+        word_beginning_frame = inferred_sequence[0][0] ### first element of first tuple
     
     ls_word = inferred_sequence[-1]
     last_frame = ls_word[0]
@@ -48,31 +53,31 @@ def make_projection_matrices(cap, stream_features, schemaLines):
     
     return projDict
 
+def decomposeP(P, normalize_K = True):
+    import numpy as np
+    M = P[0:3,0:3]
+    Q = np.eye(3)[::-1]
+    P_b = Q @ M @ M.T @ Q
+    K = Q @ np.linalg.cholesky(P_b) @ Q
+    if normalize_K: K = K / K[2,2]
+    A = np.linalg.inv(K) @ M
+    l = (1/np.linalg.det(A)) ** (1/3)
+    R = l * A
+    t = l * np.linalg.inv(K) @ P[0:3,3]
+    return K, R, t
+
+def find_intrinsic_extrinsic_M(P, normalize_K = True):
+        
+    K, R, t = decomposeP(P, normalize_K = normalize_K)
+    
+    M_int = np.append(K, np.zeros((3, 1)), axis = 1)
+    M_ext = np.append(R, t[:, np.newaxis], axis = 1)
+    M_ext = np.append(M_ext, np.array([[0, 0, 0, 1]]), axis = 0)
+    
+    return M_int, M_ext
+
 def make_internal_external_matrices(projDict):
         
-    def decomposeP(P, normalize_K = True):
-        import numpy as np
-        M = P[0:3,0:3]
-        Q = np.eye(3)[::-1]
-        P_b = Q @ M @ M.T @ Q
-        K = Q @ np.linalg.cholesky(P_b) @ Q
-        if normalize_K: K = K / K[2,2]
-        A = np.linalg.inv(K) @ M
-        l = (1/np.linalg.det(A)) ** (1/3)
-        R = l * A
-        t = l * np.linalg.inv(K) @ P[0:3,3]
-        return K, R, t
-
-    def find_intrinsic_extrinsic_M(P, normalize_K = True):
-            
-        K, R, t = decomposeP(P, normalize_K = normalize_K)
-        
-        M_int = np.append(K, np.zeros((3, 1)), axis = 1)
-        M_ext = np.append(R, t[:, np.newaxis], axis = 1)
-        M_ext = np.append(M_ext, np.array([[0, 0, 0, 1]]), axis = 0)
-        
-        return M_int, M_ext
-    
     ### DECOMPOSE PROJECTION MATRIX ON EACH FRAME ###
     internalDict = {}
     externalDict = {}
@@ -220,8 +225,10 @@ def get_world_ray_params(m_c, M_ext):
     return slope, intercept
 
 def calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt):
-    x1, y1 = lsPt['x_3D'], lsPt['y_3D']
-    xn, yn = nxPt['x_3D'], nxPt['y_3D']
+    # x1, y1 = lsPt['x_3D'], lsPt['y_3D']
+    # xn, yn = nxPt['x_3D'], nxPt['y_3D']
+    x1, y1 = lsPt.x, lsPt.y
+    xn, yn = nxPt.x, nxPt.y
 
     m1, m2 = m_w[0], m_w[1]
     b1, b2 = b_w[0], b_w[1]
@@ -237,8 +244,10 @@ def calculate_interpolated_point(m_w, b_w, lsPt, nxPt, lmbd = None):
     if lmbd is None:
         lmbd = calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)
     
-    x1, y1 = lsPt['x_3D'], lsPt['y_3D']
-    xn, yn = nxPt['x_3D'], nxPt['y_3D']
+    # x1, y1 = lsPt['x_3D'], lsPt['y_3D']
+    # xn, yn = nxPt['x_3D'], nxPt['y_3D']
+    x1, y1 = lsPt.x, lsPt.y
+    xn, yn = nxPt.x, nxPt.y
     
     m1, m2 = m_w[0], m_w[1]
     b1, b2 = b_w[0], b_w[1]
@@ -511,7 +520,6 @@ def merge_words_and_inference(words, inferred_events):
     expanded_events = expand_inferred_sequence(inferred_events, word_beginning_frame = fs_frm)
     return merge_words_and_event_features(words, expanded_events)
     
-
 
 def init_spatial_dimensions(inf_words):            
 

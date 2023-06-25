@@ -444,7 +444,16 @@ def infer(sequence_data, HMMs, grammar, outer_grammar_keyword = '<all>'):
     
     return inferred_sequence
     
-            
+def infer_mp(sequence_data_list, HMMs, grammar, outer_grammar_keyword = '<all>', num_workers = 24):
+    from multiprocessing.pool import Pool
+    from functools import partial
+    
+    partFunc = partial(infer, HMMs = HMMs, grammar = grammar, outer_grammar_keyword = outer_grammar_keyword)
+    with Pool(num_workers) as p:
+        outList = p.map(partFunc, sequence_data_list)
+    
+    return outList
+        
          
             
          
