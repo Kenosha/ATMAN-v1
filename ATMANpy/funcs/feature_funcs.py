@@ -14,7 +14,7 @@ import pandas as pd
 import ATMANpy.funcs.util_funcs as atu 
 from ATMANpy.types.Contours import Contour, Contours
 from ATMANpy.types.Points import Point2D
-from ATMANpy.types.Lines import Region
+from ATMANpy.types.Lines import Region, Lines
 
 from ATMANpy.types.ShapesTennis3D import Ball, Player
 
@@ -22,6 +22,23 @@ MISSING_SENTINEL_VALUE = 9999 ### if an integer is missing, we add this value.
                                 # can't be np.nan, because np.nan is not an integer.
 
 ##### Saving ################
+
+def extract_line_values(line):
+    if line is None:
+        featValues = []
+    else:
+        featValues = [*line.leftPt.coords, *line.rightPt.coords]
+    return featValues
+
+def extract_lines_values(lines):
+    if lines is None:
+        featValues = [[]]
+    else:
+        featValues = [extract_line_values(line) for line in lines]
+        nameValues = [line.name for line in lines]
+    featFrm = pd.DataFrame(featValues, index = nameValues)  
+    featFrm.index.name = 'idx1'
+    return featFrm
 
 def extract_contour_values(contour, compression = None):
     if compression is None:
@@ -54,6 +71,14 @@ def extract_homography_values(H):
         featValues = np.ravel(H)[:8]
     return featValues
 
+def extract_projection_values(P):
+    if P is None:
+        featValues = [MISSING_SENTINEL_VALUE] * 12
+    else:
+        featValues = np.ravel(P)
+    return featValues
+
+
 def extract_particle_values(particleArr):
     if particleArr is None:
         featValues = None ### figure something out here...
@@ -71,6 +96,13 @@ def extract_region_values(region):
         featValues = np.ravel(coords)
     return featValues
     
+def extract_point_values(point):
+    if point is None:
+        featValues = [MISSING_SENTINEL_VALUE] * 3
+    else:
+        featValues = list(point.coords)
+    return featValues
+
 def get_and_make_save_path(featureName, videoName, storeName):
     featDict = atu.get_folder_struct('features_stored')
     storePath = os.path.join(featDict['main'], videoName, storeName)
@@ -249,14 +281,19 @@ def single_2D_feature_to_object(singlefeatSeries):
             assert len(x_vals) == len(y_vals) == len(dx_vals) == len(dy_vals)
             return np.array([x_vals, y_vals, dx_vals, dy_vals])
     else:
-        ### this means we have x, y and z -> a HOMOGRAPHY!
-        assert len(x_vals) == len(y_vals) == 3
-        assert len(z_vals) == 2
-        
-        z_vals = [*z_vals, 1]
-        myH = np.array([x_vals, y_vals, z_vals])
-        
-        return myH
+        if len(singlefeatSeries) == 8:
+            ### this means we have x, y and z -> a HOMOGRAPHY!
+            assert len(x_vals) == len(y_vals) == 3
+            assert len(z_vals) == 2
+            
+            z_vals = [*z_vals, 1]
+            myH = np.array([x_vals, y_vals, z_vals])
+            
+            return myH
+        if len(singlefeatSeries) == 12:
+            ### This means we have a projection matrix.
+            myP = np.array([x_vals, y_vals, z_vals])
+            return myP
     
 def single_3D_feature_to_object(singlefeatSeries, featName):
     if 'ball' in featName.lower(): ### is ball
@@ -306,8 +343,12 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
                         featObj = Contours.from_frame(featSeries)
                     else:                                        
                         featObj = featSeries
+                    if featName.endswith('Lns'): ## -> list of contours
+                        featObj = Lines.from_frame(featSeries)
+                    else:                                        
+                        featObj = featSeries
                 else:                                       ### we have a single feature! -> normal case
-                    if featName.startswith('3D'):
+                    if featName.endswith('3D'):
                         featObj = single_3D_feature_to_object(featSeries, featName)
                     else:    
                         featObj = single_2D_feature_to_object(featSeries)
@@ -512,8 +553,6 @@ def save_features_parallel(video_id, inList, my_stream_func, num_workers = None,
     time_elapsed = time.time() - time_start
     minutes_elapsed = round(time_elapsed / 60, 1)
     print(f'Done with {len(video_segments)} segments. Took {minutes_elapsed} minutes')
-
-
 
 
 

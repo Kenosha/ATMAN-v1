@@ -329,6 +329,24 @@ class StreamFeature(StreamFeaturesBase):
             featFrm.columns = featLabels
             ff.save_feature_frame(featFrm, self.name, videoName, storeName)
         
+    def _save_line(self, videoName, storeName):
+        exFunc = ff.extract_line_values
+        outSF = self.apply(exFunc)
+        featFrm = pd.DataFrame(outSF.streamDict).T
+        if not featFrm.empty:
+            featLabels = ['x1', 'y1', 'x2', 'y2']
+            featFrm.columns = featLabels
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+            
+    def _save_lines(self, videoName, storeName):
+        exFunc = ff.extract_lines_values
+        outSF = self.apply(exFunc)
+        featFrm = outSF.to_frame()
+        if not featFrm.empty:
+            featLabels = ['x1', 'y1', 'x2', 'y2']
+            featFrm.columns = featLabels
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        
     def _save_homography(self, videoName, storeName):
         exFunc = ff.extract_homography_values
         outSF = self.apply(exFunc)
@@ -338,11 +356,32 @@ class StreamFeature(StreamFeaturesBase):
         featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
+    def _save_projection(self, videoName, storeName):
+        exFunc = ff.extract_projection_values
+        outSF = self.apply(exFunc)
+        featFrm = pd.DataFrame(outSF.streamDict).T
+        featLabels = [f'{dim}_{idx}' for dim in ['x', 'y', 'z'] for idx in range(4)]
+        featFrm.columns = featLabels
+        featFrm.index.name = 'idx0'
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+    
     def _save_region(self, videoName, storeName):
         exFunc = ff.extract_region_values
         outSF = self.apply(exFunc)
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(4)]) ### region has four corners.
+        featFrm.columns = featLabels
+        featFrm.index.name = 'idx0'
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+    
+    def _save_point(self, videoName, storeName):
+        exFunc = ff.extract_point_values
+        outSF = self.apply(exFunc)
+        featFrm = pd.DataFrame(outSF.streamDict).T
+        if len(featFrm.columns) == 2:
+            featLabels = ['x', 'y']
+        else:
+            featLabels = ['x', 'y', 'z']
         featFrm.columns = featLabels
         featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
@@ -408,14 +447,22 @@ class StreamFeature(StreamFeaturesBase):
         
         if self.name in contourNames:
             self._save_contour(videoName, storeName, compression = compression)
-        elif self.name in homographyNames:
+        elif self.name == 'H':
             self._save_homography(videoName, storeName)
+        elif self.name == 'P':
+            self._save_projection(videoName, storeName)
         elif self.name in regionNames:
             self._save_region(videoName, storeName)
+        elif self.name.endswith('Ln'):
+            self._save_line(videoName, storeName)
+        elif self.name.endswith('Lns'):
+            self._save_lines(videoName, storeName)
         elif self.name.endswith('Cnt'):
             self._save_contour(videoName, storeName, compression = compression)
         elif self.name.endswith('Cnts'):
             self._save_contours(videoName, storeName, compression = compression)
+        elif self.name.endswith('3D'):
+            self._save_point(videoName, storeName)
         elif 'Mask' in self.name:
             self._save_as_video(videoName, storeName, monochrome = True, lossless = lossless)
         elif 'Frm' in self.name:
@@ -452,10 +499,10 @@ class StreamFeatures(StreamFeaturesBase):
     ####### (like pd.DataFrame) -> frames in index, featDict in values -> multiple features
     name: str = None ### usually, the name of a StreamFeatures instance is ignored.
     
-    @staticmethod
-    def from_store(video_id, store_name, featnameList = None):
+    @classmethod
+    def from_store(cls, video_id, store_name, featnameList = None):
         featDict = ff.load_stored_features(video_id, store_name, featnameList = featnameList)
-        return BoolFeatures(featDict)
+        return cls(featDict)
     
     @staticmethod
     def type_squeeze(): ### weird!
@@ -812,7 +859,7 @@ class SFList:
         partFunc = partial(func, **kwargs)
         
         with Pool(num_workers) as p:
-            outList = p.map(partFunc, self.sfList, )
+            outList = p.map(partFunc, self.sfList)
     
         return SFList(outList)
     

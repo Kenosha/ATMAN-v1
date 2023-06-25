@@ -49,6 +49,16 @@ class Line:
         x1, y1, x2, y2 = four_coords
         return Line(Point2D((x1, y1)), Point2D((x2, y2)), name = name)
     
+    @staticmethod
+    def from_series(lnSer):
+        x1 = lnSer.loc['x1']
+        y1 = lnSer.loc['y1']
+        x2 = lnSer.loc['x2']
+        y2 = lnSer.loc['y2']
+        leftPt = Point2D((x1, y1))
+        rightPt = Point2D((x2, y2))
+        return Line(leftPt, rightPt, name = lnSer.name)
+    
     ### METHODS ### 
     def append(self, other):
         if isinstance(other, Line):
@@ -256,6 +266,13 @@ class Lines:
             return Lines([Line.from_coords(l) for l in coordList])
         except:
             return Lines([])
+
+    @staticmethod
+    def from_frame(lnFrm):
+        outList = []
+        for idx, rowSer in lnFrm.iterrows():
+            outList.append(Line.from_series(rowSer))
+        return Lines(outList)
 
     def __iter__(self):
         return iter(self.lineList)
