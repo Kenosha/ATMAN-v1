@@ -1011,6 +1011,10 @@ class MulStream:
                                             # (with mutable features, etc.)
         return canonicalType.extract(self, featureFunc, **kwargs)
         
+    def extract_to_disc(self, featureFunc, videoName, storeName, savekwargs, **kwargs):
+        outSF = self.extract(featureFunc, **kwargs)
+        outSF.save(videoName, storeName, **savekwargs)
+    
     @extract_mp_timer
     def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
         return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, _split = False, **kwargs)
@@ -1018,6 +1022,18 @@ class MulStream:
     @extract_mp_timer
     def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
         return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, _split = False, **kwargs)
+        
+    @extract_mp_timer
+    def extract_chunked_threaded_to_disc(self, featureFunc, num_workers, chunksize, 
+                                         videoName, storeName, savekwargs, **kwargs):
+        return Stream._extract_chunked_to_disc(self, featureFunc, ThreadPool, num_workers, chunksize, 
+                                               videoName, storeName, savekwargs, **kwargs)
+    
+    @extract_mp_timer
+    def extract_chunked_mp_to_disc(self, featureFunc, num_workers, chunksize, 
+                                   videoName, storeName, savekwargs, **kwargs):
+        return Stream._extract_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize,  
+                                               videoName, storeName, savekwargs, **kwargs)
         
     
 @dataclass(frozen = True)

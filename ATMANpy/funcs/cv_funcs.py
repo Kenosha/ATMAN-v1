@@ -7,6 +7,8 @@ Utility Functions
 @author: gianl
 """
 
+import os
+import time
 import numpy as np
 import cv2 as cv
 import ATMANpy.funcs.util_funcs as atu
@@ -69,6 +71,88 @@ def get_framelist(cap, frameList):
         
     return np.array(outFrames)
 
+
+def join_video_captures(cap_feature, videoName, storeName):
+    ### Due to chunking, it can happen that contiguous video captures are stored in different files
+    ### when extracting straight to disc. Hence, we might want to join these.
+    ### TODO: Why are the files that are created so large, compared to the sum of their constituents?
+    print('Joining contiguous, but separate files...')
+    
+    featDict = atu.get_folder_struct('features_stored')
+    featPath = featDict['main']
+    storePath = os.path.join(featPath, videoName, storeName, cap_feature)
+    
+    ### find files to join
+    files = os.listdir(storePath)
+    
+    ### understand dimensions, fps, codec.
+    fs_cap = cv.VideoCapture(os.path.join(storePath, files[0]))
+    width = int(fs_cap.get(cv.CAP_PROP_FRAME_WIDTH))
+    height = int(fs_cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+    size = width, height
+    fps = int(fs_cap.get(cv.CAP_PROP_FPS))
+    codec = int(fs_cap.get(cv.CAP_PROP_FOURCC))
+    fs_cap.release()
+    del fs_cap
+    # codecStr = chr(codec&0xff) + chr((codec>>8)&0xff) + chr((codec>>16)&0xff) + chr((codec>>24)&0xff)
+    # codec = cv.VideoWriter_fourcc(*codecStr)
+    
+    ### sort files to join
+    sortFunc = lambda myStr: int(myStr.split('_')[1]) ### sort by first frame
+    sorted_files = sorted(files, key = sortFunc)
+    
+    ### understand file ending
+    filenames, suffixes = [file.split('.')[0] for file in sorted_files], [file.split('.')[1] for file in sorted_files]
+    assert len(set(suffixes)) == 1, f'Mixed file types found in {storePath}'
+    suffix = suffixes[0]
+    
+    ### define helpers ###
+    startFunc = lambda fileStr: int(fileStr.split('_')[1])
+    endFunc = lambda fileStr: int(fileStr.split('_')[3])
+    
+    ### group files if contiguous
+    groupList = []
+    current_group = []
+    
+    for file in filenames:
+        if current_group == []:
+            current_group.append(file)
+        else:
+            last_file = current_group[-1]
+            if endFunc(last_file) + 1 == startFunc(file):
+                current_group.append(file)
+            elif endFunc(last_file) + 1 < startFunc(file):
+                groupList.append(current_group)
+                current_group = [file]
+            else:
+                raise Exception(f'Previous file ending: {endFunc(last_file)}; current file beginning: {startFunc(file)}')
+            
+    groupList.append(current_group)
+
+    ### merge grouped files
+    for group in groupList:
+        if len(group) > 1:
+            group_start, group_end = startFunc(group[0]), endFunc(group[-1])
+            groupName = f'from_{group_start}_to_{group_end}'
+            groupPath = os.path.join(storePath, groupName + f'.{suffix}')
+            writer = cv.VideoWriter(groupPath, codec, fps, size)
+            for fileName in group:
+                filePath = os.path.join(storePath, fileName + f'.{suffix}')
+                
+                cap = cv.VideoCapture(filePath)
+                while cap.isOpened():
+                    r, frame = cap.read()
+                    if not r:
+                        break
+                    writer.write(frame)
+
+                cap.release()
+                del cap
+                os.remove(filePath) 
+                
+            writer.release()
+    
+    
 def show_video(cap, start_frame = None, stop_frame = None, ms_between_frames = None,
                frame_counter = False):
        
