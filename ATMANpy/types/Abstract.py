@@ -966,7 +966,7 @@ class Points:
         myFeats = myFeats.rename_feature(top_player_name, 'top').rename_feature(bot_player_name, 'bot')
         
         ### turn into list of contiguous stream features
-        featList = myFeats.split_joint_features()
+        featList = myFeats.split()
         
         ### narrow instantaneous events
         if narrow_instantaneous_events:

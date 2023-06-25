@@ -136,10 +136,10 @@ def make_net_cord_lines(courtLines, b_0, b_1):
     left_val = b_0 + b_1 * left_x ** 2
     right_val = b_0 + b_1 * right_x ** 2
     
-    leftpostLine = Line(leftPt, leftPt.up(left_val), name = 'Left Post')
-    rightpostLine = Line(rightPt, rightPt.up(right_val), name = 'Right Post')
-    leftnetLine = Line(leftPt.up(left_val), middlePt.up(b_0), name = 'Left Net')
-    rightnetLine = Line(rightPt.up(right_val), middlePt.up(b_0), name = 'Right Net')
+    leftpostLine = Line(leftPt, leftPt.up(left_val), name = 'Left Post').round_points()
+    rightpostLine = Line(rightPt, rightPt.up(right_val), name = 'Right Post').round_points()
+    leftnetLine = Line(leftPt.up(left_val), middlePt.up(b_0), name = 'Left Net').round_points()
+    rightnetLine = Line(rightPt.up(right_val), middlePt.up(b_0), name = 'Right Net').round_points()
     
     netLines = Lines([leftpostLine, rightpostLine, leftnetLine, rightnetLine])
     
