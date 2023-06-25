@@ -581,6 +581,219 @@ def get_observation_frame(ballSF, velocity_shift = 3, acceleration_shift = 1):
     speedFrm.columns = ['v_x', 'v_y']
     accelFrm.columns = ['a_x', 'a_y']
     
-    obsFrm = pd.concat([ballFrm, speedFrm, accelFrm, distFrm], axis = 1)
+    obsFrm = pd.concat([ballFrm, speedFrm, accelFrm, distFrm], axis = 1).dropna()
 
     return obsFrm
+
+def narrow_down_instantaneous_events(evtSF):
+        
+    def count_consecutive(evt, evtList):
+        i = 0
+        for other in evtList:
+            if evt == other:
+                i += 1
+            else:
+                return i, other
+        return i, None
+
+    frames = evtSF.get_frames()
+    min_frame = min(frames)
+    max_frame = max(frames)
+    
+    MAX_REACH = 15
+
+    narrow_event_function = lambda x: x.startswith('B') or x.startswith('H')
+    
+    narrow_expanded_events = {}
+    for frame in frames:
+        curr_event = evtSF[frame]
+        
+        ### figure out left and right look
+        comparison_reach = min(frame - min_frame, min(max_frame - frame, MAX_REACH))
+        
+        isNarrow = narrow_event_function(curr_event)
+        
+        if not isNarrow:
+            narrow_expanded_events[frame] = curr_event
+        else:
+            events_before = [evtSF[frame - comp] for comp in range(1, comparison_reach + 1)]
+            events_after  = [evtSF[frame + comp] for comp in range(1, comparison_reach + 1)]
+            
+            count_bef, prev_event = count_consecutive(curr_event, events_before)
+            count_aft, succ_event = count_consecutive(curr_event, events_after)
+            
+            if count_bef + 1 < count_aft: ### there are substantially more of our narrow event after than before
+                narrow_expanded_events[frame] = prev_event ### -> insert the previous event!
+            elif count_bef - 1 > count_aft:
+                narrow_expanded_events[frame] = succ_event 
+            else:
+                narrow_expanded_events[frame] = curr_event 
+                
+    return StreamFeature(narrow_expanded_events, name = 'exp_eventFlag')
+        
+
+def interpolate_matrices(matSF):
+    from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
+    
+    all_frames = matSF.get_frames()
+    available_frames = [frame for frame in all_frames if not np.isnan(matSF[frame]).any()]
+    
+    outDict = {}
+    for frame in all_frames:
+        if frame in available_frames:
+            outDict[frame] = matSF[frame]
+        else:
+            ls_frame, nx_frame = find_last_and_next_list_member(frame, available_frames)
+            
+            if nx_frame is None and ls_frame is None:
+                outDict[frame] = None ### -> no values anywhere! fill with None
+            elif nx_frame is None:
+                outDict[frame] = matSF[ls_frame]
+            elif ls_frame is None:
+                outDict[frame] = matSF[nx_frame]
+            else:
+                dist = (frame - ls_frame) / (nx_frame - ls_frame)
+                outDict[frame] = matSF[ls_frame] * (1 - dist) + matSF[nx_frame] * dist
+        
+    return StreamFeature(outDict, name = matSF.name)
+    
+def interpolate_player(plSF):
+    from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
+    
+    available_frames = plSF.dropna().get_frames()
+    
+    outDict = {}
+    for frame, plPt_3D in plSF.items():
+        if frame in available_frames:
+            outDict[frame] = plSF[frame]
+        else:
+            ls_frame, nx_frame = find_last_and_next_list_member(frame, available_frames)
+            
+            if nx_frame is None and ls_frame is None:
+                outDict[frame] = None ### -> no values anywhere! fill with None
+            elif nx_frame is None:
+                outDict[frame] = plSF[ls_frame]
+            elif ls_frame is None:
+                outDict[frame] = plSF[nx_frame]
+            else:
+                dist = (frame - ls_frame) / (nx_frame - ls_frame)
+                outDict[frame] = plSF[ls_frame] * (1 - dist) + plSF[nx_frame] * dist
+        
+    return StreamFeature(outDict, name = plSF.name)
+            
+
+
+def interpolate_ball_positions_3D_smart(mySF,
+                                        max_iterations = 150, correction_strength = 0.25,
+                                        acceptable_standard_deviations = 3, 
+                                        acceptable_absolute_deviation = 10,
+                                        prop_of_z_needed = 0.5):
+    ##### Needs StreamFeatures with...
+    ### ball_3D: a Point3D
+    ### ballCnt: a ball contour
+    ### M_int: internal camera matrices
+    ### M_ext: external camera matrices
+    
+    from ATMANpy.types.Points import Point2D
+    from ATMANpy.types.Shapes3D import Point3D
+    from ATMANpy.funcs.util_funcs import find_last_and_next_list_member
+    import ATMANpy.funcs.HMM.HPost as HPost
+    
+    known_frames = mySF['ball_3D'].dropna().get_frames()
+    
+    ### FIRST PASS: FIGURE OUT LAMBDAS
+    lambdaDicts = []
+    argDicts = []
+    sequence_lambdas = {}
+    interpolation_arguments = {}
+    for frame, featDict in mySF.items():
+        ballPt_3D = featDict['ball_3D']
+        ballPt_2D = featDict['ballCnt'].center()
+        M_int = featDict['M_int']
+        M_ext = featDict['M_ext']
+        if ballPt_3D is None:
+            ### here, we need to interpolate!
+            ls_frame, nx_frame = find_last_and_next_list_member(frame, known_frames)
+            # print(f'{frame} -- last: {ls_frame}, next: {nx_frame}')
+            if ls_frame is not None and nx_frame is not None:
+                ### if both last and next position are known, we can interpolate
+                lsPt = mySF['ball_3D'][ls_frame]
+                nxPt = mySF['ball_3D'][nx_frame]
+                   
+                ### Derive the ray on which the ball has to lie
+                m_c, b_c = HPost.get_camera_ray_params(ballPt_2D, M_int)
+                m_w, b_w = HPost.get_world_ray_params(m_c, M_ext)
+            
+                ### together with knowledge about the last and the next point that is known, 
+                ### we can interpolate!
+                ### UPDATE: We have to do two passes, because the interpolation can be slightly off:
+                    # 1) lambdas can be smaller than zero, and larger than one
+                    # 2) lambdas are not necessarily monotonously increasing.
+                    ### -> both of these issues are best fixed knowing the entire sequence of lambdas.
+                sequence_lambdas[frame] = HPost.calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)
+                # print(f'{frame}: {calculate_interpolation_lambda(m_w, b_w, lsPt, nxPt)}')
+                
+                ### save the necessary items in another dictionary, so we don't need to re-create
+                interpolation_arguments[frame] = (m_w, b_w, lsPt, nxPt)
+                # ball_3D.loc[frame] = calculate_interpolated_point(m_w, b_w, lsPt, nxPt)
+        else:
+            if not sequence_lambdas == {}:
+                lambdaDicts.append(sequence_lambdas)
+                argDicts.append(interpolation_arguments)
+                sequence_lambdas = {}
+                interpolation_arguments = {}
+        
+    ### FIX LAMBDAS
+    fixed_lambdaDicts = [HPost.fix_lambda_sequence_iterative(l, 
+                                                             max_iterations = max_iterations,
+                                                             correction_strength = correction_strength) for l in lambdaDicts]
+        
+    ### SECOND PASS: PERFORM INTERPOLATIONS
+    interDicts = []
+    interpolated_points = {}
+    for lambdaDict, argDict in zip(fixed_lambdaDicts, argDicts):
+        for frame, lmbd in lambdaDict.items():
+            interpolated_points[frame] = HPost.calculate_interpolated_point(*argDict[frame], lmbd = lmbd)    
+        interDicts.append(interpolated_points)
+        interpolated_points = {}
+    
+    ### THIRD PASS: FIX OUTLIERS IN Z-DIMENSION
+    # note that x and y dimensions are okay as long as interpolation fix with lambdas works...
+    # but this leaves the z dimension open still. We can look at the arc, estimate it, and remove outliers!
+    fixed_interDicts = []
+    for lambdaDict, interDict in zip(lambdaDicts, interDicts):
+        lambdas = np.array(list(lambdaDict.values()))
+        z_values = np.array([coords[2] for coords in interDict.values()])
+        
+        fit, sd = HPost.fit_parabola_intervals(lambdas, z_values)
+    
+        replace_because_negative = (z_values < 0) 
+        replace_because_weird = np.abs(z_values - fit) > np.maximum(acceptable_absolute_deviation, 
+                                                                    acceptable_standard_deviations * sd)
+        replace = replace_because_negative | replace_because_weird
+        
+        if replace.sum() == 0:
+        #     print(f'{z_values}: Replacing in {replace.sum()} positions')
+            fixed_interDicts.append(interDict)
+        elif replace.sum() / len(replace) > prop_of_z_needed:
+            # print('Too many issues, can not fix z-coordinates.')
+            fixed_interDicts.append(interDict) 
+        else:
+            x_values, y_values = [coords[0] for coords in interDict.values()], [coords[1] for coords in interDict.values()]
+            # new_z_values = np.where(replace, fit, z_values) ### replacing with fit is easy, but choppy
+            ### instead: maybe linearly interpolate?
+            gap_z_values = np.where(replace, np.nan, z_values)
+            idx = np.arange(len(gap_z_values))
+            idx_not_nan = np.isnan(gap_z_values) == False
+            new_z_values = np.interp(idx, idx[idx_not_nan], gap_z_values[idx_not_nan])
+            new_coords = list(zip(x_values, y_values, new_z_values))
+            new_interDict = dict(zip(list(interDict.keys()), new_coords))
+            fixed_interDicts.append(new_interDict)
+    
+    ### ADD FORWARD AND BACKWARD INTERPOLATIONS
+    ## TODO: ?
+    
+    ### JOIN INTERDICTS AND TURN TO BALL 
+    joinDict = {frame: Point3D(interDict[frame]) for interDict in interDicts for frame in interDict}
+    
+    return StreamFeature(joinDict, name = 'ball_3D')
