@@ -25,6 +25,28 @@ schemaLines = CourtLines.make().add_singles_netline()
 
 import ATMANpy.funcs.particle_funcs_vectorized as pf
 
+def find_courtlines(H, schemaLines = schemaLines):
+    if H is None:
+        return None
+    else:
+        courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
+    return courtLines
+
+def calibrate_camera(courtLines, netLns, schemaLines = schemaLines, 
+                     add_coords_world = None, add_coords_image = None):
+    from ATMANpy.funcs.court_funcs import calibrate_camera
+    
+    P = calibrate_camera(courtLines, netLns, schemaLines = schemaLines,
+                         add_coords_world = add_coords_world, 
+                         add_coords_image = add_coords_image)
+    return P
+    
+def find_intrinsic_extrinsic_M(P, normalize_K = True):
+    from ATMANpy.funcs.HMM.HPost import find_intrinsic_extrinsic_M    
+    
+    M_int, M_ext = find_intrinsic_extrinsic_M(P, normalize_K = normalize_K)
+    return M_int, M_ext
+
 def get_court_corner_points(courtLines):
     tl, tr, bl, br = courtLines.get_court_region().to_points()
     return tl, tr, bl, br
@@ -124,6 +146,8 @@ def certainty_out_far_court(courtLines, ballCnt):
     
 def find_player_positions_3D(P, topPlayer, botPlayer):
     from ATMANpy.funcs.court_funcs import make_P_cond_inv
+    from ATMANpy.types.Shapes3D import Point3D
+    
     cond_val = 0 ### feet are on the ground!
     cond_dim = 2 ### axis is z dimension -> height!
     P_cond_inv = make_P_cond_inv(P, cond_val, cond_dim)
@@ -135,6 +159,7 @@ def find_player_positions_3D(P, topPlayer, botPlayer):
         top_3D_homogeneous = P_cond_inv @ np.array([top_x, top_y, 1])
         top_3D = top_3D_homogeneous[:2] / top_3D_homogeneous[2]
         topPlayer_3D = np.insert(top_3D, cond_dim, cond_val)
+        topPlayer_3D = Point3D(tuple(topPlayer_3D))
     
     if botPlayer is None:
         botPlayer_3D = None
@@ -143,7 +168,70 @@ def find_player_positions_3D(P, topPlayer, botPlayer):
         bot_3D_homogeneous = P_cond_inv @ np.array([bot_x, bot_y, 1])
         bot_3D = bot_3D_homogeneous[:2] / bot_3D_homogeneous[2]
         botPlayer_3D = np.insert(bot_3D, cond_dim, cond_val)
+        botPlayer_3D = Point3D(tuple(botPlayer_3D))
     
     return topPlayer_3D, botPlayer_3D
 
+    
+def impose_known_ball_coordinates(exp_eventFlag, topPlayer_3D, botPlayer_3D, 
+                                  schemaLines = schemaLines, bounce_height = 0.2, how_far_in_front = 8):
+    
+    if exp_eventFlag is None:
+        x, y, z = None, None, None
+    elif exp_eventFlag[:2] == 'SN': ### IMPOSE SERVE NEAR ###
+        x, y, z = None, schemaLines['Bottom Baseline'].center().y, None
+    elif exp_eventFlag[:2] == 'SF': ### IMPOSE SERVE FAR ###
+        x, y, z = None, schemaLines['Top Baseline'].center().y, None
+    elif exp_eventFlag == 'NET': ### IMPOSE NET ###
+        x, y, z = None, schemaLines['Net Line'].center().y, None
+    elif exp_eventFlag.startswith('B'): ### IMPOSE BOUNCE ###
+        x, y, z = None, None, bounce_height
+    elif exp_eventFlag == 'HN': ### IMPOSE HIT NEAR ###
+        x, y, z = None, botPlayer_3D.get_foot_point().y - how_far_in_front, None
+    elif exp_eventFlag == 'HF': ### IMPOSE HIT FAR ###
+        x, y, z = None, topPlayer_3D.get_foot_point().y + how_far_in_front, None
+    else:
+        x, y, z = None, None, None
+    
+    ball_3D_tuple = (x, y, z)
+    return ball_3D_tuple
+
+def find_known_ball_positions_3D(ballCnt, P, exp_eventFlag, topPlayer_3D, botPlayer_3D,
+                                 schemaLines = schemaLines, 
+                                 bounce_height = 0.2, how_far_in_front = 8):
+    from ATMANpy.funcs.court_funcs import make_P_cond_inv
+    from ATMANpy.types.Shapes3D import Point3D
+    
+    x_3D, y_3D, z_3D = impose_known_ball_coordinates(exp_eventFlag, topPlayer_3D, botPlayer_3D,
+                                                     schemaLines = schemaLines, 
+                                                     bounce_height = bounce_height, 
+                                                     how_far_in_front = how_far_in_front)
+    
+    if ballCnt is None:
+        return None
+    else:
+        x_2D, y_2D = ballCnt.center().coords
+    
+    ### Figure out if (and if yes, which) coordinate we have
+    if x_3D is not None:
+        cond_val = x_3D
+        cond_dim = 0
+    elif y_3D is not None:
+        cond_val = y_3D
+        cond_dim = 1
+    elif z_3D is not None:
+        cond_val = z_3D
+        cond_dim = 2
+    else:
+        return None
+    
+    P_cond_inv = make_P_cond_inv(P, cond_val, cond_dim)
+
+    pt_3D_homogeneous = P_cond_inv @ np.array([x_2D, y_2D, 1])
+    pt_3D = pt_3D_homogeneous[:2] / pt_3D_homogeneous[2]
+
+    ball_3D_tuple = np.insert(pt_3D, cond_dim, cond_val)
+    
+    ball_3D = Point3D(ball_3D_tuple)
+    return ball_3D
     

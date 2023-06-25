@@ -38,13 +38,6 @@ from ATMANpy.funcs.player_funcs import find_best_expansion, stop_criterion, find
 from ATMANpy.types.Frames import Frame, BoolFrame, MaskFrame, GreyFrame, BGRFrame, HSVFrame
 from ATMANpy.types.Contours import Contour, Contours
 
-def find_courtlines(H, schemaLines = schemaLines):
-    if H is None:
-        return None
-    else:
-        courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
-    return courtLines
-
 def track_courtlines(gCache, featCache,
                      width_of_line = 8, 
                      int_diff_thresh = 30,
@@ -562,16 +555,6 @@ def find_netlines(gFrm, courtLines, net_factor = 0.9, net_points_to_search = 100
     
     from ATMANpy.funcs.net_funcs import cubic_regress, make_net_cord_lines
     b_0, b_1 = cubic_regress(relPoints)
-    netLines = make_net_cord_lines(courtLines, b_0, b_1)
+    netLns = make_net_cord_lines(courtLines, b_0, b_1)
 
-    return netLines
-
-def calibrate_camera(courtLines, netLines, schemaLines = schemaLines, 
-                     add_coords_world = None, add_coords_image = None):
-    from ATMANpy.funcs.court_funcs import calibrate_camera
-    
-    P = calibrate_camera(courtLines, netLines, schemaLines = schemaLines,
-                         add_coords_world = add_coords_world, 
-                         add_coords_image = add_coords_image)
-    return P
-    
+    return netLns
