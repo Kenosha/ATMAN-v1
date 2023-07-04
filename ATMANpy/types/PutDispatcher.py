@@ -41,7 +41,7 @@ def put(someFrm, someObj,
             myFrm = myFrm.put(str(annotation), where = (someObj.leftPt - offset_margin).coords)
         return myFrm
     
-    if isinstance(someObj, Lines):
+    if someObj.__class__.__name__ in ['Lines', 'CourtLines', 'NetLines']: ### when the putting does not work, it's likely due to autoreload, which makes the above evaluate to false....
         if verbose: print('Lines!')
         for line in someObj:
             c1, c2 = line.leftPt.round_coords(), line.rightPt.round_coords()

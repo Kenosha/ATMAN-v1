@@ -719,6 +719,9 @@ class StreamFeatures(StreamFeaturesBase):
     def to_bool(self):
         return BoolFeatures(self.streamDict, name = self.name)
     
+    def value_counts(self):
+        return pd.concat([self[feat].value_counts() for feat in self.get_features()], axis = 1)
+    
     #### Should these be here?
     def spline_2D(self, pointFeature = 'ball', frameList = None):
         outDict = {}

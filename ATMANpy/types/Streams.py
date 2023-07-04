@@ -203,8 +203,8 @@ class Stream:
                                     scale_factor = self.scale_factor,
                                     name = self.name)
     
-        # for feat in self.features.get_features():
-        #     outFrm = outFrm.put(self.features[frmNum][feat])
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[frmNum][feat])
             
         if self.warp_dims is not None:
             width, height = self.warp_dims
@@ -1208,8 +1208,8 @@ class DecapStream:
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         outFrm = self.frames[item - self.start_frame]
         
-        # for feat in self.features.get_features():
-        #     outFrm = outFrm.put(self.features[item][feat])
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[item][feat])
         
         return outFrm
     
@@ -1321,8 +1321,8 @@ class NCDecapStream:
         assert item in self.frmNums, f'Frame requested has to be in self.frmNums!'
         outFrm = self.frames[self.frmNums.index(item)]
         
-        # for feat in self.features.get_features():
-        #     outFrm = outFrm.put(self.features[item][feat])
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[item][feat])
             
         return outFrm
     
@@ -1790,23 +1790,18 @@ class RandStream(Stream):
             myDict = self.features.maybe_get(frmNum)
             ### if frmNum not found, we get {feat: None for feat in self.get_features()}
             
-            frame = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
-            # frame = yield frame 
-            ## TODO: include featDict as a thing the generator yields!
-            
+            myFrm = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
+
             if frame_counter:
-                cv.putText(frame, str(frmNum), org = (40, 40), 
-                           fontFace = cv.FONT_HERSHEY_SIMPLEX, fontScale = 2,
-                           color = (0, 255, 0), thickness = 3)
+                myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
-            if frame is not None:
-                cv.imshow('frame', frame)
-                if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
-                    cv.destroyAllWindows()  
-                    # yield None
+            if myFrm is not None:
+                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                if not still_showing:
                     break
-            
+                
             frmNum = randrange(self.start_frame, self.stop_frame)
+            frames_yielded += 1
         
         else:
             cv.destroyAllWindows()
@@ -1869,8 +1864,8 @@ class NCStream:
                                     scale_factor = self.scale_factor,
                                     name = self.name)
         
-        # for feat in self.features.get_features():
-        #     outFrm = outFrm.put(self.features[frmNum][feat])
+        for feat in self.features.get_features():
+            outFrm = outFrm.put(self.features[frmNum][feat])
             
         return outFrm
         
