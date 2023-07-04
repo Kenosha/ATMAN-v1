@@ -31,12 +31,56 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines
 schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
-from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only, update_homography
+from ATMANpy.funcs.sf_apply_funcs import find_courtlines
+from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only, update_homography, find_linesets
 from ATMANpy.funcs.scoreboard_funcs import find_scoreboard
 from ATMANpy.funcs.player_funcs import find_best_expansion, stop_criterion, find_player_contour_with_overlap
 
 from ATMANpy.types.Frames import Frame, BoolFrame, MaskFrame, GreyFrame, BGRFrame, HSVFrame
 from ATMANpy.types.Contours import Contour, Contours
+
+def get_courtlines(gFrm, width_of_line = 8, 
+                   int_diff_thresh = 30,
+                   white_thresh = 150,
+                   rho = 3, theta = np.pi / 180, min_votes = 500,
+                   minLineLength = 8 + 1, maxLineGap = 1,
+                   merge_threshold = 2 * 8, 
+                   horizontal_filter_margin = 40,
+                   vertical_filter_margin = None,
+                   points_on_line = 100, acceptable_failure_rate = 0.5,
+                   schemaLines = schemaLines, only_225 = True, verbose = False):
+    
+    if only_225:
+        H, config = find_homography_225_only(gFrm,
+                                             width_of_line = width_of_line,
+                                             int_diff_thresh = int_diff_thresh,
+                                             white_thresh = white_thresh,
+                                             rho = rho, theta = theta, min_votes = min_votes,
+                                             minLineLength = minLineLength, maxLineGap = maxLineGap,
+                                             merge_threshold = merge_threshold, 
+                                             horizontal_filter_margin = horizontal_filter_margin,
+                                             vertical_filter_margin = vertical_filter_margin,
+                                             verbose = verbose)
+    else:
+        H, config = find_homography(gFrm,
+                                    width_of_line = width_of_line,
+                                    int_diff_thresh = int_diff_thresh,
+                                    white_thresh = white_thresh,
+                                    rho = rho, theta = theta, min_votes = min_votes,
+                                    minLineLength = minLineLength, maxLineGap = maxLineGap,
+                                    merge_threshold = merge_threshold, 
+                                    horizontal_filter_margin = horizontal_filter_margin,
+                                    vertical_filter_margin = vertical_filter_margin,
+                                    verbose = verbose)
+    trackFlag = 'Found'
+    
+    if not H is None:
+        courtLines = find_courtlines(H, schemaLines)
+    else:
+        trackFlag = 'Not Found'
+        courtLines = None
+    
+    return courtLines, H, config, trackFlag
 
 def track_courtlines(gCache, featCache,
                      width_of_line = 8, 
@@ -63,7 +107,8 @@ def track_courtlines(gCache, featCache,
                                                  rho = rho, theta = theta, min_votes = min_votes,
                                                  minLineLength = minLineLength, maxLineGap = maxLineGap,
                                                  merge_threshold = merge_threshold, 
-                                                 filter_margin = filter_margin)
+                                                 horizontal_filter_margin = horizontal_filter_margin,
+                                                 vertical_filter_margin = vertical_filter_margin)
         else:
             H, config = find_homography(curr_gFrm,
                                         width_of_line = width_of_line,
@@ -72,7 +117,8 @@ def track_courtlines(gCache, featCache,
                                         rho = rho, theta = theta, min_votes = min_votes,
                                         minLineLength = minLineLength, maxLineGap = maxLineGap,
                                         merge_threshold = merge_threshold, 
-                                        filter_margin = filter_margin)
+                                        horizontal_filter_margin = horizontal_filter_margin,
+                                        vertical_filter_margin = vertical_filter_margin)
         trackFlag = 'Found'
     else:
         # print('Courtlines found, updating homography...')
