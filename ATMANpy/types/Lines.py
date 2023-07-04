@@ -61,11 +61,11 @@ class Line:
     
     ### METHODS ### 
     def append(self, other):
-        if isinstance(other, Line):
-            return Lines([self, other])
-        elif isinstance(other, Lines):
+        try:
             return Lines([self, *other.lineList])
-        
+        except AttributeError:
+            return Lines([self, other])
+    
     def left_point(self):
         if self.leftPt.is_left(self.rightPt):
             return self.leftPt
@@ -301,10 +301,10 @@ class Lines:
         return [aLn.name for aLn in self.lineList]
     
     def append(self, other):
-        if isinstance(other, Line):
-            return Lines([*self.lineList, other])
-        elif isinstance(other, Lines):
+        try:
             return Lines([*self.lineList, *other.lineList])
+        except:
+            return Lines([*self.lineList, other])
     
     def sort(self, which, primary_direction, secondary_direction):
         ### do we sort by left point, or right point or high point or low point?
