@@ -32,11 +32,13 @@ def find_courtlines(H, schemaLines = schemaLines):
         courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
     return courtLines
 
-def calibrate_camera(courtLines, netLns, schemaLines = schemaLines, 
+def calibrate_camera(courtLines, netLns, 
+                     width = 'Doubles', schemaLines = schemaLines, 
                      add_coords_world = None, add_coords_image = None):
     from ATMANpy.funcs.court_funcs import calibrate_camera
     
-    P = calibrate_camera(courtLines, netLns, schemaLines = schemaLines,
+    P = calibrate_camera(courtLines, netLns, 
+                         width = width, schemaLines = schemaLines,
                          add_coords_world = add_coords_world, 
                          add_coords_image = add_coords_image)
     return P
@@ -51,9 +53,19 @@ def get_court_corner_points(courtLines):
     tl, tr, bl, br = courtLines.get_court_region().to_points()
     return tl, tr, bl, br
 
+def get_net_corner_points(netLines):
+    tl, bl = netLines['Left Post'].high_point(), netLines['Left Post'].low_point()
+    tr, br = netLines['Right Post'].high_point(), netLines['Right Post'].low_point()
+    tm = netLines['Left Net'].right_point()
+    return bl, tl, tm, tr, br
+
 def points_to_coords(tl, tr, bl, br):
     tl, tr, bl, br = tl.coords, tr.coords, bl.coords, br.coords
     return tl, tr, bl, br
+
+def points_to_coords_net(bl, tl, tm, tr, br):
+    bl, tl, tm, tr, br = bl.coords, tl.coords, tm.coords, tr.coords, br.coords
+    return bl, tl, tm, tr, br
 
 def correct_point(somePt, someReg):
     if somePt.within(someReg):
