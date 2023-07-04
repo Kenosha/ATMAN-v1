@@ -31,6 +31,64 @@ NET_FACTOR = 0.9
 NET_POINTS_TO_SEARCH = 100
 #####
 
+def find_linesets(gFrm,
+                  width_of_line = COURT_LINE_WIDTH, 
+                  int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
+                  white_thresh = WHITE_PIXEL_THRESHOLD,
+                  rho = RHO, theta = THETA, min_votes = MIN_VOTES,
+                  minLineLength = MIN_LINE_LENGTH, maxLineGap = MAX_LINE_GAP,
+                  merge_threshold = MERGE_THRESHOLD, 
+                  horizontal_filter_margin = MARGIN_TO_CUT_HORIZONTAL,
+                  vertical_filter_margin = None,
+                  verbose = False):
+    from ATMANpy.funcs.line_funcs import get_white_lines_fast
+    
+    allBFrm = get_white_lines_fast(gFrm, 
+                                   width_of_line = width_of_line,
+                                   int_diff_thresh = int_diff_thresh,
+                                   white_thresh = white_thresh)
+    
+    if verbose: allBFrm.show()
+    
+    houghLines = allBFrm.prob_hough(rho = rho, theta = theta, min_votes = min_votes, 
+                                    minLineLength = minLineLength, maxLineGap = maxLineGap)
+    
+    if len(houghLines) < 9:
+        return None, None, None
+    
+    if verbose: gFrm.zero().to_BGR().put(houghLines).show()
+    
+    from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
+    from ATMANpy.funcs.line_funcs import merge_court_line_candidates
+    from ATMANpy.funcs.line_funcs import filter_horizontal_line_candidates, filter_vertical_line_candidates
+    from ATMANpy.funcs.line_funcs import keep_only_central_horizontal_lines
+    
+    l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
+                                                                2 * gFrm.cols / 5, 3 * gFrm.cols / 5) 
+    h_Lines = keep_only_central_horizontal_lines(h_Lines, gFrm.cols / 3, 2 * gFrm.cols / 3)  
+    
+    if len(l_v_Lines) < 2 or len(r_v_Lines) < 2:
+        return None, None, None
+    
+    l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
+
+    l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                                threshold = merge_threshold)   
+    
+    if horizontal_filter_margin is not None:
+        h_Lines = filter_horizontal_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                    margin = horizontal_filter_margin)
+    if vertical_filter_margin is not None:
+        l_v_Lines, r_v_Lines = filter_vertical_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                               margin = vertical_filter_margin)
+        
+    if verbose: 
+        gFrm.zero().to_BGR().put(r_v_Lines).show()
+        gFrm.zero().to_BGR().put(l_v_Lines).show()
+        gFrm.zero().to_BGR().put(h_Lines).show()
+    
+    return l_v_Lines, r_v_Lines, h_Lines
+
 def find_homography_225_only(gFrm,
                              width_of_line = COURT_LINE_WIDTH, 
                              int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
@@ -38,7 +96,8 @@ def find_homography_225_only(gFrm,
                              rho = RHO, theta = THETA, min_votes = MIN_VOTES,
                              minLineLength = MIN_LINE_LENGTH, maxLineGap = MAX_LINE_GAP,
                              merge_threshold = MERGE_THRESHOLD, 
-                             filter_margin = MARGIN_TO_CUT_HORIZONTAL,
+                             horizontal_filter_margin = MARGIN_TO_CUT_HORIZONTAL,
+                             vertical_filter_margin = None,
                              verbose = False):
     from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
@@ -56,7 +115,8 @@ def find_homography_225_only(gFrm,
     if verbose: gFrm.zero().to_BGR().put(houghLines).show()
     
     from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
-    from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
+    from ATMANpy.funcs.line_funcs import merge_court_line_candidates
+    from ATMANpy.funcs.line_funcs import filter_horizontal_line_candidates, filter_vertical_line_candidates
     from ATMANpy.funcs.line_funcs import keep_only_central_horizontal_lines
     
     l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
@@ -71,8 +131,13 @@ def find_homography_225_only(gFrm,
     l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
                                                                 threshold = merge_threshold)   
     
-    l_v_Lines, r_v_Lines, h_Lines = filter_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                 margin = filter_margin)  
+    if horizontal_filter_margin is not None:
+        h_Lines = filter_horizontal_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                    margin = horizontal_filter_margin)
+    if vertical_filter_margin is not None:
+        l_v_Lines, r_v_Lines = filter_vertical_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                               margin = vertical_filter_margin)
+    
     if verbose: 
         gFrm.zero().to_BGR().put(r_v_Lines).show()
         gFrm.zero().to_BGR().put(l_v_Lines).show()
@@ -93,9 +158,9 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
                     rho = RHO, theta = THETA, min_votes = MIN_VOTES,
                     minLineLength = MIN_LINE_LENGTH, maxLineGap = MAX_LINE_GAP,
                     merge_threshold = MERGE_THRESHOLD, 
-                    filter_margin = MARGIN_TO_CUT_HORIZONTAL,
+                    horizontal_filter_margin = MARGIN_TO_CUT_HORIZONTAL,
+                    vertical_filter_margin = None,
                     verbose = False):
-    
     from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
     allBFrm = get_white_lines_fast(gFrm, 
@@ -112,15 +177,15 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
     if verbose: gFrm.zero().to_BGR().put(houghLines).show()
     
     from ATMANpy.funcs.line_funcs import split_court_line_candidates, sort_court_line_candidates
-    from ATMANpy.funcs.line_funcs import merge_court_line_candidates, filter_court_line_candidates
+    from ATMANpy.funcs.line_funcs import merge_court_line_candidates
+    from ATMANpy.funcs.line_funcs import filter_horizontal_line_candidates, filter_vertical_line_candidates
     from ATMANpy.funcs.line_funcs import keep_only_central_horizontal_lines
     
     l_v_Lines, r_v_Lines, h_Lines = split_court_line_candidates(houghLines, 
                                                                 2 * gFrm.cols / 5, 3 * gFrm.cols / 5) 
     h_Lines = keep_only_central_horizontal_lines(h_Lines, gFrm.cols / 3, 2 * gFrm.cols / 3)                  
     
-    
-    if len(l_v_Lines) == 0 and len(r_v_Lines) == 0:
+    if len(l_v_Lines) < 2 or len(r_v_Lines) < 2:
         return None, None
     
     l_v_Lines, r_v_Lines, h_Lines = sort_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines)    
@@ -128,8 +193,12 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
     l_v_Lines, r_v_Lines, h_Lines = merge_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
                                                                 threshold = merge_threshold)   
     
-    l_v_Lines, r_v_Lines, h_Lines = filter_court_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
-                                                                 margin = filter_margin)  
+    if horizontal_filter_margin is not None:
+        h_Lines = filter_horizontal_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                    margin = horizontal_filter_margin)
+    if vertical_filter_margin is not None:
+        l_v_Lines, r_v_Lines = filter_vertical_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
+                                                               margin = vertical_filter_margin)
      
     if verbose: 
         gFrm.zero().to_BGR().put(r_v_Lines).show()
@@ -170,6 +239,7 @@ def find_netlines(gFrm, courtLines):
     return netLines
 
 def calibrate_camera(courtLines, netLines, 
+                     width = 'Doubles',
                      schemaLines = None, 
                      add_coords_world = None, add_coords_image = None,
                      verbose = False):
@@ -184,12 +254,12 @@ def calibrate_camera(courtLines, netLines,
     # netLines = find_netlines(gFrm, courtLines)
     
     # b) gather points in world and on image
-    court_points_3D = schemaLines.get_3D_corner_points()
+    court_points_3D = schemaLines.get_3D_corner_points(width = width)
     net_points_3D = schemaLines.get_3D_net_points()
     court_points_3D = [p for p in court_points_3D]
     net_points_3D = [p for p in net_points_3D]
     
-    court_points_2D = courtLines.get_court_region().to_points()
+    court_points_2D = courtLines.get_court_region(width = width).to_points()
     court_points_2D = [np.array(p.coords, dtype = np.float32) for p in court_points_2D]
         
     net_l = netLines['Left Net']

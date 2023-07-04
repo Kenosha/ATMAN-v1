@@ -115,7 +115,7 @@ def get_white_lines_fast(gFrm: GreyFrame, width_of_line: int = 5,
         gFrm.mask(whiteMask).show()
         gFrm.mask(horiMask).show()
         gFrm.mask(vertMask).show()
-        gFrm.mask(line_candidateMask)
+        gFrm.mask(line_candidateMask).show()
     
     return line_candidateMask
 
@@ -188,6 +188,9 @@ def merge_vertical_lines(aLn, bLn, fixed_horizontal_line = None, threshold = 10)
 def horizontal_filter(horiLn, lo_thresh = 1000, hi_thresh = 0):
     return not (horiLn.is_strictly_above(hi_thresh) or horiLn.is_strictly_below(lo_thresh))
 
+def vertical_filter(vertLn, left_thresh = 0, right_thresh = 1000):
+    return not (vertLn.is_strictly_left(left_thresh) or vertLn.is_strictly_right(right_thresh))
+
 # def sort_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Lines):
 #     return (left_vert_Lines.sort('left_point', 'r2l', 't2b'), 
 #             right_vert_Lines.sort('left_point', 'l2r', 't2b'),
@@ -229,8 +232,8 @@ def merge_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Li
 
     return merged_left_vert_Lines, merged_right_vert_Lines, merged_hori_Lines
 
-def filter_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Lines,
-                                 margin = 40):
+def filter_horizontal_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Lines,
+                                      margin = 40):
     ### get highest, lowest points for each part of picture
     hi_left, hi_right = left_vert_Lines.highest(), right_vert_Lines.highest()
     lo_left, lo_right = left_vert_Lines.lowest(), right_vert_Lines.lowest()
@@ -245,7 +248,24 @@ def filter_court_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_L
     
     new_horizontal_Lines = horizontal_Lines.filt(my_filter)
     
-    return left_vert_Lines, right_vert_Lines, new_horizontal_Lines
+    return new_horizontal_Lines
+
+def filter_vertical_line_candidates(left_vert_Lines, right_vert_Lines, horizontal_Lines,
+                                    margin = 40):
+    ### get leftest, rightest points in the horizontal lines
+    lfPt, riPt = horizontal_Lines.leftest(), horizontal_Lines.rightest()
+    
+    ### add a margin
+    lfPt, riPt = lfPt.left(margin), riPt.right(margin)
+    
+    ### construct filter function
+    from functools import partial
+    my_filter = partial(vertical_filter, left_thresh = lfPt.x, right_thresh = riPt.x)
+    
+    new_left_vert_Lines = left_vert_Lines.filt(my_filter)
+    new_right_vert_Lines = right_vert_Lines.filt(my_filter)
+    
+    return new_left_vert_Lines, new_right_vert_Lines
 
 
 ########## COURT CORRESPONDENCES #######
@@ -332,11 +352,10 @@ def get_homography(v_Lines, h_Lines, white_BoolFrm,
                 H = calculate_homography(pts_crt, pts_prj)
                 
                 ### iii) given a homography, project court schema onto frame.
-                projLines = courtLines.transform('apply_homography', H).transform('round_points')
-                
                 try:
-                    projFrm = (displayFrame.zero().put(projLines) > 0)
-                except OverflowError:
+                    projLines = courtLines.transform('apply_homography', H).transform('round_points')
+                    projFrm = (displayFrame.zero().put(projLines) > 0) ### TODO: Thickness of line putting could be adapted?!
+                except: ### ValueError or OverflowError (cannot convert float infinity to integer, or integer too large)
                     continue
                 
                 projected_matches_white = projFrm & white_BoolFrm
