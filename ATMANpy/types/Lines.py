@@ -420,6 +420,21 @@ class Lines:
         return self.__class__([ln.rescale(scale_factor) for ln in self.lineList], name = self.name)
 
 @dataclass(frozen = True)
+class NetLines(Lines):
+    lineList: List[Line]
+    name: str = 'NetLines'
+    
+    @staticmethod
+    def from_points(bot_leftPt, top_leftPt, top_midPt, top_rightPt, bot_rightPt):
+        
+        leftpostLine = Line(bot_leftPt, top_leftPt, name = 'Left Post').round_points()
+        rightpostLine = Line(bot_rightPt, top_rightPt, name = 'Right Post').round_points()
+        leftnetLine = Line(top_leftPt, top_midPt, name = 'Left Net').round_points()
+        rightnetLine = Line(top_midPt, top_rightPt, name = 'Right Net').round_points()
+    
+        return NetLines([leftpostLine, rightpostLine, leftnetLine, rightnetLine])
+
+@dataclass(frozen = True)
 class CourtLines(Lines):
     lineList: List[Line]
     name: str = 'Lines'
@@ -574,9 +589,9 @@ class CourtLines(Lines):
     def pixel_in_foot(self):
         return self['Bottom Baseline'].length() / 36
 
-    def get_3D_corner_points(self):
-        tp, bt = self['Top Baseline'], self['Bottom Baseline']
-        points = [tp.leftPt, tp.rightPt, bt.leftPt, bt.rightPt]
+    def get_3D_corner_points(self, width = 'Doubles'):
+        courtReg = self.get_court_region(width = width)
+        points = courtReg.to_points()
         coords_3D = [[*pt.coords, 0] for pt in points]
         return coords_3D
     

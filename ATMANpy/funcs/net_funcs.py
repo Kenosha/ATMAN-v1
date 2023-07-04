@@ -5,7 +5,7 @@ Created on Mon Mar 21 14:12:58 2022
 @author: gianl
 """
 
-from ATMANpy.types.Lines import Line, Lines
+from ATMANpy.types.Lines import Line, Lines, NetLines
 
 def get_search_distance(courtLines, factor = 0.9):
     ### SEARCH HEIGHT
@@ -136,11 +136,11 @@ def make_net_cord_lines(courtLines, b_0, b_1):
     left_val = b_0 + b_1 * left_x ** 2
     right_val = b_0 + b_1 * right_x ** 2
     
-    leftpostLine = Line(leftPt, leftPt.up(left_val), name = 'Left Post').round_points()
-    rightpostLine = Line(rightPt, rightPt.up(right_val), name = 'Right Post').round_points()
-    leftnetLine = Line(leftPt.up(left_val), middlePt.up(b_0), name = 'Left Net').round_points()
-    rightnetLine = Line(rightPt.up(right_val), middlePt.up(b_0), name = 'Right Net').round_points()
+    bot_leftPt = leftPt
+    top_leftPt = leftPt.up(left_val)
+    top_midPt = middlePt.up(b_0)
+    top_rightPt = rightPt.up(right_val)
+    bot_rightPt = rightPt
     
-    netLines = Lines([leftpostLine, rightpostLine, leftnetLine, rightnetLine])
+    return NetLines.from_points(bot_leftPt, top_leftPt, top_midPt, top_rightPt, bot_rightPt)
     
-    return netLines
