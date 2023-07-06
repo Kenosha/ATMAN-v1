@@ -15,7 +15,7 @@ from typing import List
 from functools import partial
 
 import ATMANpy.funcs.feature_funcs as ff
-from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, prepend_index_level
+from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, prepend_index_level, get_folder_struct
 
 from ATMANpy.types.Lines import Line
 from ATMANpy.types.Shapes3D import Line3D
@@ -752,6 +752,92 @@ class StreamFeatures(StreamFeaturesBase):
             outDict[f2] = spLine
             f1 = f2
         return outDict
+   
+@dataclass(frozen = True)
+class ConstFeature:
+    ### a feature that is always the same, associated with a set of frames.
+    name: str
+    feature: np.ndarray
+    frameList: List
+    
+    def __repr__(self):
+        if self.is_empty():
+            return 'ConstFeature()'
+        else:
+            frames = self.get_frames()
+            min_frame, max_frame = frames[0], frames[-1]
+            return f'ConstFeature({self.name}, frames: {min_frame} to {max_frame})' ### looks like it's contiguous, but it need not be!
+    
+    def __getitem__(self, item):
+        if item in self.frameList:
+            return self.feature
+        else:
+            raise KeyError(f'Frame {item} not part of {self}')
+    
+    def is_empty(self):
+        return len(self.frameList) == 0
+    
+    def get_frames(self):
+        return self.frameList
+    
+@dataclass(frozen = True)
+class ConstFeatures:
+    ### a dict of features that is always the same, associated with a set of frames. 
+    featDict: dict
+    frameList: List
+    
+    @staticmethod
+    def from_store(video_id, store_name, featnameList, frameList = None):
+        if frameList is None:
+            frameList = []
+        
+        pathDict = get_folder_struct('features_stored')
+        storePath = os.path.join(pathDict['main'], video_id, store_name)
+        
+        ### if no list is given, read all available features
+        if featnameList is None: 
+            featnameList = [f for f in os.listdir(storePath) if not f.endswith('.csv')]
+        else:
+            featnameList = [f for f in featnameList if f in os.listdir(storePath)]
+        
+        ### collect all feature frames
+        featDict = {}
+        for featName in featnameList:
+            featPath = os.path.join(storePath, featName)
+            last_file = os.listdir(featPath)[-1] ### this has to be improved! Along with feature IO in general
+            fullPath = os.path.join(featPath, last_file)
+            
+            myArr = np.load(fullPath) ### assumes we always have array...
+            featDict[featName] = myArr
+    
+        return ConstFeatures(featDict, frameList)
+    
+    def __repr__(self):
+        if self.is_empty():
+            return 'ConstFeatures()'
+        else:
+            features = self.get_features()
+            frames = self.get_frames()
+            min_frame, max_frame = frames[0], frames[-1]
+            return f'ConstFeatures({features}, frames: {min_frame} to {max_frame})'
+        
+    def __getitem__(self, item):
+        if isinstance(item, str):
+            return ConstFeature(item, self.featDict[item], self.frameList)
+        else:
+            if item in self.frameList:
+                return self.featDict
+            else:
+                raise KeyError(f'Frame {item} not part of {self}')
+        
+    def is_empty(self):
+        return len(self.frameList) == 0
+    
+    def get_frames(self):
+        return self.frameList
+    
+    def get_features(self):
+        return list(self.featDict.keys())
     
 @dataclass(frozen = True)
 class BoolFeature(StreamFeature):
