@@ -696,7 +696,8 @@ class StillStream:
         pass
     
     @staticmethod
-    def from_file(framePath, name = None, cap_color_space = 'bgr', target_color_space = 'bgr',
+    def from_file(framePath, name = None, 
+                  cap_color_space = 'bgr', target_color_space = 'bgr',
                   scale_factor = 1):
         imgArr = np.load(framePath)
         stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
@@ -715,13 +716,14 @@ class StillStream:
     
     @staticmethod
     def from_store(fileName, featureName, videoName, storeName, 
-                   frame_color_space = 'bgr', scale_factor = 1):
+                   cap_color_space = 'bgr', target_color_space = 'bgr',
+                   scale_factor = 1):
         featDict = get_folder_struct('features_stored')
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
         return StillStream.from_file(videoPath, name = featureName,
-                                     frame_color_space = frame_color_space,
+                                     cap_color_space = cap_color_space, target_color_space = target_color_space,
                                      scale_factor = scale_factor)
     
     @staticmethod
