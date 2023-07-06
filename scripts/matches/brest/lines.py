@@ -26,7 +26,7 @@ import ATMANpy.funcs.extract_funcs as ex
 import ATMANpy.funcs.feature_funcs as ff
 
 from ATMANpy.types.Streams import Stream, CachedStream, NCStream, NCDecapStream, StreamList, MulStream, RandStream
-from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, BoolFeatures, SFList
+from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, BoolFeatures, SFList, ConstFeature, ConstFeatures
 from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
 
 from ATMANpy.types.Points import Point2D
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     
     ### Read Courtlines
     # -> since camera is fixed, lines are simply a parameter! we will make a single homography by getting a few random shots
-    randStm = RandStream(cap, START_FRAME, stop_frame, number_of_frames = 100,
+    randStm = RandStream(cap, START_FRAME, stop_frame, number_of_frames = 1000,
                          cap_color_space = 'bgr', target_color_space = 'grey',
                          scale_factor = ADD_SCALE)
     
@@ -93,7 +93,6 @@ if __name__ == '__main__':
     
     median_points = np.median(cornerSF.to_array(), axis = 0).astype(int)
     m1, m2, m3, m4 = median_points
-    
     H = sa.calculate_homography(Point2D(m1), Point2D(m2), Point2D(m3), Point2D(m4))
     courtLines = sa.find_courtlines(H)
     
@@ -138,6 +137,30 @@ if __name__ == '__main__':
     save_constant_array(P, 'P', storePath)
     save_constant_array(M_int, 'M_int', storePath)
     save_constant_array(M_ext, 'M_ext', storePath)
+    
+    ### Use the Frames where we did find lines to calculate a background frame!
+    # the nice thing is: Since the homography is constant, there is no need to warp!!!
+    # We basically construct a NCDecapStream from where a homography has been found,
+    # and calculate mean and std over all constituent frames.
+    # This will not only constitute our background (for object detection),
+    # but also be used to check whether a given frame is actually in play (so we can segment the stream.)
+    normBF = sf.get_normal_bool(courtSF['courtLines'].dropna())
+    normDecStm = NCDecapStream.from_bool(normBF, cap)
+    medFrm, stdFrm = normDecStm.frames.median(), normDecStm.frames.std()
+    medFrm, stdFrm = medFrm.rename('median_backFrm'), stdFrm.rename('std_backFrm')
+    
+    medFrm.show()
+    stdFrm.show()
+    
+    medFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = START_FRAME, stop_frame = stop_frame)
+    stdFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = START_FRAME, stop_frame = stop_frame)
+    
+    
+    
+    
+    
+    
+    
     
     
     
