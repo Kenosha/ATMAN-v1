@@ -89,7 +89,8 @@ def track_courtlines(gCache, featCache,
                      rho = 3, theta = np.pi / 180, min_votes = 500,
                      minLineLength = 8 + 1, maxLineGap = 1,
                      merge_threshold = 2 * 8, 
-                     filter_margin = 40,
+                     horizontal_filter_margin = 40,
+                     vertical_filter_margin = None,
                      points_on_line = 100, acceptable_failure_rate = 0.5,
                      schemaLines = schemaLines, only_225 = True):
     
@@ -604,3 +605,12 @@ def find_netlines(gFrm, courtLines, net_factor = 0.9, net_points_to_search = 100
     netLns = make_net_cord_lines(courtLines, b_0, b_1)
 
     return netLns
+
+def frame_comparison(cFrm, median_backFrm, std_backFrm, std_multiple = 3):
+    normdiffFrm = (cFrm - median_backFrm) / std_backFrm.clip_lo(1)
+    match_pixels = (normdiffFrm < std_multiple).sum((0, 1, 2)) / 255
+    all_pixels = normdiffFrm.rows * normdiffFrm.cols * normdiffFrm.channels
+    match_ratio = match_pixels / all_pixels
+    return match_ratio
+    
+    

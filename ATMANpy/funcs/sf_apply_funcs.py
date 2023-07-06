@@ -246,4 +246,8 @@ def find_known_ball_positions_3D(ballCnt, P, exp_eventFlag, topPlayer_3D, botPla
     
     ball_3D = Point3D(ball_3D_tuple)
     return ball_3D
+
+def exceeds_threshold(match_ratio, threshold = 0.75):
+    return match_ratio > threshold
+    
     
