@@ -144,6 +144,24 @@ class Frames:
     def is_empty(self):
         return self.length() == 0
     
+    def median(self):
+        framesType = self.__class__
+        frameType = framesType.get_constituent()
+        meanArr = np.median(self.array, axis = 0).astype('uint8')
+        return frameType(meanArr)
+    
+    def mean(self):
+        framesType = self.__class__
+        frameType = framesType.get_constituent()
+        meanArr = np.mean(self.array, axis = 0).astype('uint8')
+        return frameType(meanArr)
+    
+    def std(self):
+        framesType = self.__class__
+        frameType = framesType.get_constituent()
+        meanArr = np.std(self.array, axis = 0).astype('uint8')
+        return frameType(meanArr)
+    
     def rescale(self, scale_factor):
         framesType = self.__class__
         
