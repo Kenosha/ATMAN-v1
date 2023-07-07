@@ -19,9 +19,9 @@ from collections import deque
 from random import randrange
 from typing import List, Union
 
-from ATMANpy.types.Frames import BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame
+from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame
 from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames, BoolFrames, MaskFrames
-from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList
+from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList, ConstFeatures, ConstFeature
 from ATMANpy.types.Caches import Cache
 
 from ATMANpy.funcs.cv_funcs import get_frame
@@ -35,6 +35,12 @@ from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names,
 
 #     def length(self):
 #         return stop_frame - start_frame + 1 ### stream contains both start and stop frame!
+
+nameMap = {'bgr': 'cFrm',
+           'grey': 'gFrm',
+           'hsv': 'hFrm',
+           'bool': 'bFrm',
+           'mask': 'mFrm'}
 
 frameTypeMap = {'bgr': BGRFrame,
                 'grey': GreyFrame,
@@ -116,8 +122,6 @@ class Stream:
     def from_SF(mySF, cap, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
                 scale_factor = 1, warp_dims = None):
-        if name is None:
-            name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return Stream(cap, start, stop, 
                       truncation_anchor = 0,
@@ -169,16 +173,11 @@ class Stream:
         
         ### CHECK NAME
         if self.name is None:
-            nameMap = {'bgr': 'cFrm',
-                       'grey': 'gFrm',
-                       'hsv': 'hFrm',
-                       'bool': 'bFrm',
-                       'mask': 'mFrm'}
             object.__setattr__(self, 'name', nameMap[self.target_color_space])
         
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature):
+        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
             ### transform StreamFeature into StreamFeatures
             mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
@@ -693,7 +692,30 @@ class StillStream:
     features: StreamFeatures = StreamFeatures({})
        
     def __post_init__(self):
-        pass
+        ### CHECK FEATURES
+        mySF = self.features
+        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
+            ### transform StreamFeature into StreamFeatures
+            mySF = mySF.unsqueeze()
+        ### conform StreamFeatures to start and stop frame
+        # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
+        object.__setattr__(self, 'features', mySF)
+    
+    @staticmethod
+    def from_SF(mySF, stillFrm, name = None,
+                cap_color_space = 'bgr', target_color_space = 'bgr',
+                scale_factor = 1):
+        ### figure out name
+        if name is None:
+            name = stillFrm.name
+        ### color conversion
+        imgArr = stillFrm.array
+        stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
+        ### figure out start and stop
+        start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
+        return StillStream(stillFrm, start, stop, 
+                           scale_factor = scale_factor,
+                           features = mySF, name = name)
     
     @staticmethod
     def from_file(framePath, name = None, 
@@ -773,7 +795,7 @@ class StillStream:
         
     def attach(self, mySF: StreamFeatures):
         return Stream.attach(self, mySF)
-        
+    
     def decap(self):
         framesType = framesTypeMap[self.stillFrm.__class__.get_color()]
         
@@ -1052,19 +1074,24 @@ class StreamList:
                     scale_factor = 1,
                     warp_dims = None,
                     cache_size = None, force_fill_cache = False):
-        if cache_size is None:
-            return StreamList([Stream.from_SF(mySF, cap, name = name,
-                                              cap_color_space = cap_color_space, 
-                                              target_color_space = target_color_space,
-                                              scale_factor = scale_factor,
-                                              warp_dims = warp_dims) for mySF in sfList])
-        else:
-            return StreamList([CachedStream.from_SF(mySF, cap, name = name,
-                                                    cache_size = cache_size, force_fill_cache = force_fill_cache,
-                                                    cap_color_space = cap_color_space, 
-                                                    target_color_space = target_color_space,
-                                                    scale_factor = scale_factor,
-                                                    warp_dims = warp_dims) for mySF in sfList])
+        if isinstance(cap, cv.VideoCapture):
+            if cache_size is None:
+                return StreamList([Stream.from_SF(mySF, cap, name = name,
+                                                  cap_color_space = cap_color_space, 
+                                                  target_color_space = target_color_space,
+                                                  scale_factor = scale_factor,
+                                                  warp_dims = warp_dims) for mySF in sfList])
+            else:
+                return StreamList([CachedStream.from_SF(mySF, cap, name = name,
+                                                        cache_size = cache_size, force_fill_cache = force_fill_cache,
+                                                        cap_color_space = cap_color_space, 
+                                                        target_color_space = target_color_space,
+                                                        scale_factor = scale_factor,
+                                                        warp_dims = warp_dims) for mySF in sfList])
+        elif isinstance(cap, Frame): ### in this case, we have a list of StillStreams!
+                return StreamList([StillStream.from_SF(mySF, cap, name = name,
+                                                       cap_color_space = cap_color_space, 
+                                                       target_color_space = target_color_space) for mySF in sfList])
     
     @staticmethod
     def from_store(featureName, videoName, storeName, 
@@ -1125,6 +1152,9 @@ class StreamList:
         elif isinstance(repStm, MulStream):
             stmType = 'MulStream'
             nameStr = ', '.join([subStm.name for subStm in repStm])
+        elif isinstance(repStm, StillStream):
+            stmType = 'StillStream'
+            nameStr = repStm.name
         return f'StreamList({self.length()} {stmType}s (named {nameStr}) from {self[0].start_frame} to {self[-1].stop_frame})'
     
     def __iter__(self):
@@ -1307,8 +1337,6 @@ class NCDecapStream:
         framesType = framesTypeMap[target_color_space]
         filterSF = boolSF.filter(boolSF) ## keep only true entries
         frmNums = list(filterSF.keys())
-        if name is None:
-            name = boolSF.name
         frames = framesType.from_list(cap, frmNums, 
                                       cap_color_space = cap_color_space,
                                       scale_factor = scale_factor,
@@ -1405,11 +1433,6 @@ class CachedStream(Stream):
             
         ### CHECK NAME
         if self.name is None:
-            nameMap = {'bgr': 'cFrm',
-                       'grey': 'gFrm',
-                       'hsv': 'hFrm',
-                       'bool': 'bFrm',
-                       'mask': 'mFrm'}
             object.__setattr__(self, 'name', nameMap[self.target_color_space])
         
         ### CHECK FEATURES
@@ -1426,8 +1449,6 @@ class CachedStream(Stream):
                 cache_size = 1, force_fill_cache = False,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
                 scale_factor = 1, warp_dims = None):
-        if name is None:
-            name = mySF.name
         start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return CachedStream(cap, start, stop, cache_size = cache_size, force_fill_cache = force_fill_cache,
                             truncation_anchor = 0,
@@ -1827,8 +1848,6 @@ class NCStream:
     def from_SF(mySF, cap, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
                 scale_factor = 1):
-        if name is None:
-            name = mySF.name
         frmNums = mySF.get_frames()
         return NCStream(cap, frmNums, 
                       truncation_anchor = 0,
@@ -1839,10 +1858,6 @@ class NCStream:
     def __post_init__(self):
         ### CHECK NAME
         if self.name is None:
-            nameMap = {'bgr': 'cFrm',
-                       'grey': 'gFrm',
-                       'hsv': 'hFrm',
-                       'bool': 'bFrm'}
             object.__setattr__(self, 'name', nameMap[self.target_color_space])
         
         ### CHECK FEATURES
