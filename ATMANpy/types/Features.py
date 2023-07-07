@@ -754,7 +754,29 @@ class StreamFeatures(StreamFeaturesBase):
         return outDict
    
 @dataclass(frozen = True)
-class ConstFeature:
+class ConstFeaturesBase:
+    
+    def get_frames(self):
+        return self.frameList
+    
+    def is_empty(self):
+        return len(self.frameList) == 0
+    
+    def first(self):
+        frame = self.get_frames()[0]
+        return frame, self[frame]
+    
+    def last(self):
+        frame = self.get_frames()[-1]
+        return frame, self[frame]
+   
+    def filter(self, boolSF):
+        frameList = [frame for frame in self.frameList if boolSF[frame]]
+        return self.__class__(self.name, self.feature, frameList)
+    
+    
+@dataclass(frozen = True)
+class ConstFeature(ConstFeaturesBase):
     ### a feature that is always the same, associated with a set of frames.
     name: str
     feature: np.ndarray
@@ -774,14 +796,57 @@ class ConstFeature:
         else:
             raise KeyError(f'Frame {item} not part of {self}')
     
-    def is_empty(self):
-        return len(self.frameList) == 0
+    def maybe_get(self, item):
+        try:
+            return self[item]
+        except KeyError:
+            return None
+                  
+    def apply(self, func, **kwargs): ### TODO: at some point, allow *args, **kwargs
+        ### This method allows for function application to single features, element by element
+        ### func takes in features (H, courtLines, etc) and returns features
+        funcVals = get_return_names(func)
     
-    def get_frames(self):
-        return self.frameList
+        ### figure out name
+        if len(funcVals) == 1:
+            name = funcVals[0]
+        else:
+            name = func.__name__
+         
+        funcOut = func(self.feature, **kwargs)
+        
+        if len(funcVals) == 1:
+            return ConstFeature(name, funcOut, self.frameList)
+        else:
+            featDict = dict(zip(funcVals, funcOut))
+            return ConstFeatures(featDict, self.frameList)
+    
+    def split(self, min_feature_length = 0):
+        list_of_frame_lists = []
+        curr_frame_list = []
+        
+        prev_frame, frames = self.frameList[0], self.frameList[1:]
+        
+        for frame in frames:
+            if frame > prev_frame + 1: ### if there is a gap between last and current frame
+                if len(curr_frame_list) > min_feature_length: ### if the current accumulated sf is large enough
+                    list_of_frame_lists.append(curr_frame_list)    
+                curr_frame_list = []
+            
+            curr_frame_list.append(frame)
+            prev_frame = frame
+        
+        ### finally, add in the remaining features (if long enough)
+        if len(curr_frame_list) > min_feature_length: 
+            list_of_frame_lists.append(curr_frame_list)
+        
+        return SFList([ConstFeature(self.name, self.feature, frame_list) for frame_list in list_of_frame_lists])
+    
+    def unsqueeze(self):
+        return ConstFeatures({self.name: self.feature}, self.frameList)
     
 @dataclass(frozen = True)
-class ConstFeatures:
+class ConstFeatures(ConstFeaturesBase):
     ### a dict of features that is always the same, associated with a set of frames. 
     featDict: dict
     frameList: List
@@ -830,14 +895,68 @@ class ConstFeatures:
             else:
                 raise KeyError(f'Frame {item} not part of {self}')
         
-    def is_empty(self):
-        return len(self.frameList) == 0
-    
-    def get_frames(self):
-        return self.frameList
-    
+    def maybe_get(self, item):
+        try:
+            return self[item]
+        except KeyError:
+            return {feat: None for feat in self.get_features()}
+                
     def get_features(self):
         return list(self.featDict.keys())
+    
+    def apply(self, func, **kwargs): ###TODO: at some point, allow *args, **kwargs
+        ### This method allows for function application to single features, element by element
+        ### func takes in features (H, courtLines, etc) and returns features
+        ### assignArgs --> List: give the option to directly assign function arguments, regardless of name
+        ### assignVals --> List: give the option to rename the result features
+        ### where --> BoolFeature: give the option to apply the function not everywhere
+        funcArgs = get_positional_arguments(func)
+        funcVals = get_return_names(func)
+        
+        assert set(funcArgs).issubset(set(self.get_features())), f'Expected function arguments ({funcArgs}) have to be contained in available features ({self.get_features()})'
+        
+        ### figure out name
+        if len(funcVals) == 1:
+            name = funcVals[0]
+        else:
+            name = func.__name__
+            
+        funcOut = func(*[featDict[arg] for arg in funcArgs])
+        
+        if len(funcVals) == 1:
+            return ConstFeature(name, funcOut, self.frameList)
+        else:
+            featDict = dict(zip(funcVals, funcOut))
+            return ConstFeatures(featDict, self.frameList) 
+    
+    def split(self, min_feature_length = 0):
+        list_of_frame_lists = []
+        curr_frame_list = []
+        
+        prev_frame, frames = self.frameList[0], self.frameList[1:]
+        
+        for frame in frames:
+            if frame > prev_frame + 1: ### if there is a gap between last and current frame
+                if len(curr_frame_list) > min_feature_length: ### if the current accumulated sf is large enough
+                    list_of_frame_lists.append(curr_frame_list)    
+                curr_frame_list = []
+            
+            curr_frame_list.append(frame)
+            prev_frame = frame
+        
+        ### finally, add in the remaining features (if long enough)
+        if len(curr_frame_list) > min_feature_length: 
+            list_of_frame_lists.append(curr_frame_list)
+        
+        return SFList([ConstFeatures(self.featDict, frame_list) for frame_list in list_of_frame_lists])
+        
+    def squeeze(self):
+        if len(self.featDict) == 1:
+            name = self.get_features()[0]
+            feature = self.featDict[name]
+            return ConstFeature(name, feature, self.frameList)
+        else:
+            return self
     
 @dataclass(frozen = True)
 class BoolFeature(StreamFeature):
@@ -865,6 +984,11 @@ class BoolFeature(StreamFeature):
         featFrm = self.to_series()
         featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+
+    def split(self, min_feature_length = 0):
+        sfList = ff.split_joint_features(self.streamDict, min_feature_length = min_feature_length)
+        return SFList([self.__class__(streamDict, name = self.name) for streamDict in sfList])
+        
 
 @dataclass(frozen = True)
 class BoolFeatures(StreamFeatures):
