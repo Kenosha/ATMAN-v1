@@ -174,6 +174,8 @@ def courtlines_to_schema(H, hFrm, schemaFrm = schemaFrm):
 
 def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm, 
                                minimum_proportion = 0.01, minimum_step_gain = 0.015,
+                               gaussian_kernel = (21, 21), closing_kernel = (10, 18),
+                               back_frames_are_warped = True,
                                verbose = False):
     
     """
@@ -182,21 +184,24 @@ def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm,
     They are basically what is produced and saved by the burn in script
     """
     
-    # H_inv = np.linalg.inv(H)
-    wrpFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
-    # if verbose: wrpFrm.show()
-    
-    stdwrpFrm = std_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
-    # if verbose: stdwrpFrm.show()
-    
-    ### Background Differencing ###
-    normdiffFrm = (hFrm - wrpFrm) / stdwrpFrm.clip_lo(1)
-    
-    ### exclude everything_outside wrpFrms scope. this way, it will not bleed into the frame if we gaussian blur.
-    normdiffFrm = normdiffFrm.mask((wrpFrm > 0).any_channel())
+    if back_frames_are_warped:
+        # H_inv = np.linalg.inv(H)
+        wrpFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
+        # if verbose: wrpFrm.show()
+        
+        stdwrpFrm = std_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
+        # if verbose: stdwrpFrm.show()
+        
+        ### Background Differencing ###
+        normdiffFrm = (hFrm - wrpFrm) / stdwrpFrm.clip_lo(1)
+        
+        ### exclude everything_outside wrpFrms scope. this way, it will not bleed into the frame if we gaussian blur.
+        normdiffFrm = normdiffFrm.mask((wrpFrm > 0).any_channel())
+    else:
+        normdiffFrm = (hFrm - median_backFrm) / std_backFrm.clip_lo(1)
     
     ### Adding a blur stage!
-    normdiffFrm = normdiffFrm.gaussian_blur((21, 21))
+    normdiffFrm = normdiffFrm.gaussian_blur(gaussian_kernel)
     
     ### Iterative discovery of best background parameters
     histFrm = normdiffFrm.hist(['H', 'V'], normalize = True)
@@ -228,7 +233,7 @@ def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm,
         print(proportion_foreground)
     
     ### Adding a closing stage
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (10, 18))
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, closing_kernel)
     foregroundMask = foregroundMask.close(kernel)
     
     if verbose: hFrm.mask(foregroundMask).show()
@@ -238,24 +243,29 @@ def get_shadow_mask(hFrm, H, median_backFrm,
                     h_threshold = 5, s_threshold = 10, 
                     v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
                     v_threshold_upper = 0.97,
+                    closing_kernel = (15, 15),
+                    back_frames_are_warped = True,
                     verbose = False):
     
-    wrpFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
-    if verbose: wrpFrm.show()
-
-    diffFrm = hFrm - wrpFrm
-
+    if back_frames_are_warped:
+        like_backFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
+        if verbose: like_backFrm.show()
+    else:
+        like_backFrm = median_backFrm
+    
+    diffFrm = hFrm - like_backFrm
+    
     ### H channel -> affected only slightly!
     H_THRESHOLD = 5
     HBool = diffFrm.H() < H_THRESHOLD
 
     ### S channel -> affected slightly, but usually lowered!
     S_THRESHOLD = 10
-    S_is_lowered = (hFrm.S() < wrpFrm.S())
+    S_is_lowered = (hFrm.S() < like_backFrm.S())
     SBool = (diffFrm.S() < S_THRESHOLD) & S_is_lowered
     
     ### V channel -> lowered by 10-20% typically, according to cucchiara et al 2001
-    ratioArr = hFrm.V().array.astype(float) / np.maximum(wrpFrm.V().array.astype(float), 1)
+    ratioArr = hFrm.V().array.astype(float) / np.maximum(like_backFrm.V().array.astype(float), 1)
     ratioFrm = Frame(ratioArr)
     VBool = (ratioFrm > v_threshold_lower) & (ratioFrm < v_threshold_upper)
     
@@ -264,7 +274,7 @@ def get_shadow_mask(hFrm, H, median_backFrm,
     if verbose: hFrm.mask(~shadowMask).show()
     
     ### close the candidate shadows, since shadows of a player are contiguous.
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, closing_kernel)
     shadowMask = shadowMask.close(kernel)
     
     if verbose: hFrm.mask(~shadowMask).show()
@@ -347,7 +357,8 @@ def find_both_players_smart(gCache, featCache,
 
 def find_motion_mask(gCache, 
                      intensity_threshold = 10,
-                     relevant_indices = [4, 6, 8]):
+                     relevant_indices = [4, 6, 8],
+                     open_kernel = (5, 5)):
     centralFrm = gCache[0]
     
     motFunc = lambda othFrm: centralFrm - othFrm > intensity_threshold 
@@ -357,12 +368,15 @@ def find_motion_mask(gCache,
         othFrm_bef, othFrm_aft = gCache[-idx], gCache[idx]
         motMask = motMask & motFunc(othFrm_bef) & motFunc(othFrm_aft)
    
+    ### Opened Motion Mask
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, open_kernel)
+    motMask = motMask.open(kernel)
+     
     return motMask
 
 
 def refine_motion_mask(motMask, topPlayer, botPlayer,
-                       dil_kernel_dims = (20, 10),
-                       open_kernel_dims = (5, 5)):
+                       dil_kernel_dims = (20, 10)):
     
     ### Dilated player mask
     dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, dil_kernel_dims)
@@ -378,10 +392,6 @@ def refine_motion_mask(motMask, topPlayer, botPlayer,
         botMask = MaskFrame.false(motMask)
     
     playerMask = topMask | botMask
-    
-    ### Opened Motion Mask
-    open_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, open_kernel_dims)
-    motMask = motMask.open(open_kernel)
     
     ### Player and Motion Mask
     intMask = ~playerMask & motMask
