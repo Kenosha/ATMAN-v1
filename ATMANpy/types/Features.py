@@ -19,6 +19,20 @@ from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names,
 
 from ATMANpy.types.Lines import Line
 from ATMANpy.types.Shapes3D import Line3D
+from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame
+from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames, BoolFrames, MaskFrames
+
+frameTypeMap = {'bgr': BGRFrame,
+                'grey': GreyFrame,
+                'hsv': HSVFrame,
+                'bool': BoolFrame,
+                'mask': MaskFrame}
+
+framesTypeMap = {'bgr': BGRFrames,
+                 'grey': GreyFrames,
+                 'hsv': HSVFrames,
+                 'bool': BoolFrames,
+                 'mask': MaskFrames}
 
 def eqFunc(someFeat, otherFeat):
     eq = someFeat == otherFeat
@@ -491,6 +505,16 @@ class StreamFeature(StreamFeaturesBase):
         else:
             return pd.concat(frameList, axis = 0)
 
+    def to_multiframe(self):
+        def to_array(myFrm):
+            outArr = myFrm.array
+            return outArr
+        frmArr = self.apply(to_array).to_array().squeeze()
+        
+        fsNum, fsFrm = self.first()
+        framesType = framesTypeMap[fsFrm.get_color()]
+        return framesType(frmArr, name = self.name)
+        
     def value_counts(self):
         return self.to_series().value_counts()
 

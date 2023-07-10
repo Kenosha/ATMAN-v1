@@ -1039,6 +1039,12 @@ class MulStream:
         outSF = self.extract(featureFunc, **kwargs)
         outSF.save(videoName, storeName, **savekwargs)
     
+    def extract_mp(self, featureFunc, num_workers, **kwargs):
+        return Stream.extract_mp(self, featureFunc, num_workers, **kwargs)
+    
+    def extract_threaded(self, featureFunc, num_workers, **kwargs):
+        return Stream.extract_threaded(self, featureFunc, num_workers, **kwargs)
+    
     @extract_mp_timer
     def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
         return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, _split = False, **kwargs)
@@ -1236,6 +1242,11 @@ class DecapStream:
     features: StreamFeatures = StreamFeatures({})
     name: str = None
 
+    def __post_init__(self):
+        ### CHECK NAME
+        if self.name is None:
+            object.__setattr__(self, 'name', nameMap[self.frames.__class__.get_color()])
+
     def __getitem__(self, item):
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         outFrm = self.frames[item - self.start_frame]
@@ -1244,6 +1255,18 @@ class DecapStream:
             outFrm = outFrm.put(self.features[item][feat])
         
         return outFrm
+    
+    @staticmethod
+    def from_frameSF(frameSF):
+        ### if a StreamFeature contains contiguous frames, we can transform it into a DecapStream!
+        assert frameSF.is_contiguous(), f'Frames in {frameSF} not contiguous! Make an NCDecapStream, or ensure contiguity!'
+        
+        myFrames = frameSF.to_multiframe()
+
+        fsNum, fsFrm = frameSF.first()
+        lsNum, lsFrm = frameSF.last()
+        
+        return DecapStream(myFrames, fsNum, lsNum, name = frameSF.name)
     
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
@@ -1738,6 +1761,19 @@ class DecapCachedStream(DecapStream):
     _update_mut_features = CachedStream._update_mut_features        
     _delete_mut_features = CachedStream._delete_mut_features
         
+    @staticmethod
+    def from_frameSF(frameSF, cache_size = 1):
+        ### if a StreamFeature contains contiguous frames, we can transform it into a DecapStream!
+        assert frameSF.is_contiguous(), f'Frames in {frameSF} not contiguous! Make an NCDecapStream, or ensure contiguity!'
+        
+        myFrames = frameSF.to_multiframe()
+
+        fsNum, fsFrm = frameSF.first()
+        lsNum, lsFrm = frameSF.last()
+        
+        return DecapCachedStream(myFrames, fsNum, lsNum, 
+                                 cache_size = cache_size, name = frameSF.name)
+    
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return CachedStream.argstrings_to_args(funcArgs, myFrm, myDict)
