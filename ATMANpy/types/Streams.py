@@ -1437,7 +1437,7 @@ class CachedStream(Stream):
         
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature):
+        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
             ### transform StreamFeature into StreamFeatures
             mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
@@ -1509,6 +1509,9 @@ class CachedStream(Stream):
         # ... conform to the beginning and end of the Stream (including cache).
         frameList = list(range(self.start_frame - self.cache_size, self.stop_frame + self.cache_size + 1))
         _mut_features = _mut_features.conform(frameList)
+        ## convert constant features to stream features, to which we can write!
+        if isinstance(_mut_features, ConstFeatures):
+            _mut_features = _mut_features.to_SF()
         # ... ensure that return values of the featureFunc are included in the mut_features, 
         # so that they may be written to and read out by subsequent iterations of the feature func.
         if not features_needed is None:

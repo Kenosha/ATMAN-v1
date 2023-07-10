@@ -773,7 +773,7 @@ class ConstFeaturesBase:
     def filter(self, boolSF):
         frameList = [frame for frame in self.frameList if boolSF[frame]]
         return self.__class__(self.name, self.feature, frameList)
-    
+
     
 @dataclass(frozen = True)
 class ConstFeature(ConstFeaturesBase):
@@ -801,7 +801,10 @@ class ConstFeature(ConstFeaturesBase):
             return self[item]
         except KeyError:
             return None
-                  
+        
+    def to_SF(self):
+        return StreamFeature({frame: self.feature for frame in self.frameList}, name = self.name)
+              
     def apply(self, func, **kwargs): ### TODO: at some point, allow *args, **kwargs
         ### This method allows for function application to single features, element by element
         ### func takes in features (H, courtLines, etc) and returns features
@@ -822,10 +825,10 @@ class ConstFeature(ConstFeaturesBase):
             return ConstFeatures(featDict, self.frameList)
     
     def split(self, min_feature_length = 0):
-        list_of_frame_lists = []
-        curr_frame_list = []
-        
         prev_frame, frames = self.frameList[0], self.frameList[1:]
+        
+        curr_frame_list = [prev_frame]
+        list_of_frame_lists = []
         
         for frame in frames:
             if frame > prev_frame + 1: ### if there is a gap between last and current frame
@@ -844,6 +847,10 @@ class ConstFeature(ConstFeaturesBase):
     
     def unsqueeze(self):
         return ConstFeatures({self.name: self.feature}, self.frameList)
+    
+    def conform(self, frameList):
+        return ConstFeature(self.name, self.feature, frameList)
+    
     
 @dataclass(frozen = True)
 class ConstFeatures(ConstFeaturesBase):
@@ -904,6 +911,9 @@ class ConstFeatures(ConstFeaturesBase):
     def get_features(self):
         return list(self.featDict.keys())
     
+    def to_SF(self):
+        return StreamFeatures({frame: self.featDict for frame in self.frameList})
+    
     def apply(self, func, **kwargs): ###TODO: at some point, allow *args, **kwargs
         ### This method allows for function application to single features, element by element
         ### func takes in features (H, courtLines, etc) and returns features
@@ -921,7 +931,7 @@ class ConstFeatures(ConstFeaturesBase):
         else:
             name = func.__name__
             
-        funcOut = func(*[featDict[arg] for arg in funcArgs])
+        funcOut = func(*[self.featDict[arg] for arg in funcArgs])
         
         if len(funcVals) == 1:
             return ConstFeature(name, funcOut, self.frameList)
@@ -930,11 +940,10 @@ class ConstFeatures(ConstFeaturesBase):
             return ConstFeatures(featDict, self.frameList) 
     
     def split(self, min_feature_length = 0):
-        list_of_frame_lists = []
-        curr_frame_list = []
-        
         prev_frame, frames = self.frameList[0], self.frameList[1:]
         
+        curr_frame_list = [prev_frame]
+        list_of_frame_lists = []
         for frame in frames:
             if frame > prev_frame + 1: ### if there is a gap between last and current frame
                 if len(curr_frame_list) > min_feature_length: ### if the current accumulated sf is large enough
@@ -957,6 +966,10 @@ class ConstFeatures(ConstFeaturesBase):
             return ConstFeature(name, feature, self.frameList)
         else:
             return self
+    
+    def conform(self, frameList):
+        return ConstFeatures(self.featDict, frameList)
+    
     
 @dataclass(frozen = True)
 class BoolFeature(StreamFeature):
