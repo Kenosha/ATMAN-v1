@@ -61,7 +61,9 @@ def decomposeP(P, normalize_K = True):
     K = Q @ np.linalg.cholesky(P_b) @ Q
     if normalize_K: K = K / K[2,2]
     A = np.linalg.inv(K) @ M
-    l = (1/np.linalg.det(A)) ** (1/3)
+    detA = np.linalg.det(A)
+    sgn_detA, val_detA = np.sign(detA), np.abs(detA)
+    l = sgn_detA * (1/val_detA) ** (1/3)
     R = l * A
     t = l * np.linalg.inv(K) @ P[0:3,3]
     return K, R, t
