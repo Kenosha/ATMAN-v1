@@ -247,7 +247,7 @@ class Frame:
             threshold_x = aLn.weak_x(y)
             first_beyond_threshold = max(int(threshold_x) + 1, 0)
             outArray[y, first_beyond_threshold:] = 255
-        return BoolFrame(outArray)
+        return MaskFrame(outArray)
         
     def left_of(self, aLn: Line):
         outArray = np.zeros((self.rows, self.cols), dtype = 'uint8')
@@ -255,7 +255,7 @@ class Frame:
             threshold_x = aLn.weak_x(y)
             first_beyond_threshold = max(int(threshold_x) + 1, 0)
             outArray[y, :first_beyond_threshold] = 255
-        return BoolFrame(outArray)
+        return MaskFrame(outArray)
     
     def below(self, aLn: Line):
         outArray = np.zeros((self.rows, self.cols), dtype = 'uint8')
@@ -263,7 +263,7 @@ class Frame:
             threshold_y = aLn.weak_y(x)
             first_beyond_threshold = max(int(threshold_y) + 1, 0)
             outArray[first_beyond_threshold:, x] = 255
-        return BoolFrame(outArray)
+        return MaskFrame(outArray)
             
     def above(self, aLn: Line):
         outArray = np.zeros((self.rows, self.cols), dtype = 'uint8')
@@ -271,7 +271,7 @@ class Frame:
             threshold_y = aLn.weak_y(x)
             first_beyond_threshold = max(int(threshold_y) + 1, 0)
             outArray[:first_beyond_threshold, x] = 255
-        return BoolFrame(outArray)
+        return MaskFrame(outArray)
           
     def within_region(self, region: Region):
         l, r, t, b = region['Left'], region['Right'], region['Top'], region['Bottom']

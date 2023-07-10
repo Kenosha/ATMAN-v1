@@ -40,9 +40,10 @@ def get_initial_ROIs(schemaLines,
 
     return ROI_lower, ROI_upper
 
-
 def get_service_ROIs(schemaLines, 
-                     width_factor = 1, depth_factor = 0.5, add_depth_factor_bottom = 0.5):
+                     width_factor = 1, depth_factor = 0.5, 
+                     add_depth_factor_bottom = 0.5,
+                     add_depth_factor_top = 0.2):
     
     width_add = width_factor * schemaLines.doubles_alley_width
     depth_add = depth_factor * schemaLines.side_length
@@ -59,9 +60,15 @@ def get_service_ROIs(schemaLines,
 
     ### adjust lower ROI
     depth_add_bottom = add_depth_factor_bottom * schemaLines.side_length
+    ### adjust upper ROI
+    depth_add_top = add_depth_factor_top * schemaLines.side_length
     
     top_left, top_right, bot_left, bot_right = ROI_lower.to_points()
     ROI_lower = Region.from_points(top_left.up(depth_add_bottom), top_right.up(depth_add_bottom), 
+                                   bot_left, bot_right)
+    
+    top_left, top_right, bot_left, bot_right = ROI_upper.to_points()
+    ROI_upper = Region.from_points(top_left.up(depth_add_top), top_right.up(depth_add_top), 
                                    bot_left, bot_right)
 
     return ROI_lower, ROI_upper
@@ -580,15 +587,12 @@ def find_player_contour_with_overlap(gFrm, burninMask, roiMask, playerContour_pr
     if shadowMask is not None:
         roi_burninMask = roi_burninMask & ~shadowMask
         
-    cntList, _ = roi_burninMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    myCnts, _ = roi_burninMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     
-    if len(cntList) > 0:
+    if myCnts.length() > 0:
         weight_func = partial(calculate_contour_overlap_factor, 
                               frame = gFrm, cnt_reference = playerContour_prev)
-        
-        cntList = [Contour(c) for c in cntList]
-        
-        largest_weighted_contour = sorted(cntList, key = lambda c: c.area() * weight_func(c))[-1]
+        largest_weighted_contour = sorted(myCnts.contourList, key = lambda c: c.area() * weight_func(c))[-1]
         if largest_weighted_contour.area() > MIN_PLAYER_SIZE:
             return largest_weighted_contour
 

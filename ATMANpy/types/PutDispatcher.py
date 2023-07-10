@@ -48,7 +48,7 @@ def put(someFrm, someObj,
             self_copy = cv.line(self_copy, c1, c2, color, thickness)
         return InstClass(self_copy)
         
-    if isinstance(someObj, Region):
+    if someObj.__class__.__name__ == 'Region':
         if verbose: print('Region!')
         return put(someFrm, Lines(someObj.lineList), 
                    color = color, radius = radius, thickness = thickness, where = where, size = size)
