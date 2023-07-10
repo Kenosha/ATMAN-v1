@@ -256,13 +256,11 @@ def get_shadow_mask(hFrm, H, median_backFrm,
     diffFrm = hFrm - like_backFrm
     
     ### H channel -> affected only slightly!
-    H_THRESHOLD = 5
-    HBool = diffFrm.H() < H_THRESHOLD
+    HBool = diffFrm.H() < h_threshold
 
     ### S channel -> affected slightly, but usually lowered!
-    S_THRESHOLD = 10
     S_is_lowered = (hFrm.S() < like_backFrm.S())
-    SBool = (diffFrm.S() < S_THRESHOLD) & S_is_lowered
+    SBool = (diffFrm.S() < s_threshold) & S_is_lowered
     
     ### V channel -> lowered by 10-20% typically, according to cucchiara et al 2001
     ratioArr = hFrm.V().array.astype(float) / np.maximum(like_backFrm.V().array.astype(float), 1)
