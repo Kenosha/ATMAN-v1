@@ -172,7 +172,25 @@ def courtlines_to_schema(H, hFrm, schemaFrm = schemaFrm):
     wrpFrm = hFrm.warp(H_inv, cols = schemaFrm.cols, rows = schemaFrm.rows)
     return wrpFrm
 
+def get_burn_in_mask_simple(hFrm, median_backFrm,
+                            ROI = None, h_threshold = 5, v_threshold = 5,
+                            gaussian_kernel = (21, 21), closing_kernel = (10, 18),
+                            verbose = False):
+    diffFrm = hFrm - median_backFrm
+    
+    diffFrm = diffFrm.gaussian_blur(gaussian_kernel)
+    
+    if not ROI is None:
+        diffFrm = diffFrm.mask(diffFrm.within_region(ROI))
+    
+    backgroundMask = (diffFrm.H() <= h_threshold) & (diffFrm.V() <= v_threshold)
+    foregroundMask = ~backgroundMask
+    
+    foregroundMask = foregroundMask.close(closing_kernel)
+    return foregroundMask
+ 
 def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm, 
+                               ROI = None,
                                minimum_proportion = 0.01, minimum_step_gain = 0.015,
                                gaussian_kernel = (21, 21), closing_kernel = (10, 18),
                                back_frames_are_warped = True,
@@ -192,16 +210,18 @@ def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm,
         stdwrpFrm = std_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
         # if verbose: stdwrpFrm.show()
         
-        ### Background Differencing ###
         normdiffFrm = (hFrm - wrpFrm) / stdwrpFrm.clip_lo(1)
         
         ### exclude everything_outside wrpFrms scope. this way, it will not bleed into the frame if we gaussian blur.
         normdiffFrm = normdiffFrm.mask((wrpFrm > 0).any_channel())
     else:
         normdiffFrm = (hFrm - median_backFrm) / std_backFrm.clip_lo(1)
-    
+        
     ### Adding a blur stage!
     normdiffFrm = normdiffFrm.gaussian_blur(gaussian_kernel)
+    
+    if ROI is not None:
+        normdiffFrm = normdiffFrm.mask(normdiffFrm.within_region(ROI))
     
     ### Iterative discovery of best background parameters
     histFrm = normdiffFrm.hist(['H', 'V'], normalize = True)
@@ -243,6 +263,7 @@ def get_shadow_mask(hFrm, H, median_backFrm,
                     h_threshold = 5, s_threshold = 10, 
                     v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
                     v_threshold_upper = 0.97,
+                    opening_kernel = (15, 15),
                     closing_kernel = (15, 15),
                     back_frames_are_warped = True,
                     verbose = False):
@@ -255,19 +276,31 @@ def get_shadow_mask(hFrm, H, median_backFrm,
     
     diffFrm = hFrm - like_backFrm
     
-    ### H channel -> affected only slightly!
-    HBool = diffFrm.H() < h_threshold
+    if not h_threshold is None:
+        ### H channel -> affected only slightly!
+        HMask = diffFrm.H() < h_threshold
+    else:
+        HMask = MaskFrame.true(hFrm)
 
-    ### S channel -> affected slightly, but usually lowered!
-    S_is_lowered = (hFrm.S() < like_backFrm.S())
-    SBool = (diffFrm.S() < s_threshold) & S_is_lowered
-    
+    if not s_threshold is None:
+        ### S channel -> affected slightly, but usually lowered!
+        S_is_lowered = (hFrm.S() < like_backFrm.S())
+        SMask = (diffFrm.S() < s_threshold) & S_is_lowered
+    else:
+        SMask = MaskFrame.true(hFrm)
+        
     ### V channel -> lowered by 10-20% typically, according to cucchiara et al 2001
     ratioArr = hFrm.V().array.astype(float) / np.maximum(like_backFrm.V().array.astype(float), 1)
     ratioFrm = Frame(ratioArr)
-    VBool = (ratioFrm > v_threshold_lower) & (ratioFrm < v_threshold_upper)
+    VMask = (ratioFrm > v_threshold_lower) & (ratioFrm < v_threshold_upper)
     
-    shadowMask = HBool & SBool & VBool 
+    shadowMask = HMask & SMask & VMask 
+    
+    if verbose: hFrm.mask(~shadowMask).show()
+    
+    ### open the shadow mask, to remove clutter
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, opening_kernel)
+    shadowMask = shadowMask.open(kernel)
     
     if verbose: hFrm.mask(~shadowMask).show()
     
