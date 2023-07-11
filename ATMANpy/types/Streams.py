@@ -700,7 +700,11 @@ class StillStream:
         ### conform StreamFeatures to start and stop frame
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
-    
+        
+        ### CHECK NAME
+        if self.name is None:
+            object.__setattr__(self, 'name', self.stillFrm.name)
+        
     @staticmethod
     def from_SF(mySF, stillFrm, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
@@ -1246,7 +1250,16 @@ class DecapStream:
         ### CHECK NAME
         if self.name is None:
             object.__setattr__(self, 'name', nameMap[self.frames.__class__.get_color()])
-
+            
+        ### CHECK FEATURES
+        mySF = self.features
+        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
+            ### transform StreamFeature into StreamFeatures
+            mySF = mySF.unsqueeze()
+        ### conform StreamFeatures to start and stop frame
+        # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
+        object.__setattr__(self, 'features', mySF)
+    
     def __getitem__(self, item):
         assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         outFrm = self.frames[item - self.start_frame]
@@ -1281,7 +1294,10 @@ class DecapStream:
     
     def size(self, unit = 'GB'):
         return self.frames.size(unit = unit)
-        
+    
+    def attach(self, mySF: StreamFeatures):
+        return Stream.attach(self, mySF)
+    
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
         for idx, myFrm in enumerate(self.frames):
@@ -1417,25 +1433,13 @@ class CachedStream(Stream):
     
     def __post_init__(self):
         
-        ### Define a helper function which is only relevant if we want to force fill the cache.
-        def truncate_frame_number(frmNum):
-            if not self.force_fill_cache:
-                return frmNum
-            else:
-                if frmNum < self.start_frame:
-                    return self.start_frame
-                elif frmNum > self.stop_frame:
-                    return self.stop_frame
-                else:
-                    return frmNum
-        
         ### Here, important to check that the cache size is actually available within the stream!
         total_frames = int(self.cap.get(cv.CAP_PROP_FRAME_COUNT))  ### total number of frames
         fs_avail = self.truncation_anchor
         ls_avail = self.truncation_anchor + total_frames - 1 ### available frames, in absolute terms (relative to the master cap). Note that if there are 2 frames, the indices are 0 and 1 -> hence, we subtract 1 from num_frames
         
-        start_cap = truncate_frame_number(self.start_frame - self.cache_size)
-        stop_cap = truncate_frame_number(self.stop_frame + self.cache_size)
+        start_cap = self.truncate_frame_number(self.start_frame - self.cache_size)
+        stop_cap = self.truncate_frame_number(self.stop_frame + self.cache_size)
         
         if not fs_avail <= start_cap <= ls_avail:
             print(f'Starting frame {self.start_frame} not available in {self.cap} from {fs_avail} to {ls_avail} and cache_size {self.cache_size}')
@@ -1449,11 +1453,6 @@ class CachedStream(Stream):
             object.__setattr__(self, 'stop_frame', latest_stop)
             print(f'Reset stopping frame to {latest_stop}.')
         
-        # if not fs_avail <= start_cap <= ls_avail:
-        #     raise Exception(f'Starting frame {start_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
-        # if not fs_avail <= stop_cap <= ls_avail:
-        #     raise Exception(f'Stop frame {stop_cap} not available in {self.cap} from {fs_avail} to {ls_avail}')
-            
         ### CHECK NAME
         if self.name is None:
             object.__setattr__(self, 'name', nameMap[self.target_color_space])
@@ -1578,7 +1577,19 @@ class CachedStream(Stream):
             elif argStr == featCache.name:
                 args.append(featCache)
         return args
-    
+
+    def truncate_frame_number(self, frmNum):
+        ### Define a helper function which is only relevant if we want to force fill the cache.
+        if not self.force_fill_cache:
+            return frmNum
+        else:
+            if frmNum < self.start_frame:
+                return self.start_frame
+            elif frmNum > self.stop_frame:
+                return self.stop_frame
+            else:
+                return frmNum
+            
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
@@ -1589,18 +1600,6 @@ class CachedStream(Stream):
         ### Update: The featCache is not updated, but rebuilt, so that changes to past features can be used by featFunc.
         featIndices = frameCache.get_indices()
         
-        ### Define a helper function which is only relevant if we want to force fill the cache.
-        def truncate_frame_number(frmNum):
-            if not self.force_fill_cache:
-                return frmNum
-            else:
-                if frmNum < self.start_frame:
-                    return self.start_frame
-                elif frmNum > self.stop_frame:
-                    return self.stop_frame
-                else:
-                    return frmNum
-        
         ### mutable features always have to exist here!
         assert hasattr(self, '_mut_features'), 'To create a generator for a CachedStream, mutable features always have to exist!'
     
@@ -1608,7 +1607,7 @@ class CachedStream(Stream):
         cap_stop = self.stop_frame + self.cache_size
     
         frmNum = cap_start ### think of this as a counter in the background -> goes from cap_start to cap_stop, increment of 1
-        getNum = truncate_frame_number(frmNum) ### if force_fill_cache -> this truncates frames before start and after stop to start and stop resp.
+        getNum = self.truncate_frame_number(frmNum) ### if force_fill_cache -> this truncates frames before start and after stop to start and stop resp.
         
         self.cap.set(cv.CAP_PROP_POS_FRAMES, getNum - self.truncation_anchor)       
 
@@ -1633,7 +1632,7 @@ class CachedStream(Stream):
                 
             ### feed/build the caches
             frameCache = frameCache.add(myFrm)
-            features = [self._mut_features.maybe_get(truncate_frame_number(idx + cntNum)) for idx in featIndices]
+            features = [self._mut_features.maybe_get(self.truncate_frame_number(idx + cntNum)) for idx in featIndices]
             featCache = Cache.from_list(features, name = 'featCache')
             
             ### check if we are supposed to yield -> only once cache is full!
@@ -1658,7 +1657,7 @@ class CachedStream(Stream):
                 self.cap.set(cv.CAP_PROP_POS_FRAMES, getNum - self.truncation_anchor)      
                 
             frmNum += 1  ### the counter is incremented
-            getNum = truncate_frame_number(frmNum) ### the latest frame being read
+            getNum = self.truncate_frame_number(frmNum) ### the latest frame being read
             
         else:
             cv.destroyAllWindows()
@@ -1686,7 +1685,6 @@ class CachedStream(Stream):
                 
             ### assert that all arguments that we expect (funcArgs) we have been able to extract (args).
             assert len(args) == len(funcArgs), f'Required arguments ({funcArgs}) have to match supplied arguments ({args})'
-            
             
             ### call extraction function
             funcOut = featureFunc(*args, **kwargs)
@@ -1729,17 +1727,32 @@ class CachedStream(Stream):
         # in principle, this is how the CachedStream behaves: 
         # Its generator begins cycling before start frame, and ends after stop_frame. 
         
-        ### get starting and ending frames including cache
-        # (the existence of which is guaranteed by post_init!)
-        start_cap = self.start_frame - self.cache_size - self.truncation_anchor
-        stop_cap = self.stop_frame + self.cache_size - self.truncation_anchor
-            
         framesType = framesTypeMap[self.target_color_space]
         
-        myFrms = framesType.from_video(self.cap, start_cap, stop_cap,
-                                       cap_color_space = self.cap_color_space,
-                                       scale_factor = self.scale_factor,
-                                       name = self.name)
+        ### First, decap the main body of the Stream -> the frames not in the initial and final cache wings.
+        start_body = self.start_frame - self.truncation_anchor
+        stop_body = self.stop_frame - self.truncation_anchor
+        
+        bodyFrms = framesType.from_video(self.cap, start_body, stop_body,
+                                         cap_color_space = self.cap_color_space,
+                                         scale_factor = self.scale_factor,
+                                         name = self.name)
+        
+        ### Now, get the initial and final wings 
+        # -> they might or might not exist inside the cap, due to force filling.
+        cache_range = range(1, self.cache_size + 1)
+        naive_left_wing = list(reversed([self.start_frame - cache_elem for cache_elem in cache_range]))
+        naive_right_wing = [self.stop_frame + cache_elem for cache_elem in cache_range]
+        # Now, truncate, so we are certain that the elements will exist!
+        trunc_left_wing = [self.truncate_frame_number(el) - self.truncation_anchor for el in naive_left_wing]
+        trunc_right_wing = [self.truncate_frame_number(el) - self.truncation_anchor for el in naive_right_wing]
+        # get the frames using these lists
+        leftFrms = framesType.from_list(self.cap, trunc_left_wing)
+        rightFrms = framesType.from_list(self.cap, trunc_right_wing)
+        
+        ### join left wing, body, right wing
+        myFrms = leftFrms.join(bodyFrms).join(rightFrms)
+        
         ### warp if necessary
         if self.warp_dims is not None:
             width, height = self.warp_dims

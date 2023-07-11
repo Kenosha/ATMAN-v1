@@ -144,23 +144,34 @@ class Frames:
     def is_empty(self):
         return self.length() == 0
     
+    def join(self, otherFrms):
+        framesType = self.__class__
+        otherType = otherFrms.__class__
+        assert framesType == otherType, f'Attempting to join MultiFrame of {framesType} with MultiFrame of {otherType}'
+    
+        joinArr = np.concatenate((self.array, otherFrms.array), axis = 0)
+        return framesType(joinArr, self.name)
+    
+    def sum(self, axes):
+        return self.array.sum(axes)
+    
     def median(self):
         framesType = self.__class__
         frameType = framesType.get_constituent()
-        meanArr = np.median(self.array, axis = 0).astype('uint8')
-        return frameType(meanArr)
+        myArr = np.median(self.array, axis = 0).astype('uint8')
+        return frameType(myArr)
     
     def mean(self):
         framesType = self.__class__
         frameType = framesType.get_constituent()
-        meanArr = np.mean(self.array, axis = 0).astype('uint8')
-        return frameType(meanArr)
+        myArr = np.mean(self.array, axis = 0).astype('uint8')
+        return frameType(myArr)
     
     def std(self):
         framesType = self.__class__
         frameType = framesType.get_constituent()
-        meanArr = np.std(self.array, axis = 0).astype('uint8')
-        return frameType(meanArr)
+        myArr = np.std(self.array, axis = 0).astype('uint8')
+        return frameType(myArr)
     
     def rescale(self, scale_factor):
         framesType = self.__class__
