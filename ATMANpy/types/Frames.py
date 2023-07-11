@@ -473,23 +473,27 @@ class BoolFrame(Frame):
         c1, c2, c3 = cv.split(self.array)
         return BoolFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
 
-    def open(self, kernel):
+    def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, kernel)
         return BoolFrame(arr)
         
-    def close(self, kernel):
+    def close(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
         return BoolFrame(arr)
     
-    def dilate(self, kernel):
+    def dilate(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.dilate(self_copy, kernel)
         return BoolFrame(arr)
     
-    def erode(self, kernel):
+    def erode(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.erode(self_copy, kernel)
         return BoolFrame(arr)
         
@@ -595,23 +599,27 @@ class MaskFrame(Frame):
                    where = where, size = size, annotation = annotation,
                    verbose = verbose)
     
-    def open(self, kernel):
+    def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, kernel)
         return MaskFrame(arr)
         
-    def close(self, kernel):
+    def close(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
         return MaskFrame(arr)
     
-    def dilate(self, kernel):
+    def dilate(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.dilate(self_copy, kernel)
         return MaskFrame(arr)
     
-    def erode(self, kernel):
+    def erode(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.erode(self_copy, kernel)
         return MaskFrame(arr)
         
@@ -746,26 +754,16 @@ class GreyFrame(Frame):
         
         return theta
     
-    def open(self, kernel):
+    def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, kernel)
         return GreyFrame(arr)
         
-    def close(self, kernel):
+    def close(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
-        return GreyFrame(arr)
-    
-    def clopen(self, close_kernel, open_kernel):
-        self_copy = self.array.copy()
-        arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, close_kernel)
-        arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, open_kernel)
-        return GreyFrame(arr)
-
-    def opse(self, open_kernel, close_kernel):
-        self_copy = self.array.copy()
-        arr = cv.morphologyEx(self_copy, cv.MORPH_OPEN, open_kernel)
-        arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, close_kernel)
         return GreyFrame(arr)
     
     def connected_regions(self, size_threshold = 0):
