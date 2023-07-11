@@ -53,7 +53,7 @@ def put(someFrm, someObj,
         return put(someFrm, Lines(someObj.lineList), 
                    color = color, radius = radius, thickness = thickness, where = where, size = size)
     
-    if isinstance(someObj, Contour):
+    if someObj.__class__.__name__ == 'Contour':
         if verbose: print('Contour!')
         myFrm = InstClass(cv.drawContours(self_copy, [someObj.points], -1, color, thickness = thickness))
         if annotation is not None:
@@ -65,7 +65,7 @@ def put(someFrm, someObj,
                 myFrm = myFrm.put(str(annotation), where = (cntPnt - offset_margin).coords)
         return myFrm
           
-    if isinstance(someObj, Contours):
+    if someObj.__class__.__name__ == 'Contours':
         if verbose: print('Contours!')
         myFrm = InstClass(cv.drawContours(self_copy, [cnt.points for cnt in someObj], -1, color, thickness = thickness))
         if annotation is not None:

@@ -623,6 +623,13 @@ class Region(Lines):
         object.__setattr__(self, 'points', (self.p1, self.p2, self.p3, self.p4))
     
     @staticmethod
+    def from_array(regArr):
+        assert len(regArr) == 8, f'Array used to build region needs to be of length 8, has length {len(regArr)}'
+        p1x, p1y, p2x, p2y, p3x, p3y, p4x, p4y = regArr
+        p1, p2, p3, p4 = Point2D((p1x, p1y)), Point2D((p2x, p2y)), Point2D((p3x, p3y)), Point2D((p4x, p4y))
+        return Region.from_points(p1, p2, p3, p4)
+    
+    @staticmethod
     def from_points(p1: Point2D, p2: Point2D, p3: Point2D = None, p4: Point2D = None,
                     area = None, centroid = None):
         is_rectangle = p3 is None and p4 is None

@@ -797,8 +797,21 @@ class ConstFeaturesBase:
     def filter(self, boolSF):
         frameList = [frame for frame in self.frameList if boolSF[frame]]
         return self.__class__(self.name, self.feature, frameList)
-
     
+    def merge(self, otherSF):
+        features, features_other = self.get_features(), otherSF.get_features()
+        
+        features_overlap = [f for f in features if f in features_other]
+        if features_overlap != []:
+            raise Exception(f'features {features_overlap} exist in {self} and {otherSF}, can not combine')
+            
+        if isinstance(otherSF, ConstFeaturesBase):
+            selfDict = self.unsqueeze().featDict
+            otherDict = otherSF.unsqueeze().featDict
+            return ConstFeatures(selfDict | otherDict, self.frameList)
+        else:
+            return self.to_SF().merge(otherSF)
+        
 @dataclass(frozen = True)
 class ConstFeature(ConstFeaturesBase):
     ### a feature that is always the same, associated with a set of frames.
@@ -826,6 +839,9 @@ class ConstFeature(ConstFeaturesBase):
         except KeyError:
             return None
         
+    def get_features(self):
+        return [self.name]
+    
     def to_SF(self):
         return StreamFeature({frame: self.feature for frame in self.frameList}, name = self.name)
               
@@ -869,11 +885,15 @@ class ConstFeature(ConstFeaturesBase):
         
         return SFList([ConstFeature(self.name, self.feature, frame_list) for frame_list in list_of_frame_lists])
     
+    def squeeze(self):
+        return self
+    
     def unsqueeze(self):
         return ConstFeatures({self.name: self.feature}, self.frameList)
     
     def conform(self, frameList):
         return ConstFeature(self.name, self.feature, frameList)
+    
     
     
 @dataclass(frozen = True)
@@ -883,7 +903,8 @@ class ConstFeatures(ConstFeaturesBase):
     frameList: List
     
     @staticmethod
-    def from_store(video_id, store_name, featnameList, frameList = None):
+    def from_store(video_id, store_name, featnameList, featTypeList = None, 
+                   frameList = None):
         if frameList is None:
             frameList = []
         
@@ -896,15 +917,24 @@ class ConstFeatures(ConstFeaturesBase):
         else:
             featnameList = [f for f in featnameList if f in os.listdir(storePath)]
         
+        ### figure out types
+        if featTypeList is None:
+            featTypeList = [None] * len(featnameList)
+        else:
+            assert len(featnameList) == len(featTypeList)
+        
         ### collect all feature frames
         featDict = {}
-        for featName in featnameList:
+        for featName, featType in zip(featnameList, featTypeList):
             featPath = os.path.join(storePath, featName)
             last_file = os.listdir(featPath)[-1] ### this has to be improved! Along with feature IO in general
             fullPath = os.path.join(featPath, last_file)
             
-            myArr = np.load(fullPath) ### assumes we always have array...
-            featDict[featName] = myArr
+            myArr = np.load(fullPath) 
+            if featType is None:
+                featDict[featName] = myArr
+            else:
+                featDict[featName] = featType.from_array(myArr)
     
         return ConstFeatures(featDict, frameList)
     
@@ -990,6 +1020,9 @@ class ConstFeatures(ConstFeaturesBase):
             return ConstFeature(name, feature, self.frameList)
         else:
             return self
+    
+    def unsqueeze(self):
+        return self
     
     def conform(self, frameList):
         return ConstFeatures(self.featDict, frameList)
