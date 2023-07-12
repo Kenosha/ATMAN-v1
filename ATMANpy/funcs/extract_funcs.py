@@ -260,6 +260,7 @@ def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm,
     return foregroundMask
 
 def get_shadow_mask(hFrm, H, median_backFrm,
+                    ROI = None,
                     h_threshold = 5, s_threshold = 10, 
                     v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
                     v_threshold_upper = 0.97,
@@ -275,6 +276,9 @@ def get_shadow_mask(hFrm, H, median_backFrm,
         like_backFrm = median_backFrm
     
     diffFrm = hFrm - like_backFrm
+    
+    if not ROI is None:
+        diffFrm = diffFrm.mask(diffFrm.within_region(ROI))
     
     if not h_threshold is None:
         ### H channel -> affected only slightly!
@@ -299,14 +303,12 @@ def get_shadow_mask(hFrm, H, median_backFrm,
     if verbose: hFrm.mask(~shadowMask).show()
     
     ### open the shadow mask, to remove clutter
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, opening_kernel)
-    shadowMask = shadowMask.open(kernel)
+    shadowMask = shadowMask.open(opening_kernel)
     
     if verbose: hFrm.mask(~shadowMask).show()
     
     ### close the candidate shadows, since shadows of a player are contiguous.
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, closing_kernel)
-    shadowMask = shadowMask.close(kernel)
+    shadowMask = shadowMask.close(closing_kernel)
     
     if verbose: hFrm.mask(~shadowMask).show()
     
@@ -387,22 +389,30 @@ def find_both_players_smart(gCache, featCache,
     return topPlayer, botPlayer
 
 def find_motion_mask(gCache, 
+                     ROI = None,
                      intensity_threshold = 10,
                      relevant_indices = [4, 6, 8],
-                     open_kernel = (5, 5)):
+                     open_kernel = (5, 5),
+                     close_kernel = (5, 5)):
     centralFrm = gCache[0]
     
     motFunc = lambda othFrm: centralFrm - othFrm > intensity_threshold 
     
-    motMask = MaskFrame.true(centralFrm)
+    if ROI is None:
+        motMask = MaskFrame.true(centralFrm)
+    else:
+        motMask = centralFrm.within_region(ROI)
+    
     for idx in relevant_indices:
         othFrm_bef, othFrm_aft = gCache[-idx], gCache[idx]
         motMask = motMask & motFunc(othFrm_bef) & motFunc(othFrm_aft)
    
-    ### Opened Motion Mask
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, open_kernel)
-    motMask = motMask.open(kernel)
-     
+    ### Close and Open, optionally.
+    if not close_kernel is None:
+        motMask = motMask.close(close_kernel) 
+    if not open_kernel is None:
+        motMask = motMask.open(open_kernel)
+        
     return motMask
 
 
