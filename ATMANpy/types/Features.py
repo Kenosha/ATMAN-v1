@@ -430,7 +430,10 @@ class StreamFeature(StreamFeaturesBase):
         
         ### get codec ###
         if lossless:
-            codec = cv.VideoWriter_fourcc(*'FFV1')
+            codec = cv.VideoWriter_fourcc(*'FFV1') ### this often gives a mysterious windows access violation error...
+            ### TODO: if you want to fix: use scikit.video -> ffmpegwriter... seems like our best bet.
+            # codec = cv.VideoWriter_fourcc(*'X264')
+            # codec = cv.VideoWriter_fourcc(*'AVC1')
         else:
             codec = cv.VideoWriter_fourcc(*'XVID')
         

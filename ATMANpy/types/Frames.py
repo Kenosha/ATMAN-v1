@@ -21,6 +21,7 @@ from ATMANpy.types.Contours import Contour, Contours
 
 from ATMANpy.types.PutDispatcher import put
 
+_TEMP_STRICT_MASK = False
 
 class FrameIterator:
     def __init__(self, frame):
@@ -397,8 +398,18 @@ class BoolFrame(Frame):
         arraycheck(self, channel_number = 3, color_channel_length = 3)
         ########################  
         
-        #####################
-
+        if _TEMP_STRICT_MASK: 
+        ### temporary flag: should be True, but currently false, 
+        # since we are dealing with the impossibility to create lossless mask video. 
+            assert set(list(self.unique())).issubset({0, 255}), f'Inadmissible values in {self}: {self.unique()}'
+        else:
+            if not set(list(self.unique())).issubset({0, 255}):
+                # print(f'Inadmissible values in {self}: {self.unique()}')
+                # print('Re-thresholding at 127/255...')
+                new_array = ((self.array > 127) * 255).astype('uint8')
+                object.__setattr__(self, 'array', new_array)
+                
+                
     @staticmethod
     def false(likeFrm):
         shape = likeFrm.shape
@@ -516,7 +527,6 @@ class BoolFrame(Frame):
 @dataclass(frozen = True)
 class MaskFrame(Frame):
     ### Introduced 16.06.2023 -> This is a BoolFrame with one channel! BoolFrame itself always has three
-    
     array: np.ndarray
     name: str = 'frame'
     
@@ -534,8 +544,17 @@ class MaskFrame(Frame):
             object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_BGR2GRAY))
         #############################  
         
-        assert set(list(self.unique())).issubset({0, 255}), f'Inadmissible values in {self}: {self.unique()}'
-    
+        if _TEMP_STRICT_MASK: 
+        ### temporary flag: should be True, but currently false, 
+        # since we are dealing with the impossibility to create lossless mask video. 
+            assert set(list(self.unique())).issubset({0, 255}), f'Inadmissible values in {self}: {self.unique()}'
+        else:
+            if not set(list(self.unique())).issubset({0, 255}):
+                # print(f'Inadmissible values in {self}: {self.unique()}')
+                # print('Re-thresholding at 127/255...')
+                new_array = ((self.array > 127) * 255).astype('uint8')
+                object.__setattr__(self, 'array', new_array)
+                
     
     @staticmethod
     def false(likeFrm):
