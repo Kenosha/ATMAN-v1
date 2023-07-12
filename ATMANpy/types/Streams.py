@@ -262,6 +262,11 @@ class Stream:
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
     
+    def rename(self, new_name):
+        updDict = {'name': new_name}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
     def recolor(self, new_target_color_space):
         updDict = {'target_color_space': new_target_color_space}
         newDict = get_updated_attribute_dictionary(self, updDict)
@@ -1178,6 +1183,9 @@ class StreamList:
         
     def length(self):
         return len(self.streams)
+    
+    def rename(self, new_name):
+        return StreamList([myStm.rename(new_name) for myStm in self])
     
     def recolor(self, new_target_color_space):
         return StreamList([myStm.recolor(new_target_color_space) for myStm in self])

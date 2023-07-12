@@ -555,7 +555,6 @@ class MaskFrame(Frame):
                 new_array = ((self.array > 127) * 255).astype('uint8')
                 object.__setattr__(self, 'array', new_array)
                 
-    
     @staticmethod
     def false(likeFrm):
         shape = likeFrm.shape[:2]
