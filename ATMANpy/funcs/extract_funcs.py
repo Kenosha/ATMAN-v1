@@ -439,16 +439,19 @@ def refine_motion_mask(motMask, topPlayer, botPlayer,
     
     return intMask
 
-def get_contours_from_mask(intMask, max_number_of_contours = 40):
+def get_contours_from_mask(intMask, min_area_of_contours = 0, max_number_of_contours = 40):
     ### find movement contours
-    cntArr, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    movCnts = Contours([Contour(c) for c in cntArr if len(c) > 2]) ### need at least three points for a contour
-    
-    if 0 < movCnts.length() < max_number_of_contours:
-        ### if there are no contours, there is nothing we can do...
-        ### if there is an excessive amount of contours, we likely have camera panning...
+    movCnts, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    movCnts = Contours([cnt for cnt in movCnts if cnt.area() > min_area_of_contours]) ### need at least three points for a contour
+                                                                                    # -> alternatively: want a contour with an area!
+    if max_number_of_contours is None:
         return movCnts
-    
+    else:
+        if 0 < movCnts.length() < max_number_of_contours:
+            ### if there are no contours, there is nothing we can do...
+            ### if there is an excessive amount of contours, we likely have camera panning...
+            return movCnts
+        
 def get_movement_contours(gCache, featCache, 
                           intensity_threshold = 10, relevant_indices = [4, 6, 8],
                           dil_kernel_dims = (20, 10), open_kernel_dims = (5, 5),
