@@ -53,6 +53,8 @@ SCALE_FACTOR = NATURAL_SCALE * ADD_SCALE
 
 
 if __name__ == '__main__':
+    ### TODO: Use roiMask created by court_roi.py
+    
     ### Read constant Homography and Projection Matrix
     HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = list(range(START_FRAME, stop_frame + 1)))
 
@@ -65,9 +67,10 @@ if __name__ == '__main__':
     myStm = Stream(cap, START_FRAME, stop_frame)
     mulStm = MulStream.from_streams(myStm, medStm, stdStm)
     matchSF = mulStm.extract(ex.frame_comparison, std_multiple = 3) 
-    matchBF = matchSF.apply(sa.exceeds_threshold, threshold = 0.75).to_bool()
+    matchBF = matchSF.apply(sa.exceeds_threshold, threshold = 0.75).to_bool().rename('isCourt')
     ### in principle, segmentation like so works, 
     # but camera cut-aways are not a good way of segmenting anymore, 
     # since the camera rarely (or never) cuts away... 
     # the only thing that happens is a blend-in graphic after games, for example.
     
+    matchBF.save(VIDEO_ID, STORE_NAME)

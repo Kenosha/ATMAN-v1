@@ -66,6 +66,8 @@ if __name__ == '__main__':
     except FileExistsError:
         pass
     
+    #### TODO: Use the roiMask created in court_roi.py!!
+    
     ### Read Courtlines
     # -> since camera is fixed, lines are simply a parameter! we will make a single homography by getting a few random shots
     randStm = RandStream(cap, START_FRAME, stop_frame, number_of_frames = 1000,
@@ -115,7 +117,6 @@ if __name__ == '__main__':
     schemaLines.get_3D_corner_points('Doubles')
     
     P = sa.calibrate_camera(courtLines, netLines, width = 'Singles')
-    P2 = sa.calibrate_camera(courtLines, netLines, width = 'Doubles')
     M_int, M_ext = sa.find_intrinsic_extrinsic_M(P, normalize_K = True)
     
     if np.isnan(M_ext).any():
