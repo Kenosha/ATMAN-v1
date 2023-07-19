@@ -30,7 +30,7 @@ from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, B
 from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
 
 from ATMANpy.types.Points import Point2D
-from ATMANpy.types.Lines import CourtLines, Region
+from ATMANpy.types.Lines import CourtLines, Region, Regions
 
 from ATMANpy.funcs.player_funcs import get_service_ROIs
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_intersection_points
@@ -38,13 +38,12 @@ schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
 START_FRAME = 0
-RUN_LENGTH = 10000
+STOP_FRAME = 10000
 VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
 STORE_NAME = 'test'
 NUM_WORKERS = 24
 CHUNKSIZE = 1000
 
-stop_frame = START_FRAME + RUN_LENGTH
 cap = get_video(VIDEO_ID)
 
 width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
@@ -68,7 +67,7 @@ if __name__ == '__main__':
     except FileExistsError:
         pass
     
-    randStm = RandStream(cap, START_FRAME, stop_frame, number_of_frames = 1000,
+    randStm = RandStream(cap, START_FRAME, STOP_FRAME, number_of_frames = 1000,
                          cap_color_space = 'bgr', target_color_space = 'grey',
                          scale_factor = ADD_SCALE)
     
@@ -76,26 +75,75 @@ if __name__ == '__main__':
     # -> region of interest will be saved as a StillFrame of Mask type
     some_frame = 300
     someFrm = randStm[some_frame]
-    someFrm.show()
+    # someFrm.show()
     
     p1, p2, p3, p4 = Point2D((200, 0)), Point2D((440, 0)), Point2D((0, 295)), Point2D((width, 295))
     ROI = Region.from_points(p1, p2, p3, p4)
     someFrm.put(ROI).show()
     
     savePath = ff.get_and_make_save_path('courtroiReg', VIDEO_ID, STORE_NAME)
-    fileName = f'from_{START_FRAME}_to_{stop_frame}.npy'
+    fileName = f'from_{START_FRAME}_to_{STOP_FRAME}.npy'
     fullPath = os.path.join(savePath, fileName)
     roiArr = ff.extract_region_values(ROI)
     np.save(fullPath, roiArr)
     
-    ### Set up two regions of interest for where players might stand when serving and returning.
-    get_service_ROIs(schemaLines)
+    #### Ball Kid ROIs
+    myRegs = []
+    currPts = []
     
+    def draw_ballkid_rois(myFrm):
+        imageArr = myFrm.array
+        cloneArr = imageArr.copy()
+        
+        def click_and_crop(event, x, y, flags, param):
+        	# grab references to the global variables
+            global myRegs, currPts
+            
+            # if the left mouse button was clicked, 
+            # record the starting (x, y) coordinates 
+            if event == cv.EVENT_LBUTTONDOWN:
+                currPts = [Point2D((x, y)).conform_to(myFrm)]
+        	# check to see if the left mouse button was released
+            elif event == cv.EVENT_LBUTTONUP:
+                currPts.append(Point2D((x, y)).conform_to(myFrm))
+                myRegs.append(Region.from_points(*currPts))
+
+                cv.rectangle(imageArr, currPts[0].coords, currPts[1].coords, (0, 255, 0), 2)
+                cv.imshow("image", imageArr)
+
+                currPts = []
+        
+        ### Prepare CallBack
+        cv.namedWindow('image')
+        cv.setMouseCallback('image', click_and_crop)
+        
+        ### Show
+        while True:
+            cv.imshow('image', imageArr)
+            
+            key = cv.waitKey(1) & 0xFF
+            
+        	# if the 'r' key is pressed, reset the cropping region
+            if key == ord("r"):
+                imageArr = cloneArr.copy()
+            # if the 'q' key is pressed, exit
+            elif key == ord("q"):
+                cv.destroyAllWindows()
+                break
+            
+        return Regions(myRegs)
+
+    kidFrm = someFrm.to_BGR()
+    kidRegs = draw_ballkid_rois(kidFrm)
     
-    roiMask.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = START_FRAME, stop_frame = stop_frame)
+    assert kidRegs.length() == 6
     
+    fileName = f'from_{START_FRAME}_to_{STOP_FRAME}.npy'    
+    savePath = ff.get_and_make_save_path(f'ballkidROIs', VIDEO_ID, STORE_NAME)
+    fullPath = os.path.join(savePath, fileName)
     
-    
+    roiArr = ff.extract_regions_values(kidRegs)
+    np.save(fullPath, roiArr)
     
     
     
