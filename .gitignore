@@ -3,8 +3,12 @@ HTK/
 papers/
 video_files/
 unused/
+ball_svm/
+executables/
 trajectories_stored/
 features_stored/
+Tracktor/
+*.ods
 *.csv
 *.stats
 Todo.txt
