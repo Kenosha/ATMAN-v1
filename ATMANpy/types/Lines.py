@@ -612,8 +612,8 @@ class CourtLines(Lines):
 class Region(Lines):
     lineList: List[Line]
     name: str = 'Region'
-    area: int = None
-    centroid: Point2D = None
+    # area: int = None
+    # centroid: Point2D = None
     
     def __post_init__(self):
         object.__setattr__(self, 'p1', self['Top'].leftPt)
@@ -648,14 +648,14 @@ class Region(Lines):
                     Line(rt, rb, name = 'Right'), 
                     Line(lb, rb, name = 'Bottom')]
         
-        if is_rectangle:
-            h, w = lineList[0].length(), lineList[1].length()
-            if area is None:
-                area = (h + 1) * (w + 1) # note: a 'region' where all points are the same has h, w = zero, but contains one pixel -> therefore, area has to be one.
-            if centroid is None:
-                centroid = lt.down(h/2).right(w/2)
+        # if is_rectangle:
+        #     h, w = lineList[0].length(), lineList[1].length()
+        #     if area is None:
+        #         area = (h + 1) * (w + 1) # note: a 'region' where all points are the same has h, w = zero, but contains one pixel -> therefore, area has to be one.
+        #     if centroid is None:
+        #         centroid = lt.down(h/2).right(w/2)
         
-        return Region(lineList, area = area, centroid = centroid)
+        return Region(lineList)
         
     @staticmethod
     def from_lines(lines: Lines):
@@ -677,6 +677,32 @@ class Region(Lines):
         
         return Region.from_points(p1, p2, p3, p4)
         
+    def is_rectangle(self):
+        #### -> top left and lower right point (p1 and p4) fully identify!
+        p2_is_redundant = self.p2 == Point2D((self.p4.x, self.p1.y))
+        p3_is_redundant = self.p3 == Point2D((self.p1.x, self.p4.y))
+        return p2_is_redundant & p3_is_redundant
+    
+    def height(self):
+        assert self.is_rectangle()
+        return self.lineList[0].length()
+    
+    def width(self):
+        assert self.is_rectangle()
+        return self.lineList[1].length() 
+    
+    def area(self):
+        # note: a 'region' where all points are the same has h, w = zero, but contains one pixel -> therefore, area has to be one.
+        assert self.is_rectangle()
+        return (self.height() + 1) * (self.width() + 1)
+    
+    def centroid(self):
+        assert self.is_rectangle()
+        return self.p1.down(self.height() / 2).right(self.width() / 2)
+    
+    def rename(self, new_name):
+        return Region(self.lineList, name = new_name)
+    
     def to_points(self):
         t, b = self['Top'], self['Bottom']
         return t.leftPt, t.rightPt, b.leftPt, b.rightPt
@@ -746,12 +772,60 @@ class Region(Lines):
                 
         return Region.from_points(p1, p2, p3, p4) 
     
-    
     def get_homography(self, othRegion):
         from ATMANpy.funcs.line_funcs import calculate_homography
         return calculate_homography(self.points, othRegion.points)
         
+    def intersection(self, othRegion):
+        assert self.is_rectangle() and othRegion.is_rectangle(), 'Intersection can only be calculated for rectangular regions! Implement if needed more generally.'
+        p1x = max(self.p1.x, othRegion.p1.x)
+        p1y = max(self.p1.y, othRegion.p1.y)
+        p4x = min(self.p4.x, othRegion.p4.x)
+        p4y = min(self.p4.y, othRegion.p4.y)
         
+        p1, p4 = Point2D((p1x, p1y)), Point2D((p4x, p4y))
         
+        if p1.is_above(p4) and p1.is_left(p4):
+            return Region.from_points(p1, p4)
+        else:
+            return None
+        
+    
+@dataclass(frozen = True)
+class Regions:
+    regList: List[Region]    
+    name: str = 'Regions'
+    
+    @staticmethod
+    def from_array(regArr):
+        return Regions([Region.from_array(subArr) for subArr in regArr])
+        
+    def __iter__(self):
+        return iter(self.regList)
+    
+    def __getitem__(self, item):
+        if isinstance(item, str):
+            regList = [myReg for myReg in self if myReg.name == item]
+            if len(regList) == 1:
+                return regList[0]
+            else:
+                return Regions(regList)
+        else:
+            return self.regList[item]
+    
+    def length(self):
+        return len(self.regList)
+    
+    def heights(self):
+        return [myReg.height() for myReg in self]
+    
+    def widths(self):
+        return [myReg.width() for myReg in self]
+    
+    def areas(self):
+        return [myReg.area() for myReg in self]
+    
+    def centroids(self):
+        return [myReg.centroid() for myReg in self]
     
     

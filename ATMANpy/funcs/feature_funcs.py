@@ -63,6 +63,24 @@ def extract_contours_values(contours, compression = None):
     featFrm = pd.DataFrame(featValues)  
     featFrm.index.name = 'idx1'
     return featFrm
+                                
+def extract_region_values(region):
+    if region is None:
+        featValues = [MISSING_SENTINEL_VALUE] * 8 ### 4 points with 2 coords.
+    else:
+        coords = [pt.coords for pt in region.to_points()]
+        featValues = np.ravel(coords)
+    return featValues
+
+def extract_regions_values(regions):
+    if regions is None:
+        featValues = [[]]
+    else:
+        featValues = [extract_region_values(region) for region in regions]
+        
+    featFrm = pd.DataFrame(featValues)  
+    featFrm.index.name = 'idx1'
+    return featFrm
 
 def extract_homography_values(H):
     if H is None:
@@ -86,14 +104,6 @@ def extract_particle_values(particleArr):
         featValues = np.ravel(particleArr.astype(int))
     # uniqueParticles = np.unique(particleArr, axis = 0) ### we don't do this, 
                                                          ### because the number of repetitions matters!
-    return featValues
-                                                         
-def extract_region_values(region):
-    if region is None:
-        featValues = [MISSING_SENTINEL_VALUE] * 8 ### 4 points with 2 coords.
-    else:
-        coords = [pt.coords for pt in region.to_points()]
-        featValues = np.ravel(coords)
     return featValues
     
 def extract_point_values(point):

@@ -15,7 +15,7 @@ import ATMANpy.auxil.constants as const
 from ATMANpy.funcs.type_funcs import typecheck, arraycheck
 from ATMANpy.funcs.cv_funcs import show, get_frame    
 from ATMANpy.types.Points import Point2D
-from ATMANpy.types.Lines import Line, Lines, Region
+from ATMANpy.types.Lines import Line, Lines, Region, Regions
 
 from multipledispatch import dispatch
 
@@ -123,8 +123,8 @@ class Contours:
     def rescale(self, scale_factor):
         return Contours([cnt.rescale(scale_factor) for cnt in self])
     
-    def enclosing_region(self, margin = 0):
-        return [cnt.enclosing_region() for cnt in self]
+    def enclosing_regions(self, margin = 0):
+        return Regions([cnt.enclosing_region() for cnt in self])
         
     def fit_ellipse(self):
         ## returns: centerCoords, majminAxis, rotAngle 

@@ -53,6 +53,13 @@ def put(someFrm, someObj,
         return put(someFrm, Lines(someObj.lineList), 
                    color = color, radius = radius, thickness = thickness, where = where, size = size)
     
+    if someObj.__class__.__name__ == 'Regions':
+        if verbose: print('Regions!')
+        for reg in someObj:
+            someFrm = put(someFrm, reg, 
+                          color = color, radius = radius, thickness = thickness, where = where, size = size)
+        return someFrm
+    
     if someObj.__class__.__name__ == 'Contour':
         if verbose: print('Contour!')
         myFrm = InstClass(cv.drawContours(self_copy, [someObj.points], -1, color, thickness = thickness))
