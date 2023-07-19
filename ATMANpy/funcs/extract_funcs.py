@@ -439,7 +439,14 @@ def refine_motion_mask(motMask, topPlayer, botPlayer,
     
     return intMask
 
-def get_contours_from_mask(intMask, min_area_of_contours = 0, max_number_of_contours = 40):
+def get_contours_from_mask(intMask, 
+                           ROI = None,
+                           min_area_of_contours = 0, 
+                           max_number_of_contours = 40):
+    ### filter ROI
+    if ROI is not None:
+        intMask = intMask.mask(intMask.within_region(ROI))
+    
     ### find movement contours
     movCnts, _ = intMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     movCnts = Contours([cnt for cnt in movCnts if cnt.area() > min_area_of_contours]) ### need at least three points for a contour
