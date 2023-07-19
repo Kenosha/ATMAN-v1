@@ -746,6 +746,9 @@ class StreamFeatures(StreamFeaturesBase):
     def to_bool(self):
         return BoolFeatures(self.streamDict, name = self.name)
     
+    def to_dataframe(self):
+        return pd.DataFrame.from_dict(self.streamDict, orient = 'index')
+    
     def value_counts(self):
         return pd.concat([self[feat].value_counts() for feat in self.get_features()], axis = 1)
     
