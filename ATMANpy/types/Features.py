@@ -270,12 +270,12 @@ class StreamFeature(StreamFeaturesBase):
         return [self.name]
     
     def conform(self, conformList):
-        if isinstance(conformList, StreamFeaturesBase):
-            conformList = conformList.keys() 
+        if isinstance(conformList, StreamFeaturesBase) or isinstance(conformList, ConstFeaturesBase):
+            conformList = conformList.get_frames() 
         
         streamDict = {}
         for frame in conformList:
-            if frame in self.keys():
+            if frame in self.get_frames():
                 streamDict[frame] = self[frame]
             else:
                 streamDict[frame] = None
@@ -592,11 +592,11 @@ class StreamFeatures(StreamFeaturesBase):
                 
     def conform(self, conformList):
         if isinstance(conformList, StreamFeaturesBase):
-            conformList = conformList.keys()
+            conformList = conformList.get_frames()
         
         streamDict = {}
         for frame in conformList:
-            if frame in self.keys():
+            if frame in self.get_frames():
                 streamDict[frame] = self[frame]
             else:
                 streamDict[frame] = {feat: None for feat in self.get_features()}
@@ -691,9 +691,6 @@ class StreamFeatures(StreamFeaturesBase):
 
     def length(self):
         return len(self.streamDict)
-    
-    def get_frames(self):
-        return list(self.streamDict.keys())
     
     def get_features(self):
         if self.is_empty():
@@ -1056,7 +1053,7 @@ class BoolFeature(StreamFeature):
     def false(self):
         return self.length() - self.true()
     
-    def save(self, videoName, storeName):
+    def save(self, videoName, storeName, compression = None, lossless = None):
         featFrm = self.to_series()
         featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)

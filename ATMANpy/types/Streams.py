@@ -1184,6 +1184,17 @@ class StreamList:
     def length(self):
         return len(self.streams)
     
+    def conform(self, otherStms):
+        ### takes another streamlist, and conforms this one to it!
+        streams = []
+        for otherStm in otherStms:
+            start, stop = otherStm.start_frame, otherStm.stop_frame
+            fitStms = [selfStm for selfStm in self if start >= selfStm.start_frame and stop <= selfStm.stop_frame]
+            assert len(fitStms) == 1
+            fitStm = fitStms[0]
+            streams.append(fitStm.conform(start, stop))
+        return StreamList(streams)
+        
     def rename(self, new_name):
         return StreamList([myStm.rename(new_name) for myStm in self])
     
