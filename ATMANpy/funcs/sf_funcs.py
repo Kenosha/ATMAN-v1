@@ -18,6 +18,7 @@ from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 from ATMANpy.types.Contours import Contours
 
+import ATMANpy.funcs.util_funcs as ut
 import ATMANpy.funcs.sf_apply_funcs as sf
 
 from ATMANpy.types.Lines import CourtLines
@@ -797,3 +798,35 @@ def interpolate_ball_positions_3D_smart(mySF,
     joinDict = {frame: Point3D(interDict[frame]) for interDict in interDicts for frame in interDict}
     
     return StreamFeature(joinDict, name = 'ball_3D')
+
+def find_ballkid_sequences(cntSF, namedROIs, fill_limit = 3,
+                           distance_adjacent = 30, distance_near = 125,
+                           relevance_irrelevant = 0.25, relevance_conditional = 0.8):
+    import ATMANpy.funcs.ballkid_funcs as bk
+    
+    ### from movement contours and ballkid ROIs (with descriptive names!) ...
+    ### ... produce a scalar between 0 and 1, indicating the proportion of the contour within the ROI ...
+    intSF = bk.contour_proportion_in_ROI(cntSF, namedROIs)
+    ### ... and turn it into a dataframe ...
+    intDF = bk.prop_sf_to_dataframe(intSF, fill_limit = fill_limit)
+    ### ... where the proportion values are transformed into strings explaining the motion of the contour relative to the ROI.
+    strDF = bk.prop_frame_to_motion(intDF)
+    
+    ### Remove nan rows and split into contiguous chunks, called BLOCKS.
+    strDF = strDF.dropna(axis = 0, how = 'all')
+    strDFs = ut.split(strDF)
+        
+    ### Look at these blocks and join those which together represent a single interruption of play due to ballkids.
+    outList = bk.segment_play(strDFs, 
+                              distance_adjacent = distance_adjacent, 
+                              distance_near = distance_near,
+                              relevance_irrelevant = relevance_irrelevant,
+                              relevance_conditional = relevance_conditional)
+    
+    ### Transform into a BoolFeature.
+    ballkidBF = bk.outlist_to_bool(outList).conform(cntSF).fillna(False)
+
+    ### TODO: Widen the segments of play towards the back -> often, they cut out a bit too early.
+    return ballkidBF
+
+    
