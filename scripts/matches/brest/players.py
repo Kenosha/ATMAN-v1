@@ -59,19 +59,24 @@ if __name__ == '__main__':
     HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = list(range(START_FRAME, STOP_FRAME + 1)))
     courtSF = HPSF['H'].apply(sa.find_courtlines)
 
-    ### Read Segmentation Boolean
-    courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()    
+    ### Read Segmentation Booleans
+    # courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()    
+    ballkidBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['ballkidBool']).squeeze()   
+    playBF = ballkidBF.neg().conform(HPSF).fillna(False).rename('isPlay')
     
     ### Add empty player feature
     mySF = HPSF.to_SF().add('topPlayer', None).add('botPlayer', None).drop('P')
-    mySFs = mySF.filter(courtBF).split()
+    mySFs = mySF.filter(playBF).split()
     
-    burnStms = StreamList.from_store('foregroundMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask')
-    shadStms = StreamList.from_store('shadowMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask') 
-    
+    ### Get Streams, and conform them to the segmentation
     greyCtms = StreamList.from_SFList(mySFs, cap, 
                                       cache_size = 1, force_fill_cache = True,
                                       cap_color_space = 'bgr', target_color_space = 'grey')
+    
+    burnStms = StreamList.from_store('foregroundMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask')
+    burnStms = burnStms.conform(greyCtms)
+    shadStms = StreamList.from_store('shadowMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask') 
+    shadStms = shadStms.conform(greyCtms)
     
     ### Set Up ROIs
     # get courtROI to focus on the court itself
@@ -102,7 +107,7 @@ if __name__ == '__main__':
     
     ### 
     plStms = StreamList.from_SFList(plSFs, cap)    
-    plStms[0].show()
+    plStms[1].show()
     
     plStms[0][0].show()
 
