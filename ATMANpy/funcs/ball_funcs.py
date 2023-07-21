@@ -114,21 +114,20 @@ def calculate_alpha(sobGrads, normGrads, ellipseMask, unit = 'deg'):
     return mean, std
 
 
-def find_alpha_and_std_and_semiaxes(cnt, gFrm, maskFrm):
-    PIXEL_MARGIN = 3
-    ZOOM_FACTOR = 10
+def find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask,
+                                    pixel_margin = 3, zoom_factor = 10):
+
+    cntRegion = cnt.enclosing_region(margin = pixel_margin)
     
-    cntRegion = cnt.enclosing_region(margin = PIXEL_MARGIN)
-    
-    foreBlob_large = gFrm.crop(cntRegion).zoom(ZOOM_FACTOR)
-    foreBool_large = maskFrm.crop(cntRegion).zoom(ZOOM_FACTOR)
+    foreBlob_large = gFrm.crop(cntRegion).zoom(zoom_factor)
+    foreBool_large = intMask.crop(cntRegion).zoom(zoom_factor)
     
     cnts_large, _ = foreBool_large.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     
-    if len(cnts_large) == 1:
-        cnt_large = Contour(cnts_large[0])
+    if cnts_large.length() == 1:
+        cnt_large = cnts_large[0]
     else:
-        cnt_large = sorted([Contour(c) for c in cnts_large], key = lambda c: c.area())[-1] #take largest
+        cnt_large = cnts_large.largest()
     
     from ATMANpy.funcs.ball_funcs import get_ellipse, get_ellipse_mask, get_sobel_grads, get_normal_grads, calculate_alpha
     
@@ -208,7 +207,8 @@ def find_ball_candidate_mask(cFrm, motMask, topPlayerContour, botPlayerContour):
 
 #### SVM Feature collection for each ball candidate ####
 import pandas as pd
-def make_feature_frame(cnts, hFrm, gFrm, intMask):
+def make_feature_frame(cnts, hFrm, gFrm, intMask,
+                       zoom_factor = 10, pixel_margin = 3):
     
     cntSers = []
     
@@ -219,7 +219,9 @@ def make_feature_frame(cnts, hFrm, gFrm, intMask):
             
         # Alpha (and maybe add std?) and semiaxes
         try:
-            alpha, std, semiAxes = find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask)
+            alpha, std, semiAxes = find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask,
+                                                                   zoom_factor = zoom_factor, 
+                                                                   pixel_margin = pixel_margin)
             semiMaj, semiMin = semiAxes
         except:
             alpha, std, semiMaj, semiMin = np.nan, np.nan, np.nan, np.nan #occasionally, a contour has no ellipse that can be fitted.

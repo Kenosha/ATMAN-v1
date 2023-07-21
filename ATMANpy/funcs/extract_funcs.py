@@ -416,19 +416,16 @@ def find_motion_mask(gCache,
     return motMask
 
 
-def refine_motion_mask(motMask, topPlayer, botPlayer,
-                       dil_kernel_dims = (20, 10)):
-    
-    ### Dilated player mask
-    dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, dil_kernel_dims)
+def filter_player_movement(motMask, topPlayer, botPlayer,
+                           dil_kernel = (20, 10)):
     
     if not topPlayer is None:
-        topMask = motMask.within_contour(topPlayer).dilate(dil_kernel)
+        topMask = motMask.within_contour(topPlayer).dilate(dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
         topMask = MaskFrame.false(motMask)
         
     if not botPlayer is None:
-        botMask = motMask.within_contour(botPlayer).dilate(dil_kernel)
+        botMask = motMask.within_contour(botPlayer).dilate(dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
         botMask = MaskFrame.false(motMask)
     
@@ -461,7 +458,7 @@ def get_contours_from_mask(intMask,
         
 def get_movement_contours(gCache, featCache, 
                           intensity_threshold = 10, relevant_indices = [4, 6, 8],
-                          dil_kernel_dims = (20, 10), open_kernel_dims = (5, 5),
+                          dil_kernel = (20, 10), open_kernel = (5, 5),
                           max_number_of_contours = 40):
     
     topPlayer = featCache[0]['topPlayer']
@@ -471,27 +468,30 @@ def get_movement_contours(gCache, featCache,
                                intensity_threshold = intensity_threshold, 
                                relevant_indices = relevant_indices)
     
-    intMask = refine_motion_mask(motMask, topPlayer, botPlayer, 
-                                 dil_kernel_dims = dil_kernel_dims,
-                                 open_kernel_dims = open_kernel_dims)
+    intMask = filter_player_movement(motMask, topPlayer, botPlayer, 
+                                     dil_kernel = dil_kernel)
     
     movCnts = get_contours_from_mask(intMask, 
                                      max_number_of_contours = max_number_of_contours)
     
     return movCnts
 
-def get_feature_frames(hFrm, gFrm, intMask, movCnts):
-    from ATMANpy.funcs.ball_funcs import make_feature_frame
-    
-    ### make a feature frame
-    ballTable = make_feature_frame(movCnts, hFrm, gFrm, intMask).dropna()
-    ballTable.index.name = 'idx1'
-    
-    ### it can be that features can not be calculated for a contour...
-    if len(ballTable) == 0:
+def get_feature_frames(hFrm, gFrm, intMask, movCnts,
+                       zoom_factor = 10, pixel_margin = 3):
+    if movCnts.length() == 0:
         return None
     else:
-        return ballTable
+        from ATMANpy.funcs.ball_funcs import make_feature_frame
+        ### make a feature frame
+        ballTable = make_feature_frame(movCnts, hFrm, gFrm, intMask, 
+                                       zoom_factor = zoom_factor, pixel_margin = pixel_margin).dropna()
+        ballTable.index.name = 'idx1'
+        
+        ### it can be that features can not be calculated for a contour...
+        if len(ballTable) == 0:
+            return None
+        else:
+            return ballTable
     
 def get_movement_contours_and_frame(gCache, hCache, featCache, 
                                     intensity_threshold = 10, relevant_indices = [4, 6, 8],
@@ -513,7 +513,7 @@ def get_movement_contours_and_frame(gCache, hCache, featCache,
     
     movCnts = get_contours_from_mask(intMask, 
                                      max_number_of_contours = max_number_of_contours)
-    
+
     if movCnts is None:
         ballTable = None
     else:
