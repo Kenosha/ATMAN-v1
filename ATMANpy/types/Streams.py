@@ -1107,6 +1107,14 @@ class StreamList:
                 return StreamList([StillStream.from_SF(mySF, cap, name = name,
                                                        cap_color_space = cap_color_space, 
                                                        target_color_space = target_color_space) for mySF in sfList])
+        elif cap is None: ### In this case, the SFList itself contains the stream info! 
+            if cache_size is None:
+                return StreamList([DecapStream.from_frameSF(mySF) for mySF in sfList])
+            else:
+                return StreamList([DecapCachedStream.from_SF(mySF,
+                                                             cache_size = cache_size, 
+                                                             force_fill_cache = force_fill_cache,
+                                                             ) for mySF in sfList])
     
     @staticmethod
     def from_store(featureName, videoName, storeName, 
@@ -1161,14 +1169,10 @@ class StreamList:
     
     def __repr__(self):
         repStm = self[0]
-        if isinstance(repStm, Stream):
-            stmType = 'Stream'
-            nameStr = repStm.name
-        elif isinstance(repStm, MulStream):
-            stmType = 'MulStream'
+        stmType = repStm.__class__.__name__
+        if isinstance(repStm, MulStream):
             nameStr = ', '.join([subStm.name for subStm in repStm])
-        elif isinstance(repStm, StillStream):
-            stmType = 'StillStream'
+        else:
             nameStr = repStm.name
         return f'StreamList({self.length()} {stmType}s (named {nameStr}) from {self[0].start_frame} to {self[-1].stop_frame})'
     
@@ -1184,11 +1188,16 @@ class StreamList:
     def length(self):
         return len(self.streams)
     
-    def conform(self, otherStms):
-        ### takes another streamlist, and conforms this one to it!
+    def conform(self, otherList):
+        ### takes another StreamList or SFList, and conforms this one to it!
+        if isinstance(otherList, StreamList): ### el -> Stream (or similar)
+            get_start_stop = lambda el: (el.start_frame, el.stop_frame)
+        if isinstance(otherList, SFList): ### el -> StreamFeature (or similar)
+            get_start_stop = lambda el: (el.get_frames()[0], el.get_frames()[-1])
+        
         streams = []
-        for otherStm in otherStms:
-            start, stop = otherStm.start_frame, otherStm.stop_frame
+        for otherEl in otherList:
+            start, stop = get_start_stop(otherEl)
             fitStms = [selfStm for selfStm in self if start >= selfStm.start_frame and stop <= selfStm.stop_frame]
             assert len(fitStms) == 1
             fitStm = fitStms[0]
@@ -1317,6 +1326,9 @@ class DecapStream:
     def attach(self, mySF: StreamFeatures):
         return Stream.attach(self, mySF)
     
+    def decap(self):
+        return self ### needed, so that chunking can be done with simple chunk_generator functions
+    
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
         for idx, myFrm in enumerate(self.frames):
@@ -1416,6 +1428,9 @@ class NCDecapStream:
     
     def attach(self, mySF: StreamFeatures):
         return Stream.attach(self, mySF)
+    
+    def decap(self):
+        return self ### needed, so that chunking can be done with simple chunk_generator functions
     
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
     
@@ -1809,6 +1824,9 @@ class DecapCachedStream(DecapStream):
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return CachedStream.argstrings_to_args(funcArgs, myFrm, myDict)
+    
+    def decap(self):
+        return self ### needed, so that chunking can be done with simple chunk_generator functions
     
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
