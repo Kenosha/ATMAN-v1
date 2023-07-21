@@ -126,6 +126,12 @@ class Contours:
     def enclosing_regions(self, margin = 0):
         return Regions([cnt.enclosing_region() for cnt in self])
         
+    def smallest(self):
+        return self[np.argmin(self.area())]
+        
+    def largest(self):
+        return self[np.argmax(self.area())]
+    
     def fit_ellipse(self):
         ## returns: centerCoords, majminAxis, rotAngle 
         ## -> parameters of the rotated rectangle in which the ellipse is inscribed
