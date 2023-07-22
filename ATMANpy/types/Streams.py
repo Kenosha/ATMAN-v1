@@ -190,7 +190,7 @@ class Stream:
             assert H.dropna().length() == H.length() == self.length(), 'When warping is specified, all frames in stream must have a homography.'
     
     
-    def __getitem__(self, frmNum):
+    def get(self, frmNum, put = True):
         ### TODO: allow for item to be a slice also! (this would yield a multiframes)
         assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         outType = frameTypeMap[self.target_color_space]
@@ -202,8 +202,9 @@ class Stream:
                                     scale_factor = self.scale_factor,
                                     name = self.name)
     
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[frmNum][feat])
+        if put:
+            for feat in self.features.get_features():
+                outFrm = outFrm.put(self.features[frmNum][feat])
             
         if self.warp_dims is not None:
             width, height = self.warp_dims
@@ -212,7 +213,7 @@ class Stream:
             outFrm = outFrm.warp(H_inv, cols = width, rows = height)
         
         return outFrm
-        
+    
     @staticmethod
     def argstrings_to_args(funcArgs, myFrm, myDict):
         ### get arguments to plug into feature extraction function
@@ -761,12 +762,17 @@ class StillStream:
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return Stream.argstrings_to_funcs(funcArgs, myFrm, myDict)
     
-    def __getitem__(self, frmNum):
+    def get(self, frmNum, put = True):
         assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
         if self.scale_factor != 1:
             outFrm = self.stillFrm.rescale(self.scale_factor)
         else:
             outFrm = self.stillFrm
+        
+        if put:
+            for feat in self.features.get_features():
+                outFrm = outFrm.put(self.features[frmNum][feat])
+            
         return outFrm
     
     def length(self):
@@ -893,11 +899,8 @@ class MulStream:
     def __iter__(self):
         return self.streams.__iter__()
     
-    def __getitem__(self, item):
-        if isinstance(item, int):
-            return [myStm[item] for myStm in self]
-        else:
-            return MulStream([myStm[item] for myStm in self])
+    def get(self, frmNum, put = True):
+        return [myStm.get(frmNum, put = put) for myStm in self]
     
     ### So that a MulStream may be extracted from with caching
     def _set_mut_features(self, features_needed = None):
@@ -1288,12 +1291,13 @@ class DecapStream:
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
     
-    def __getitem__(self, item):
-        assert self.start_frame <= item <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
-        outFrm = self.frames[item - self.start_frame]
+    def get(self, frmNum, put = True):
+        assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+        outFrm = self.frames[frmNum - self.start_frame]
         
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[item][feat])
+        if put:
+            for feat in self.features.get_features():
+                outFrm = outFrm.put(self.features[frmNum][feat])
         
         return outFrm
     
@@ -1417,12 +1421,13 @@ class NCDecapStream:
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
 
-    def __getitem__(self, item):
-        assert item in self.frmNums, f'Frame requested has to be in self.frmNums!'
-        outFrm = self.frames[self.frmNums.index(item)]
+    def get(self, frmNum, put = True):
+        assert frmNum in self.frmNums, f'Frame requested has to be in self.frmNums!'
+        outFrm = self.frames[self.frmNums.index(frmNum)]
         
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[item][feat])
+        if put:
+            for feat in self.features.get_features():
+                outFrm = outFrm.put(self.features[frmNum][feat])
             
         return outFrm
     
@@ -1958,7 +1963,7 @@ class NCStream:
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
     
-    def __getitem__(self, frmNum):
+    def get(self, frmNum, put = True):
         ### TODO: allow for item to be a slice also! (this would yield a multiframes)
         assert frmNum in self.frmNums, f'Frame requested has to be in frmNums: [{self.frmNums[0]} ... {self.frmNums[-1]}]'
         outType = frameTypeMap[self.target_color_space]
@@ -1970,8 +1975,9 @@ class NCStream:
                                     scale_factor = self.scale_factor,
                                     name = self.name)
         
-        for feat in self.features.get_features():
-            outFrm = outFrm.put(self.features[frmNum][feat])
+        if put:
+            for feat in self.features.get_features():
+                outFrm = outFrm.put(self.features[frmNum][feat])
             
         return outFrm
         
