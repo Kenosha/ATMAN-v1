@@ -40,9 +40,9 @@ schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
 START_FRAME = 0
-STOP_FRAME = 10000
+STOP_FRAME = 100000
 VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'test'
+STORE_NAME = 'svm_run'
 NUM_WORKERS = 24
 CHUNKSIZE = 5000
 
@@ -108,7 +108,9 @@ if __name__ == '__main__':
     ballkidBFs.save(VIDEO_ID, STORE_NAME)
     
     
-    
+    ### TODO: Stop play sequences a bit later 
+        # -> often, ballkid movememnt starts at or slightly before the second bounce
+    ### TODO: Resegmentation by hand, in cases where theres a problem: Needs an interface, etc.
     
     
     

@@ -37,13 +37,12 @@ schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
 START_FRAME = 0
-RUN_LENGTH = 10000
+STOP_FRAME = 100000
 VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'test'
+STORE_NAME = 'svm_run'
 NUM_WORKERS = 24
 CHUNKSIZE = 1000
 
-stop_frame = START_FRAME + RUN_LENGTH
 cap = get_video(VIDEO_ID)
 
 width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
@@ -56,15 +55,15 @@ if __name__ == '__main__':
     ### TODO: Use roiMask created by court_roi.py
     
     ### Read constant Homography and Projection Matrix
-    HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = list(range(START_FRAME, stop_frame + 1)))
+    HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = list(range(START_FRAME, STOP_FRAME + 1)))
 
     ### Read median and standard deviation background
-    fileName = f'from_{START_FRAME}_to_{stop_frame}.npy'
+    fileName = f'from_{START_FRAME}_to_{STOP_FRAME}.npy'
     medStm = StillStream.from_store(fileName, 'median_backFrm', VIDEO_ID, STORE_NAME)
     stdStm = StillStream.from_store(fileName, 'std_backFrm', VIDEO_ID, STORE_NAME)
     
     ### Compare Frame and Background, find overlap metric
-    myStm = Stream(cap, START_FRAME, stop_frame)
+    myStm = Stream(cap, START_FRAME, STOP_FRAME)
     mulStm = MulStream.from_streams(myStm, medStm, stdStm)
     matchSF = mulStm.extract(ex.frame_comparison, std_multiple = 3) 
     matchBF = matchSF.apply(sa.exceeds_threshold, threshold = 0.75).to_bool().rename('isCourt')

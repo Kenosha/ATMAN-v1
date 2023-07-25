@@ -38,9 +38,9 @@ schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
 START_FRAME = 0
-STOP_FRAME = 10000
+STOP_FRAME = 100000
 VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'test'
+STORE_NAME = 'svm_run'
 NUM_WORKERS = 24
 CHUNKSIZE = 1000
 
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     ### Set up a region of interest to focus attention on court. 
     # -> region of interest will be saved as a StillFrame of Mask type
     some_frame = 300
-    someFrm = randStm[some_frame]
+    someFrm = randStm.get(some_frame, put = False)
     # someFrm.show()
     
     p1, p2, p3, p4 = Point2D((200, 0)), Point2D((440, 0)), Point2D((0, 295)), Point2D((width, 295))
@@ -139,7 +139,7 @@ if __name__ == '__main__':
     assert kidRegs.length() == 6
     
     fileName = f'from_{START_FRAME}_to_{STOP_FRAME}.npy'    
-    savePath = ff.get_and_make_save_path(f'ballkidROIs', VIDEO_ID, STORE_NAME)
+    savePath = ff.get_and_make_save_path('ballkidROIs', VIDEO_ID, STORE_NAME)
     fullPath = os.path.join(savePath, fileName)
     
     roiArr = ff.extract_regions_values(kidRegs)

@@ -36,13 +36,12 @@ schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
 START_FRAME = 0
-RUN_LENGTH = 10000
+STOP_FRAME = 100000
 VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'test'
+STORE_NAME = 'svm_run'
 NUM_WORKERS = 24
 CHUNKSIZE = 1000
 
-stop_frame = START_FRAME + RUN_LENGTH
 cap = get_video(VIDEO_ID)
 
 width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
@@ -70,7 +69,7 @@ if __name__ == '__main__':
     
     ### Read Courtlines
     # -> since camera is fixed, lines are simply a parameter! we will make a single homography by getting a few random shots
-    randStm = RandStream(cap, START_FRAME, stop_frame, number_of_frames = 1000,
+    randStm = RandStream(cap, START_FRAME, STOP_FRAME, number_of_frames = 1000,
                          cap_color_space = 'bgr', target_color_space = 'grey',
                          scale_factor = ADD_SCALE)
     
@@ -109,10 +108,10 @@ if __name__ == '__main__':
     netLines = NetLines.from_points(Point2D(bl), Point2D(tl), Point2D(tm), Point2D(tr), Point2D(br))
     
     ### Check the quality of line finding!
-    myStm = Stream(cap, START_FRAME, stop_frame)
-    myStm[4000].put(courtLines).put(netLines).show()
+    myStm = Stream(cap, START_FRAME, STOP_FRAME)
+    myStm.get(4000, put = False).put(courtLines).put(netLines).show()
     
-    myStm[4000].put(courtLines.get_court_region('Singles')).show()
+    myStm.get(4000, put = False).put(courtLines.get_court_region('Singles')).show()
     schemaLines.get_3D_corner_points('Singles')
     schemaLines.get_3D_corner_points('Doubles')
     
@@ -126,7 +125,7 @@ if __name__ == '__main__':
         ### Update: Not really, sadly. see above.
     
     def save_constant_array(npArr, saveName, storePath):
-        constPath = os.path.join(storePath, 'constants')
+        constPath = os.path.join(storePath, saveName)
         try:
             os.mkdir(constPath)
         except FileExistsError:
@@ -138,25 +137,6 @@ if __name__ == '__main__':
     save_constant_array(P, 'P', storePath)
     save_constant_array(M_int, 'M_int', storePath)
     save_constant_array(M_ext, 'M_ext', storePath)
-    
-    ### Use the Frames where we did find lines to calculate a background frame!
-    # the nice thing is: Since the homography is constant, there is no need to warp!!!
-    # We basically construct a NCDecapStream from where a homography has been found,
-    # and calculate mean and std over all constituent frames.
-    # This will not only constitute our background (for object detection),
-    # but also be used to check whether a given frame is actually in play (so we can segment the stream.)
-    normBF = sf.get_normal_bool(courtSF['courtLines'].dropna())
-    normDecStm = NCDecapStream.from_bool(normBF, cap)
-    medFrm, stdFrm = normDecStm.frames.median(), normDecStm.frames.std()
-    medFrm, stdFrm = medFrm.rename('median_backFrm'), stdFrm.rename('std_backFrm')
-    
-    medFrm.show()
-    stdFrm.show()
-    
-    medFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = START_FRAME, stop_frame = stop_frame)
-    stdFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = START_FRAME, stop_frame = stop_frame)
-    
-    
     
     
     

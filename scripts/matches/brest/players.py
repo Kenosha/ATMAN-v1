@@ -39,9 +39,9 @@ schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
 START_FRAME = 0
-STOP_FRAME = 10000
+STOP_FRAME = 100000
 VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'test'
+STORE_NAME = 'svm_run'
 NUM_WORKERS = 24
 CHUNKSIZE = 5000
 
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     ### Read Segmentation Booleans
     # courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()    
     ballkidBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['ballkidBool']).squeeze()   
-    playBF = ballkidBF.neg().conform(HPSF).fillna(False).rename('isPlay')
+    playBF = ballkidBF.neg().conform(frameList).fillna(False).rename('isPlay')
     
     ### Add empty player feature
     mySF = HPSF.to_SF().add('topPlayer', None).add('botPlayer', None).drop('P')
@@ -105,12 +105,7 @@ if __name__ == '__main__':
     mulStms = StreamList.combine(greyCtms, burnStms, shadStms)
     plSFs = mulStms.extract_chunked_mp(ex.find_both_players_smart, NUM_WORKERS, CHUNKSIZE, **params)
     
-    ### 
-    plStms = StreamList.from_SFList(plSFs, cap)    
-    plStms[1].show()
+    plSFs.save(VIDEO_ID, STORE_NAME, compression = 32)
     
-    plStms[0][0].show()
-
-    plStms[0].show()
 
 
