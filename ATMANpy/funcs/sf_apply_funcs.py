@@ -250,4 +250,20 @@ def find_known_ball_positions_3D(ballCnt, P, exp_eventFlag, topPlayer_3D, botPla
 def exceeds_threshold(match_ratio, threshold = 0.75):
     return match_ratio > threshold
     
+def threshold_false_positives_negatives(fp_rate, fn_rate, fp_threshold = 0.05, fn_threshold = 0.3):
+    if fp_threshold is not None:
+        fp_bool = fp_rate < fp_threshold
+    else:
+        fp_bool = True
+    
+    if fn_threshold is not None:
+        fn_bool = fn_rate < fn_threshold
+    else:
+        fn_bool = True
+        
+    isCourt = fp_bool & fn_bool
+    
+    return isCourt
+    
+
     
