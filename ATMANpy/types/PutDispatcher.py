@@ -12,9 +12,9 @@ from ATMANpy.types.Contours import Contour, Contours
 
 def put(someFrm, someObj, 
         color = None, radius = None, thickness = None, where = None, size = None,
-        annotation = None, verbose = False):
+        annotation = None, enumeration = False, verbose = False):
     
-    offset_margin = 20
+    offset_margin = 10
     
     if verbose:
         print('Calling put dispatcher with keywords')
@@ -74,17 +74,20 @@ def put(someFrm, someObj,
           
     if someObj.__class__.__name__ == 'Contours':
         if verbose: print('Contours!')
-        myFrm = InstClass(cv.drawContours(self_copy, [cnt.points for cnt in someObj], -1, color, thickness = thickness))
-        if annotation is not None:
-            for cnt in someObj:
+        if thickness > 0:
+            myFrm = InstClass(cv.drawContours(self_copy, [cnt.points for cnt in someObj], -1, color, thickness = thickness))
+        else:
+            myFrm = InstClass(self_copy)
+        if enumeration:
+            for idx, cnt in enumerate(someObj):
                 try:
                     cntPnt = cnt.center()
                 except ZeroDivisionError:
                     pass
                 else:
-                    myFrm = myFrm.put(str(annotation), where = (cntPnt - offset_margin).coords)
+                    myFrm = myFrm.put(str(idx), where = (cntPnt - offset_margin).coords, size = 0.5, color = (0, 0, 255))
         return myFrm
-      
+                    
     if isinstance(someObj, str):
         if verbose: print('String!')
         font = cv.FONT_HERSHEY_SIMPLEX

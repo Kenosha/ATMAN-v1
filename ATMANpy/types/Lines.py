@@ -306,6 +306,9 @@ class Lines:
         except:
             return Lines([*self.lineList, other])
     
+    def drop(self, line_to_drop):
+        return Lines([aLn for aLn in self.lineList if aLn.name != line_to_drop], name = self.name)
+    
     def sort(self, which, primary_direction, secondary_direction):
         ### do we sort by left point, or right point or high point or low point?
         ### t2b, b2t, l2r or r2l?
@@ -696,6 +699,12 @@ class Region(Lines):
         assert self.is_rectangle()
         return (self.height() + 1) * (self.width() + 1)
     
+    def pseudo_trapezius_area(self):
+        tLn, bLn = self['Top'], self['Bottom']
+        width = (tLn.length() + bLn.length()) / 2
+        height = tLn.distance_to(bLn.center())
+        return round((width + 1) * (height + 1)) ### plus one -> see above!
+        
     def centroid(self):
         assert self.is_rectangle()
         return self.p1.down(self.height() / 2).right(self.width() / 2)

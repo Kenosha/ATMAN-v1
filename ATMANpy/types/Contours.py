@@ -52,6 +52,9 @@ class Contour:
         cY = int(M["m01"] / M["m00"])
         return Point2D((cX, cY))
 
+    def shift(self, x_offset = 0, y_offset = 0):
+        return Contour((self.points + [x_offset, y_offset]))
+
     def rescale(self, scale_factor):
         return Contour((self.points * scale_factor).astype(int))
     

@@ -196,6 +196,9 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
     if horizontal_filter_margin is not None:
         h_Lines = filter_horizontal_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
                                                     margin = horizontal_filter_margin)
+        if len(h_Lines) == 0:
+            return None, None
+        
     if vertical_filter_margin is not None:
         l_v_Lines, r_v_Lines = filter_vertical_line_candidates(l_v_Lines, r_v_Lines, h_Lines,
                                                                margin = vertical_filter_margin)

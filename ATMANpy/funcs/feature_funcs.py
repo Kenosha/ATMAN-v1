@@ -348,12 +348,10 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
             else:
                 if isinstance(featSeries, pd.DataFrame):    ### yes, this is weird. 
                                                             ### usually, we always have a series, but
-                                                            ### we can also save indistinct tables, which are read as such.
+                                                            ### we can also save indistinct tables, which are read as such.                       
                     if featName.endswith('Cnts'): ## -> list of contours
                         featObj = Contours.from_frame(featSeries)
-                    else:                                        
-                        featObj = featSeries
-                    if featName.endswith('Lns'): ## -> list of contours
+                    elif featName.endswith('Lns'): ## -> list of Lines
                         featObj = Lines.from_frame(featSeries)
                     else:                                        
                         featObj = featSeries
@@ -362,6 +360,7 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
                         featObj = single_3D_feature_to_object(featSeries, featName)
                     else:    
                         featObj = single_2D_feature_to_object(featSeries)
+                
                 stream_features[idx][featName] = featObj
                 
     return stream_features
