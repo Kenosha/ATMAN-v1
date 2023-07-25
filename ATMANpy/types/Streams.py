@@ -16,7 +16,7 @@ import multiprocessing
 # multiprocessing.set_start_method('spawn')
 from multiprocessing.pool import Pool, ThreadPool
 from collections import deque
-from random import randrange
+from random import randrange, sample
 from typing import List, Union
 
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame
@@ -1091,21 +1091,30 @@ class StreamList:
                     target_color_space = 'bgr',
                     scale_factor = 1,
                     warp_dims = None,
-                    cache_size = None, force_fill_cache = False):
+                    cache_size = None, force_fill_cache = False,
+                    number_of_frames_to_sample_randomly = None):
         if isinstance(cap, cv.VideoCapture):
-            if cache_size is None:
-                return StreamList([Stream.from_SF(mySF, cap, name = name,
-                                                  cap_color_space = cap_color_space, 
-                                                  target_color_space = target_color_space,
-                                                  scale_factor = scale_factor,
-                                                  warp_dims = warp_dims) for mySF in sfList])
-            else:
+            if cache_size is not None:
                 return StreamList([CachedStream.from_SF(mySF, cap, name = name,
                                                         cache_size = cache_size, force_fill_cache = force_fill_cache,
                                                         cap_color_space = cap_color_space, 
                                                         target_color_space = target_color_space,
                                                         scale_factor = scale_factor,
                                                         warp_dims = warp_dims) for mySF in sfList])
+            elif number_of_frames_to_sample_randomly is not None:
+                return StreamList([RandStream.from_SF(mySF, cap, name = name, 
+                                                      number_of_frames = number_of_frames_to_sample_randomly,
+                                                      cap_color_space = cap_color_space, 
+                                                      target_color_space = target_color_space, 
+                                                      scale_factor = scale_factor,
+                                                      warp_dims = warp_dims) for mySF in sfList])
+            else:
+                return StreamList([Stream.from_SF(mySF, cap, name = name,
+                                                  cap_color_space = cap_color_space, 
+                                                  target_color_space = target_color_space,
+                                                  scale_factor = scale_factor,
+                                                  warp_dims = warp_dims) for mySF in sfList])
+                
         elif isinstance(cap, Frame): ### in this case, we have a list of StillStreams!
                 return StreamList([StillStream.from_SF(mySF, cap, name = name,
                                                        cap_color_space = cap_color_space, 
@@ -1881,6 +1890,18 @@ class DecapCachedStream(DecapStream):
 @dataclass(frozen = True)
 class RandStream(Stream):
     number_of_frames: int = 100
+        
+    @staticmethod
+    def from_SF(mySF, cap, name = None,
+                number_of_frames = 100,
+                cap_color_space = 'bgr', target_color_space = 'bgr',
+                scale_factor = 1, warp_dims = None):
+        start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
+        return RandStream(cap, start, stop, number_of_frames = number_of_frames,
+                          truncation_anchor = 0,
+                          cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                          scale_factor = scale_factor, warp_dims = warp_dims,
+                          features = mySF, name = name)
     
     def length(self):
         return self.number_of_frames
@@ -1937,17 +1958,16 @@ class NCStream:
     def __repr__(self):
         return f'NCStream(cap = {self.cap}, frmNums = {self.frmNums[0]} ... {self.frmNums[-1]} (length = {self.length()}), features = {self.features})'
     
-    
     @staticmethod
     def from_SF(mySF, cap, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
                 scale_factor = 1):
         frmNums = mySF.get_frames()
         return NCStream(cap, frmNums, 
-                      truncation_anchor = 0,
-                      cap_color_space = cap_color_space, target_color_space = target_color_space, 
-                      scale_factor = scale_factor,
-                      features = mySF, name = name)
+                        truncation_anchor = 0,
+                        cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                        scale_factor = scale_factor,
+                        features = mySF, name = name)
     
     def __post_init__(self):
         ### CHECK NAME
@@ -2092,6 +2112,59 @@ class NCStream:
     def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
         return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, _split = False, **kwargs)
        
+@dataclass(frozen = True)
+class NCRandStream(NCStream):
+    number_of_frames: int = 100
+    
+    @staticmethod
+    def from_SF(mySF, cap, name = None,
+                cap_color_space = 'bgr', target_color_space = 'bgr',
+                scale_factor = 1, number_of_frames = 100):
+        frmNums = mySF.get_frames()
+        return NCRandStream(cap, frmNums, number_of_frames = number_of_frames,
+                            truncation_anchor = 0,
+                            cap_color_space = cap_color_space, target_color_space = target_color_space, 
+                            scale_factor = scale_factor,
+                            features = mySF, name = name)
+    
+    def __repr__(self):
+        return f'NCRandStream(cap = {self.cap}, frmNums = {self.frmNums[0]} ... {self.frmNums[-1]} (length = {self.length()}), features = {self.features})'
+    
+    def length(self):
+        return self.number_of_frames
+    
+    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+            
+        sampled_frames = sample(self.frmNums, self.number_of_frames)
+    
+        for frmNum in sampled_frames:
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
+            ret, frame = self.cap.read()
+            
+            ### Get the frame in the correct color type
+            myFrm = color_converter(frame, self.cap_color_space, self.target_color_space)
+            myFrm = myFrm.rename(self.name)
+            
+            ### rescale if necessary
+            if self.scale_factor != 1:
+                myFrm = myFrm.rescale(self.scale_factor)
+                
+            ### Get the feature dictionary
+            myDict = self.features.maybe_get(frmNum)
+            ### if frmNum not found, we get {feat: None for feat in self.get_features()}
+            
+            myFrm = yield frmNum, myFrm, myDict # take in frame, possibly altered, to show 
+
+            if frame_counter:
+                myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
+            
+            if myFrm is not None:
+                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                if not still_showing:
+                    break
+                
+        else:
+            cv.destroyAllWindows()
 
     
     
