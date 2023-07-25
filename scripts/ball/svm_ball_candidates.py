@@ -16,11 +16,18 @@ import datetime as dt
 import ATMANpy.funcs.util_funcs as ut
 
 ### Path to labelled data
-VIDEO_ID = 'pqxAmUWIoKc'
+VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
 
 ballDict = ut.get_folder_struct('ball_svm')
 readPath  = os.path.join(ballDict['main'], VIDEO_ID, 'raw_data')
 writePath = os.path.join(ballDict['main'], VIDEO_ID, 'fitted_svms')
+
+
+try:
+    os.mkdir(writePath)
+except FileExistsError:
+    print('   Adding to existing ball_svm data')
+
 
 frmList = []
 for labelled_csv in os.listdir(readPath):
@@ -28,10 +35,13 @@ for labelled_csv in os.listdir(readPath):
     frmList.append(ballFrm)
     
 rawFrm = pd.concat(frmList, ignore_index = True)
-rawFrm['idx_within_image'] = rawFrm['idx_within_image'].fillna(rawFrm['index'])
-rawFrm = rawFrm.drop(['index', 'frameNum'], axis = 1)
+index_name = 'idx1'
 
-typeDict = {'idx_within_image': np.int64}
+# rawFrm['idx_within_image'] = rawFrm['idx_within_image'].fillna(rawFrm['index'])
+# rawFrm = rawFrm.drop(['index', 'frameNum'], axis = 1)
+rawFrm = rawFrm.drop(['frameNum'], axis = 1)
+
+typeDict = {index_name: np.int64}
 for col, tp in typeDict.items():
     rawFrm[col] = rawFrm[col].astype(tp)
 

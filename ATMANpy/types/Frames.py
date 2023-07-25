@@ -469,11 +469,13 @@ class BoolFrame(Frame):
         np.savetxt(os.path.join(savePath, f'{name}_bool.csv'), self.array, delimiter = ',')
         
     def put(self, anyObj, 
-            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None, 
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            annotation = None, enumeration = False,
             verbose = False):
         return put(self.to_grey(), anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, annotation = annotation,
+                   where = where, size = size, 
+                   annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
     
     def any_channel(self):
@@ -610,11 +612,13 @@ class MaskFrame(Frame):
         np.savetxt(os.path.join(savePath, f'{name}_mask.csv'), self.array, delimiter = ',')
         
     def put(self, anyObj, 
-            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None,
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            annotation = None, enumeration = False,
             verbose = False):
-        return put(self.to_grey(), anyObj, 
+        return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, annotation = annotation,
+                   where = where, size = size, 
+                   annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
     
     def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
@@ -641,6 +645,11 @@ class MaskFrame(Frame):
         arr = cv.erode(self_copy, kernel)
         return MaskFrame(arr)
         
+    def count_true(self):
+        return self.sum((0, 1)) // 255
+    def count_false(self):
+        return self.rows * self.cols - self.count_true()
+    
     def prob_hough(self, 
                    rho = 1,  ### the resolution of parameter r in pixels
                    theta = np.pi/180, ### the resolution of parameter theta in radians
@@ -716,11 +725,13 @@ class GreyFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None,
+            color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, annotation = annotation, 
+                   where = where, size = size, 
+                   annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
         
     def zero(self):
@@ -730,45 +741,45 @@ class GreyFrame(Frame):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
         return GreyFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
     
-    def sobel(self):
+    def sobel(self, ksize = 3):
         self_copy = self.array.copy()
-        grad_x = cv.Sobel(self_copy, cv.CV_64F, 1, 0)
-        grad_y = cv.Sobel(self_copy, cv.CV_64F, 0, 1)
+        grad_x = cv.Sobel(self_copy, cv.CV_64F, 1, 0, ksize = ksize)
+        grad_y = cv.Sobel(self_copy, cv.CV_64F, 0, 1, ksize = ksize)
         grad = np.sqrt(grad_x**2 + grad_y**2)
         grad_norm = (grad * 255 / grad.max()).astype(np.uint8)
         return GreyFrame(grad_norm)
     
-    def sobel_x(self):
+    def sobel_x(self, ksize = 3):
         self_copy = self.array.copy()
-        grad = cv.Sobel(self_copy, cv.CV_64F, 1, 0)
+        grad = cv.Sobel(self_copy, cv.CV_64F, 1, 0, ksize = ksize)
         grad = np.abs(grad)
         ### Update: Do not normalize under the hood! keep the normalisation factor!
         normaliser = grad.max() / 255
         grad_norm = (grad / normaliser).astype(np.uint8)
         return GreyFrame(grad_norm), normaliser
     
-    def sobel_y(self):
+    def sobel_y(self, ksize = 3):
         self_copy = self.array.copy()
-        grad = cv.Sobel(self_copy, cv.CV_64F, 0, 1)
+        grad = cv.Sobel(self_copy, cv.CV_64F, 0, 1, ksize = ksize)
         grad = np.abs(grad)
         ### Update: Do not normalize under the hood! keep the normalisation factor!
         normaliser = grad.max() / 255
         grad_norm = (grad / normaliser).astype(np.uint8)
         return GreyFrame(grad_norm), normaliser
     
-    def sobel_dirs(self, toward_high_intensity = True):
+    def sobel_dirs(self, ksize = 3, toward_high_intensity = True):
         ### how: atan or atan2
         # - atan: calculate arctan of quotient, losing info if x is negative
         # - atan2: two argument arctan.
         self_copy = self.array.copy()
-        grad_x = cv.Sobel(self_copy, cv.CV_64F, 1, 0)
-        grad_y = cv.Sobel(self_copy, cv.CV_64F, 0, 1)
+        grad_x = cv.Sobel(self_copy, cv.CV_64F, 1, 0, ksize = ksize)
+        grad_y = cv.Sobel(self_copy, cv.CV_64F, 0, 1, ksize = ksize)
         theta = np.arctan2(grad_y, grad_x)
         
         ### by default, sobel gradients point toward high intensity regions
         # we can also turn this around if we want
         if not toward_high_intensity:
-            theta = theta + np.pi
+            theta = (theta + np.pi) % (2 * np.pi) ### maps to [0, 2pi), instead of [-pi, pi]. The modulus is only there to reduce 2pi to 0.
         
         return theta
     
@@ -874,11 +885,13 @@ class BGRFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None,
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, annotation = annotation,
+                   where = where, size = size, 
+                   annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
         
     def zero(self):
@@ -979,11 +992,13 @@ class HSVFrame(Frame):
     ##################     
     
     def put(self, anyObj, 
-            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, annotation = None, 
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, annotation = annotation,
+                   where = where, size = size, 
+                   annotation = annotation, enumeration = enumeration,
                    verbose = False)
         
     def zero(self):

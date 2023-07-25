@@ -476,14 +476,16 @@ def get_movement_contours(gCache, featCache,
     
     return movCnts
 
-def get_feature_frames(hFrm, gFrm, intMask, movCnts,
+def get_feature_frames(hFrm, gFrm, movCnts,
+                       ksize = 3,
                        zoom_factor = 10, pixel_margin = 3):
     if movCnts.length() == 0:
         return None
     else:
         from ATMANpy.funcs.ball_funcs import make_feature_frame
         ### make a feature frame
-        ballTable = make_feature_frame(movCnts, hFrm, gFrm, intMask, 
+        ballTable = make_feature_frame(movCnts, hFrm, gFrm, 
+                                       ksize = ksize,
                                        zoom_factor = zoom_factor, pixel_margin = pixel_margin).dropna()
         ballTable.index.name = 'idx1'
         
@@ -674,4 +676,48 @@ def frame_comparison(cFrm, median_backFrm, std_backFrm, std_multiple = 3):
     match_ratio = match_pixels / all_pixels
     return match_ratio
     
+
+def court_match_rates(gFrm, courtLines, 
+                      zoom_factor = 1.2,
+                      width_of_line = 5, 
+                      white_thresh = 200, 
+                      int_diff_thresh = 10,
+                      dil_kernel = (2, 2)):
+    from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
+    ####### 1) Get Court Region and Scale It! -> for masking, and normalizing area.
+    courtReg = courtLines.get_court_region('Doubles')
+    scaledReg = courtReg.scale(zoom_factor)
+    courtLines = courtLines.drop('Net Line')
+    
+    ####### 2) Create Masks 
+    ### Figure out white, line-like parts of screen
+    whiteMask = get_white_lines_fast(gFrm, 
+                                     width_of_line = width_of_line, 
+                                     white_thresh = white_thresh, 
+                                     int_diff_thresh = int_diff_thresh)
+    whiteMask = whiteMask & whiteMask.within_region(scaledReg)
+    ### Create Court Mask
+    courtMask = MaskFrame.false(whiteMask).put(courtLines)
+    ### Create Dilated Masks
+    dil_whiteMask = whiteMask.dilate(dil_kernel)
+    dil_courtMask = courtMask.dilate(dil_kernel)
+    
+    ### Join Masks -> false positives and false negatives are of interest!
+    false_positive = whiteMask & ~dil_courtMask ### dilate the negated thing a bit, to be "lenient"
+    false_negative = ~dil_whiteMask & courtMask ### dilate the negated thing a bit, to be "lenient"
+    
+    ####### 3) Evaluate
+    all_positive = dil_courtMask.count_true() ### how many should be positive!
+    all_negative = scaledReg.pseudo_trapezius_area() - all_positive ### how many should be negative
+    
+    fp_rate = false_positive.count_true() / all_negative
+    fn_rate = false_negative.count_true() / all_positive
+    
+    # if fp_rate > fp_threshold or fn_rate > fn_threshold:
+    #     return True
+    # else:
+    #     return False
+    
+    # return fp, fn
+    return fp_rate, fn_rate

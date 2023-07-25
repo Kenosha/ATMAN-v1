@@ -44,100 +44,88 @@ def get_ellipse_mask(greyBlob, centerCoords, semiAxes, theta):
 
 
 ### Get the Sobel Gradients ###
-def get_sobel_grads(greyBlob, unit = 'deg'):
+def get_sobel_grads(foreBlob_large, ksize = 3):
     warnings.filterwarnings("default", category = RuntimeWarning)
-    sobGrads = Frame(greyBlob.sobel_dirs(toward_high_intensity = False))
+    sobArr = foreBlob_large.sobel_dirs(toward_high_intensity = False, ksize = ksize)
     ### we're turning around the sobel gradients directions to point out and away from the ellipse,
     # (given that the center is light and outside is dark)
     # this way, we're close to the formulation in yan x-mas kittler (2005).
+
+    ### if we downscale, we turn the sobel gradients (which are now 0 to 2*pi)
+    ### into angles that go from 0 to 360, to have only uint16, which is faster
+    ### than calculating with floats
+    degArr = (sobArr * 180 / np.pi)
     
-    if unit == 'deg':
-        ### if we downscale, we turn the sobel gradients (which are now 0 to 2*pi)
-        ### into angles that go from 0 to 360, to have only uint16, which is faster
-        ### than calculating with floats
-        degArray = (sobGrads.array * 180 / np.pi).astype('uint16') 
-        sobGrads = Frame(degArray)
-    
-    # sobChk = sobGrads.mask(ellipseMask)
-    # sobChk.show()
-    
-    # self_copy = foreBlob_large.array.copy()
-    # grad_x = cv.Sobel(self_copy, cv.CV_64F, 1, 0)
-    # grad_y = cv.Sobel(self_copy, cv.CV_64F, 0, 1)
-    
-    # xChk = Frame(grad_x).mask(ellipseMask)
-    # yChk = Frame(grad_y).mask(ellipseMask)
-    
-    return sobGrads
+    return degArr
 
 
 ### Get the Normal Gradients ###
-def get_normal_grads(greyBlob, ellipse_centercoords, unit = 'deg'):
+def get_normal_grads(foreBlob_large, centerCoords, theta):
     
     # construct a grid that contains a coordinate system, essentially
     # rows = np.array(list(range(foreBlob_large.rows, 0, -1))) # note that in index terms, low numbers are high. We want low numbers to be at the bottom of coord system.
     ### above is unnecessary! sobel gradient coords are also top-left origin.
-    rows = np.array(list(range(greyBlob.rows)))
-    cols = np.array(list(range(greyBlob.cols)))
+    rows, cols = np.arange(foreBlob_large.rows), np.arange(foreBlob_large.cols)
+    center_row, center_col = centerCoords[1], centerCoords[0] ### first element of centerCoords is x -> the column. second is y -> the row.
     
     idxGrid = np.dstack(np.meshgrid(rows, cols, indexing = 'ij')) ### a grid which contains as values of a cell the index of a cell
-    assert idxGrid.shape[:2] == greyBlob.shape[:2]
+    assert idxGrid.shape[:2] == foreBlob_large.shape[:2]
     
-    idxGrid_rel = idxGrid - ellipse_centercoords
-    normGrads = np.arctan2(idxGrid_rel[:, :, 0], idxGrid_rel[:, :, 1])
-    normGrads = Frame(normGrads)
+    ### Get the angle of the normal vectors, from 0 at 3 o clock, 90 at 6 o clock, etc.
+    idxGrid_rel = idxGrid - (center_row, center_col)
+    angle_of_an_upright_ellipse = np.arctan2(idxGrid_rel[:, :, 0], idxGrid_rel[:, :, 1]) ### basically, arctan2(y, x)
+    inclination_correction = theta * np.pi / 180
+    normArr = angle_of_an_upright_ellipse - inclination_correction
+    ## why minus? see notes, 22.07.2023
     
-    if unit == 'deg':
-        degArray = (normGrads.array + 2 * np.pi) % (2 * np.pi) # map [-pi, pi] to [0, 2pi]
-        degArray = (degArray * 180 / np.pi).astype('uint16') 
-        normGrads = Frame(degArray)
+    ### remap [-pi, pi] to [0, 2pi]
+    normArr = (normArr + 4 * np.pi) % (2 * np.pi) ### x 4pi instead of x 2pi 
+                                                    # just in case the inclination correction goes up to 2pi.
+                                                    # (in which case we could get as low as -3pi, in normArr.)
     
-    # normGrads.show()
+    ### Turn into Degrees
+    normArr = (normArr * 180 / np.pi)
     
-    return normGrads
+    return normArr
 
-def calculate_alpha(sobGrads, normGrads, ellipseMask, unit = 'deg'):
+def calculate_alpha(sobArr, normArr, ellipseMask):
     
     #### putting it all together
-    absdiffFrm = (normGrads - sobGrads)
+    absdiffFrm = np.abs(normArr - sobArr)
     
-    half_circle = 180 if unit == 'deg' else np.pi  
-    anglFrm = (absdiffFrm + half_circle) % (2 * half_circle) - half_circle
+    # half_circle = 180 if unit == 'deg' else np.pi  
+    half_circle = 180
+    anglArr = np.abs((absdiffFrm + half_circle) % (2 * half_circle) - half_circle)
     ### ensure that we take the smaller difference between two angles
     # i.e: d(360, 5) != 355, but 10
     
-    # # chk = diffFrm.mask(ellipseMask)
-    # chk2 = anglFrm.mask(ellipseMask)
-    # # diffFrm.mask(ellipseMask).show()
-    
-    mean, std = anglFrm.mean_std(mask = ellipseMask)
+    mean, std = Frame(anglArr).mean_std(mask = ellipseMask)
     return mean, std
 
 
-def find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask,
+def find_alpha_and_std_and_semiaxes(cnt, gFrm,
+                                    ksize = 3,
                                     pixel_margin = 3, zoom_factor = 10):
 
     cntRegion = cnt.enclosing_region(margin = pixel_margin)
-    
     foreBlob_large = gFrm.crop(cntRegion).zoom(zoom_factor)
-    foreBool_large = intMask.crop(cntRegion).zoom(zoom_factor)
+    foreBool_large = gFrm.within_contour(cnt).crop(cntRegion).zoom(zoom_factor)
     
-    cnts_large, _ = foreBool_large.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    
-    if cnts_large.length() == 1:
-        cnt_large = cnts_large[0]
-    else:
-        cnt_large = cnts_large.largest()
-    
+    ### technically, we could just scale up the contour, 
+    ### but then the contour would be much chunkier than finding a new contour in the interpolated image.
+    cnts_large, _ = foreBool_large.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE) 
+    assert cnts_large.length() == 1
+    cnt_large = cnts_large[0]
+        
     from ATMANpy.funcs.ball_funcs import get_ellipse, get_ellipse_mask, get_sobel_grads, get_normal_grads, calculate_alpha
     
     centerCoords, semiAxes, theta = get_ellipse(cnt_large)
     ellipseMask = get_ellipse_mask(foreBlob_large, centerCoords, semiAxes, theta)
     
-    sobGrads = get_sobel_grads(foreBlob_large)
-    normGrads = get_normal_grads(foreBlob_large, centerCoords)
+    sobArr = get_sobel_grads(foreBlob_large, ksize = ksize)
+    normArr = get_normal_grads(foreBlob_large, centerCoords, theta)
     
-    alpha, std = calculate_alpha(sobGrads, normGrads, ellipseMask)
+    alpha, std = calculate_alpha(sobArr, normArr, ellipseMask)
     return alpha, std, semiAxes ### we also return the semiAxes, since they will be params
 
 
@@ -207,7 +195,8 @@ def find_ball_candidate_mask(cFrm, motMask, topPlayerContour, botPlayerContour):
 
 #### SVM Feature collection for each ball candidate ####
 import pandas as pd
-def make_feature_frame(cnts, hFrm, gFrm, intMask,
+def make_feature_frame(cnts, hFrm, gFrm,
+                       ksize = 3,
                        zoom_factor = 10, pixel_margin = 3):
     
     cntSers = []
@@ -219,7 +208,8 @@ def make_feature_frame(cnts, hFrm, gFrm, intMask,
             
         # Alpha (and maybe add std?) and semiaxes
         try:
-            alpha, std, semiAxes = find_alpha_and_std_and_semiaxes(cnt, gFrm, intMask,
+            alpha, std, semiAxes = find_alpha_and_std_and_semiaxes(cnt, gFrm,
+                                                                   ksize = ksize,
                                                                    zoom_factor = zoom_factor, 
                                                                    pixel_margin = pixel_margin)
             semiMaj, semiMin = semiAxes
