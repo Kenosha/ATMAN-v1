@@ -170,6 +170,10 @@ class Stream:
         if self.stop_frame > self.start_frame + total_frames:
             print(f'{self.stop_frame} not available in cap of length {total_frames}. Reinitializing with stop_frame = {total_frames}...')
             object.__setattr__(self, 'stop_frame', total_frames)
+            
+        if self.start_frame > self.stop_frame:
+            print(f'Stop frame ({self.stop_frame}) occurs before start frame ({self.start_frame})')
+            object.__setattr__(self, 'stop_frame', self.start_frame)
         
         ### CHECK NAME
         if self.name is None:
@@ -258,10 +262,16 @@ class Stream:
         length = self.length()
         return round(length * width * height * mult / unitMap[unit], 2)
     
+    def get_framelist(self):
+        return list(range(self.start_frame, self.stop_frame + 1))
+        
     def conform(self, start_frame, stop_frame):
         updDict = {'start_frame': start_frame, 'stop_frame': stop_frame}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
+    
+    def widen(self, N):
+        return self.conform(self.start_frame - N, self.stop_frame + N)
     
     def rename(self, new_name):
         updDict = {'name': new_name}
@@ -1216,6 +1226,9 @@ class StreamList:
             streams.append(fitStm.conform(start, stop))
         return StreamList(streams)
         
+    def widen(self, N):
+        return StreamList([myStm.widen(N) for myStm in self])
+    
     def rename(self, new_name):
         return StreamList([myStm.rename(new_name) for myStm in self])
     
@@ -1228,6 +1241,12 @@ class StreamList:
     def attach(self, sfList):
         assert self.length() == sfList.length(), f'Trying to attach SFList of length {sfList.length()} to StreamList of length {self.length()}'
         return StreamList([myStm.attach(mySF) for myStm, mySF in zip(self, sfList)])
+    
+    def join(self):
+        ### create an NCStream from the StreamList
+        frameList = list(set([frmNum for myStm in self for frmNum in myStm.get_framelist()]))
+        cap = self[0].cap ### needs generalisation...
+        return NCStream(cap, frameList)
     
     # def chunk_generator(self, chunksize = None): 
     #     ### chunks are simply the elements!
@@ -1903,9 +1922,23 @@ class RandStream(Stream):
                           scale_factor = scale_factor, warp_dims = warp_dims,
                           features = mySF, name = name)
     
+    def sample_space(self):
+        return super().length()
+    
     def length(self):
         return self.number_of_frames
     
+    def decap(self):
+        frmNums = self.get_framelist()
+        sampled_frames = sample(frmNums, self.number_of_frames) 
+        
+        framesType = framesTypeMap[self.target_color_space]
+        frames = framesType.from_list(self.cap, sampled_frames, 
+                                      cap_color_space = self.cap_color_space,
+                                      scale_factor = self.scale_factor,
+                                      name = self.name) ### TODO: speed up the get_framelist function by threading.
+        return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
+
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
             
         frmNum = randrange(self.start_frame, self.stop_frame)
@@ -2028,6 +2061,11 @@ class NCStream:
     def attach(self, mySF):
         return Stream.attach(self, mySF)
 
+    def sample(self, number_of_frames):
+        updDict = {'number_of_frames': number_of_frames}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return NCRandStream(**newDict)
+
     def decap(self):
         framesType = framesTypeMap[self.target_color_space]
         frames = framesType.from_list(self.cap, self.frmNums, 
@@ -2130,12 +2168,26 @@ class NCRandStream(NCStream):
     def __repr__(self):
         return f'NCRandStream(cap = {self.cap}, frmNums = {self.frmNums[0]} ... {self.frmNums[-1]} (length = {self.length()}), features = {self.features})'
     
+    def sample_space(self):
+        return super().length()
+    
     def length(self):
         return self.number_of_frames
     
+    def decap(self):
+        sampled_frames = sample(self.frmNums, self.number_of_frames) 
+        
+        framesType = framesTypeMap[self.target_color_space]
+        frames = framesType.from_list(self.cap, sampled_frames, 
+                                      cap_color_space = self.cap_color_space,
+                                      scale_factor = self.scale_factor,
+                                      name = self.name) ### TODO: speed up the get_framelist function by threading.
+        return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
+
     def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
             
-        sampled_frames = sample(self.frmNums, self.number_of_frames)
+        sampled_frames = sample(self.frmNums, self.number_of_frames) ### TODO: this is without replacement, RandStream is with!!!
+                                                                        # -> make explicit whether we want with or without.
     
         for frmNum in sampled_frames:
             self.cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
