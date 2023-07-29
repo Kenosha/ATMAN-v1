@@ -7,6 +7,7 @@ Utility Functions
 @author: gianl
 """
 
+import cv2 as cv
 import os
 import time
 import datetime
@@ -39,6 +40,45 @@ def make_timestamp():
 ####### video read in
 
 
+def text_to_dict(textPath):
+    with open(textPath) as f:
+        lines = f.readlines()
+
+    def parse(textStr):
+        name, val = textStr.replace(' ', '').replace('\n', '').split('=')
+        
+        try:
+            if '.' in val:
+                val = float(val)
+            else:
+                val = int(val)
+        except ValueError:
+            pass
+        
+        return name, val
+    
+    outDict = {name.lower(): val for name, val in [parse(l) for l in lines]}
+    return outDict
+
+def read_config(match_name):
+    matchDir = get_folder_struct('scripts')['matches']
+    configPath = os.path.join(matchDir, match_name, '_config.txt')
+    
+    configDict = text_to_dict(configPath)
+
+    ### add the video capture to the config
+    cap = get_video(configDict['video_id'])   
+    width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
+    
+    configDict['cap'] = cap
+    configDict['natural_scale'] = width / 1920
+    configDict['scale_factor'] = configDict['natural_scale'] * configDict['add_scale']
+    
+    print('Reading config...')
+    for key, val in configDict.items():
+        print(f'    {key}: {val}')
+    
+    return configDict
 
 ##### 
 
@@ -248,4 +288,5 @@ def split(df):
     consecidx = np.arange(len(df))
     return [d for _, d in df.groupby(nonconsecIdx - consecidx)]
     
+
     
