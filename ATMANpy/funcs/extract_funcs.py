@@ -415,6 +415,35 @@ def find_motion_mask(gCache,
         
     return motMask
 
+def find_motion_mask_three_channel(hCache, 
+                                   ROI = None,
+                                   intensity_threshold = (10, 10, 10),
+                                   relevant_indices = [4, 6, 8],
+                                   open_kernel = (5, 5),
+                                   close_kernel = (5, 5)):
+    centralFrm = hCache[0]
+    
+    motFunc = lambda othFrm: centralFrm - othFrm > intensity_threshold 
+    
+    if ROI is None:
+        motBool = BoolFrame.true(centralFrm)
+    else:
+        motBool = centralFrm.within_region(ROI).to_bool()
+    
+    for idx in relevant_indices:
+        othFrm_bef, othFrm_aft = hCache[-idx], hCache[idx]
+        motBool = motBool & motFunc(othFrm_bef) & motFunc(othFrm_aft)
+   
+    ### Close and Open, optionally.
+    ### Note: In case of multichannel image (which this bool is), each channel is processed indipendently!! Source: Doc for cv.morphologyEx
+    if not close_kernel is None:
+        motBool = motBool.close(close_kernel) 
+    if not open_kernel is None:
+        motBool = motBool.open(open_kernel)
+        
+    HMask, SMask, VMask = motBool.split()
+        
+    return HMask, SMask, VMask 
 
 def filter_player_movement(motMask, topPlayer, botPlayer,
                            dil_kernel = (20, 10)):
@@ -479,7 +508,9 @@ def get_movement_contours(gCache, featCache,
 def get_feature_frames(hFrm, gFrm, movCnts,
                        ksize = 3,
                        zoom_factor = 10, pixel_margin = 3):
-    if movCnts.length() == 0:
+    if movCnts is None:
+        return None
+    elif movCnts.length() == 0:
         return None
     else:
         from ATMANpy.funcs.ball_funcs import make_feature_frame
@@ -675,7 +706,12 @@ def frame_comparison(cFrm, median_backFrm, std_backFrm, std_multiple = 3):
     all_pixels = normdiffFrm.rows * normdiffFrm.cols * normdiffFrm.channels
     match_ratio = match_pixels / all_pixels
     return match_ratio
-    
+
+def black_comparison(foregroundMask):
+    on_pixels = foregroundMask.sum((0, 1)) // 255
+    all_pixels = foregroundMask.rows * foregroundMask.cols
+    on_ratio = on_pixels / all_pixels
+    return on_ratio
 
 def court_match_rates(gFrm, courtLines, 
                       zoom_factor = 1.2,
@@ -721,3 +757,5 @@ def court_match_rates(gFrm, courtLines,
     
     # return fp, fn
     return fp_rate, fn_rate
+
+
