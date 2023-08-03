@@ -14,8 +14,11 @@ import pandas as pd
 from typing import List
 from functools import partial
 
+from skvideo.io import FFmpegWriter
+
 import ATMANpy.funcs.feature_funcs as ff
-from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, prepend_index_level, get_folder_struct
+from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names
+from ATMANpy.funcs.util_funcs import prepend_index_level, get_folder_struct, make_timestamp
 
 from ATMANpy.types.Lines import Line
 from ATMANpy.types.Shapes3D import Line3D
@@ -410,7 +413,7 @@ class StreamFeature(StreamFeaturesBase):
         if not featFrm.empty:
             ff.save_feature_frame(featFrm, self.name, videoName, storeName)
         
-    def _save_as_video(self, videoName, storeName, 
+    def _save_as_video(self, videoName, storeName,
                        monochrome = True, lossless = True):
         ### the folder name has information about which feature...
         savePath = ff.get_and_make_save_path(self.name, videoName, storeName)
@@ -420,74 +423,62 @@ class StreamFeature(StreamFeaturesBase):
         assert self.is_contiguous(), 'can only save contiguous video features as video!'
         frames = self.get_frames()
         fs, ls = frames[0], frames[-1]
+        
         fileName = f'from_{fs}_to_{ls}.avi'
         
         fullPath = os.path.join(savePath, fileName)
         
-        ### get frame size
-        frame_height, frame_width = self[fs].rows, self[fs].cols
-        size = frame_width, frame_height
-        
-        ### get codec ###
         if lossless:
-            codec = cv.VideoWriter_fourcc(*'FFV1') ### this often gives a mysterious windows access violation error...
-            ### TODO: if you want to fix: use scikit.video -> ffmpegwriter... seems like our best bet.
-            # codec = cv.VideoWriter_fourcc(*'X264')
-            # codec = cv.VideoWriter_fourcc(*'AVC1')
+            outputdict = {
+              '-vcodec': 'libx264',  #use the h.264 codec
+              '-crf': '0',           #set the constant rate factor to 0, which is lossless
+              '-preset':'veryslow'   #the slower the better compression, in princple, try 
+                                     #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+             }
         else:
-            codec = cv.VideoWriter_fourcc(*'XVID')
-        
-        ### set fps
-        fps = 25
-        
-        if monochrome:
-            writer = cv.VideoWriter(fullPath, 
-                                    codec,
-                                    fps,
-                                    size, 
-                                    0)
-        else:
-            writer = cv.VideoWriter(fullPath, 
-                                    codec,
-                                    fps,
-                                    size)
+            outputdict = {}
             
-        for myFrm in self.values():
-            writer.write(myFrm.array)
+        writer = FFmpegWriter(fullPath, outputdict = outputdict)
         
-        writer.release()
-    
+        for myFrm in self.values():
+            writer.writeFrame(myFrm.array)
+        
+        writer.close()
+        
     def save(self, videoName, storeName, lossless = False, compression = None):
+        ### New principle: -> do not save None values! 
+        saveSF = self.dropna()
+        
         contourNames = ['topPlayer', 'botPlayer']
         homographyNames = ['H']
         regionNames = ['scoreBoard']
         
         if self.name in contourNames:
-            self._save_contour(videoName, storeName, compression = compression)
+            saveSF._save_contour(videoName, storeName, compression = compression)
         elif self.name == 'H':
-            self._save_homography(videoName, storeName)
+            saveSF._save_homography(videoName, storeName)
         elif self.name == 'P':
-            self._save_projection(videoName, storeName)
+            saveSF._save_projection(videoName, storeName)
         elif self.name in regionNames:
-            self._save_region(videoName, storeName)
+            saveSF._save_region(videoName, storeName)
         elif self.name.endswith('Ln'):
-            self._save_line(videoName, storeName)
+            saveSF._save_line(videoName, storeName)
         elif self.name.endswith('Lns'):
-            self._save_lines(videoName, storeName)
+            saveSF._save_lines(videoName, storeName)
         elif self.name.endswith('Cnt'):
-            self._save_contour(videoName, storeName, compression = compression)
+            saveSF._save_contour(videoName, storeName, compression = compression)
         elif self.name.endswith('Cnts'):
-            self._save_contours(videoName, storeName, compression = compression)
+            saveSF._save_contours(videoName, storeName, compression = compression)
         elif self.name.endswith('3D'):
-            self._save_point(videoName, storeName)
+            saveSF._save_point(videoName, storeName)
         elif 'Mask' in self.name:
-            self._save_as_video(videoName, storeName, monochrome = True, lossless = lossless)
+            saveSF._save_as_video(videoName, storeName, monochrome = True, lossless = lossless)
         elif 'Frm' in self.name:
-            self._save_as_video(videoName, storeName, monochrome = False, lossless = lossless)
+            saveSF._save_as_video(videoName, storeName, monochrome = False, lossless = lossless)
         elif 'Flag' in self.name: ### all text has to be called Flag!
-            self._save_text(videoName, storeName)
+            saveSF._save_text(videoName, storeName)
         elif 'Table' in self.name:
-            self._save_table(videoName, storeName)
+            saveSF._save_table(videoName, storeName)
         else:
             print(f"Did not save {self.name}, don't know how!")
         
