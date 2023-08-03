@@ -21,7 +21,7 @@ from ATMANpy.types.Contours import Contour, Contours
 
 from ATMANpy.types.PutDispatcher import put
 
-_TEMP_STRICT_MASK = False
+_TEMP_STRICT_MASK = True
 
 class FrameIterator:
     def __init__(self, frame):
@@ -326,7 +326,12 @@ class Frame:
         self_copy = self.array.copy()
         zoomArr = cv.resize(self_copy, None, 
                             fx = zoom_factor, fy = zoom_factor, interpolation = interpolation)
-        return InstClass(zoomArr)
+        if InstClass.__name__ == 'MaskFrame':
+            return GreyFrame(zoomArr) > 127 ### this is a maskframe!
+        elif InstClass.__name__ == 'BoolFrame':
+            return BGRFrame(zoomArr) > 127 ### this is a boolframe
+        else:
+            return InstClass(zoomArr)
 
     def gaussian_blur(self, kernelSize):
         self_copy = self.array.copy()
@@ -419,7 +424,7 @@ class BoolFrame(Frame):
     
     @staticmethod
     def true(likeFrm):
-        return ~BoolFrame.false()
+        return ~BoolFrame.false(likeFrm)
     
     ####################
     
@@ -478,13 +483,17 @@ class BoolFrame(Frame):
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
     
+    def split(self):
+        c1, c2, c3 = cv.split(self.array)
+        return MaskFrame(c1), MaskFrame(c2), MaskFrame(c3)
+    
     def any_channel(self):
         c1, c2, c3 = cv.split(self.array)
-        return BoolFrame(cv.bitwise_or(cv.bitwise_or(c1, c2), c3))
+        return MaskFrame(cv.bitwise_or(cv.bitwise_or(c1, c2), c3))
     
     def all_channels(self):
         c1, c2, c3 = cv.split(self.array)
-        return BoolFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
+        return MaskFrame(cv.bitwise_and(cv.bitwise_and(c1, c2), c3))
 
     def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         self_copy = self.array.copy()
