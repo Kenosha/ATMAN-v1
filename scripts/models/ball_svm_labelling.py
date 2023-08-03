@@ -5,14 +5,6 @@ Created on Fri Jul 21 21:37:13 2023
 @author: gianl
 """
 
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jul 21 12:28:19 2023
-
-@author: gianl
-"""
-
-
 import os
 import time
 
@@ -46,40 +38,30 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_inters
 schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
-START_FRAME = 0
-STOP_FRAME = 100000
-VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'svm_run'
-NUM_WORKERS = 24
-CHUNKSIZE = 5000
+conf = ut.read_config('brest')
+vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+nwo, nch = conf['num_workers'], conf['chunksize']
+cap = conf['cap']
 
-cap = get_video(VIDEO_ID)
-
-width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
-NATURAL_SCALE = width / 1920
-ADD_SCALE = 1 
-SCALE_FACTOR = NATURAL_SCALE * ADD_SCALE
-
+NUM_FRAMES = 400
+    
 ####### AUXILIARY FUNCTIONS ##################
 
-        
-def label_ball_candidate(clickPt, contourFrm: pd.DataFrame, max_range_threshold = 100):
-    outFrm = contourFrm.copy()
-    outFrm['isBall'] = 0
-
+def label_ball_candidate(clickPt, cnts: Contours, max_range_threshold = 100):
     if clickPt is None:
         print('No click detected, no ball.')
     else:
-        dFrm = (contourFrm[['Cx', 'Cy']] - clickPt) ** 2
-        distance = (dFrm['Cx'] + dFrm['Cy']) ** 0.5
-        if distance.min() < max_range_threshold:
-            identified_ball = distance.argmin()
-            outFrm.loc[identified_ball, 'isBall'] = 1
+        d = lambda aPt, bPt: ((aPt[0] - bPt[0]) ** 2 + (aPt[1] - bPt[1]) ** 2) ** 0.5
+        distances = [d(centerPt.coords, clickPt) for centerPt in cnts.center()]
+        if min(distances) < max_range_threshold:
+            identified_ball = np.argmin(distances)
+            idCnt = cnts[identified_ball]
+            idCnts = Contours([idCnt]) ### to make it easier for us: turn into Contours of length 1
+            otherCnts = cnts.drop(identified_ball)
             print(f'Contour Nr.{identified_ball} identified as ball.')
+            return idCnts, otherCnts
         else:
             print('Click was too far away, no ball.')
-            
-    return outFrm
 
 def show_and_callback(showFrm1, showFrm2):
     global clickPt
@@ -103,104 +85,67 @@ def show_and_callback(showFrm1, showFrm2):
     else:
         return key
     
-    
-#################################################
-
-
-#### TODO: Important 
-    ### -> Save contours instead of frame -> in case the algorithm for get_feature_frame changes, 
-    ### we can always recreate the training data! 
+##################
 
 if __name__ == '__main__':
-    frameList = list(range(START_FRAME, STOP_FRAME + 1))
+    frameList = list(range(conf['start_frame'], conf['stop_frame'] + 1))
     
-    cntSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['movCnts']).squeeze()
-    cntStm = NCRandStream.from_SF(cntSF, cap, number_of_frames = 400)
+    mySF = StreamFeatures.from_store(vid, sto, featnameList = ['movCnts', 'topPlayer', 'botPlayer']).squeeze()
+    myStm = NCRandStream.from_SF(mySF, cap, number_of_frames = NUM_FRAMES)
            
-    clickList = []
-    frameList = []
+    # clickList = []
+    idDict = {} ### for ball contours
+    otherDict = {} ### for non-ball contours
     
-    for frmNum, myFrm, myFeats in cntStm.generator():
+    for frmNum, myFrm, myFeats in myStm.generator():
         
         cnts = myFeats['movCnts']
+        topPlayer, botPlayer = myFeats['topPlayer'], myFeats['botPlayer']
         hFrm = myFrm.to_HSV()
         gFrm = myFrm.to_grey()
         
-        cntFrm = ex.get_feature_frames(hFrm, gFrm, cnts)
+        # cntFrm = ex.get_feature_frames(hFrm, gFrm, cnts)
     
-        showFrm = myFrm.put(cnts, enumeration = True, thickness = 0).zoom(1 / SCALE_FACTOR)
-        showFrm_with_contours = myFrm.put(cnts, enumeration = True, thickness = 1).zoom(1 / SCALE_FACTOR)
+        showFrm = myFrm.put(cnts, enumeration = True, thickness = 0)
+        showFrm = showFrm.zoom(1 / conf['scale_factor'])
+        
+        showFrm_with_contours = myFrm.put(cnts, enumeration = True, thickness = 1)
+        showFrm_with_contours = showFrm_with_contours.put(topPlayer, color = (255, 0, 0)).put(botPlayer, color = (255, 0, 0))
+        showFrm_with_contours = showFrm_with_contours.zoom(1 / conf['scale_factor'])
         
         clickPt = None
         key = show_and_callback(showFrm, showFrm_with_contours)
-        
-        # ######### CLICK STUFF ########
-        # # reset the mouse click location
-        # clickPt = None
-        # # set up the window
-        # cv.namedWindow("image")
-        # cv.setMouseCallback("image", select_point)
-        # # display the image and wait for a keypress
-        # cv.imshow("image", showFrm.array)
-        # key = cv.waitKey(0) & 0xFF
-        # showing_contours = False
-        
-        # if key == ord('s'): ### switch between contours painted on or not.
-        #     if showing_contours:
-        #         cv.imshow("image", showFrm.array)
-        #         showing_contours = False
-        #     else:
-        #         cv.imshow("image", showFrm_with_contours.array)
-        #         showing_contours = True
         
         if key == ord('q'): ## press q to quit
             cv.destroyAllWindows()
             break
         
         if key == ord(' '): ## press confirm click and go to next picture
-            clickPt = clickPt[0] * SCALE_FACTOR, clickPt[1] * SCALE_FACTOR
-            clickList.append(clickPt)
+            clickPt = clickPt[0] * conf['scale_factor'], clickPt[1] * conf['scale_factor']
+            # clickList.append(clickPt)
             print(f'Logged {clickPt}')
-            outFrm = label_ball_candidate(clickPt, cntFrm)
             
-            outFrm = outFrm.reset_index().rename({'index': 'idx_within_image'}, axis = 1)
-            outFrm['frameNum'] = frmNum
-            
-            frameList.append(outFrm)
-        
+            try:
+                idCnts, otherCnts = label_ball_candidate(clickPt, cnts)
+            except:
+                continue
+            else:
+                idDict[frmNum] = idCnts
+                otherDict[frmNum] = otherCnts
+                
         if key == ord('x'): ## press x to indicate there is nothing to click here
             pass
             # frameNum = randrange(0, total_frames - 1)
             # cFrm = BGRFrame.from_video(cap, frameNum)
         
-            
-    ##### CONCATENATE AND SAVE ######
-    
-    ballDict = ut.get_folder_struct('ball_svm')
-    
-    vidPath = os.path.join(ballDict['main'], VIDEO_ID)
-    
-    try:
-        os.mkdir(vidPath)
-    except FileExistsError:
-        print('   Adding to existing ball_svm data')
-        
-    savePath = os.path.join(vidPath, 'raw_data')
-    
-    try:
-        os.mkdir(savePath)
-    except FileExistsError:
-        print('   Adding to existing ball_svm data')
-    
-    import datetime as dt
-    timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    
-    filePath = os.path.join(savePath, f'labelled_balls_{timestamp}.csv')
-    
-    # frameList2 = [frm.reset_index().rename({'index': 'idx_within_image'}, axis = 1) for frm in frameList]
-    bigFrm = pd.concat(frameList, ignore_index = True)    
-    
-    bigFrm.to_csv(filePath)   
+    #### CREATE CONTOUR(S) STREAM FEATURES ####
+    ballSF = StreamFeature(idDict, name = 'svm_labelled_ballCnts')
+    otherSF = StreamFeature(otherDict, name = 'svm_labelled_nonballCnts')
+
+    ### SAVE ###
+    ballSF.save(vid, sto, compression = conf['compression_ball'])    
+    otherSF.save(vid, sto, compression = conf['compression_ball'])    
+
         
 
     

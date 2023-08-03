@@ -39,37 +39,30 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_inters
 schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
-START_FRAME = 0
-STOP_FRAME = 100000
-VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'svm_run'
-NUM_WORKERS = 24
-CHUNKSIZE = 5000
-
-cap = get_video(VIDEO_ID)
-
-width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
-NATURAL_SCALE = width / 1920
-ADD_SCALE = 1 
-SCALE_FACTOR = NATURAL_SCALE * ADD_SCALE
-
 if __name__ == '__main__':
-    frameList = list(range(START_FRAME, STOP_FRAME + 1))
+        
+    conf = ut.read_config('brest')
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    nwo, nch = conf['num_workers'], conf['chunksize']
+    cap = conf['cap']
+    
+    frameList = list(range(conf['start_frame'], conf['stop_frame'] + 1))
     
     ### Read constant Homography and Projection Matrix
-    HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = list(range(START_FRAME, STOP_FRAME + 1)))
+    HPSF = ConstFeatures.from_store(vid, sto, ['H', 'P'], frameList = frameList)
     courtSF = HPSF['H'].apply(sa.find_courtlines)
 
-    ### Read Segmentation Boolean
-    courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()    
+    ### Read Segmentation Booleans
+    boolBF = BoolFeatures.from_store(vid, sto, featnameList = ['isCourt', 'isValidFore']) 
+    boolBF = boolBF.all().rename('isValidCourt')
     
     ### Read ROIs
-    courtroiSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['courtroiReg'], 
+    courtroiSF = ConstFeatures.from_store(vid, sto, ['courtroiReg'], 
                                           featTypeList = [Region], frameList = frameList).squeeze()
     courtROI = courtroiSF.feature
     
-    kidroiSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['ballkidROIs'], 
-                                         featTypeList = [Regions], frameList = frameList).squeeze()
+    kidroiSF = ConstFeatures.from_store(vid, sto, ['ballkidROIs'], 
+                                        featTypeList = [Regions], frameList = frameList).squeeze()
     kidROIs = kidroiSF.feature
     
     ### Label the ROIs depending on position
@@ -93,24 +86,38 @@ if __name__ == '__main__':
     namedRois = Regions(namedROIs)
         
     ### Read Relevant Masks
-    burnStms = StreamList.from_store('foregroundMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask')
-    shadStms = StreamList.from_store('shadowMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask') 
-    motiStms = StreamList.from_store('rough_motMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask') 
+    # burnStms = StreamList.from_store('foregroundMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask')
+    # shadStms = StreamList.from_store('shadowMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
+    motiStms = StreamList.from_store('rough_motMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
     
     ### Find motion contours
     params = {'min_area_of_contours': 10,
               'ROI': None, ### 6x slower when specifying a ROI!
               'max_number_of_contours': None}
-    cntSFs = motiStms.rename('intMask').extract_chunked_mp(ex.get_contours_from_mask, NUM_WORKERS, CHUNKSIZE, **params)
+    cntSFs = motiStms.rename('intMask').extract_chunked_mp(ex.get_contours_from_mask, nwo, nch, **params)
     
     ### Find ROI Intersection Proportions
     ballkidBFs = cntSFs.apply_whole(sf.find_ballkid_sequences, namedROIs)
-    ballkidBFs.save(VIDEO_ID, STORE_NAME)
+    
+    ballkidBF = ballkidBFs.concatenate().conform(frameList).fillna(False) ### fill with False, since the segmented out sections 
+                                                       # (which get created by conforming) are
+                                                       # 1) not technically above threshold
+                                                       # 2) can be taken care of by combining the isCourt boolean with OR
+    
+    playBF = boolBF.merge(ballkidBF.neg().rename('isNotBallKid')).to_bool()
+    playBF = playBF.all().rename('isPlay')
+    playBF.save(vid, sto)
     
     
     ### TODO: Stop play sequences a bit later 
         # -> often, ballkid movememnt starts at or slightly before the second bounce
     ### TODO: Resegmentation by hand, in cases where theres a problem: Needs an interface, etc.
+    
+    
+    
+    
+    
+    
     
     
     

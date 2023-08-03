@@ -65,26 +65,37 @@ if __name__ == '__main__':
     ### Get the Segmenting Boolean
     courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()
     courtBFs = courtBF.filter(courtBF).split()
+    courtStms = StreamList.from_SFList(courtBFs, cap)
     
-    ### TODO: Maybe widen the segmentation for this, so we sample frames only from what is truly play, and not
-    ### sequences when the court is being shown but the lights are different and there is no play? (weird changeovers? check frame 24000)
+    ### Build an NCStream which holds all frames from which we can sample a valid court frame
+    ### for construction of background frames for each member of courtStms
+    # TODO: Maybe widen the segmentation for this, so we sample frames only from what is truly play, and not
+    # sequences when the court is being shown but the lights are different and there is no play? (weird changeovers? check frame 24000)
     # Stream(cap, START_FRAME, STOP_FRAME).get(24000).show()
+    TRUNC_N = 1000 ### how many frames to truncate before and after, addressing the above issue      
+    sampleStm = courtStms.widen(-TRUNC_N).join() 
     
-    courtStms = StreamList.from_SFList(courtBFs, cap, number_of_frames_to_sample_randomly = 1000)
+    ### Now, for each courtStm, sample and calculate median and std
+    WING_N = 2000 ### how many frames before start and after stop (respectively)
+                    # can admissibly be sampled.
+    SAMPLE_N = 1000 ### frames to sample for each background frame
     
-    courtStms[0].show()
-    
-    # normBF = sf.get_normal_bool(courtSF['courtLines'].dropna())
-    # normDecStm = NCDecapStream.from_bool(normBF, cap)
-    # medFrm, stdFrm = normDecStm.frames.median(), normDecStm.frames.std()
-    # medFrm, stdFrm = medFrm.rename('median_backFrm'), stdFrm.rename('std_backFrm')
-    
-    # medFrm.show()
-    # stdFrm.show()
-    
-    # medFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = START_FRAME, stop_frame = STOP_FRAME)
-    # stdFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = START_FRAME, stop_frame = STOP_FRAME)
-    
-    
+    for courtStm in courtStms:
+        ### construct subsample stream
+        wideStm = courtStm.widen(WING_N)
+        admissible_frames = [frm for frm in wideStm.get_framelist() if frm in sampleStm.frmNums]
+        assert len(admissible_frames) >= SAMPLE_N, f'Too few frames in widened {courtStm}, consider increasing WING_N'
+        subsampleStm = sampleStm.conform(admissible_frames).sample(SAMPLE_N)
+        
+        ### 
+        subsampleDecStm = subsampleStm.decap()
+        medFrm, stdFrm = subsampleDecStm.frames.median(), subsampleDecStm.frames.std()
+        medFrm, stdFrm = medFrm.rename('median_backFrm'), stdFrm.rename('std_backFrm')
+        
+        # medFrm.show()
+        # stdFrm.show()
+        
+        medFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = courtStm.start_frame, stop_frame = courtStm.stop_frame)
+        stdFrm.save_like_feature(VIDEO_ID, STORE_NAME, start_frame = courtStm.start_frame, stop_frame = courtStm.stop_frame)
     
     

@@ -38,31 +38,23 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_inters
 schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
-START_FRAME = 0
-STOP_FRAME = 100000
-VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'svm_run'
-NUM_WORKERS = 24
-CHUNKSIZE = 5000
-
-cap = get_video(VIDEO_ID)
-
-width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
-NATURAL_SCALE = width / 1920
-ADD_SCALE = 1 
-SCALE_FACTOR = NATURAL_SCALE * ADD_SCALE
 
 if __name__ == '__main__':
-    frameList = list(range(START_FRAME, STOP_FRAME + 1))
+        
+    conf = ut.read_config('brest')
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    nwo, nch = conf['num_workers'], conf['chunksize']
+    cap = conf['cap']
+    
+    frameList = list(range(conf['start_frame'], conf['stop_frame']))
     
     ### Read constant Homography and Projection Matrix
-    HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = list(range(START_FRAME, STOP_FRAME + 1)))
+    HPSF = ConstFeatures.from_store(vid, sto, ['H', 'P'], frameList = frameList)
     courtSF = HPSF['H'].apply(sa.find_courtlines)
 
     ### Read Segmentation Booleans
     # courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()    
-    ballkidBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['ballkidBool']).squeeze()   
-    playBF = ballkidBF.neg().conform(frameList).fillna(False).rename('isPlay')
+    playBF = BoolFeatures.from_store(vid, sto, featnameList = ['isPlay']).squeeze()   
     
     ### Add empty player feature
     mySF = HPSF.to_SF().add('topPlayer', None).add('botPlayer', None).drop('P')
@@ -73,14 +65,14 @@ if __name__ == '__main__':
                                       cache_size = 1, force_fill_cache = True,
                                       cap_color_space = 'bgr', target_color_space = 'grey')
     
-    burnStms = StreamList.from_store('foregroundMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask')
+    burnStms = StreamList.from_store('foregroundMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask')
     burnStms = burnStms.conform(greyCtms)
-    shadStms = StreamList.from_store('shadowMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask') 
+    shadStms = StreamList.from_store('shadowMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
     shadStms = shadStms.conform(greyCtms)
     
     ### Set Up ROIs
     # get courtROI to focus on the court itself
-    courtroiSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['courtroiReg'], 
+    courtroiSF = ConstFeatures.from_store(vid, sto, ['courtroiReg'], 
                                           featTypeList = [Region], frameList = frameList).squeeze()
     courtROI = courtroiSF.feature
 
@@ -93,19 +85,19 @@ if __name__ == '__main__':
     
     ### Run Player Extraction
     params = {'player_tracking_scale_factor': 1.5,
-              'bot_min_bounding_height': 200 * SCALE_FACTOR,
-              'bot_min_bounding_width': 80 * SCALE_FACTOR,
-              'top_min_bounding_height': 150 * SCALE_FACTOR,
-              'top_min_bounding_width': 60 * SCALE_FACTOR,
+              'bot_min_bounding_height': 200 * conf['scale_factor'],
+              'bot_min_bounding_width': 80 * conf['scale_factor'],
+              'top_min_bounding_height': 150 * conf['scale_factor'],
+              'top_min_bounding_width': 60 * conf['scale_factor'],
               'initial_ROI_upper': initial_ROI_upper,
               'initial_ROI_lower': initial_ROI_lower,
               'halfcourtLine_upper': halfcourtLine_upper,
               'halfcourtLine_lower': halfcourtLine_lower}
     
     mulStms = StreamList.combine(greyCtms, burnStms, shadStms)
-    plSFs = mulStms.extract_chunked_mp(ex.find_both_players_smart, NUM_WORKERS, CHUNKSIZE, **params)
+    plSFs = mulStms.extract_chunked_mp(ex.find_both_players_smart, nwo, nch, **params)
     
-    plSFs.save(VIDEO_ID, STORE_NAME, compression = 32)
+    plSFs.save(vid, sto, compression = 32)
     
 
 

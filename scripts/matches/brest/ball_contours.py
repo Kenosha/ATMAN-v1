@@ -39,46 +39,37 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_inters
 schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
-START_FRAME = 0
-STOP_FRAME = 100000
-VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'svm_run'
-NUM_WORKERS = 24
-CHUNKSIZE = 5000
-
-cap = get_video(VIDEO_ID)
-
-width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
-NATURAL_SCALE = width / 1920
-ADD_SCALE = 1 
-SCALE_FACTOR = NATURAL_SCALE * ADD_SCALE
-
 
 if __name__ == '__main__':
-    frameList = list(range(START_FRAME, STOP_FRAME + 1))
+            
+    conf = ut.read_config('brest')
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    nwo, nch = conf['num_workers'], conf['chunksize']
+    cap = conf['cap']
+    
+    frameList = list(range(conf['start_frame'], conf['stop_frame'] + 1))
     
     ### Read constant Homography and Projection Matrix
-    HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = list(range(START_FRAME, STOP_FRAME + 1)))
+    HPSF = ConstFeatures.from_store(vid, sto, ['H', 'P'], frameList = frameList)
     courtSF = HPSF['H'].apply(sa.find_courtlines)
 
     ### Read Segmentation Booleans
     # courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()    
-    ballkidBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['ballkidBool']).squeeze()   
-    playBF = ballkidBF.neg().conform(frameList).fillna(False).rename('isPlay')
+    playBF = BoolFeatures.from_store(vid, sto, featnameList = ['isPlay']).squeeze()   
     
     ### Read Players
-    playerSFs = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['topPlayer', 'botPlayer']).split()
+    playerSFs = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayer', 'botPlayer']).split()
     
     ### Read Fine Motion Mask 
-    burnStms = StreamList.from_store('foregroundMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask') 
+    burnStms = StreamList.from_store('foregroundMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
     burnStms = burnStms.conform(playerSFs).attach(playerSFs).rename('motMask')
     
-    motiStms = StreamList.from_store('fine_motMask', VIDEO_ID, STORE_NAME, cap_color_space = 'bool', target_color_space = 'mask') 
+    motiStms = StreamList.from_store('fine_motMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
     motiStms = motiStms.conform(playerSFs).attach(playerSFs).rename('motMask')
     
     ### Filter out Players from fine motion mask
     params = {'dil_kernel': (5, 3)}
-    filtSFs = motiStms.extract_chunked_mp(ex.filter_player_movement, NUM_WORKERS, CHUNKSIZE, **params)
+    filtSFs = motiStms.extract_chunked_mp(ex.filter_player_movement, nwo, nch, **params)
     
     ### Get contours 
     filtStms = motiStms.from_SFList(filtSFs, None)
@@ -86,6 +77,6 @@ if __name__ == '__main__':
     params = {'ROI': None, 
               'min_area_of_contours': 0, 
               'max_number_of_contours': None}
-    cntSFs = filtStms.extract_chunked_mp(ex.get_contours_from_mask, NUM_WORKERS, CHUNKSIZE, **params)
+    cntSFs = filtStms.extract_chunked_mp(ex.get_contours_from_mask, nwo, nch, **params)
 
-    cntSFs.save(VIDEO_ID, STORE_NAME, compression = 24)
+    cntSFs.save(vid, sto, compression = conf['compression_ball'])

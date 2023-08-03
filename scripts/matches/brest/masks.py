@@ -38,46 +38,35 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_inters
 schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
-START_FRAME = 0
-STOP_FRAME = 100000
-VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'svm_run'
-NUM_WORKERS = 24
-CHUNKSIZE = 5000
-
-cap = get_video(VIDEO_ID)
-
-width, height = cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
-NATURAL_SCALE = width / 1920
-ADD_SCALE = 1 
-SCALE_FACTOR = NATURAL_SCALE * ADD_SCALE
-LOSSLESS = False ### there is a weird saving issue when creating the lossless files...
 
 if __name__ == '__main__':
-    frameList = list(range(START_FRAME, STOP_FRAME + 1))
+        
+    conf = ut.read_config('brest')
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    nwo, nch = conf['num_workers'], conf['chunksize']
+    cap = conf['cap']
+    
+    frameList = list(range(conf['start_frame'], conf['stop_frame'] + 1))
+    
     ### Read constant Homography and Projection Matrix
-    HPSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['H', 'P'], frameList = frameList)
+    HPSF = ConstFeatures.from_store(vid, sto, ['H', 'P'], frameList = frameList)
     courtSF = HPSF['H'].apply(sa.find_courtlines)
 
     ### Read Segmentation Boolean
-    courtBF = BoolFeatures.from_store(VIDEO_ID, STORE_NAME, featnameList = ['isCourt']).squeeze()    
+    courtBF = BoolFeatures.from_store(vid, sto, featnameList = ['isCourt']).squeeze()    
     courtSFs = courtSF.filter(courtBF).split()
     HSFs = HPSF['H'].filter(courtBF).split()
 
     ### Read median and standard deviation background
-    fileName = f'from_{START_FRAME}_to_{STOP_FRAME}.npy'
-    medStm = StillStream.from_store(fileName, 'median_backFrm', VIDEO_ID, STORE_NAME)
-    stdStm = StillStream.from_store(fileName, 'std_backFrm', VIDEO_ID, STORE_NAME)
+    medStms = StreamList.from_store('median_backFrm', vid, sto, target_color_space = 'hsv')
+    stdStms = StreamList.from_store('std_backFrm', vid, sto, target_color_space = 'hsv')
     
     ### Prepare HSV MulStreams
     hsvStms = StreamList.from_SFList(HSFs, cap, target_color_space = 'hsv')
-    medStms = StreamList.from_SFList(HSFs, medStm.stillFrm, target_color_space = 'hsv')
-    stdStms = StreamList.from_SFList(HSFs, stdStm.stillFrm, target_color_space = 'hsv')
-    
     mulStms = StreamList.combine(hsvStms, medStms, stdStms)
     
     ### Set Up Court ROI
-    courtroiSF = ConstFeatures.from_store(VIDEO_ID, STORE_NAME, ['courtroiReg'], 
+    courtroiSF = ConstFeatures.from_store(vid, sto, ['courtroiReg'], 
                                           featTypeList = [Region], frameList = frameList).squeeze()
     courtROI = courtroiSF.feature
     
@@ -85,11 +74,11 @@ if __name__ == '__main__':
     params =  {'ROI': courtROI,
                'h_threshold': 16, 
                'v_threshold': 16, 
-               'gaussian_kernel': (round(21 * SCALE_FACTOR), round(21 * SCALE_FACTOR)), 
-               'closing_kernel': (round(10 * SCALE_FACTOR), round(18 * SCALE_FACTOR)),
+               'gaussian_kernel': (round(21 * conf['scale_factor']), round(21 * conf['scale_factor'])), 
+               'closing_kernel': (round(10 * conf['scale_factor']), round(18 * conf['scale_factor'])),
                'verbose': False}
-    burnSFs = mulStms.extract_chunked_mp(ex.get_burn_in_mask_simple, NUM_WORKERS, CHUNKSIZE, **params)
-    burnSFs.save(VIDEO_ID, STORE_NAME, lossless = LOSSLESS)
+    burnSFs = mulStms.extract_chunked_mp(ex.get_burn_in_mask_simple, nwo, nch, **params)
+    burnSFs.save(vid, sto, lossless = conf['lossless'])
     
     ### Shadow Mask
     mulStms = StreamList.combine(hsvStms, medStms)
@@ -98,24 +87,25 @@ if __name__ == '__main__':
               's_threshold': None,
               'v_threshold_lower': 0.75,
               'v_threshold_upper': 0.97,
-              'opening_kernel': (round(15 * SCALE_FACTOR), round(15 * SCALE_FACTOR)),
-              'closing_kernel': (round(15 * SCALE_FACTOR), round(15 * SCALE_FACTOR)),
+              'opening_kernel': (round(15 * conf['scale_factor']), round(15 * conf['scale_factor'])),
+              'closing_kernel': (round(15 * conf['scale_factor']), round(15 * conf['scale_factor'])),
               'back_frames_are_warped': False}
-    shadSFs = mulStms.extract_chunked_mp(ex.get_shadow_mask, NUM_WORKERS, CHUNKSIZE, **params)
-    shadSFs.save(VIDEO_ID, STORE_NAME, lossless = LOSSLESS)
+    shadSFs = mulStms.extract_chunked_mp(ex.get_shadow_mask, nwo, nch, **params)
+    shadSFs.save(vid, sto, lossless = conf['lossless'])
     
     ### Motion Mask
     gCtms = StreamList.from_SFList(HSFs, cap, target_color_space = 'grey', 
                                    cache_size = 8, force_fill_cache = True)
+    
     # a) a fine grained mask, for ball detection
     params = {'ROI': courtROI,
-              'intensity_threshold': 10,
+              'intensity_threshold': 5,
               'relevant_indices': [4, 6, 8],
               'open_kernel': None,
               'close_kernel': (3, 3)}
-    motSFs = gCtms.extract_chunked_mp(ex.find_motion_mask, NUM_WORKERS, CHUNKSIZE * 10, **params)
+    motSFs = gCtms.extract_chunked_mp(ex.find_motion_mask, nwo, nch * 10, **params)
     motSFs = motSFs.rename('fine_motMask')
-    motSFs.save(VIDEO_ID, STORE_NAME, lossless = LOSSLESS)
+    motSFs.save(vid, sto, lossless = conf['lossless'])
     
     # b) a rougher mask, for ballkid detection
     params = {'ROI': courtROI,
@@ -123,9 +113,9 @@ if __name__ == '__main__':
               'relevant_indices': [4, 6, 8],
               'close_kernel': (17, 17),
               'open_kernel': (4, 4)}
-    motSFs = gCtms.extract_chunked_mp(ex.find_motion_mask, NUM_WORKERS, CHUNKSIZE * 10, **params)
+    motSFs = gCtms.extract_chunked_mp(ex.find_motion_mask, nwo, nch * 10, **params)
     motSFs = motSFs.rename('rough_motMask')
-    motSFs.save(VIDEO_ID, STORE_NAME, lossless = LOSSLESS)
+    motSFs.save(vid, sto, lossless = conf['lossless'])
     
     
     
