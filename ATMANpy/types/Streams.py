@@ -186,8 +186,12 @@ class Stream:
             mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
+        if self.scale_factor != 1:
+            mySF = mySF.rescale(self.scale_factor)
+            
         object.__setattr__(self, 'features', mySF)
     
+        ### CHECK WARPING
         if self.warp_dims is not None:
             assert 'H' in self.features.get_features(), 'If warp dimensions are specified, we need a Homography in features to warp with!'
             H = self.features['H']
@@ -333,7 +337,7 @@ class Stream:
             ### rescale if necessary
             if self.scale_factor != 1:
                 myFrm = myFrm.rescale(self.scale_factor)
-            
+                
             ### Get the feature dictionary
             myDict = self.features.maybe_get(frmNum)
             ### if frmNum not found, we get {feat: None for feat in self.get_features()}
@@ -887,8 +891,12 @@ class MulStream:
             # ... cache_size -> check all CachedStreams, take largest
         
         canonical_features = self.streams[0].features
-        canonical_start_frame = self.streams[0].start_frame ### this fucks things if there is a difference 
-        canonical_stop_frame = self.streams[0].stop_frame   ### between starts and stops, but the generator will pick this up.
+        try:
+            canonical_start_frame = self.streams[0].start_frame ### this fucks things if there is a difference 
+            canonical_stop_frame = self.streams[0].stop_frame   ### between starts and stops, but the generator will pick this up.
+        except AttributeError:
+            canonical_start_frame = self.streams[0].frmNums[0]
+            canonical_stop_frame = self.streams[0].frmNums[-1]
 
         object.__setattr__(self, 'features', canonical_features)
         object.__setattr__(self, 'start_frame', canonical_start_frame)

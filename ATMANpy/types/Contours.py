@@ -105,8 +105,11 @@ class Contours:
     def __iter__(self):
         return self.contourList.__iter__()
         
-    def __getitem__(self, item):
-        return self.contourList[item]
+    def __getitem__(self, index):
+        return self.contourList[index]
+    
+    def drop(self, index):
+        return Contours([cnt for idx, cnt in enumerate(self) if idx != index])
     
     def length(self):
         return len(self.contourList)
