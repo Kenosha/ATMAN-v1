@@ -51,7 +51,7 @@ class ParticleFilter:
     def __init__(self, 
                  process_standard_deviation = 10, ### in pixels -> one dimensional!
                  observation_standard_deviation = 10, ### in pixels -> one dimensional
-                 spatial_lambda = 0.0000001,  ### spatial poisson density of clutter... whatever that is. See isard & blake (1998)
+                 spatial_lambda = 10 ** -7,  ### spatial poisson density of clutter... whatever that is. See isard & blake (1998)
                  p_no_ball = 0.25, ### probability that ball is not among tracked objects
                  p_prime = 0.3 ### probability of switching model if close to player (from A to A_prime or A_primeprime)
                  ):
@@ -144,7 +144,7 @@ class ParticleFilter:
                                                                   # and our maximum is false
             
         ### for the normal case, which is described in Yan Christmas Kittler...
-        t1 = np.argmin(closeArr, axis = 0) ### for each particle, most recent time at not close.
+        t1 = np.argmin(closeArr, axis = 0) ### for each particle, most recent time at which not close.
         t2 = np.argmax(modelArr, axis = 0) ### for each particle, most recent time at which A' used.
         
         possible_model_switch = t1 < t2 ### note that this is inverted versus paper
@@ -177,7 +177,7 @@ class ParticleFilter:
             if chamferCnts is None:
                 ball_is_close = False
             else:
-                ball_is_close = not chamferCnts.contains(sPt)
+                ball_is_close = chamferCnts.contains(sPt)
                 
             ### assign models depending on closeness    
             if not ball_is_close:   ### not close to player
@@ -205,7 +205,8 @@ class ParticleFilter:
     
     def get_means_and_weights(self, S, As, ballContours,
                               frame_width = 1920, 
-                              frame_height = 1080):
+                              frame_height = 1080,
+                              rectify = True):
         # S.shape ### n,j -> j = 4
         # As.shape ### n,i,j -> i = j = 4. But note: for einstein sums, we need to multiply the vector rows with the matrix columns
         
@@ -216,14 +217,14 @@ class ParticleFilter:
         ### the upper two elements of the m0 vector -> location of updated particles.
         m0_loc = m0[:, :2]
         
-        if ballContours is None or ballContours == []:
+        if ballContours is None or ballContours.is_empty():
             m = m0[:, :, np.newaxis]
             w = np.zeros((m.shape[0], 1)) + self.beta
         
         else:
             z_coords = [list(cnt.center().coords) for cnt in ballContours]
             
-            dist = np.dstack([m0_loc - xy for xy in z_coords])
+            dist = np.dstack([xy - m0_loc for xy in z_coords])
             
             ###### Construct the matrix of weights #######
             # weight_cov_inv.shape ### 2 x 2
@@ -250,14 +251,15 @@ class ParticleFilter:
             m = np.insert(m,0,m0,axis=2) ### axis 2 is z, index = 0 -> prepend the m0 vector!
             # m.shape ### -> n,4,z+1  
         
-        #### Weight Rectification and Normalization
-        # if particle is out of bounds...
-        x, y = m[:, 0, :], m[:, 1, :]
-        bad_point = (x < 0) | (y < 0) | (x > frame_width) | (y > frame_height)
-        # bad_point.shape -> n,z+1
-        
-        ### ... we set the weight to zero
-        w = w * ~bad_point
+        if rectify:
+            #### Weight Rectification and Normalization
+            # if particle is out of bounds...
+            x, y = m[:, 0, :], m[:, 1, :]
+            bad_point = (x < 0) | (y < 0) | (x > frame_width) | (y > frame_height)
+            # bad_point.shape -> n,z+1
+            
+            ### ... we set the weight to zero
+            w = w * ~bad_point
         
         ### then, normalize weights so they add up to one
         w = w / w.sum() 
@@ -268,7 +270,7 @@ class ParticleFilter:
         cholQ, cholC = np.linalg.cholesky(self.Q), np.linalg.cholesky(self.C)
         
         wArr = w.flatten('F') ### fortran-style ordering -> columns first!
-        N,Z = w.shape
+        N, Z = w.shape
         sampleIdx = np.random.choice(N * Z, p = wArr, size = N)
         i, j = sampleIdx % N, sampleIdx // N
         
@@ -280,8 +282,8 @@ class ParticleFilter:
         concatStr = 'n,ij->nij'
         cov_L = np.einsum(concatStr, j == 0, cholQ) + np.einsum(concatStr, j > 0, cholC)
         
-        ### means + scaled covariances 
-        means = np.array([m[n, :, z] for n,z in zip(i,j)])
+        ### samples are means + scaled covariances 
+        means = m[i, :, j]
         # means.shape ### -> N,Z
         
         n_matmulStr = 'nij,nj->ni' ### matrix multiplication, n times
@@ -335,13 +337,13 @@ class ParticleFilter:
         else:
             m0_loc = S[:, :2]
             z_coords = [list(cnt.center().coords) for cnt in ballContours]
-            dist = np.dstack([m0_loc - xy for xy in z_coords])
+            dist = np.dstack([xy - m0_loc for xy in z_coords])
         
             trans_vec_mat_mulStr = 'niz,ij->njz'
             dist_x_obs_cov_inv = np.einsum(trans_vec_mat_mulStr, dist, self.R_inv)
             
             vec_vec_mulStr = 'njz,njz->nz'
-            likelihood_exp_term = np.einsum(vec_vec_mulStr,dist_x_obs_cov_inv,dist)
+            likelihood_exp_term = np.einsum(vec_vec_mulStr, dist_x_obs_cov_inv, dist)
             
             likelihoods = np.exp(-0.5 * likelihood_exp_term)
             likelihood = likelihoods.mean(axis = 0) / self.likelihood_denominator
@@ -372,7 +374,8 @@ class ParticleFilter:
                        frame_height = 1080, 
                        pixel_per_meter_horizontal = 200,
                        pixel_per_meter_vertical = 100,
-                       fps = 25):
+                       fps = 25,
+                       rectify = True):
         
         indexHistories = None
         closeHistories = None
@@ -396,13 +399,13 @@ class ParticleFilter:
             propagation_models, closeBools, modelBools = self.get_motion_model_with_contours(particles, chamferCnts,
                                                                                              closeHistories = closeHistories,
                                                                                              modelHistories = modelHistories)    
-        
             ########### UPDATE PARTICLES #########
             ### means_and_weights updates last periods particles, ...
-            mDict, wDict = self.get_means_and_weights(particles, propagation_models, ballContours,
-                                                      frame_width = frame_width, frame_height = frame_height) 
+            m, w = self.get_means_and_weights(particles, propagation_models, ballContours,
+                                              frame_width = frame_width, frame_height = frame_height,
+                                              rectify = rectify) 
             ### ... and resample compares to evidence in this period!
-            particles, particleIdxs, _ = self.resample(mDict, wDict)
+            particles, particleIdxs, _ = self.resample(m, w)
             
             ########### UPDATE HISTORIES #########
             indexHistories, closeHistories, modelHistories = ParticleFilter.update_histories(indexHistories, closeHistories, modelHistories,
