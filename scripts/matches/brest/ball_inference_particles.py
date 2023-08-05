@@ -67,7 +67,6 @@ if __name__ == '__main__':
     ### Simulate Particles ###
     # a) create SF with player chamfers and ball candidate contours
     mySFs = chamfSFs.merge(cntSFs)
-    mySFs = mySFs[:10]
     
     # b) Initialize Particle Filter Model
     from ATMANpy.models.ParticleFilter import ParticleFilter
