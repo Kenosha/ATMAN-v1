@@ -23,7 +23,7 @@ from ATMANpy.types.Lines import Region
 from ATMANpy.types.Lines import CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
 
-import ATMANpy.funcs.particle_funcs_vectorized as pf
+from ATMANpy.models.ParticleFilter import ParticleFilter
 
 def find_courtlines(H, schemaLines = schemaLines):
     if H is None:
@@ -81,10 +81,19 @@ def calculate_homography(tl, tr, bl, br):
 def replace_trackflag(trackFlag, replace_value):
     return ''
         
-def choose_ball_contour(smooth_particles, candCnts, likelihood_threshold = 10 ** (-15)):
-    ballCnt = pf.choose_likely_ball_contour(smooth_particles, candCnts, l_threshold = likelihood_threshold)
-    return ballCnt
+# def choose_ball_contour(smooth_particles, candCnts, likelihood_threshold = 10 ** (-15)):
+#     ballCnt = pf.choose_likely_ball_contour(smooth_particles, candCnts, l_threshold = likelihood_threshold)
+#     return ballCnt
     
+def choose_ball_contour(smooth_particles, candCnts, 
+                        pFilter = None, standard_deviation_threshold = 2):
+    if pFilter is None:
+        ballCnt = ParticleFilter().choose_likely_ball_contour(smooth_particles, candCnts, 
+                                                              standard_deviation_threshold = standard_deviation_threshold)
+    else:
+        ballCnt = pFilter.choose_likely_ball_contour(smooth_particles, candCnts, 
+                                                     standard_deviation_threshold = standard_deviation_threshold)
+    return ballCnt
 
 #### Add in boolean features for in/out calling
 def distance_from_near_court(courtLines, ballCnt):

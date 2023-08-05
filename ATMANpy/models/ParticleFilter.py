@@ -366,6 +366,37 @@ class ParticleFilter:
                     return None, max_likelihood, normalised_threshold
                 else:
                     return None
+                
+    def choose_likely_ball_contour(self, S, ballContours, standard_deviation_threshold = 2):
+        
+        if ballContours is None or ballContours.is_empty():
+            return None
+        else:
+            m0_loc = S[:, :2]
+            z_coords = [list(cnt.center().coords) for cnt in ballContours]
+            dist = np.dstack([xy - m0_loc for xy in z_coords])
+        
+            trans_vec_mat_mulStr = 'niz,ij->njz'
+            dist_x_obs_cov_inv = np.einsum(trans_vec_mat_mulStr, dist, self.R_inv)
+            
+            vec_vec_mulStr = 'njz,njz->nz'
+            likelihood_exp_term = np.einsum(vec_vec_mulStr, dist_x_obs_cov_inv, dist)
+            
+            mean_unnormalised_likelihoods = np.exp(-0.5 * likelihood_exp_term).mean(axis = 0)
+            
+            ### Figure out threshold value ###
+            # assuming uncorrelated observation error with a single standard deviation for x and y coords, we get...
+            threshold_unnormalised_likelihood = np.exp(- standard_deviation_threshold ** 2)
+            
+            ### Figure out if there is at least one contour within the threshold
+            at_least_one_contour = (mean_unnormalised_likelihoods > threshold_unnormalised_likelihood).any()
+            
+            if at_least_one_contour:
+                likeliest_idx = np.argmax(mean_unnormalised_likelihoods)
+                return ballContours[likeliest_idx]
+                
+            else:
+                return None
 
     ### The StreamFeature function to run the particle algorithm
     def find_particles(self, mySF, 
