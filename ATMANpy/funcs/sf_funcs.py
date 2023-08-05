@@ -256,14 +256,17 @@ def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
             true_contours = []
             for true_idx in myTable.index:
                 true_contours.append(cnts[true_idx])
-            trueDict[frmNum] = Contours(true_contours)
+                
+            if true_contours == []:
+                trueDict[frmNum] = None
+            else:
+                trueDict[frmNum] = Contours(true_contours)
 
     return StreamFeature(trueDict, name = 'candCnts')
 
 def find_particles(mySF, 
                    dims = (1920, 1080), pixel_in_meter = (200, 100), N = 1000, fps = 25,
-                   chamfer_threshold = None,
-                   normal_propagation = None, close_propagation = None, switch_probability = None,):
+                   normal_propagation = None, close_propagation = None, switch_probability = None):
 
     import ATMANpy.funcs.particle_funcs_vectorized as pf
     

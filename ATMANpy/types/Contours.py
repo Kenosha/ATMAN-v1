@@ -114,6 +114,9 @@ class Contours:
     def length(self):
         return len(self.contourList)
     
+    def is_empty(self):
+        return self.length() == 0
+    
     def moments(self):
         return [cnt.moments() for cnt in self]
     
