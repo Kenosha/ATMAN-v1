@@ -422,7 +422,8 @@ class ParticleFilter:
         histDict = {} ### but we also need the final index histories, for smoothing
         for frame, featDict in mySF.items():
             ### write to frame!
-            partDict[frame] = particles.astype(int) ### for memory reasons, save as integer
+            partDict[frame - 1] = particles.astype(int) ### for memory reasons, save as integer
+                                                        ### EDIT: particles belong to previous period!
             
             chamferCnts = featDict['chamferCnts']
             ballContours = featDict['candCnts']
@@ -442,8 +443,8 @@ class ParticleFilter:
             indexHistories, closeHistories, modelHistories = ParticleFilter.update_histories(indexHistories, closeHistories, modelHistories,
                                                                                              particleIdxs, closeBools, modelBools) 
     
-        partDict[frame + 1] = particles.astype(int) ### for memory reasons, save as integer
-        histDict[frame + 1] = indexHistories ### these are only needed at the very end, 
+        partDict[frame] = particles.astype(int) ### for memory reasons, save as integer
+        histDict[frame] = indexHistories ### these are only needed at the very end, 
                                                # since indexHistories update and accumulate
         
         partSF = StreamFeature(partDict, name = 'particles')
