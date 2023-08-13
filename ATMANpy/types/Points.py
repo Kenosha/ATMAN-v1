@@ -51,6 +51,10 @@ class Point2D:
         op_x, op_y = Point2D.get_operant(y)
         outCoords = self.coords[0] // op_x, self.coords[1] // op_y
         return Point2D(outCoords)
+    def __truediv__(self, y): ### this does not guarantee a safe point!
+        op_x, op_y = Point2D.get_operant(y)
+        outCoords = self.coords[0] / op_x, self.coords[1] / op_y
+        return Point2D(outCoords)
     
     ### METHODS ###
     def up(self, points):

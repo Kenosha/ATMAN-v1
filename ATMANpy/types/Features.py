@@ -340,11 +340,12 @@ class StreamFeature(StreamFeaturesBase):
         exFunc = ff.extract_contours_values
         outSF = self.apply(exFunc, compression = compression) 
         
-        featFrm = outSF.to_frame()
-        if not featFrm.empty:
-            featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
-            featFrm.columns = featLabels
-            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        if not outSF.dropna().is_empty(): # TODO: Put this in more places! An all empty SF will give nothing to write and actually cause an error in outSF.to_frame, since an empty SF is always a StreamFeatures (not StreamFeature), which does not have a to_frame method (yet?)
+            featFrm = outSF.to_frame()
+            if not featFrm.empty:
+                featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
+                featFrm.columns = featLabels
+                ff.save_feature_frame(featFrm, self.name, videoName, storeName)
         
     def _save_line(self, videoName, storeName):
         exFunc = ff.extract_line_values

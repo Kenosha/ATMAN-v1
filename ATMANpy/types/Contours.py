@@ -37,6 +37,9 @@ class Contour:
         myPoints = np.dstack([x_vals, y_vals]).reshape((num_points, 1, 2)) ### bring them into shape
         return Contour(myPoints)
         
+    def __eq__(self, othCnt):
+        return np.array(self.points == othCnt.points).all()
+        
     def moments(self):
         return cv.moments(self.points)
     

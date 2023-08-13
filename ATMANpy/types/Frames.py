@@ -804,6 +804,13 @@ class GreyFrame(Frame):
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
         return GreyFrame(arr)
     
+    def normalize(self):
+        ### push values to be between 0 and 255
+        v_min, v_max = self.array.min(), self.array.max()
+        lambdArr = (self.array - v_min) / (v_max - v_min)
+        normArr = (lambdArr * 255).astype('uint8')
+        return GreyFrame(normArr)
+    
     def connected_regions(self, size_threshold = 0):
         SCREEN_SIZE_CONSTANT = 0.95 ### sometime, the entire screen is chosen as region...
                                     ## if a region is larger than SCREEN_SIZE_CONSTANT of the screen, 
@@ -826,7 +833,6 @@ class GreyFrame(Frame):
                 regionList.append(myRegion)
                 
         return regionList
-    
     
     def hist(self, normalize = False):
         histData = cv.calcHist([self.array], [0], None, [256], [0, 256])
