@@ -11,8 +11,8 @@ import numpy as np
 
 from ATMANpy.types.Points import Point2D, SafePoint2D
 from ATMANpy.types.Lines import Line, Lines, CourtLines, Region
-from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame
-from ATMANpy.types.Contours import Contour
+from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, BoolFrame, HSVFrame, MaskFrame
+from ATMANpy.types.Contours import Contour, Contours
 
 
 def get_initial_ROIs(schemaLines, 
@@ -561,13 +561,13 @@ def find_player_contour(hFrm, burninMask, roiMask, shadowMask = None,
             hFrm.put(largestContour).show()
         return Contour(largestContour)
 
-def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame):
+def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame_shape):
     LOWER_BOUND_WEIGHT = 0.1
     if cnt_reference is None:
         return 1
     else:
-        cntMask_interest = frame.within_contour(cnt_interest) 
-        cntMask_reference = frame.within_contour(cnt_reference)
+        cntMask_interest = MaskFrame.false(frame_shape).within_contour(cnt_interest) 
+        cntMask_reference = MaskFrame.false(frame_shape).within_contour(cnt_reference)
         
         ovlp_sum = (cntMask_interest & cntMask_reference).sum(axes = (0, 1))
         refn_sum = cntMask_reference.sum(axes = (0, 1))
@@ -575,7 +575,7 @@ def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame):
         return max(ovlp_sum / refn_sum, LOWER_BOUND_WEIGHT)
     
 
-def find_player_contour_with_overlap(gFrm, burninMask, roiMask, playerContour_prev, shadowMask = None, 
+def find_player_contour_with_overlap(burninMask, roiMask, playerContour_prev, shadowMask = None, 
                                      verbose = False):
     
     MIN_PLAYER_SIZE = 50 ### minimum size of player, in pixels.
@@ -591,16 +591,29 @@ def find_player_contour_with_overlap(gFrm, burninMask, roiMask, playerContour_pr
     
     if myCnts.length() > 0:
         weight_func = partial(calculate_contour_overlap_factor, 
-                              frame = gFrm, cnt_reference = playerContour_prev)
+                              frame_shape = burninMask.shape, cnt_reference = playerContour_prev)
         largest_weighted_contour = sorted(myCnts.contourList, key = lambda c: c.area() * weight_func(c))[-1]
         if largest_weighted_contour.area() > MIN_PLAYER_SIZE:
             return largest_weighted_contour
 
-    
+
+def find_contours(myMask, min_size = 25):
+    myCnts, _ = myMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    myCnts = Contours([myCnt for myCnt in myCnts if myCnt.area() > min_size])
+    return myCnts
+
+def find_player_candidate_contours_with_overlap(currCnts, candCnts_prev):
+    candCnts = Contours([]) ### the initialized list of contours that actually have a parent -> the candidates
+    parLists = []
+    for currCnt in currCnts:
+        parList = [] ### the list of the parents of the current contour
         
-    
-    
-    
-    
-    
+        for par_idx, candCnt_prev in enumerate(candCnts_prev):
+            if currCnt.overlap_factor(candCnt_prev, relative_to = 'other') > 0: # other, because the interpretation is simple: how much of the previous contour is present in the current contour?
+                parList.append(par_idx)
+        
+        candCnts = candCnts.append(currCnt) ### Contours are not mutable...
+        parLists.append(parList) ### ... while lists are.
+            
+    return candCnts, parLists 
     

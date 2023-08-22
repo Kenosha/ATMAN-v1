@@ -35,6 +35,7 @@ from ATMANpy.funcs.sf_apply_funcs import find_courtlines
 from ATMANpy.funcs.court_funcs import find_homography, find_homography_225_only, update_homography, find_linesets
 from ATMANpy.funcs.scoreboard_funcs import find_scoreboard
 from ATMANpy.funcs.player_funcs import find_best_expansion, stop_criterion, find_player_contour_with_overlap
+from ATMANpy.funcs.player_funcs import find_contours, find_player_candidate_contours_with_overlap
 
 from ATMANpy.types.Frames import Frame, BoolFrame, MaskFrame, GreyFrame, BGRFrame, HSVFrame
 from ATMANpy.types.Contours import Contour, Contours
@@ -314,19 +315,17 @@ def get_shadow_mask(hFrm, H, median_backFrm,
     
     return shadowMask
 
+def get_projected_ROI(ROI, H):
+    return ROI.transform('apply_homography', H).transform('round_points')
+
 def adaptive_player_ROI(playerContour, initialROI, H, gFrm,
                         player_tracking_scale_factor = 1.2,
                         min_bounding_height = 100,
                         min_bounding_width = 40,
                         halfcourtLine = None, keep_below_or_above = None):
         
-    def get_projected_ROI(ROI, H):
-        return ROI.transform('apply_homography', H).transform('round_points')
-
     if playerContour is None:
         initial_projROI = get_projected_ROI(initialROI, H)
-    
-    if playerContour is None:
         roiMask = gFrm.within_region(initial_projROI)
     else:
         enclReg = playerContour.enclosing_region()
@@ -388,6 +387,60 @@ def find_both_players_smart(gCache, featCache,
     ### ROI Masks are returned only for checking...
     return topPlayer, botPlayer
 
+def find_player_candidate_tracks_joint(foregroundCache, shadowCache, featCache,  
+                                         min_player_size = 50):
+    fMask = foregroundCache[0]
+    sMask = shadowCache[0]
+    H = featCache[0]['H']
+    player_candidates_prev = featCache[-1]['player_candidates']
+    
+    jointMask =  fMask & ~sMask  
+    currCnts = find_contours(jointMask, min_size = min_player_size)
+    
+    if player_candidates_prev is None:
+        player_candidates, player_parents = currCnts, [[]] * currCnts.length()
+    else:
+        player_candidates, player_parents = find_player_candidate_contours_with_overlap(currCnts, player_candidates_prev)
+    
+    return player_candidates, player_parents
+    
+def find_player_candidate_tracks(foregroundCache, shadowCache, featCache,  
+                                 min_player_size = 50,
+                                 initial_ROI_upper = None, initial_ROI_lower = None):
+    
+    fMask = foregroundCache[0]
+    sMask = shadowCache[0]
+    H = featCache[0]['H']
+    candCnts_top_prev = featCache[-1]['topPlayer_candidates']
+    candCnts_bot_prev = featCache[-1]['botPlayer_candidates']
+    
+    initialize = candCnts_top_prev is None or candCnts_bot_prev is None
+    jointMask =  fMask & ~sMask  
+    
+    if initialize:
+        initial_projROI = get_projected_ROI(initial_ROI_upper, H)
+        roiMask = fMask.within_region(initial_projROI)
+        jointMask_top = jointMask & roiMask      
+    
+        initial_projROI = get_projected_ROI(initial_ROI_lower, H)
+        roiMask = fMask.within_region(initial_projROI)
+        jointMask_bot = jointMask & roiMask      
+    
+        topPlayer_candidates = find_contours(jointMask_top, min_size = min_player_size)
+        botPlayer_candidates = find_contours(jointMask_bot, min_size = min_player_size)
+        
+        topPlayer_parents = [[]] * topPlayer_candidates.length()
+        botPlayer_parents = [[]] * botPlayer_candidates.length()
+    
+    else:
+        currCnts = find_contours(jointMask, min_size = min_player_size)
+    
+        topPlayer_candidates, topPlayer_parents = find_player_candidate_contours_with_overlap(currCnts, candCnts_top_prev)
+        botPlayer_candidates, botPlayer_parents = find_player_candidate_contours_with_overlap(currCnts, candCnts_bot_prev)
+    
+    return topPlayer_candidates, topPlayer_parents, botPlayer_candidates, botPlayer_parents
+
+    
 def find_motion_mask(gCache, 
                      ROI = None,
                      intensity_threshold = 10,
@@ -446,19 +499,26 @@ def find_motion_mask_three_channel(hCache,
     return HMask, SMask, VMask 
 
 def filter_player_movement(motMask, topPlayer, botPlayer,
-                           dil_kernel = (20, 10)):
+                           top_player_dil_kernel = (12, 7),
+                           bot_player_dil_kernel = (20, 12),
+                           verbose = False):
     
     if not topPlayer is None:
-        topMask = motMask.within_contour(topPlayer).dilate(dil_kernel, kernelType = cv.MORPH_ELLIPSE)
+        topMask = motMask.within_contour(topPlayer).dilate(top_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
         topMask = MaskFrame.false(motMask)
         
     if not botPlayer is None:
-        botMask = motMask.within_contour(botPlayer).dilate(dil_kernel, kernelType = cv.MORPH_ELLIPSE)
+        botMask = motMask.within_contour(botPlayer).dilate(bot_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
         botMask = MaskFrame.false(motMask)
     
     playerMask = topMask | botMask
+    
+    if verbose:
+        ### to show contours...
+        plCnts, _ = playerMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+        motMask.to_grey().to_BGR().put(plCnts).show()
     
     ### Player and Motion Mask
     intMask = ~playerMask & motMask
