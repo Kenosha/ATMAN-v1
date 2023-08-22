@@ -527,33 +527,33 @@ def expand_to_ellipse(myCnt):
     return Contour(outPts)
 
 
-def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
-                              frames_before = None, frames_after = None):
+def interpolate_ball_features(prevCnt, nextCnt, interpolation_points = 8,
+                              time_since_prev_ball = None, time_to_next_ball = None):
     
     ###### Ensure Ellipticality ####
     ### so that we may form an ellipse from both contours,
     ### we have to have at least five points on the contour
-    if len(cnt_before.points) < 6:
-        ell_cnt_before = expand_to_ellipse(cnt_before)
+    if len(prevCnt.points) < 6:
+        ell_cnt_before = expand_to_ellipse(prevCnt)
     else:
-        ell_cnt_before = cnt_before
+        ell_cnt_before = prevCnt
     
-    if len(cnt_after.points) < 6:
-        ell_cnt_after = expand_to_ellipse(cnt_after)
+    if len(nextCnt.points) < 6:
+        ell_cnt_after = expand_to_ellipse(nextCnt)
     else:
-        ell_cnt_after = cnt_after
+        ell_cnt_after = nextCnt
     
     #### Sourt out Frame Count for Weighting ###
-    if frames_before is None:
-        frames_before = 1 ### how many frames before is the contour before from?
+    if time_since_prev_ball is None:
+        time_since_prev_ball = 1 ### how many frames before is the contour before from?
         # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
             # then time before is 1
         # if we interpolate a contour at t=3, and cnt_bef is from t=0,
             # then time before is 3
-    if frames_after is None:
-        frames_after = 1
+    if time_to_next_ball is None:
+        time_to_next_ball = 1
         
-    tot_frames = frames_before + frames_after
+    tot_frames = time_since_prev_ball + time_to_next_ball
     #########    
     
     ###### Fit Ellipse Parameters #####
@@ -571,7 +571,7 @@ def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
     def weight_avg(bef, aft):
         ### the chiasm is sic! the further away the frame after is,
         ### the more weight we give to the frame before, and vice versa.
-        return bef * frames_after / tot_frames + aft * frames_before / tot_frames 
+        return bef * time_to_next_ball / tot_frames + aft * time_since_prev_ball / tot_frames 
     
     x_int, y_int = weight_avg(x_before, x_after), weight_avg(y_before, y_after)
     maj_int, min_int = weight_avg(maj_before, maj_after), weight_avg(min_before, min_after)
@@ -595,38 +595,38 @@ def interpolate_ball_features(cnt_before, cnt_after, interpolation_points = 8,
     
     return Contour(coords)
 
-def interpolate_ball_features_smart(cnt_before, cnt_after, 
+def interpolate_ball_features_smart(prevCnt, nextCnt, 
                                     interpolation_points = 8,
                                     speed_before = None, speed_after = None,
                                     accel_before = None, accel_after = None,
-                                    frames_before = None, frames_after = None,
+                                    time_since_prev_ball = None, time_to_next_ball = None,
                                     acceptable_lambda_difference = 2,
                                     verbose = False):
     
     ###### Ensure Ellipticality ####
     ### so that we may form an ellipse from both contours,
     ### we have to have at least five points on the contour
-    if len(cnt_before.points) < 5:
-        ell_cnt_before = expand_to_ellipse(cnt_before)
+    if len(prevCnt.points) < 5:
+        ell_cnt_before = expand_to_ellipse(prevCnt)
     else:
-        ell_cnt_before = cnt_before
+        ell_cnt_before = prevCnt
     
-    if len(cnt_after.points) < 5:
-        ell_cnt_after = expand_to_ellipse(cnt_after)
+    if len(nextCnt.points) < 5:
+        ell_cnt_after = expand_to_ellipse(nextCnt)
     else:
-        ell_cnt_after = cnt_after
+        ell_cnt_after = nextCnt
     
     #### Sourt out Frame Count for Weighting ###
-    if frames_before is None:
-        frames_before = 1 ### how many frames before is the contour before from?
+    if time_since_prev_ball is None:
+        time_since_prev_ball = 1 ### how many frames before is the contour before from?
         # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
             # then time before is 1
         # if we interpolate a contour at t=3, and cnt_bef is from t=0,
             # then time before is 3
-    if frames_after is None:
-        frames_after = 1
+    if time_to_next_ball is None:
+        time_to_next_ball = 1
         
-    tot_frames = frames_before + frames_after
+    tot_frames = time_since_prev_ball + time_to_next_ball
     #########    
     
     ###### Fit Ellipse Parameters #####
@@ -667,9 +667,9 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
         
         ### plausibility check
         if not 0 < l_x < tot_frames:
-            return interpolate_ball_features(cnt_before, cnt_after, 
+            return interpolate_ball_features(prevCnt, nextCnt, 
                                              interpolation_points = interpolation_points,
-                                             frames_before = frames_before, frames_after = frames_after)
+                                             time_since_prev_ball = time_since_prev_ball, time_to_next_ball = time_to_next_ball)
     else:
         l_x = None
         
@@ -678,9 +678,9 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
         
         ### plausibility check
         if not 0 < l_y < tot_frames:
-            return interpolate_ball_features(cnt_before, cnt_after, 
+            return interpolate_ball_features(prevCnt, nextCnt, 
                                              interpolation_points = interpolation_points,
-                                             frames_before = frames_before, frames_after = frames_after)
+                                             time_since_prev_ball = time_since_prev_ball, time_to_next_ball = time_to_next_ball)
     else:
         l_y = None
     
@@ -699,9 +699,9 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
     
         ## check plausibility 
         if abs(l_x - l_y) > acceptable_lambda_difference:
-            return interpolate_ball_features(cnt_before, cnt_after, 
+            return interpolate_ball_features(prevCnt, nextCnt, 
                                              interpolation_points = interpolation_points,
-                                             frames_before = frames_before, frames_after = frames_after) 
+                                             time_since_prev_ball = time_since_prev_ball, time_to_next_ball = time_to_next_ball) 
         
     
     if verbose:
@@ -715,20 +715,20 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
                                                                  ### except add one to the integer.
                                                                  ### this is because if lambda is 1.5,
                                                                  ### the appropriate switching point
-                                                                 ### is when frames_before = 2.
+                                                                 ### is when time_since_prev_ball = 2.
                                                                  
     ### calculate location (and ellipse parameters) depending on switching point and proportion.
-    if frames_before < switching_point:
-        x_int = x_before + frames_before * speed_before_star.x
-        y_int = y_before + frames_before * speed_before_star.y
+    if time_since_prev_ball < switching_point:
+        x_int = x_before + time_since_prev_ball * speed_before_star.x
+        y_int = y_before + time_since_prev_ball * speed_before_star.y
         maj_int, min_int, theta_int = maj_before, min_before, theta_before
-    if frames_before > switching_point:
-        x_int = x_after - frames_after * speed_after_star.x
-        y_int = y_after - frames_after * speed_after_star.y
+    if time_since_prev_ball > switching_point:
+        x_int = x_after - time_to_next_ball * speed_after_star.x
+        y_int = y_after - time_to_next_ball * speed_after_star.y
         maj_int, min_int, theta_int = maj_after, min_after, theta_after
-    if frames_before == switching_point:
-        x_prev = x_before + (frames_before - 1) * speed_before_star.x
-        y_prev = y_before + (frames_before - 1) * speed_before_star.y
+    if time_since_prev_ball == switching_point:
+        x_prev = x_before + (time_since_prev_ball - 1) * speed_before_star.x
+        y_prev = y_before + (time_since_prev_ball - 1) * speed_before_star.y
         
         prop_add_on_x = switching_prop * speed_before_star.x + (1 - switching_prop) * speed_after_star.x
         prop_add_on_y = switching_prop * speed_before_star.y + (1 - switching_prop) * speed_after_star.y
@@ -758,25 +758,25 @@ def interpolate_ball_features_smart(cnt_before, cnt_after,
 
     return Contour(coords)
 
-def interpolate_ball_features_circle(cnt_before, cnt_after, interpolation_points = 6,
-                                     frames_before = None, frames_after = None):
+def interpolate_ball_features_circle(prevCnt, nextCnt, interpolation_points = 6,
+                                     time_since_prev_ball = None, time_to_next_ball = None):
     
     #### Sourt out Frame Count for Weighting ###
-    if frames_before is None:
-        frames_before = 1 ### how many frames before is the contour before from?
+    if time_since_prev_ball is None:
+        time_since_prev_ball = 1 ### how many frames before is the contour before from?
         # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
             # then time before is 1
         # if we interpolate a contour at t=3, and cnt_bef is from t=0,
             # then time before is 3
-    if frames_after is None:
-        frames_after = 1
+    if time_to_next_ball is None:
+        time_to_next_ball = 1
         
-    tot_frames = frames_before + frames_after
+    tot_frames = time_since_prev_ball + time_to_next_ball
     #########    
     
     ###### Fit Circle Parameters #####
-    xy_before, area_before = cnt_before.center(), cnt_before.area()
-    xy_after, area_after = cnt_after.center(), cnt_after.area()
+    xy_before, area_before = prevCnt.center(), prevCnt.area()
+    xy_after, area_after = nextCnt.center(), nextCnt.area()
     
     x_before, y_before = xy_before.coords
     x_after, y_after = xy_after.coords
@@ -786,7 +786,7 @@ def interpolate_ball_features_circle(cnt_before, cnt_after, interpolation_points
     def weight_avg(bef, aft):
         ### the chiasm is sic! the further away the frame after is,
         ### the more weight we give to the frame before, and vice versa.
-        return bef * frames_after / tot_frames + aft * frames_before / tot_frames 
+        return bef * time_to_next_ball / tot_frames + aft * time_since_prev_ball / tot_frames 
     
     x_int, y_int = weight_avg(x_before, x_after), weight_avg(y_before, y_after)
     area_int = weight_avg(area_before, area_after)
@@ -807,30 +807,30 @@ def interpolate_ball_features_circle(cnt_before, cnt_after, interpolation_points
     
     return Contour(coords)
 
-def interpolate_ball_features_smart_circle(cnt_before, cnt_after, 
+def interpolate_ball_features_smart_circle(prevCnt, nextCnt, 
                                            interpolation_points = 6,
                                            speed_before = None, speed_after = None,
                                            accel_before = None, accel_after = None,
-                                           frames_before = None, frames_after = None,
+                                           time_since_prev_ball = None, time_to_next_ball = None,
                                            acceptable_lambda_difference = 3,
                                            verbose = False):
     
-    #### Sourt out Frame Count for Weighting ###
-    if frames_before is None:
-        frames_before = 1 ### how many frames before is the contour before from?
+    #### Sort out Frame Count for Weighting ###
+    if time_since_prev_ball is None:
+        time_since_prev_ball = 1 ### how many frames before is the contour before from?
         # (i.e: if we interpolate a contour at t=3, and cnt_bef is from t=2, 
             # then time before is 1
         # if we interpolate a contour at t=3, and cnt_bef is from t=0,
             # then time before is 3
-    if frames_after is None:
-        frames_after = 1
+    if time_to_next_ball is None:
+        time_to_next_ball = 1
         
-    tot_frames = frames_before + frames_after
+    tot_frames = time_since_prev_ball + time_to_next_ball ### TODO: shouldnt this be +1 ? 
     #########    
     
     ###### Fit Circle Parameters #####
-    xy_before, area_before = cnt_before.center(), cnt_before.area()
-    xy_after, area_after = cnt_after.center(), cnt_after.area()
+    xy_before, area_before = prevCnt.center(), prevCnt.area()
+    xy_after, area_after = nextCnt.center(), nextCnt.area()
     
     x_before, y_before = xy_before.coords
     x_after, y_after = xy_after.coords
@@ -864,9 +864,9 @@ def interpolate_ball_features_smart_circle(cnt_before, cnt_after,
         ### plausibility check
         if not 0 <= l_x <= tot_frames:
             if verbose: print(f'l_x {l_x} out of scope ({tot_frames})')
-            return interpolate_ball_features_circle(cnt_before, cnt_after, 
+            return interpolate_ball_features_circle(prevCnt, nextCnt, 
                                              interpolation_points = interpolation_points,
-                                             frames_before = frames_before, frames_after = frames_after)
+                                             time_since_prev_ball = time_since_prev_ball, time_to_next_ball = time_to_next_ball)
     else:
         l_x = None
         
@@ -876,9 +876,9 @@ def interpolate_ball_features_smart_circle(cnt_before, cnt_after,
         ### plausibility check
         if not 0 <= l_y <= tot_frames:
             if verbose: print(f'l_y {l_y} out of scope ({tot_frames})')
-            return interpolate_ball_features_circle(cnt_before, cnt_after, 
+            return interpolate_ball_features_circle(prevCnt, nextCnt, 
                                              interpolation_points = interpolation_points,
-                                             frames_before = frames_before, frames_after = frames_after)
+                                             time_since_prev_ball = time_since_prev_ball, time_to_next_ball = time_to_next_ball)
     else:
         l_y = None
     
@@ -898,9 +898,9 @@ def interpolate_ball_features_smart_circle(cnt_before, cnt_after,
         ## check plausibility 
         if abs(l_x - l_y) > acceptable_lambda_difference:
             if verbose: print(f'Difference between l_x ({l_x}) and l_y ({l_y}) too large.')
-            return interpolate_ball_features_circle(cnt_before, cnt_after, 
+            return interpolate_ball_features_circle(prevCnt, nextCnt, 
                                                     interpolation_points = interpolation_points,
-                                                    frames_before = frames_before, frames_after = frames_after) 
+                                                    time_since_prev_ball = time_since_prev_ball, time_to_next_ball = time_to_next_ball) 
         
     
     if verbose:
@@ -914,20 +914,20 @@ def interpolate_ball_features_smart_circle(cnt_before, cnt_after,
                                                                  ### except add one to the integer.
                                                                  ### this is because if lambda is 1.5,
                                                                  ### the appropriate switching point
-                                                                 ### is when frames_before = 2.
+                                                                 ### is when time_since_prev_ball = 2.
                                                                  
     ### calculate location (and ellipse parameters) depending on switching point and proportion.
-    if frames_before < switching_point:
-        x_int = x_before + frames_before * speed_before_star.x
-        y_int = y_before + frames_before * speed_before_star.y
+    if time_since_prev_ball < switching_point:
+        x_int = x_before + time_since_prev_ball * speed_before_star.x
+        y_int = y_before + time_since_prev_ball * speed_before_star.y
         area_int = area_before
-    if frames_before > switching_point:
-        x_int = x_after - frames_after * speed_after_star.x
-        y_int = y_after - frames_after * speed_after_star.y
+    if time_since_prev_ball > switching_point:
+        x_int = x_after - time_to_next_ball * speed_after_star.x
+        y_int = y_after - time_to_next_ball * speed_after_star.y
         area_int = area_after
-    if frames_before == switching_point:
-        x_prev = x_before + (frames_before - 1) * speed_before_star.x
-        y_prev = y_before + (frames_before - 1) * speed_before_star.y
+    if time_since_prev_ball == switching_point:
+        x_prev = x_before + (time_since_prev_ball - 1) * speed_before_star.x
+        y_prev = y_before + (time_since_prev_ball - 1) * speed_before_star.y
         
         prop_add_on_x = switching_prop * speed_before_star.x + (1 - switching_prop) * speed_after_star.x
         prop_add_on_y = switching_prop * speed_before_star.y + (1 - switching_prop) * speed_after_star.y

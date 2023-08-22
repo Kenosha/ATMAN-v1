@@ -324,49 +324,6 @@ class ParticleFilter:
         return motherArr, closeArr, modelArr
         
         
-    def choose_likely_ball_contour(self, S, ballContours, l_threshold = 1/10,
-                                   return_likelihood = False,
-                                   verbose = False):
-        
-        if ballContours is None or ballContours.is_empty():
-            if verbose: print('No Contours!')
-            if return_likelihood:
-                return None, None, None
-            else:
-                return None
-        else:
-            m0_loc = S[:, :2]
-            z_coords = [list(cnt.center().coords) for cnt in ballContours]
-            dist = np.dstack([xy - m0_loc for xy in z_coords])
-        
-            trans_vec_mat_mulStr = 'niz,ij->njz'
-            dist_x_obs_cov_inv = np.einsum(trans_vec_mat_mulStr, dist, self.R_inv)
-            
-            vec_vec_mulStr = 'njz,njz->nz'
-            likelihood_exp_term = np.einsum(vec_vec_mulStr, dist_x_obs_cov_inv, dist)
-            
-            likelihoods = np.exp(-0.5 * likelihood_exp_term)
-            likelihood = likelihoods.mean(axis = 0) / self.likelihood_denominator
-            max_likelihood = np.max(likelihood)
-            
-            ### normalise the threshold, so the likelihood denominator cancels out.
-            normalised_threshold = l_threshold / self.likelihood_denominator
-            
-            if max_likelihood > normalised_threshold:
-                likeliest_idx = np.argmax(likelihood)
-                likeliest_z = ballContours[likeliest_idx]
-                if verbose: print(f'Detected a ball contour with likelihood {max_likelihood}')
-                if return_likelihood:
-                    return likeliest_z, max_likelihood, normalised_threshold
-                else:
-                    return likeliest_z
-            else:
-                if verbose: print(f'No ball, best candidate has likelihood {max_likelihood}')
-                if return_likelihood:
-                    return None, max_likelihood, normalised_threshold
-                else:
-                    return None
-                
     def choose_likely_ball_contour(self, S, ballContours, standard_deviation_threshold = 2):
         
         if ballContours is None or ballContours.is_empty():
