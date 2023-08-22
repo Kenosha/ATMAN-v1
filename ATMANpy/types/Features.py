@@ -285,10 +285,16 @@ class StreamFeature(StreamFeaturesBase):
         return self.__class__(streamDict, name = self.name)  
       
     def fillna(self, fill_value):
-        return self.__class__({frame: fill_value if feat is None else feat for frame, feat in self.items()}, name = self.name)
+        if isinstance(fill_value, StreamFeature):
+            return self.__class__({frame: fill_value.maybe_get(frame) if feat is None else feat for frame, feat in self.items()}, name = self.name)
+        else:
+            return self.__class__({frame: fill_value if feat is None else feat for frame, feat in self.items()}, name = self.name)
       
     def dropna(self):
         return StreamFeature({frame: feat for frame, feat in self.items() if feat is not None}, name = self.name)
+    
+    def isna(self):
+        return BoolFeature({frame: feat is None for frame, feat in self.items()}, name = self.name)
     
     def rename(self, new_name):
         return self.__class__(self.streamDict, name = new_name)

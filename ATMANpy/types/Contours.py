@@ -74,6 +74,28 @@ class Contour:
         # rotAngle: theta, the rotation angle of the rectangle.
         return cv.fitEllipse(self.points)
 
+    def overlap_factor(self, otherCnt, relative_to = 'self'):
+        self_max_x, self_max_y = self.points.max(axis = 0)[0]
+        othr_max_x, othr_max_y = otherCnt.points.max(axis = 0)[0]
+        
+        max_x, max_y = max(self_max_x, othr_max_x) + 1, max(self_max_y, othr_max_y) + 1
+        
+        zeroArr = np.zeros((max_y, max_x), dtype = 'uint8')
+        
+        selfArr = cv.fillPoly(zeroArr.copy(), [self.points], 1)
+        othrArr = cv.fillPoly(zeroArr.copy(), [otherCnt.points], 1)
+        
+        intArr = selfArr & othrArr
+
+        if relative_to == 'self':
+            refArr = selfArr.copy()
+        elif relative_to == 'other':
+            refArr = othrArr.copy()
+        elif relative_to == 'both':
+            refArr = selfArr | othrArr
+            
+        return intArr.sum() / refArr.sum()
+
     def contains(self, somePt):
         return cv.pointPolygonTest(self.points, somePt.coords, False) == 1
 
@@ -113,6 +135,9 @@ class Contours:
     
     def drop(self, index):
         return Contours([cnt for idx, cnt in enumerate(self) if idx != index])
+    
+    def append(self, someCnt):
+        return Contours([*self.contourList, someCnt])
     
     def length(self):
         return len(self.contourList)

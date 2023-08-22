@@ -583,7 +583,7 @@ class Stream:
                     if time_since_last_message > MESSAGE_FREQUENCY:
                         len_queue = len(pending)
                         ram_pct = psutil.virtual_memory().percent
-                        print(f'   ... length of queue: {len(pending)}. Ram utilization: {ram_pct}%')
+                        print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%')
                         time_of_last_message = time.time()
         
         allSFs = SFList(sfList).concatenate(axis = 0)
@@ -1018,7 +1018,7 @@ class MulStream:
                 return True
             elif all([not state for state in generator_states]):
                 return False
-            else: ### somethign is messed up
+            else: ### something is messed up
                 raise Exception('Some generators are running, while others are not...')
             
         def step_generators(genList):
@@ -1822,8 +1822,8 @@ class CachedStream(Stream):
         trunc_left_wing = [self.truncate_frame_number(el) - self.truncation_anchor for el in naive_left_wing]
         trunc_right_wing = [self.truncate_frame_number(el) - self.truncation_anchor for el in naive_right_wing]
         # get the frames using these lists
-        leftFrms = framesType.from_list(self.cap, trunc_left_wing)
-        rightFrms = framesType.from_list(self.cap, trunc_right_wing)
+        leftFrms = framesType.from_list(self.cap, trunc_left_wing, cap_color_space = self.cap_color_space)
+        rightFrms = framesType.from_list(self.cap, trunc_right_wing, cap_color_space = self.cap_color_space)
         
         ### join left wing, body, right wing
         myFrms = leftFrms.join(bodyFrms).join(rightFrms)

@@ -416,10 +416,13 @@ class BoolFrame(Frame):
                 
                 
     @staticmethod
-    def false(likeFrm):
-        shape = likeFrm.shape
-        if len(shape) == 2:
-            shape = tuple([*shape, 3])
+    def false(like):
+        if isinstance(like, tuple):
+            shape = like
+        else:
+            shape = likeFrm.shape
+            if len(shape) == 2:
+                shape = tuple([*shape, 3])
         return BoolFrame(np.zeros(shape, dtype = 'uint8'), name = likeFrm.name)
     
     @staticmethod
@@ -567,13 +570,16 @@ class MaskFrame(Frame):
                 object.__setattr__(self, 'array', new_array)
                 
     @staticmethod
-    def false(likeFrm):
-        shape = likeFrm.shape[:2]
+    def false(like):
+        if isinstance(like, tuple):
+            shape = like
+        else:     ### assumed to be a frame
+            shape = like.shape[:2]
         return MaskFrame(np.zeros(shape, dtype = 'uint8'), name = likeFrm.name)
     
     @staticmethod
-    def true(likeFrm):
-        return ~MaskFrame.false(likeFrm)
+    def true(like):
+        return ~MaskFrame.false(like)
     
     ####################
     
