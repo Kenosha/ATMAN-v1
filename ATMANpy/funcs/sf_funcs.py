@@ -9,17 +9,21 @@ that call for treating all features as a whole, across frames
 @author: gianl
 """
 
+import pandas as pd
 import numpy as np
+
+import copy
 
 import ATMANpy.auxil.constants as const
 
-from ATMANpy.types.Features import StreamFeatures, StreamFeature, BoolFeatures, BoolFeature
+from ATMANpy.types.Features import StreamFeatures, StreamFeature, BoolFeatures, BoolFeature, SFList
+from ATMANpy.types.Streams import Stream
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 from ATMANpy.types.Contours import Contours
 
 import ATMANpy.funcs.util_funcs as ut
-import ATMANpy.funcs.sf_apply_funcs as sf
+import ATMANpy.funcs.sf_apply_funcs as sa
 
 from ATMANpy.types.Lines import CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
@@ -92,7 +96,7 @@ def median_corner_regions(inSF, how_many_unilateral = 8):
     
     required_features = ['tl', 'tr', 'bl', 'br']
     mySF = inSF[required_features]
-    myArr = mySF.apply(sf.points_to_coords).to_array()
+    myArr = mySF.apply(sa.points_to_coords).to_array()
     numFrames = mySF.length()
     
     ### Auxiliary function for finding outlier courtlines    
@@ -217,6 +221,90 @@ def get_median_and_deviation_frame(wrpSF):
     stdFrm = HSVFrame(stdArr.astype('uint8'), name = 'std_backFrm')
     
     return medFrm, stdFrm
+
+def split_player_candidate_tracks(plSF):
+
+    ### get data from last frame
+    lastFrm, lastDict = plSF.last()    
+    lastCnts, lastPars = lastDict['player_candidates'], lastDict['player_parents']
+    
+    ### initialize list of tracks
+    last_trackList = []
+    for lastCnt, lastPar in zip(lastCnts, lastPars):
+        if lastPar == []:
+            trackDict = {'contour': lastCnt, 'parent': None}
+            last_trackList.append({lastFrm: trackDict})
+        else:
+            for par in lastPar:
+                trackDict = {'contour': lastCnt, 'parent': par}
+                last_trackList.append({lastFrm: trackDict})
+         
+    ### iterate over frames, backward, from penultimate
+    other_frames = list(reversed(plSF.get_frames()[:-1]))
+
+    for frame in other_frames:
+        featDict = plSF[frame]
+        currCnts = featDict['player_candidates']
+        currPars = featDict['player_parents']
+        
+        curr_indices = []
+        curr_trackList = [] ### this list of tracks is populated in the loop
+        for last_track in last_trackList:
+            
+            ### Handle previously finished tracks ###
+            try:
+                childDict = last_track[frame + 1]
+            except KeyError: 
+                ### in this case, the track was previously completed from end to beginning, so we add it in unmodified
+                curr_trackList.append(last_track)
+                continue
+            
+            currIdx = childDict['parent']
+            curr_indices.append(currIdx)
+            
+            ### Handle just finished tracks ###
+            if currIdx is None: ### in this case, the track is just completed, so we add it in unmodified.
+                curr_trackList.append(last_track)
+                continue
+            
+            ### Handle tracks with a continuation in next frame (parents to a child)
+            currCnt = currCnts[currIdx]
+            currPar = currPars[currIdx]
+            
+            if currPar == []: ### in this case, the track has no parent, and so it terminates here (seen backwards; seen forwards, it spawns here).
+                curr_track = copy.deepcopy(last_track)
+                currDict = {'contour': currCnt, 'parent': None}
+                curr_track[frame] = currDict
+                curr_trackList.append(curr_track)
+                
+            else:
+                for par in currPar:
+                    curr_track = copy.deepcopy(last_track)
+                    currDict = {'contour': currCnt, 'parent': par}
+                    curr_track[frame] = currDict
+                    curr_trackList.append(curr_track)
+                
+        ### Handle tracks which are just begun: they are not pointed to by a child (seen forwards, they end here!)
+        current_childless = [idx for idx in range(currCnts.length()) if idx not in curr_indices]
+        
+        for currIdx in current_childless:
+            currCnt = currCnts[currIdx]
+            currPar = currPars[currIdx]
+            
+            if currPar == []: ### in this case, the track has no parent, and so it terminates here (seen backwards; seen forwards, it spawns here).
+                ### it's childless and parentless -> appears and disappears.
+                currDict = {'contour': currCnt, 'parent': None}
+                curr_track = {frame: currDict}
+                curr_trackList.append(curr_track)
+            else:
+                for par in currPar:
+                    currDict = {'contour': currCnt, 'parent': par}
+                    curr_track = {frame: currDict}
+                    curr_trackList.append(curr_track)
+                    
+        last_trackList = copy.deepcopy(curr_trackList)
+        
+    
 
 def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
                          probability_threshold = None):
@@ -457,6 +545,383 @@ def find_last_N_items(mySF, N = 3, startNum = None):
     else:
         return None, [None] * N    
 
+def get_positions_speeds_and_accelerations_for_interpolation(ballSF, itpl_distance = 25):
+    
+    def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3, frm1, frm2, frm3):
+        ### given three contours, calculate their speed and acceleration per frame
+        try:
+            speed1 = (cnt2.center() - cnt1.center()) / (frm2 - frm1)
+        except:
+            speed1 = None
+        
+        try:
+            speed2 = (cnt3.center() - cnt2.center()) / (frm3 - frm2)
+        except:
+            speed2 = None
+        
+        try:
+            accel = speed2 - speed1
+        except:
+            accel = None
+            
+        return speed1, speed2, accel
+    
+    outDict = {}
+    
+    ### Get the stretches of play without a ball --> these will have to be interpolated
+    emptySFs = ballSF.filter(ballSF.isna()).split()
+
+    for emptySF in emptySFs:
+        T = emptySF.length()
+        
+        if T > itpl_distance:
+            segDict = {frame: None for frame in emptySF}
+        
+        ### find first and last frames of empty stretch
+        fsNum, _ = emptySF.first()
+        lsNum, _ = emptySF.last()
+        
+        ##### DETERMINE PREVIOUS BALL POSITIONS
+        prevNum, prevCnt = find_last_item(ballSF, startNum = fsNum)   
+        
+        if prevCnt is None or fsNum - prevNum > itpl_distance:
+            prevNum, prevCnt     = None, None ### being over itpl distance is the same as being None 
+            prevNum_1, prevCnt_1 = None, None ### in this case, we have no last known position, speed and acceleration
+            prevNum_2, prevCnt_2 = None, None                 
+        else:
+            prevNum_1, prevCnt_1 = find_last_item(ballSF, startNum = prevNum - 1)
+        
+            if prevCnt_1 is None or fsNum - prevNum_1 > itpl_distance:
+                prevNum_1, prevCnt_1 = None, None ### being over itpl distance is the same as being None 
+                prevNum_2, prevCnt_2 = None, None ### in this case, we have no speed and acceleration
+            else:    
+                prevNum_2, prevCnt_2 = find_last_item(ballSF, startNum = prevNum_1 - 1)
+        
+                if prevCnt_2 is None or fsNum - prevNum_2 > itpl_distance:
+                    prevNum_2, prevCnt_2 = None, None  ### being over itpl distance is the same as being None 
+                                                 ### in this case, we have no acceleration
+            
+        ##### DETERMINE NEXT BALL POSITIONS
+        nextNum, nextCnt = find_next_item(ballSF, startNum = lsNum)   
+        
+        if nextCnt is None or nextNum - lsNum > itpl_distance:
+            nextNum, nextCnt     = None, None ### being over itpl distance is the same as being None 
+            nextNum_1, nextCnt_1 = None, None ### in this case, we have no last known position, speed and acceleration
+            nextNum_2, nextCnt_2 = None, None                 
+        else:
+            nextNum_1, nextCnt_1 = find_next_item(ballSF, startNum = nextNum + 1)
+        
+            if nextCnt_1 is None or nextNum_1 - lsNum > itpl_distance:
+                nextNum_1, nextCnt_1 = None, None ### being over itpl distance is the same as being None 
+                nextNum_2, nextCnt_2 = None, None ### in this case, we have no speed and acceleration
+            else:    
+                nextNum_2, nextCnt_2 = find_next_item(ballSF, startNum = nextNum_1 + 1)
+        
+                if nextCnt_2 is None or nextNum_2 - lsNum > itpl_distance:
+                    nextNum_2, nextCnt_2 = None, None ### being over itpl distance is the same as being None 
+                                                      ### in this case, we have no acceleration
+    
+        ##### DETERMINE SPEEDS AND ACCELERATION
+        _, speed_before, accel_before = calculate_speeds_and_acceleration(prevCnt_2, prevCnt_1, prevCnt, prevNum_2, prevNum_1, prevNum)
+        speed_after, _, accel_after = calculate_speeds_and_acceleration(nextCnt, nextCnt_1, nextCnt_2, nextNum, nextNum_1, nextNum_2)
+
+        ##### TURN POINTS (i.e. VECTORS) INTO SERIES
+        try:
+            p_b = prevCnt.center()
+            p_b_x, p_b_y = p_b.x, p_b.y
+        except AttributeError:
+            p_b_x, p_b_y = None, None
+            
+        try:
+            p_a = nextCnt.center()
+            p_a_x, p_a_y = p_a.x, p_a.y
+        except AttributeError:
+            p_a_x, p_a_y = None, None 
+           
+        try:
+            s_b_x, s_b_y = speed_before.x, speed_before.y
+        except AttributeError:
+            s_b_x, s_b_y = None, None
+        
+        try:
+            s_a_x, s_a_y = speed_after.x, speed_after.y
+        except AttributeError:
+            s_a_x, s_a_y = None, None
+            
+        try:
+            a_b_x, a_b_y = accel_before.x, accel_before.y
+        except AttributeError:
+            a_b_x, a_b_y = None, None
+        
+        try:
+            a_a_x, a_a_y = accel_after.x, accel_after.y
+        except AttributeError:
+            a_a_x, a_a_y = None, None
+            
+        
+        #### WRITE TO DICTIONARY
+        frameDict = {'p_b_x': p_b_x, 
+                     'p_b_y': p_b_y,
+                     's_b_x': s_b_x,
+                     's_b_y': s_b_y,
+                     'a_b_x': a_b_x,
+                     'a_b_y': a_b_y,
+                     'p_a_x': p_a_x,
+                     'p_a_y': p_a_y,
+                     's_a_x': s_a_x,
+                     's_a_y': s_a_y,
+                     'a_a_x': a_a_x,
+                     'a_a_y': a_a_y,
+                     'T': T,
+                     }
+
+        segDict = {frame: frameDict for frame in emptySF}
+        
+        outDict = {**outDict, **segDict}
+        
+    return StreamFeatures(outDict)
+
+def even_smarter_interpolate_ball_contours(ballSF, itpl_distance = 25, 
+                                           verbose = False, plot = False, cap = None):
+    ### TODO: What if there is no acceleration only? Should probably still try to interpolate, no?
+    ### TODO: What do we do with the really pathological cases, where the nearest point pair is far away?
+        ## idea 1: use player position to enforce a better point? (i don't like this much - more moving parts)
+    
+    from mpl_toolkits.mplot3d import Axes3D  
+    # Axes3D import has side effects, it enables using projection='3d' in add_subplot
+    import matplotlib.pyplot as plt
+    
+    dataSF = get_positions_speeds_and_accelerations_for_interpolation(ballSF, itpl_distance = itpl_distance)
+    dataSFs = dataSF.split()
+
+    ### initialize search grid
+    b_min, b_max = 0, 1 ### without the endpoint!
+    N = 40
+    betas = np.linspace(b_min, b_max, N, endpoint = False)
+
+    sfList = []
+
+    for segSF in dataSFs:
+        fsFrm, dataDict = segSF.first() ### the data is constant across segments, so get the first, arbitrarily.
+        
+        if pd.Series(dataDict).isna().any():
+            pass
+        else:
+            
+            if cap is not None: 
+                ### show the previous and next position, speed and acceleration by making three contours respectively.
+                befPt = Point2D((dataDict['p_b_x'], dataDict['p_b_y']))
+                befSp = Point2D((dataDict['s_b_x'], dataDict['s_b_y']))
+                befAc = Point2D((dataDict['a_b_x'], dataDict['a_b_y'])) 
+                
+                aftPt = Point2D((dataDict['p_a_x'], dataDict['p_a_y']))
+                aftSp = Point2D((dataDict['s_a_x'], dataDict['s_a_y']))
+                aftAc = Point2D((dataDict['a_a_x'], dataDict['a_a_y'])) 
+                
+                befPt2 = befPt - befSp
+                befPt3 = befPt2 - befSp - befAc
+                
+                aftPt2 = aftPt + aftSp
+                aftPt3 = aftPt2 + aftSp + aftAc 
+            
+                gFrm = Stream.from_SF(segSF, cap, target_color_space = 'grey').get(fsFrm, put = False)
+                cFrm = gFrm.to_BGR()
+                cFrm = cFrm.put(befPt, color = (0, 255, 0)).put(befPt2, color = (0, 200, 0)).put(befPt3, color = (0, 150, 0))
+                cFrm = cFrm.put(aftPt, color = (0, 0, 255)).put(aftPt2, color = (0, 0, 200)).put(aftPt3, color = (0, 0, 150))
+                
+                cFrm.show()
+            
+            ### Length of empty stretch to be interpolated
+            T = dataDict['T']
+            
+            ##### Family of Lines emanating from Contours BEFORE
+            ### initialize Position and Speed Arrays
+            posArr_bef = np.zeros((T + 1, N, 2)) # Time, Betas, Coordinates
+            spdArr_bef = np.zeros((T + 1, N, 2)) # Time, Betas, Coordinates
+            
+            posArr_bef[0] = dataDict['p_b_x'], dataDict['p_b_y']
+            spdArr_bef[0, :, 0] = dataDict['s_b_x'] + betas * dataDict['a_b_x']
+            spdArr_bef[0, :, 1] = dataDict['s_b_y'] + betas * dataDict['a_b_y']
+            
+            for t in range(1, T + 1):
+                posArr_bef[t] = posArr_bef[t-1] + spdArr_bef[t-1]
+                spdArr_bef[t, :, 0] = spdArr_bef[t-1, :, 0] + betas ** (t + 1) * dataDict['a_b_x']
+                spdArr_bef[t, :, 1] = spdArr_bef[t-1, :, 1] + betas ** (t + 1) * dataDict['a_b_y']
+            
+            posArr_bef, spdArr_bef = posArr_bef[1:], spdArr_bef[1:] ### cut out first period, which is initial!
+            
+            ##### Family of Lines emanating from Contours AFTER
+            ### initialize Position and Speed Arrays
+            posArr_aft = np.zeros((T + 1, N, 2)) # Time, Betas, Coordinates
+            spdArr_aft = np.zeros((T + 1, N, 2)) # Time, Betas, Coordinates
+            
+            posArr_aft[T] = dataDict['p_a_x'], dataDict['p_a_y']
+            spdArr_aft[T, :, 0] = dataDict['s_a_x'] ### note the difference in timing here! consult last (inlaid) page in blue book.
+            spdArr_aft[T, :, 1] = dataDict['s_a_y'] ### in short: speed is a forwards thing -> p(T + 2) = p(T + 1) + s(T + 1) holds with these "initial" (really, terminal) conditions.
+            
+            for t in reversed(range(1, T + 1)):
+                spdArr_aft[t-1, :, 0] = spdArr_aft[t, :, 0] - betas ** (t + 1) * dataDict['a_a_x']
+                spdArr_aft[t-1, :, 1] = spdArr_aft[t, :, 1] - betas ** (t + 1) * dataDict['a_a_y']
+                posArr_aft[t-1] = posArr_aft[t] - spdArr_aft[t-1]
+                
+            posArr_aft, spdArr_aft = posArr_aft[:-1], spdArr_aft[:-1] ### cut the last period, which is terminal
+            
+            ##### Calculate sum of squares, and minimize!
+            posArr_bef_exp = posArr_bef[:, :, np.newaxis, :] ### expand, so as to allow betas to differ!
+            posArr_aft_exp = posArr_aft[:, np.newaxis, :, :] ### expand, so as to allow betas to differ!
+            
+            sum_squares = ((posArr_bef_exp - posArr_aft_exp) ** 2).sum(axis = -1)
+            
+            T_star_idx, B_bef_star_idx, B_aft_star_idx = np.argwhere(sum_squares == np.min(sum_squares))[0] ### get the first argmin (should be unique)
+            T_star, B_bef_star, B_aft_star = T_star_idx + 1, betas[B_bef_star_idx], betas[B_aft_star_idx]
+            
+            opt_distance = sum_squares[T_star_idx, B_bef_star_idx, B_aft_star_idx] ** 0.5
+            if verbose: 
+                print(f'Pixel distance between two lines at meeting point: {round(opt_distance, 3)}')
+                print(f'Meeting point at time {T_star} (counting from 1 to {T}), at beta_bef = {B_bef_star} and beta_aft = {B_aft_star}')
+            
+            if plot:
+                LIMIT = 1000
+                limit_sum_squares = np.where(sum_squares > LIMIT, np.nan, sum_squares)
+                
+                ### Plot
+                X, Y = np.meshgrid(betas, range(1, T + 1))
+                
+                fig = plt.figure(figsize = (20, 20))
+                ax = fig.add_subplot(111, projection='3d')
+                ax.plot_surface(X, Y, limit_sum_squares, cmap='viridis', edgecolor='none')
+    
+                ax.set_xlabel('B')
+                ax.set_ylabel('T')
+
+            ##### Create the interpolated paths, using the optimal model parameter beta_star and the switching point T_star
+            meetPt_bef = posArr_bef[T_star_idx, B_bef_star_idx]
+            meetPt_aft = posArr_aft[T_star_idx, B_aft_star_idx]
+            meetPt = (meetPt_bef + meetPt_aft) / 2
+            
+            befPts = posArr_bef[:T_star_idx, B_bef_star_idx]
+            aftPts = posArr_aft[T_star_idx + 1:, B_aft_star_idx]
+            
+            ptArr = np.array([*befPts, meetPt, *aftPts]).astype(int)
+            
+            streamDict = {frame: Point2D(tuple(ptCoords)) for frame, ptCoords in zip(segSF.get_frames(), ptArr)}
+            
+            sfList.append(StreamFeature(streamDict, name = 'ball'))
+        
+    itplSF = SFList(sfList).concatenate()
+    return ballSF.fillna(itplSF)
+
+def smarter_interpolate_ball_contours(ballSF, itpl_distance = 25, verbose = False):
+    ### Instead of looking at three consecutive prior or past contours, these may now be spaced apart.
+    
+    ####### AUXILIARY 
+    import ATMANpy.funcs.particle_funcs_vectorized as pf
+    
+    def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3, frm1, frm2, frm3):
+        ### given three subsequent contours, calculate their speed and acceleration per frame
+        try:
+            speed1 = (cnt2.center() - cnt1.center()) / (frm2 - frm1)
+        except:
+            speed1 = None
+        
+        try:
+            speed2 = (cnt3.center() - cnt2.center()) / (frm3 - frm2)
+        except:
+            speed2 = None
+        
+        try:
+            accel = speed2 - speed1
+        except:
+            accel = None
+            
+        return speed1, speed2, accel
+    
+    ####### LOOP OVER BALL SF
+    
+    outDict = {}
+    for frmNum, ballCnt in ballSF.items():
+        
+        if ballCnt is not None:
+            outDict[frmNum] = ballCnt
+            continue
+        
+        ##### DETERMINE PREVIOUS BALL POSITIONS
+        prevNum, prevCnt = find_last_item(ballSF, startNum = frmNum)   
+        
+        if prevCnt is None or frmNum - prevNum > itpl_distance:
+            prevNum, prevCnt     = None, None ### being over itpl distance is the same as being None 
+            prevNum_1, prevCnt_1 = None, None ### in this case, we have no last known position, speed and acceleration
+            prevNum_2, prevCnt_2 = None, None                 
+        else:
+            prevNum_1, prevCnt_1 = find_last_item(ballSF, startNum = prevNum - 1)
+        
+            if prevCnt_1 is None or frmNum - prevNum_1 > itpl_distance:
+                prevNum_1, prevCnt_1 = None, None ### being over itpl distance is the same as being None 
+                prevNum_2, prevCnt_2 = None, None ### in this case, we have no speed and acceleration
+            else:    
+                prevNum_2, prevCnt_2 = find_last_item(ballSF, startNum = prevNum_1 - 1)
+        
+                if prevCnt_2 is None or frmNum - prevNum_2 > itpl_distance:
+                    prevNum_2, prevCnt_2 = None, None  ### being over itpl distance is the same as being None 
+                                                 ### in this case, we have no acceleration
+            
+        ##### DETERMINE NEXT BALL POSITIONS
+        nextNum, nextCnt = find_next_item(ballSF, startNum = frmNum)   
+        
+        if nextCnt is None or nextNum - frmNum > itpl_distance:
+            nextNum, nextCnt     = None, None ### being over itpl distance is the same as being None 
+            nextNum_1, nextCnt_1 = None, None ### in this case, we have no last known position, speed and acceleration
+            nextNum_2, nextCnt_2 = None, None                 
+        else:
+            nextNum_1, nextCnt_1 = find_next_item(ballSF, startNum = nextNum + 1)
+        
+            if nextCnt_1 is None or nextNum_1 - frmNum > itpl_distance:
+                nextNum_1, nextCnt_1 = None, None ### being over itpl distance is the same as being None 
+                nextNum_2, nextCnt_2 = None, None ### in this case, we have no speed and acceleration
+            else:    
+                nextNum_2, nextCnt_2 = find_next_item(ballSF, startNum = nextNum_1 + 1)
+        
+                if nextCnt_2 is None or nextNum_2 - frmNum > itpl_distance:
+                    nextNum_2, nextCnt_2 = None, None ### being over itpl distance is the same as being None 
+                                                      ### in this case, we have no acceleration
+
+        ##### DETERMINE SPEEDS AND ACCELERATION
+        _, speed_before, accel_before = calculate_speeds_and_acceleration(prevCnt_2, prevCnt_1, prevCnt, prevNum_2, prevNum_1, prevNum)
+        speed_after, _, accel_after = calculate_speeds_and_acceleration(nextCnt, nextCnt_1, nextCnt_2, nextNum, nextNum_1, nextNum_2)
+
+        
+        ##### DETERMINE TIME FROM LAST BALL AND TO NEXT BALL
+        if prevNum is None or nextNum is None:
+            continue
+        else:
+            time_since_prev_ball = frmNum - prevNum
+            time_to_next_ball = nextNum - frmNum
+        
+        ##### INTERPOLATE
+        if speed_before is not None and speed_after is not None:
+            interpolation_points = 6
+            acceptable_lambda_difference = 3
+            itplBall = pf.interpolate_ball_features_smart_circle(prevCnt, nextCnt,
+                                                                 speed_before = speed_before, 
+                                                                 speed_after = speed_after,
+                                                                 accel_before = accel_before,
+                                                                 accel_after = accel_after,
+                                                                 time_since_prev_ball = time_since_prev_ball,
+                                                                 time_to_next_ball = time_to_next_ball,
+                                                                 interpolation_points = interpolation_points,
+                                                                 acceptable_lambda_difference = acceptable_lambda_difference,
+                                                                 verbose = verbose)
+        # else:
+        #     itplBall = pf.interpolate_ball_features_circle(prevCnt, nextCnt, 
+        #                                                    frames_before = time_from_ball,
+        #                                                    frames_after = time_to_ball)
+        else:
+            itplBall = None
+        
+        outDict[frmNum] = itplBall
+
+    return StreamFeature(outDict, name = 'ballCnt')
+
 
 def smart_interpolate_ball_contours(ballSF, verbose = False):
     
@@ -492,9 +957,9 @@ def smart_interpolate_ball_contours(ballSF, verbose = False):
         last_frame_with_ball, last_three_cnts = find_last_N_items(ballSF, N = 3,
                                                                   startNum = frmNum)
         
-        currCtr, currCtr_1, currCtr_2 = last_three_cnts
+        prevCnt, prevCnt_1, prevCnt_2 = last_three_cnts
         
-        if currCtr is None:
+        if prevCnt is None:
             outDict[frmNum] = None
             continue
             
@@ -502,33 +967,33 @@ def smart_interpolate_ball_contours(ballSF, verbose = False):
         next_frame_with_ball, next_three_ctrs = find_next_N_items(ballSF, N = 3,
                                                                   startNum = frmNum)
         
-        nextCtr, nextCtr_1, nextCtr_2 = next_three_ctrs
+        nextCnt, nextCnt_1, nextCnt_2 = next_three_ctrs
         
-        if nextCtr is None:
+        if nextCnt is None:
             outDict[frmNum] = None
             continue
         
         ### determine speeds and accelerations before and after
-        _, currSpeed, currAccel = calculate_speeds_and_acceleration(currCtr_2, currCtr_1, currCtr)
-        nextSpeed, _, nextAccel = calculate_speeds_and_acceleration(nextCtr, nextCtr_1, nextCtr_2)
+        _, speed_before, accel_before = calculate_speeds_and_acceleration(prevCnt_2, prevCnt_1, prevCnt)
+        speed_after, _, accel_after = calculate_speeds_and_acceleration(nextCnt, nextCnt_1, nextCnt_2)
 
         ### determine the time elapsed since the last ball and until the next ball
-        time_from_ball = frmNum - last_frame_with_ball
-        time_to_ball = next_frame_with_ball - frmNum
+        time_since_prev_ball = frmNum - last_frame_with_ball
+        time_to_next_ball = next_frame_with_ball - frmNum
         
-        if currSpeed is not None and nextSpeed is not None:
-            itplBall = pf.interpolate_ball_features_smart_circle(currCtr, nextCtr,
-                                                                 speed_before = currSpeed, 
-                                                                 speed_after = nextSpeed,
-                                                                 accel_before = currAccel,
-                                                                 accel_after = nextAccel,
-                                                                 frames_before = time_from_ball,
-                                                                 frames_after = time_to_ball,
+        if speed_before is not None and speed_after is not None:
+            itplBall = pf.interpolate_ball_features_smart_circle(prevCnt, nextCnt,
+                                                                 speed_before = speed_before, 
+                                                                 speed_after = speed_after,
+                                                                 accel_before = accel_before,
+                                                                 accel_after = accel_after,
+                                                                 time_since_prev_ball = time_since_prev_ball,
+                                                                 time_to_next_ball = time_to_next_ball,
                                                                  verbose = verbose)
         else:
-            itplBall = pf.interpolate_ball_features_circle(currCtr, nextCtr, 
-                                                           frames_before = time_from_ball,
-                                                           frames_after = time_to_ball)
+            itplBall = pf.interpolate_ball_features_circle(prevCnt, nextCnt, 
+                                                           time_since_prev_ball = time_since_prev_ball,
+                                                           time_to_next_ball = time_to_next_ball)
         outDict[frmNum] = itplBall
         
     return StreamFeature(outDict, name = 'ballCnt')
