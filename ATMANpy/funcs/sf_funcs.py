@@ -19,7 +19,7 @@ import ATMANpy.auxil.constants as const
 from ATMANpy.types.Features import StreamFeatures, StreamFeature, BoolFeatures, BoolFeature, SFList
 from ATMANpy.types.Streams import Stream
 from ATMANpy.types.Points import Point2D
-from ATMANpy.types.Lines import Region
+from ATMANpy.types.Lines import Line, Region
 from ATMANpy.types.Contours import Contours
 
 import ATMANpy.funcs.util_funcs as ut
@@ -303,8 +303,164 @@ def split_player_candidate_tracks(plSF):
                     curr_trackList.append(curr_track)
                     
         last_trackList = copy.deepcopy(curr_trackList)
-        
     
+    ### invert the ordering of the track lists
+    sort_trackList = []
+    for track in last_trackList:
+        rev_track = {frame: track[frame] for frame in reversed(track)}
+        sort_trackList.append(rev_track)
+    
+    del last_trackList, curr_trackList
+    
+    ### make a stream features object from the tracked contours
+    stream_features = [StreamFeatures(track)['contour'].rename(f'track_{idx}') for idx, track in enumerate(sort_trackList)]
+    trackSF = SFList(stream_features).join()
+    
+    return trackSF
+    
+def evaluate_player_candidates(trackSF, H = None, schemaLines = schemaLines):
+    
+    ### some parameters
+    granularity = 10
+    max_meter_per_second = 8
+    fps = 25
+    metric_weights = {'dist': 5, 'speed': 2, 'area': 1, 'move': 2}
+    
+    max_meter_per_frame = max_meter_per_second / fps
+    
+    ### get court for top and bottom baselines
+    courtSF = trackSF['courtLines']
+    ### get the court roi for maximum acceptable distances from lines
+    ROISF = trackSF['courtroiReg']
+    
+    all_frames = trackSF.get_frames() ### all frames (as opposed to some tracks, which are only partially full (but always contiguous!)
+    all_tracks = trackSF.drop('courtLines').drop('courtroiReg').get_features() 
+    
+    metricSers = []
+    for track in all_tracks:
+        singleSF = trackSF[track].dropna()
+  
+        prevCnt = None
+        
+        top_dists = []
+        bot_dists = []
+        top_speeds = []
+        bot_speeds = []
+        areas = []
+        nstills = []
+        for frame, currCnt in singleSF.items():
+            
+            ### calculate normalized distance to baselines
+            
+            # a) subdivide the baselines 
+            topLn, botLn = courtSF[frame]['Top Baseline'], courtSF[frame]['Bottom Baseline']
+            topPts, botPts = topLn.subdivide(granularity), botLn.subdivide(granularity) ### sadly, have to divide the line, because 
+                                                                                        ### distance between line and point uses weak_intersect, which extends line
+            
+            # b) construct a line traversing the contour from top to bottom 
+            currReg = currCnt.enclosing_region()
+            cntLn = Line(currReg['Top'].center(), currReg['Bottom'].center())
+            cntPts = cntLn.subdivide(granularity)
+            
+            # c) calculated distances
+            top_dist = min([topPt.distance_to(cntPt) for cntPt in cntPts for topPt in topPts])
+            bot_dist = min([botPt.distance_to(cntPt) for cntPt in cntPts for botPt in botPts])
+            
+            # d) calculate maximum acceptable distances
+            roitopLn, roibotLn = ROISF[frame]['Top'], ROISF[frame]['Bottom']
+            roitopPt, roibotPt = roitopLn.center(), roibotLn.center()
+            
+            top_dist_max = roitopPt.distance_to(topLn.center())
+            bot_dist_max = roibotPt.distance_to(botLn.center())
+            
+            # e) normalize
+            top_dist_norm = top_dist / top_dist_max
+            bot_dist_norm = bot_dist / bot_dist_max
+            
+            ### calculate speed
+            
+            # a) get pixels moved per frame
+            if prevCnt is None:
+                pixel_per_frame = 0
+            else:
+                pixel_per_frame = currCnt.center().distance_to(prevCnt.center())
+            
+            # b) calculate normalizing speed, adjusted for perspective (using length of two baselines)
+            top_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Top Baseline', vertLine = 'Top Center Line')
+            bot_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Bottom Baseline', vertLine = 'Bottom Center Line')
+            
+            top_max_pixel_per_frame = max_meter_per_frame * max(top_pixel_per_meter) ### take the larger of the two, so that we can account for the largest speeds
+            bot_max_pixel_per_frame = max_meter_per_frame * max(bot_pixel_per_meter) 
+            
+            # c) normalize
+            top_speed_norm = pixel_per_frame / top_max_pixel_per_frame
+            bot_speed_norm = pixel_per_frame / bot_max_pixel_per_frame
+            
+            ### calculate area! --> used for minimising the standard deviations in areas, so our contours don't look jittery!
+            area = currCnt.area()
+            
+            ### check if frame is not completely still (if it is, it is likely not player!)
+            if prevCnt is None:
+                not_still = False
+            else:
+                not_still = prevCnt != currCnt
+            
+            ### store
+            top_dists.append(top_dist_norm)
+            bot_dists.append(bot_dist_norm)
+            top_speeds.append(top_speed_norm)
+            bot_speeds.append(bot_speed_norm)
+            areas.append(area)
+            nstills.append(not_still)
+            
+            prevCnt = currCnt
+        
+        ### Build the Evaluation Metrics!
+        metricDict = {}
+        
+        ### if the player is around the baseline at least 50% of the time, this should be close to one! 
+        # otherwise, it can get very small, even substantially less than zero! 
+        metricDict['top_dist_score'] = 1 - np.median(np.array(top_dists) ** 2) 
+        metricDict['bot_dist_score'] = 1 - np.median(np.array(bot_dists) ** 2)
+        
+        ### if the player is moving fast, this should be closer to one!
+        metricDict['top_speed_score'] = np.mean(np.array(top_speeds) ** 2) ### using the median here causes many zeroes and few positive values.
+        metricDict['bot_speed_score'] = np.mean(np.array(bot_speeds) ** 2)  ## especially for the top player, this could make things hard to distinguish...
+                                                                            ## also, the typical tendency to move is captured by the still_score!
+                                                                    
+        ### if the contour is not too jittery, closer to one! If it is super jittery, it can be smaller than zero! 
+        metricDict['area_score'] = 1 - (np.std(areas) / np.mean(areas))
+        
+        ### if the contour is moving at least a bit, this should be close to 1!
+        metricDict['move_score'] = np.mean(nstills)
+        
+        ### the longer the contour is on screen, the larger this metric
+        metricDict['screen_score'] = singleSF.length() / len(all_frames)
+        
+        metricSers.append(pd.Series(metricDict, name = track))
+        
+    metricDF = pd.concat(metricSers, axis = 1).T
+        
+    ### Evaluate all tracks according to metrics, and the weights assigned
+    
+    # a) gather the metrics that enter linearly
+    topDF = metricDF[['top_dist_score', 'top_speed_score', 'move_score', 'area_score']]
+    topDF.columns = [col.replace('top_', '').replace('_score', '') for col in topDF.columns]
+    
+    botDF = metricDF[['bot_dist_score', 'bot_speed_score', 'move_score', 'area_score']]
+    botDF.columns = [col.replace('bot_', '').replace('_score', '') for col in botDF.columns]
+    
+    # b) the proportion of frames that a player can be seen in enters multiplicatively!
+    screen_mult = metricDict['screen_score']
+    
+    # c) evaluate the aggregate metric of each track, for top and bot player
+    weightSer = pd.Series(metric_weights)
+    
+    topSer = (topDF * weightSer).sum(axis = 1) * screen_mult
+    
+    top_eval = metricDF['top_dist_score'] + metricDF['bot_dist_score']
+    
+        
 
 def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
                          probability_threshold = None):
