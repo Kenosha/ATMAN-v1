@@ -153,24 +153,46 @@ class StreamFeaturesBase:
             streamDict = {**self.streamDict, **otherSF.streamDict} ### does not sort!
         return self.__class__(streamDict, name = self.name)
     
-    def merge(self, otherSF):
-        features, features_other = self.get_features(), otherSF.get_features()
+    def merge(self, otherSF, how = 'left'):
+        ### ensure we work with StreamFeatures
+        leftSF, rightSF = self.unsqueeze(), otherSF.unsqueeze()
         
-        features_overlap = [f for f in features if f in features_other]
+        ### Figure out validity
+        left_features, right_features = leftSF.get_features(), rightSF.get_features()
+        
+        features_overlap = [f for f in left_features if f in right_features]
         if features_overlap != []:
             raise Exception(f'features {features_overlap} exist in {self} and {otherSF}, can not combine')
             
+        ### figure out how to merge
+        if how == 'left':
+            frameList = leftSF.get_frames()
+        elif how == 'right':
+            frameList = rightSF.get_frames()
+        elif how == 'outer':
+            left_set, right_set = set(leftSF.get_frames()), set(rightSF.get_frames())
+            frameList = list(left_set | right_set)
+        elif how == 'inner':
+            left_set, right_set = set(leftSF.get_frames()), set(rightSF.get_frames())
+            frameList = list(left_set & right_set)
+            
         streamDict = {}    
-        for frame, featObj in self.streamDict.items():
+        for frame in frameList:
+            ### get left featDict
             try:
-                other_featObj = otherSF[frame]
+                left_featDict = leftSF[frame]
+            except KeyError:
+                left_featDict = {f: None for f in left_features} 
+            
+            ### get right featDict
+            try:
+                right_featDict = rightSF[frame]
             except:
-                other_featObj = {f: None for f in features_other}
-            finally:
-                if isinstance(other_featObj, dict):
-                    streamDict[frame] = {self.name: featObj, **other_featObj}
-                else:
-                    streamDict[frame] = {self.name: featObj, otherSF.name: other_featObj}
+                right_featDict = {f: None for f in right_features}
+            
+            ### combine
+            streamDict[frame] = {**left_featDict, **right_featDict}
+                
         return StreamFeatures(streamDict)
     
     def split(self, min_feature_length = 0):
@@ -489,6 +511,9 @@ class StreamFeature(StreamFeaturesBase):
         else:
             print(f"Did not save {self.name}, don't know how!")
         
+    def squeeze(self):
+        return self
+    
     def unsqueeze(self):
         return StreamFeatures({frame: {self.name: feat} for frame, feat in self.items()})
     
@@ -726,6 +751,9 @@ class StreamFeatures(StreamFeaturesBase):
                 applyDict[frame] = dict(zip(funcVals, funcOut))
     
         return StreamFeatures(applyDict, name = name).squeeze()
+    
+    def unsqueeze(self):
+        return self
     
     def squeeze(self):
         if len(self.get_features()) == 1:
@@ -1100,7 +1128,7 @@ class SFList:
     sfList: List ### a list of stream features
     
     def __repr__(self):
-        return f'SFList({self.length()} StreamFeatures from {self[0].first()[0]} to {self[-1].last()[0]})'
+        return f'SFList({self.length()} StreamFeatures from {self[0].first()[0]} to {self[0].last()[0]})'
     
     def __iter__(self):
         return self.sfList.__iter__()
@@ -1138,8 +1166,6 @@ class SFList:
     @extract_mp_timer
     def apply_whole_mp(self, func, num_workers, **kwargs):
         from multiprocessing.pool import Pool
-        from functools import partial
-        
         partFunc = partial(func, **kwargs)
         
         with Pool(num_workers) as p:
@@ -1154,16 +1180,21 @@ class SFList:
         assert self.length() == otherSFList.length(), 'Lists to be merged have to be of same length!'
         return SFList([aSF.merge(bSF) for aSF, bSF in zip(self, otherSFList)])
     
-    def concatenate(self, axis = 0):
-        ### concatenates a list of features; axis similar to pandas
-        # axis = 0 ---> along index (i.e. frames)
-        # axis = 1 ---> along columns (i.e. features)
+    def concatenate(self):
+        ### extends a list of features (along index)
         if self.length() == 0:
             return StreamFeatures({})
         else:    
-            concatFunc = StreamFeaturesBase.extend if axis == 0 else StreamFeaturesBase.merge
             x, xs = self[0], self[1:]
-        return concatFunc(x, xs.concatenate(axis = axis))
+        return StreamFeaturesBase.extend(x, xs.concatenate())
+    
+    def join(self): 
+        ### merges a list of features (along columns)
+        if self.length() == 0:
+            return StreamFeatures({})
+        else:    
+            x, xs = self[0], self[1:]
+        return StreamFeaturesBase.merge(x, xs.join(), how = 'outer')
     
     def save(self, videoName, storeName, compression = 24, lossless = False):
         for mySF in self:
