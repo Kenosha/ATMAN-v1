@@ -181,9 +181,8 @@ class Stream:
         
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
-            ### transform StreamFeature into StreamFeatures
-            mySF = mySF.unsqueeze()
+        ### transform StreamFeature into StreamFeatures
+        mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         if self.scale_factor != 1:
@@ -586,7 +585,7 @@ class Stream:
                         print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%')
                         time_of_last_message = time.time()
         
-        allSFs = SFList(sfList).concatenate(axis = 0)
+        allSFs = SFList(sfList).concatenate()
             
         if _split:
             return allSFs.split()
@@ -714,9 +713,8 @@ class StillStream:
     def __post_init__(self):
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
-            ### transform StreamFeature into StreamFeatures
-            mySF = mySF.unsqueeze()
+        ### transform StreamFeature into StreamFeatures
+        mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
@@ -1320,9 +1318,8 @@ class DecapStream:
             
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
-            ### transform StreamFeature into StreamFeatures
-            mySF = mySF.unsqueeze()
+        ### transform StreamFeature into StreamFeatures
+        mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
@@ -1413,9 +1410,8 @@ class NCDecapStream:
     def __post_init__(self):
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature):
-            ### transform StreamFeature into StreamFeatures
-            mySF = mySF.unsqueeze()
+        ### transform StreamFeature into StreamFeatures
+        mySF = mySF.unsqueeze()
         object.__setattr__(self, 'features', mySF)
     
     def __repr__(self):
@@ -1534,9 +1530,8 @@ class CachedStream(Stream):
         
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature) or isinstance(self.features, ConstFeature):
-            ### transform StreamFeature into StreamFeatures
-            mySF = mySF.unsqueeze()
+        ### transform StreamFeature into StreamFeatures
+        mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
@@ -2017,9 +2012,8 @@ class NCStream:
         
         ### CHECK FEATURES
         mySF = self.features
-        if isinstance(self.features, StreamFeature):
-            ### transform StreamFeature into StreamFeatures
-            mySF = mySF.unsqueeze()
+        ### transform StreamFeature into StreamFeatures
+        mySF = mySF.unsqueeze()
         ### conform StreamFeatures to start and stop frame
         # mySF = mySF.conform(list(range(self.start_frame, self.stop_frame + 1))) ### capture contains last frame!
         object.__setattr__(self, 'features', mySF)
