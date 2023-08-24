@@ -272,14 +272,15 @@ def split_player_candidate_tracks(plSF):
             currPar = currPars[currIdx]
             
             if currPar == []: ### in this case, the track has no parent, and so it terminates here (seen backwards; seen forwards, it spawns here).
-                curr_track = copy.deepcopy(last_track)
+                # curr_track = copy.deepcopy(last_track)
+                curr_track = last_track
                 currDict = {'contour': currCnt, 'parent': None}
                 curr_track[frame] = currDict
                 curr_trackList.append(curr_track)
                 
             else:
                 for par in currPar:
-                    curr_track = copy.deepcopy(last_track)
+                    curr_track = copy.deepcopy(last_track) ### need to do this due to mutability and the loop over parents...
                     currDict = {'contour': currCnt, 'parent': par}
                     curr_track[frame] = currDict
                     curr_trackList.append(curr_track)
@@ -303,6 +304,7 @@ def split_player_candidate_tracks(plSF):
                     curr_trackList.append(curr_track)
                     
         last_trackList = copy.deepcopy(curr_trackList)
+        del curr_trackList
     
     ### invert the ordering of the track lists
     sort_trackList = []
@@ -310,7 +312,7 @@ def split_player_candidate_tracks(plSF):
         rev_track = {frame: track[frame] for frame in reversed(track)}
         sort_trackList.append(rev_track)
     
-    del last_trackList, curr_trackList
+    del last_trackList
     
     ### make a stream features object from the tracked contours
     stream_features = [StreamFeatures(track)['contour'].rename(f'track_{idx}') for idx, track in enumerate(sort_trackList)]
@@ -318,34 +320,57 @@ def split_player_candidate_tracks(plSF):
     
     return trackSF
     
-def evaluate_player_candidates(trackSF, H = None, schemaLines = schemaLines):
-    
-    ### some parameters
-    granularity = 10
-    max_meter_per_second = 8
-    fps = 25
-    metric_weights = {'dist': 5, 'speed': 2, 'area': 1, 'move': 2}
-    
-    max_meter_per_frame = max_meter_per_second / fps
+def evaluate_player_candidates(trackSF,
+                               granularity = 10,
+                               # max_meter_per_second = 8
+                               # fps = 25,
+                               area_outlier_iqr_multiple = 1.5,
+                               overlap_optimum = 0.9,
+                               overlap_strictness = 5,
+                               metric_weights = {'dist': 5, 'ovlp': 2, 'area': 1, 'move': 2},
+                               ):
     
     ### get court for top and bottom baselines
     courtSF = trackSF['courtLines']
     ### get the court roi for maximum acceptable distances from lines
     ROISF = trackSF['courtroiReg']
+    ### get the candidates
+    candSF = trackSF.drop('courtLines').drop('courtroiReg')
     
-    all_frames = trackSF.get_frames() ### all frames (as opposed to some tracks, which are only partially full (but always contiguous!)
-    all_tracks = trackSF.drop('courtLines').drop('courtroiReg').get_features() 
+    ### some auxiliary functions
+    def beta(x, optimum, strictness):
+        ### Taking in x between 0 and 1, and optima between 0 and 1 and a positive real valued strictness, yields a beta distribution.
+        ### the maximum occurs at optimum parameter; strictness indicates how fast the distribution drops around strictness
+        ### the beta distribution is then scaled so that the f(optimum) = 1. f(0) = f(1) = 0, if optimum in (0, 1).
+        opt, opt_c = optimum, 1 - optimum
+        x_c = 1 - x
+        
+        y = (x ** (opt * strictness)) * (x_c ** (opt_c * strictness)) 
+        norm = (opt ** (opt * strictness)) * (opt_c ** (opt_c * strictness)) 
+        
+        return y / norm
+        
+    from scipy.stats import iqr
     
+    ### some auxiliary variables
+    # max_meter_per_frame = max_meter_per_second / fps
+    max_conceivable_ratio_outliers = 0.5 / area_outlier_iqr_multiple #### in theory, up to 50% of observations could be outliers, 
+                                                                        # but we scale it by the multiple, to make the metric more sensitive.                                              
+    all_frames = candSF.get_frames() ### all frames (as opposed to some tracks, which are only partially full (but always contiguous!)
+    all_tracks = candSF.get_features() 
+    
+    ### gather metrics in loop!
     metricSers = []
     for track in all_tracks:
-        singleSF = trackSF[track].dropna()
+        singleSF = candSF[track].dropna()
   
         prevCnt = None
         
         top_dists = []
         bot_dists = []
-        top_speeds = []
-        bot_speeds = []
+        # top_speeds = []
+        # bot_speeds = []
+        ovlps = []
         areas = []
         nstills = []
         for frame, currCnt in singleSF.items():
@@ -380,21 +405,29 @@ def evaluate_player_candidates(trackSF, H = None, schemaLines = schemaLines):
             ### calculate speed
             
             # a) get pixels moved per frame
+            # if prevCnt is None:
+            #     pixel_per_frame = 0
+            # else:
+            #     pixel_per_frame = currCnt.center().distance_to(prevCnt.center())
+            
+            # # b) calculate normalizing speed, adjusted for perspective (using length of two baselines)
+            # top_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Top Baseline', vertLine = 'Top Center Line')
+            # bot_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Bottom Baseline', vertLine = 'Bottom Center Line')
+            
+            # top_max_pixel_per_frame = max_meter_per_frame * max(top_pixel_per_meter) ### take the larger of the two, so that we can account for the largest speeds
+            # bot_max_pixel_per_frame = max_meter_per_frame * max(bot_pixel_per_meter) 
+            
+            # # c) normalize
+            # top_speed_norm = pixel_per_frame / top_max_pixel_per_frame
+            # bot_speed_norm = pixel_per_frame / bot_max_pixel_per_frame
+            
+            ### calculate overlap
             if prevCnt is None:
-                pixel_per_frame = 0
+                ovlp = 1
             else:
-                pixel_per_frame = currCnt.center().distance_to(prevCnt.center())
+                ovlp = currCnt.overlap_factor(prevCnt, relative_to = 'self')
             
-            # b) calculate normalizing speed, adjusted for perspective (using length of two baselines)
-            top_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Top Baseline', vertLine = 'Top Center Line')
-            bot_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Bottom Baseline', vertLine = 'Bottom Center Line')
-            
-            top_max_pixel_per_frame = max_meter_per_frame * max(top_pixel_per_meter) ### take the larger of the two, so that we can account for the largest speeds
-            bot_max_pixel_per_frame = max_meter_per_frame * max(bot_pixel_per_meter) 
-            
-            # c) normalize
-            top_speed_norm = pixel_per_frame / top_max_pixel_per_frame
-            bot_speed_norm = pixel_per_frame / bot_max_pixel_per_frame
+            ovlps.append(ovlp)
             
             ### calculate area! --> used for minimising the standard deviations in areas, so our contours don't look jittery!
             area = currCnt.area()
@@ -408,8 +441,8 @@ def evaluate_player_candidates(trackSF, H = None, schemaLines = schemaLines):
             ### store
             top_dists.append(top_dist_norm)
             bot_dists.append(bot_dist_norm)
-            top_speeds.append(top_speed_norm)
-            bot_speeds.append(bot_speed_norm)
+            # top_speeds.append(top_speed_norm)
+            # bot_speeds.append(bot_speed_norm)
             areas.append(area)
             nstills.append(not_still)
             
@@ -424,12 +457,22 @@ def evaluate_player_candidates(trackSF, H = None, schemaLines = schemaLines):
         metricDict['bot_dist_score'] = 1 - np.median(np.array(bot_dists) ** 2)
         
         ### if the player is moving fast, this should be closer to one!
-        metricDict['top_speed_score'] = np.mean(np.array(top_speeds) ** 2) ### using the median here causes many zeroes and few positive values.
-        metricDict['bot_speed_score'] = np.mean(np.array(bot_speeds) ** 2)  ## especially for the top player, this could make things hard to distinguish...
-                                                                            ## also, the typical tendency to move is captured by the still_score!
-                                                                    
+        # metricDict['top_speed_score'] = np.mean(np.array(top_speeds) ** 2) ### using the median here causes many zeroes and few positive values.
+        # metricDict['bot_speed_score'] = np.mean(np.array(bot_speeds) ** 2)  ## especially for the top player, this could make things hard to distinguish...
+                                                                                ## also, the typical tendency to move is captured by the still_score!
+                         
+        ### if the player is moving adequately, the overlap should be close to some optimum value
+        ### -> make a beta distribution, which maps 
+        metricDict['ovlp_score'] = np.mean(beta(np.array(ovlps), overlap_optimum, overlap_strictness))              
+                         
         ### if the contour is not too jittery, closer to one! If it is super jittery, it can be smaller than zero! 
-        metricDict['area_score'] = 1 - (np.std(areas) / np.mean(areas))
+        # metricDict['area_score'] = 1 - (np.std(areas) / np.mean(areas))
+        ### since this is kind of a tie breaker, we want to go into the extremes -> how many outliers are there?
+        med_area = np.median(areas)
+        out_range = area_outlier_iqr_multiple * iqr(areas)
+        lo, hi = med_area - out_range, med_area + out_range
+        outliers = [a for a in areas if not lo < a < hi]
+        metricDict['area_score'] = 1 - (len(outliers) / (max_conceivable_ratio_outliers * len(areas)))
         
         ### if the contour is moving at least a bit, this should be close to 1!
         metricDict['move_score'] = np.mean(nstills)
@@ -444,23 +487,32 @@ def evaluate_player_candidates(trackSF, H = None, schemaLines = schemaLines):
     ### Evaluate all tracks according to metrics, and the weights assigned
     
     # a) gather the metrics that enter linearly
-    topDF = metricDF[['top_dist_score', 'top_speed_score', 'move_score', 'area_score']]
+    topDF = metricDF[['top_dist_score', 'ovlp_score', 'move_score', 'area_score']]
     topDF.columns = [col.replace('top_', '').replace('_score', '') for col in topDF.columns]
     
-    botDF = metricDF[['bot_dist_score', 'bot_speed_score', 'move_score', 'area_score']]
+    botDF = metricDF[['bot_dist_score', 'ovlp_score', 'move_score', 'area_score']]
     botDF.columns = [col.replace('bot_', '').replace('_score', '') for col in botDF.columns]
     
     # b) the proportion of frames that a player can be seen in enters multiplicatively!
-    screen_mult = metricDict['screen_score']
+    screen_mult = metricDF['screen_score']
     
     # c) evaluate the aggregate metric of each track, for top and bot player
     weightSer = pd.Series(metric_weights)
     
     topSer = (topDF * weightSer).sum(axis = 1) * screen_mult
+    botSer = (botDF * weightSer).sum(axis = 1) * screen_mult
     
-    top_eval = metricDF['top_dist_score'] + metricDF['bot_dist_score']
+    # topDF['eval'] = topSer
+    # botDF['eval'] = botSer
     
+    top_choice = topSer.index[topSer.argmax()]
+    bot_choice = botSer.index[botSer.argmax()]
         
+    topSF = candSF[top_choice].rename('topPlayer')
+    botSF = candSF[bot_choice].rename('botPlayer')
+    
+    return topSF.merge(botSF, how = 'outer')
+    
 
 def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
                          probability_threshold = None):
