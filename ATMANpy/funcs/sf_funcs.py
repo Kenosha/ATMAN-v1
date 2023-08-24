@@ -222,29 +222,36 @@ def get_median_and_deviation_frame(wrpSF):
     
     return medFrm, stdFrm
 
-def split_player_candidate_tracks(plSF):
+def split_player_candidate_tracks(plSF, verbose = False):
+
+    if verbose: import time    
 
     ### get data from last frame
     lastFrm, lastDict = plSF.last()    
-    lastCnts, lastPars = lastDict['player_candidates'], lastDict['player_parents']
+    lastPars = lastDict['player_parents']
     
     ### initialize list of tracks
     last_trackList = []
-    for lastCnt, lastPar in zip(lastCnts, lastPars):
+    for currIdx, lastPar in enumerate(lastPars):
         if lastPar == []:
-            trackDict = {'contour': lastCnt, 'parent': None}
+            trackDict = {'cnt_idx': currIdx, 'parent': None}
             last_trackList.append({lastFrm: trackDict})
         else:
             for par in lastPar:
-                trackDict = {'contour': lastCnt, 'parent': par}
+                trackDict = {'cnt_idx': currIdx, 'parent': par}
                 last_trackList.append({lastFrm: trackDict})
          
     ### iterate over frames, backward, from penultimate
     other_frames = list(reversed(plSF.get_frames()[:-1]))
 
     for frame in other_frames:
+        
+        if verbose:
+            chk = time.time()
+            print(f'Frame Number: {frame} (until {plSF.first()[0]})')
+            print(f'Number of Tracks: {len(last_trackList)}')
+        
         featDict = plSF[frame]
-        currCnts = featDict['player_candidates']
         currPars = featDict['player_parents']
         
         curr_indices = []
@@ -268,54 +275,65 @@ def split_player_candidate_tracks(plSF):
                 continue
             
             ### Handle tracks with a continuation in next frame (parents to a child)
-            currCnt = currCnts[currIdx]
             currPar = currPars[currIdx]
             
             if currPar == []: ### in this case, the track has no parent, and so it terminates here (seen backwards; seen forwards, it spawns here).
                 # curr_track = copy.deepcopy(last_track)
                 curr_track = last_track
-                currDict = {'contour': currCnt, 'parent': None}
+                currDict = {'cnt_idx': currIdx, 'parent': None}
                 curr_track[frame] = currDict
                 curr_trackList.append(curr_track)
                 
             else:
                 for par in currPar:
                     curr_track = copy.deepcopy(last_track) ### need to do this due to mutability and the loop over parents...
-                    currDict = {'contour': currCnt, 'parent': par}
+                    currDict = {'cnt_idx': currIdx, 'parent': par}
                     curr_track[frame] = currDict
                     curr_trackList.append(curr_track)
-                
+               
+        if verbose:
+            print(f'   ... done with track check: took {round(time.time() - chk, 1)} secs')
+            chk = time.time()
+        
         ### Handle tracks which are just begun: they are not pointed to by a child (seen forwards, they end here!)
-        current_childless = [idx for idx in range(currCnts.length()) if idx not in curr_indices]
+        current_childless = [idx for idx in range(len(currPars)) if idx not in curr_indices]
         
         for currIdx in current_childless:
-            currCnt = currCnts[currIdx]
             currPar = currPars[currIdx]
             
             if currPar == []: ### in this case, the track has no parent, and so it terminates here (seen backwards; seen forwards, it spawns here).
                 ### it's childless and parentless -> appears and disappears.
-                currDict = {'contour': currCnt, 'parent': None}
+                currDict = {'cnt_idx': currIdx, 'parent': None}
                 curr_track = {frame: currDict}
                 curr_trackList.append(curr_track)
             else:
                 for par in currPar:
-                    currDict = {'contour': currCnt, 'parent': par}
+                    currDict = {'cnt_idx': currIdx, 'parent': par}
                     curr_track = {frame: currDict}
                     curr_trackList.append(curr_track)
-                    
+              
+        if verbose:
+            print(f'   ... done with childless: took {round(time.time() - chk, 1)} secs')
+            chk = time.time()
+        
         last_trackList = copy.deepcopy(curr_trackList)
         del curr_trackList
     
-    ### invert the ordering of the track lists
+        if verbose:
+            print(f'   ... done copying: took {round(time.time() - chk, 1)} secs')
+            chk = time.time()
+    
+    ### invert the ordering of the track lists, keep only the contour index
     sort_trackList = []
     for track in last_trackList:
-        rev_track = {frame: track[frame] for frame in reversed(track)}
+        rev_track = {frame: track[frame]['cnt_idx'] for frame in reversed(track)}
         sort_trackList.append(rev_track)
     
     del last_trackList
     
-    ### make a stream features object from the tracked contours
-    stream_features = [StreamFeatures(track)['contour'].rename(f'track_{idx}') for idx, track in enumerate(sort_trackList)]
+    ### gather the contours
+    cntSF = plSF['player_candidates']
+    stream_features = [StreamFeature({frame: cntSF[frame][cnt_idx] for frame, cnt_idx in track.items()}, name = f'track_{idx}') for idx, track in enumerate(sort_trackList)]
     trackSF = SFList(stream_features).join()
     
     return trackSF
