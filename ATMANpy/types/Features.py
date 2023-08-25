@@ -1128,7 +1128,7 @@ class SFList:
     sfList: List ### a list of stream features
     
     def __repr__(self):
-        return f'SFList({self.length()} StreamFeatures from {self[0].first()[0]} to {self[0].last()[0]})'
+        return f'SFList({self.length()} StreamFeatures from {self[0].first()[0]} to {self[-1].last()[0]})'
     
     def __iter__(self):
         return self.sfList.__iter__()
@@ -1171,6 +1171,56 @@ class SFList:
         with Pool(num_workers) as p:
             outList = p.map(partFunc, self.sfList)
     
+        return SFList(outList)
+    
+    def chunk_fixed(self, chunksize):
+        ### Chunk with fixed chunksize! i.e. if there is an SF of length 730, and we chunk 700, we get 700 and 30
+        sfList = []
+        for mySF in self:
+            while mySF.length() > chunksize:
+                frames = mySF.get_frames()
+                chunk_frames = frames[:chunksize]
+                other_frames = frames[chunksize:]
+                chunkSF, mySF = mySF.conform(chunk_frames), mySF.conform(other_frames)
+                sfList.append(chunkSF)
+            else:
+                sfList.append(mySF)
+        return SFList(sfList)
+    
+    def chunk_evenly(self, chunksize):
+        ### Chunk into (almost) even size chunks! i.e. if there is an SF of length 730, and we chunk 700, we get 365 and 365
+        sfList = []
+        for mySF in self:
+            num_chunks = mySF.length() // chunksize + 1
+            chunksize_round = mySF.length() // num_chunks + 1
+            
+            while mySF.length() > chunksize_round:
+                frames = mySF.get_frames()
+                chunk_frames = frames[:chunksize_round]
+                other_frames = frames[chunksize_round:]
+                chunkSF, mySF = mySF.conform(chunk_frames), mySF.conform(other_frames)
+                sfList.append(chunkSF)
+            else:
+                sfList.append(mySF)
+    
+        return SFList(sfList)
+    
+    def dechunk(self):
+        ### re-join chunks in SFList, that is, sfs that are contiguous within the list! 
+        ### (note: not super robust, since we might have an bona fide SFList with contiguous, but disparate SFs)
+        outList = []
+        prevSF = None
+        for mySF in self:
+            if prevSF is None:
+                prevSF = mySF
+            else:
+                if mySF.first()[0] == prevSF.last()[0] + 1: ### contiguous!
+                    prevSF = prevSF.extend(mySF)
+                else:
+                    outList.append(prevSF)
+                    prevSF = mySF
+    
+        outList.append(prevSF)
         return SFList(outList)
     
     def add(self, key, value):
