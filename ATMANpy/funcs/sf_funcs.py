@@ -224,7 +224,9 @@ def get_median_and_deviation_frame(wrpSF):
     
     return medFrm, stdFrm
 
-def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, critical_number_of_tracks = 2000):
+def split_player_candidate_tracks(plSF, 
+                                  critical_number_of_tracks = 2000,
+                                  verbose = False, super_verbose = False):
 
     if verbose: 
         start_time = time.time()
@@ -263,11 +265,6 @@ def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, 
         curr_indices = []
         curr_trackList = [] ### this list of tracks is populated in the loop
         
-        ### emergency exit
-        if len(last_trackList) > critical_number_of_tracks:
-            print(f'Had to exit {plSF} at frame {frame} --> too many tracks! ({len(last_trackList)})')
-            return StreamFeatures({})
-        
         for last_track in last_trackList:
             
             ### Handle previously finished tracks ###
@@ -279,12 +276,13 @@ def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, 
                 continue
             
             currIdx = childDict['parent']
-            curr_indices.append(currIdx)
             
             ### Handle just finished tracks ###
             if currIdx is None: ### in this case, the track is just completed, so we add it in unmodified.
                 curr_trackList.append(last_track)
                 continue
+            else:
+                curr_indices.append(currIdx)
             
             ### Handle tracks with a continuation in next frame (parents to a child)
             currPar = currPars[currIdx]
@@ -298,7 +296,7 @@ def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, 
                 
             else:
                 for par in currPar:
-                    curr_track = copy.deepcopy(last_track) ### need to do this due to mutability and the loop over parents...
+                    curr_track = dict(last_track) ### need to do this due to mutability and the loop over parents...
                     currDict = {'cnt_idx': currIdx, 'parent': par}
                     curr_track[frame] = currDict
                     curr_trackList.append(curr_track)
@@ -322,14 +320,19 @@ def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, 
                 for par in currPar:
                     currDict = {'cnt_idx': currIdx, 'parent': par}
                     curr_track = {frame: currDict}
-                    curr_trackList.append(curr_track)
+                    curr_trackList.append(curr_track)  
               
         if super_verbose:
             print(f'   ... done with childless: took {round(time.time() - chk, 1)} secs')
             chk = time.time()
         
-        last_trackList = copy.deepcopy(curr_trackList)
+        last_trackList = list(curr_trackList)
         del curr_trackList
+        
+        ### emergency exit
+        if len(last_trackList) > critical_number_of_tracks:
+            print(f'Had to exit {plSF} at frame {frame} --> too many tracks! ({len(last_trackList)})')
+            break ### breaking the loop, thereby ensuring that the tracks which are found are not lost, only shortened (at the beginning)
     
         if super_verbose:
             print(f'   ... done copying: took {round(time.time() - chk, 1)} secs')
@@ -350,13 +353,17 @@ def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, 
         sort_time = time.time()
         
     ### gather the contours
-    cntSF = plSF['player_candidates']
-    stream_features = [StreamFeature({frame: cntSF[frame][cnt_idx] for frame, cnt_idx in track.items()}, name = f'track_{idx}') for idx, track in enumerate(sort_trackList)]
+    # cntSF = plSF['player_candidates']
+    # stream_features = [StreamFeature({frame: cntSF[frame][cnt_idx] for frame, cnt_idx in track.items()}, name = f'track_{idx}') for idx, track in enumerate(sort_trackList)]
+    ### gather only the indices
+    # stream_features = [StreamFeature(track, name = f'track_{idx}') for idx, track in enumerate(sort_trackList)]
+    serList = [pd.Series(track, name = idx) for idx, track in enumerate(sort_trackList)]
     
     if verbose:
         gather_time = time.time()
     
-    trackSF = SFList(stream_features).join()
+    # trackSF = SFList(stream_features).join()
+    trackDF = pd.concat(serList, axis = 1)
     
     if verbose:
         end_time = time.time()
@@ -376,9 +383,9 @@ def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, 
         print(f'   Time spent gathering: {time_to_gather} seconds.')
         print(f'   Time spent joining: {time_to_join} seconds.')
     
-    return trackSF
+    return trackDF
     
-def evaluate_player_candidates(trackSF,
+def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to apply_starmap method of  SFList!
                                granularity = 10,
                                # max_meter_per_second = 8
                                # fps = 25,
@@ -389,11 +396,11 @@ def evaluate_player_candidates(trackSF,
                                ):
     
     ### get court for top and bottom baselines
-    courtSF = trackSF['courtLines']
+    courtSF = candSF['courtLines']
     ### get the court roi for maximum acceptable distances from lines
-    ROISF = trackSF['courtroiReg']
+    ROISF = candSF['courtroiReg']
     ### get the candidates
-    candSF = trackSF.drop('courtLines').drop('courtroiReg')
+    cntSF = candSF['player_candidates']
     
     ### some auxiliary functions
     def beta(x, optimum, strictness):
@@ -414,15 +421,110 @@ def evaluate_player_candidates(trackSF,
     # max_meter_per_frame = max_meter_per_second / fps
     max_conceivable_ratio_outliers = 0.5 / area_outlier_iqr_multiple #### in theory, up to 50% of observations could be outliers, 
                                                                         # but we scale it by the multiple, to make the metric more sensitive.                                              
-    all_frames = candSF.get_frames() ### all frames (as opposed to some tracks, which are only partially full (but always contiguous!)
-    all_tracks = candSF.get_features() 
+    all_frames = cntSF.get_frames() ### all frames (as opposed to some tracks, which are only partially full (but always contiguous!)
+    all_tracks = splitDF.columns 
     
-    ### gather metrics in loop!
+    ### Build Look-Up Tables
+    ## -> this is to speed up the process: we don't want to recalculate stuff for every track that we already know! 
+    ## since there can be upwards of 10,000 tracks!
+    
+    # a) Frame Dependent, Contour Independent Quantities
+    FDCI_LUT = {}
+    for frame in all_frames:
+        ### to calculate normalized distance to baselines...
+        
+        # a) get points on the baselines 
+        topLn, botLn = courtSF[frame]['Top Baseline'], courtSF[frame]['Bottom Baseline']
+        topPts, botPts = topLn.subdivide(granularity), botLn.subdivide(granularity) ### sadly, have to divide the line, because 
+                                                                                    ### distance between line and point uses weak_intersect, which extends line
+        # b) get points at maximum acceptable distance
+        roitopLn, roibotLn = ROISF[frame]['Top'], ROISF[frame]['Bottom']
+        roitopPt, roibotPt = roitopLn.center(), roibotLn.center()
+        
+        # c) calculate maximum acceptable distance
+        top_dist_max = roitopPt.distance_to(topLn.center())
+        bot_dist_max = roibotPt.distance_to(botLn.center())
+    
+        FDCI_LUT[frame] = {'topPts': topPts, 'botPts': botPts,
+                           'top_dist_max': top_dist_max, 'bot_dist_max': bot_dist_max}
+    
+    # b) Frame Dependent, Contour Dependent Quantities
+    FDCD_LUT = {}
+    for frame in all_frames:
+        frameCnts = cntSF[frame]
+        
+        top_dist_norms = []
+        bot_dist_norms = []
+        areas = []
+        for frameCnt in frameCnts:
+            
+            ### to calculate normalized distance to baselines...
+            # a) construct a line traversing the contour from top to bottom 
+            cntReg = frameCnt.enclosing_region()
+            cntLn = Line(cntReg['Top'].center(), cntReg['Bottom'].center())
+            cntPts = cntLn.subdivide(granularity)
+            
+            # b) calculate distances to points on baselines
+            topPts = FDCI_LUT[frame]['topPts']
+            botPts = FDCI_LUT[frame]['botPts']
+            top_dist = min([topPt.distance_to(cntPt) for cntPt in cntPts for topPt in topPts])
+            bot_dist = min([botPt.distance_to(cntPt) for cntPt in cntPts for botPt in botPts])
+            
+            # c) normalize
+            top_dist_max = FDCI_LUT[frame]['top_dist_max']
+            bot_dist_max = FDCI_LUT[frame]['bot_dist_max']
+            top_dist_norm = top_dist / top_dist_max
+            bot_dist_norm = bot_dist / bot_dist_max
+    
+            top_dist_norms.append(top_dist_norm)
+            bot_dist_norms.append(bot_dist_norm)
+    
+            ### to calculate area...
+            area = frameCnt.area()
+            areas.append(area)
+            
+        FDCD_LUT[frame] = {'top_dist_norm': top_dist_norms,
+                           'bot_dist_norm': bot_dist_norms,
+                           'areas': areas}
+        
+    # c) Frame Dependent, Contour Dependent, Previous Contour Dependent Quantities
+    FDCDPD_LUT = {}
+    prev_frameCnts = None
+    for frame in all_frames:
+        frameCnts = cntSF[frame]
+        
+        ovlp_array = []
+        nstill_array = []
+        
+        for frameCnt in frameCnts:
+            
+            if prev_frameCnts is None:
+                continue
+            
+            ovlp_row = []
+            nstill_row = []
+            for prev_frameCnt in prev_frameCnts:
+                ovlp = frameCnt.overlap_factor(prev_frameCnt, relative_to = 'self')
+                not_still = frameCnt != prev_frameCnt
+                    
+                ovlp_row.append(ovlp)
+                nstill_row.append(not_still)
+                
+            ovlp_array.append(ovlp_row)
+            nstill_array.append(nstill_row)
+            
+        FDCDPD_LUT[frame] = {'ovlp': np.array(ovlp_array),
+                             'nstill': np.array(nstill_array)}
+        
+        prev_frameCnts = frameCnts
+    
+    ### For each track, gather the correct metrics from the LUTs.
     metricSers = []
     for track in all_tracks:
-        singleSF = candSF[track].dropna()
-  
-        prevCnt = None
+        trackSer = splitDF[track].dropna().astype(int)
+        
+        if len(trackSer) < 2: ### single frame tracks not admissible!
+            continue
         
         top_dists = []
         bot_dists = []
@@ -431,81 +533,38 @@ def evaluate_player_candidates(trackSF,
         ovlps = []
         areas = []
         nstills = []
-        for frame, currCnt in singleSF.items():
+        
+        for frame in trackSer.index:
             
-            ### calculate normalized distance to baselines
+            ### figure out relevant track indices!
+            frame_idx = trackSer[frame]
+            try:
+                prev_frame_idx = trackSer[frame - 1]
+            except KeyError:
+                continue
             
-            # a) subdivide the baselines 
-            topLn, botLn = courtSF[frame]['Top Baseline'], courtSF[frame]['Bottom Baseline']
-            topPts, botPts = topLn.subdivide(granularity), botLn.subdivide(granularity) ### sadly, have to divide the line, because 
-                                                                                        ### distance between line and point uses weak_intersect, which extends line
+            ### get LUT entries for specific frame
+            FDCD_entry = FDCD_LUT[frame]
+            FDCDPD_entry = FDCDPD_LUT[frame]
             
-            # b) construct a line traversing the contour from top to bottom 
-            currReg = currCnt.enclosing_region()
-            cntLn = Line(currReg['Top'].center(), currReg['Bottom'].center())
-            cntPts = cntLn.subdivide(granularity)
-            
-            # c) calculated distances
-            top_dist = min([topPt.distance_to(cntPt) for cntPt in cntPts for topPt in topPts])
-            bot_dist = min([botPt.distance_to(cntPt) for cntPt in cntPts for botPt in botPts])
-            
-            # d) calculate maximum acceptable distances
-            roitopLn, roibotLn = ROISF[frame]['Top'], ROISF[frame]['Bottom']
-            roitopPt, roibotPt = roitopLn.center(), roibotLn.center()
-            
-            top_dist_max = roitopPt.distance_to(topLn.center())
-            bot_dist_max = roibotPt.distance_to(botLn.center())
-            
-            # e) normalize
-            top_dist_norm = top_dist / top_dist_max
-            bot_dist_norm = bot_dist / bot_dist_max
-            
-            ### calculate speed
-            
-            # a) get pixels moved per frame
-            # if prevCnt is None:
-            #     pixel_per_frame = 0
-            # else:
-            #     pixel_per_frame = currCnt.center().distance_to(prevCnt.center())
-            
-            # # b) calculate normalizing speed, adjusted for perspective (using length of two baselines)
-            # top_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Top Baseline', vertLine = 'Top Center Line')
-            # bot_pixel_per_meter = courtSF[frame].pixel_in_meter(horiLine = 'Bottom Baseline', vertLine = 'Bottom Center Line')
-            
-            # top_max_pixel_per_frame = max_meter_per_frame * max(top_pixel_per_meter) ### take the larger of the two, so that we can account for the largest speeds
-            # bot_max_pixel_per_frame = max_meter_per_frame * max(bot_pixel_per_meter) 
-            
-            # # c) normalize
-            # top_speed_norm = pixel_per_frame / top_max_pixel_per_frame
-            # bot_speed_norm = pixel_per_frame / bot_max_pixel_per_frame
-            
-            ### calculate overlap
-            if prevCnt is None:
-                ovlp = 1
-            else:
-                ovlp = currCnt.overlap_factor(prevCnt, relative_to = 'self')
-            
-            ovlps.append(ovlp)
-            
-            ### calculate area! --> used for minimising the standard deviations in areas, so our contours don't look jittery!
-            area = currCnt.area()
-            
-            ### check if frame is not completely still (if it is, it is likely not player!)
-            if prevCnt is None:
-                not_still = False
-            else:
-                not_still = prevCnt != currCnt
-            
-            ### store
+            ### gather distances
+            top_dist_norm = FDCD_entry['top_dist_norm'][frame_idx]
+            bot_dist_norm = FDCD_entry['bot_dist_norm'][frame_idx]
             top_dists.append(top_dist_norm)
             bot_dists.append(bot_dist_norm)
-            # top_speeds.append(top_speed_norm)
-            # bot_speeds.append(bot_speed_norm)
-            areas.append(area)
-            nstills.append(not_still)
             
-            prevCnt = currCnt
-        
+            ### gather areas
+            area = FDCD_entry['areas'][frame_idx]   
+            areas.append(area)
+            
+            ### gather overlaps
+            ovlp = FDCDPD_entry['ovlp'][frame_idx, prev_frame_idx]
+            ovlps.append(ovlp)
+            
+            ### gather not-stills
+            nstill = FDCDPD_entry['nstill'][frame_idx, prev_frame_idx]
+            nstills.append(nstill)
+            
         ### Build the Evaluation Metrics!
         metricDict = {}
         
@@ -536,7 +595,7 @@ def evaluate_player_candidates(trackSF,
         metricDict['move_score'] = np.mean(nstills)
         
         ### the longer the contour is on screen, the larger this metric
-        metricDict['screen_score'] = singleSF.length() / len(all_frames)
+        metricDict['screen_score'] = len(trackSer) / len(all_frames)
         
         metricSers.append(pd.Series(metricDict, name = track))
         
@@ -566,8 +625,11 @@ def evaluate_player_candidates(trackSF,
     top_choice = topSer.index[topSer.argmax()]
     bot_choice = botSer.index[botSer.argmax()]
         
-    topSF = candSF[top_choice].rename('topPlayer')
-    botSF = candSF[bot_choice].rename('botPlayer')
+    #### only now do we actually build the track!!!
+    topidxSer = splitDF[top_choice].dropna().astype(int)
+    botidxSer = splitDF[bot_choice].dropna().astype(int)
+    topSF = StreamFeature({frame: cntSF[frame][topidxSer[frame]] for frame in topidxSer.index}, name = 'topPlayer')
+    botSF = StreamFeature({frame: cntSF[frame][botidxSer[frame]] for frame in botidxSer.index}, name = 'botPlayer')
     
     return topSF.merge(botSF, how = 'outer')
     
