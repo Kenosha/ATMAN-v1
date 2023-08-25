@@ -5,7 +5,7 @@ Created on Fri Jul  7 18:03:27 2023
 @author: gianl
 """
 
-
+import sys
 import os
 import time
 
@@ -57,18 +57,14 @@ if __name__ == '__main__':
     playBF = BoolFeatures.from_store(vid, sto, featnameList = ['isPlay']).squeeze()   
     
     ### Add empty player feature
-    mySF = HPSF.to_SF().add('topPlayer', None).add('botPlayer', None).drop('P')
+    mySF = HPSF.to_SF().add('topPlayer_candidates', None).add('botPlayer_candidates', None).drop('P')
     mySFs = mySF.filter(playBF).split()
     
     ### Get Streams, and conform them to the segmentation
-    greyCtms = StreamList.from_SFList(mySFs, cap, 
-                                      cache_size = 1, force_fill_cache = True,
-                                      cap_color_space = 'bgr', target_color_space = 'grey')
-    
-    burnStms = StreamList.from_store('foregroundMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask')
-    burnStms = burnStms.conform(greyCtms)
-    shadStms = StreamList.from_store('shadowMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
-    shadStms = shadStms.conform(greyCtms)
+    burnCtms = StreamList.from_store('foregroundMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask',
+                                     cache_size = 1, force_fill_cache = True).conform(mySFs).attach(mySFs)
+    shadCtms = StreamList.from_store('shadowMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask',
+                                     cache_size = 1, force_fill_cache = True).conform(mySFs).attach(mySFs)
     
     ### Set Up ROIs
     # get courtROI to focus on the court itself
@@ -80,24 +76,33 @@ if __name__ == '__main__':
     params = {'width_factor': 1, 'depth_factor': 0.4, 
               'add_depth_factor_bottom': 0.5, 'add_depth_factor_top': 0.5}
     initial_ROI_lower, initial_ROI_upper = get_service_ROIs(schemaLines, **params)
-    halfcourtLine_lower, halfcourtLine_upper = get_half_court_Lines(schemaLines)
-    # schemaFrm.put(initial_ROI_lower).show()
     
     ### Run Player Extraction
-    params = {'player_tracking_scale_factor': 1.5,
-              'bot_min_bounding_height': 200 * conf['scale_factor'],
-              'bot_min_bounding_width': 80 * conf['scale_factor'],
-              'top_min_bounding_height': 150 * conf['scale_factor'],
-              'top_min_bounding_width': 60 * conf['scale_factor'],
-              'initial_ROI_upper': initial_ROI_upper,
-              'initial_ROI_lower': initial_ROI_lower,
-              'halfcourtLine_upper': halfcourtLine_upper,
-              'halfcourtLine_lower': halfcourtLine_lower}
+    params = {'min_player_size': 50}
+    mulStms = StreamList.combine(burnCtms, shadCtms)
     
-    mulStms = StreamList.combine(greyCtms, burnStms, shadStms)
-    plSFs = mulStms.extract_chunked_mp(ex.find_both_players_smart, nwo, nch, **params)
+    trackSFs = mulStms.extract_chunked_mp(ex.find_player_candidate_tracks_joint, nwo, nch, **params)
     
-    plSFs.save(vid, sto, compression = 32)
+    ### Split Candidate Contours with Links into Tracks 
+    params = {'critical_number_of_tracks': 15000,
+              'verbose': False,
+              'super_verbose': False}
+    splitDFs = trackSFs.apply_whole_mp(sf.split_player_candidate_tracks, nwo, **params)
+    splitDFs = splitDFs.sfList ### have to do this so that splitDFs is not an SFList type
+    ### -> note that the outputs here will be dataframes!!!
+
+    candSFs = trackSFs.concatenate().merge(courtroiSF).merge(courtSF).split()
     
+    params = {'granularity': 10,
+              'area_outlier_iqr_multiple': 1.5,
+              'overlap_optimum': 0.9,
+              'overlap_strictness': 5,
+              'metric_weights': {'dist': 5, 'ovlp': 2, 'area': 1, 'move': 2}}
+    plSFs = candSFs.apply_whole_mp_starmapped(sf.evaluate_player_candidates, nwo, splitDFs, **params)
+    
+    plSFs.save(vid, sto, compression = conf['compression_players'])
+
+    # idx = 10
+    # Stream.from_SF(plSFs[idx], cap).show()
 
 
