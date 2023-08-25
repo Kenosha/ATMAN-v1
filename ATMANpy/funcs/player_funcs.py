@@ -576,6 +576,7 @@ def calculate_contour_overlap_factor(cnt_interest, cnt_reference, frame_shape):
     
 
 def find_player_contour_with_overlap(burninMask, roiMask, playerContour_prev, shadowMask = None, 
+                                     retr = cv.RETR_EXTERNAL, approx = cv.CHAIN_APPROX_SIMPLE,
                                      verbose = False):
     
     MIN_PLAYER_SIZE = 50 ### minimum size of player, in pixels.
@@ -587,7 +588,7 @@ def find_player_contour_with_overlap(burninMask, roiMask, playerContour_prev, sh
     if shadowMask is not None:
         roi_burninMask = roi_burninMask & ~shadowMask
         
-    myCnts, _ = roi_burninMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    myCnts, _ = roi_burninMask.to_grey().find_contours(retr, approx)
     
     if myCnts.length() > 0:
         weight_func = partial(calculate_contour_overlap_factor, 
@@ -597,8 +598,9 @@ def find_player_contour_with_overlap(burninMask, roiMask, playerContour_prev, sh
             return largest_weighted_contour
 
 
-def find_contours(myMask, min_size = 25):
-    myCnts, _ = myMask.to_grey().find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+def find_contours(myMask, min_size = 25, retr = cv.RETR_EXTERNAL, approx = cv.CHAIN_APPROX_SIMPLE):
+    ### use cv.RETR_EXTERNAL to only get external contours! RETR_TREE also gives black contours that are completely within white areas!
+    myCnts, _ = myMask.to_grey().find_contours(retr, approx)
     myCnts = Contours([myCnt for myCnt in myCnts if myCnt.area() > min_size])
     return myCnts
 
