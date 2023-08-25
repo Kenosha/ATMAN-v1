@@ -70,7 +70,11 @@ def extract_mp_timer(extractMethod):
             paramStr = f'{num_workers} workers'
         if len(otherArgs) == 2:
             num_workers, chunksize = otherArgs
-            paramStr = f'{num_workers} workers and chunks of {chunksize}'
+            if isinstance(chunksize, list):
+                ### "chunksize" is not a chunksize, but an iterable passed to starmapped!
+                paramStr = f'{num_workers} workers'
+            else:
+                paramStr = f'{num_workers} workers and chunks of {chunksize}'
         print(f'{extractMethod.__name__} on {selfObj.__class__.__name__} with {exFunc.__name__} using {paramStr}: took {timeStr} seconds')
 
         return result
@@ -171,10 +175,10 @@ class StreamFeaturesBase:
             frameList = rightSF.get_frames()
         elif how == 'outer':
             left_set, right_set = set(leftSF.get_frames()), set(rightSF.get_frames())
-            frameList = list(left_set | right_set)
+            frameList = sorted(list(left_set | right_set))
         elif how == 'inner':
             left_set, right_set = set(leftSF.get_frames()), set(rightSF.get_frames())
-            frameList = list(left_set & right_set)
+            frameList = sorted(list(left_set & right_set))
             
         streamDict = {}    
         for frame in frameList:
@@ -1172,6 +1176,19 @@ class SFList:
             outList = p.map(partFunc, self.sfList)
     
         return SFList(outList)
+    
+    @extract_mp_timer
+    def apply_whole_mp_starmapped(self, func, num_workers, starmap_iterable, **kwargs):
+        from multiprocessing.pool import Pool
+        partFunc = partial(func, **kwargs)
+        
+        joint_iterable = zip(self.sfList, starmap_iterable)
+        
+        with Pool(num_workers) as p:
+            outList = p.starmap(partFunc, joint_iterable)
+    
+        return SFList(outList)
+    
     
     def chunk_fixed(self, chunksize):
         ### Chunk with fixed chunksize! i.e. if there is an SF of length 730, and we chunk 700, we get 700 and 30
