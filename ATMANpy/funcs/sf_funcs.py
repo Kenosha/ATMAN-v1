@@ -9,6 +9,8 @@ that call for treating all features as a whole, across frames
 @author: gianl
 """
 
+import time
+
 import pandas as pd
 import numpy as np
 
@@ -222,9 +224,10 @@ def get_median_and_deviation_frame(wrpSF):
     
     return medFrm, stdFrm
 
-def split_player_candidate_tracks(plSF, verbose = False):
+def split_player_candidate_tracks(plSF, verbose = False, super_verbose = False, critical_number_of_tracks = 2000):
 
-    if verbose: import time    
+    if verbose: 
+        start_time = time.time()
 
     ### get data from last frame
     lastFrm, lastDict = plSF.last()    
@@ -244,9 +247,12 @@ def split_player_candidate_tracks(plSF, verbose = False):
     ### iterate over frames, backward, from penultimate
     other_frames = list(reversed(plSF.get_frames()[:-1]))
 
+    if verbose:
+        loop_begin_time = time.time()
+
     for frame in other_frames:
         
-        if verbose:
+        if super_verbose:
             chk = time.time()
             print(f'Frame Number: {frame} (until {plSF.first()[0]})')
             print(f'Number of Tracks: {len(last_trackList)}')
@@ -256,6 +262,12 @@ def split_player_candidate_tracks(plSF, verbose = False):
         
         curr_indices = []
         curr_trackList = [] ### this list of tracks is populated in the loop
+        
+        ### emergency exit
+        if len(last_trackList) > critical_number_of_tracks:
+            print(f'Had to exit {plSF} at frame {frame} --> too many tracks! ({len(last_trackList)})')
+            return StreamFeatures({})
+        
         for last_track in last_trackList:
             
             ### Handle previously finished tracks ###
@@ -291,7 +303,7 @@ def split_player_candidate_tracks(plSF, verbose = False):
                     curr_track[frame] = currDict
                     curr_trackList.append(curr_track)
                
-        if verbose:
+        if super_verbose:
             print(f'   ... done with track check: took {round(time.time() - chk, 1)} secs')
             chk = time.time()
         
@@ -312,17 +324,20 @@ def split_player_candidate_tracks(plSF, verbose = False):
                     curr_track = {frame: currDict}
                     curr_trackList.append(curr_track)
               
-        if verbose:
+        if super_verbose:
             print(f'   ... done with childless: took {round(time.time() - chk, 1)} secs')
             chk = time.time()
         
         last_trackList = copy.deepcopy(curr_trackList)
         del curr_trackList
     
-        if verbose:
+        if super_verbose:
             print(f'   ... done copying: took {round(time.time() - chk, 1)} secs')
             chk = time.time()
     
+    if verbose:
+        loop_end_time = time.time()
+        
     ### invert the ordering of the track lists, keep only the contour index
     sort_trackList = []
     for track in last_trackList:
@@ -331,10 +346,35 @@ def split_player_candidate_tracks(plSF, verbose = False):
     
     del last_trackList
     
+    if verbose:
+        sort_time = time.time()
+        
     ### gather the contours
     cntSF = plSF['player_candidates']
     stream_features = [StreamFeature({frame: cntSF[frame][cnt_idx] for frame, cnt_idx in track.items()}, name = f'track_{idx}') for idx, track in enumerate(sort_trackList)]
+    
+    if verbose:
+        gather_time = time.time()
+    
     trackSF = SFList(stream_features).join()
+    
+    if verbose:
+        end_time = time.time()
+        
+        time_before_loop = round(loop_begin_time - start_time, 1)
+        time_in_loop = round(loop_end_time - loop_begin_time, 1)
+        time_to_sort = round(sort_time - loop_end_time, 1)
+        time_to_gather = round(gather_time - sort_time, 1)
+        time_to_join = round(end_time - gather_time, 1)
+        time_total = round(end_time - start_time, 1)
+        
+        print(f'{plSF}: Found {len(sort_trackList)} tracks.')
+        print(f'Took {time_total} seconds:')
+        print(f'   Time spent before loop: {time_before_loop} seconds.')
+        print(f'   Time spent in loop: {time_in_loop} seconds.')
+        print(f'   Time spent sorting: {time_to_sort} seconds.')
+        print(f'   Time spent gathering: {time_to_gather} seconds.')
+        print(f'   Time spent joining: {time_to_join} seconds.')
     
     return trackSF
     
