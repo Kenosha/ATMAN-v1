@@ -311,8 +311,10 @@ class StreamFeature(StreamFeaturesBase):
         return self.__class__(streamDict, name = self.name)  
       
     def fillna(self, fill_value):
-        if isinstance(fill_value, StreamFeature):
+        if fill_value.__class__.__name__ == 'StreamFeature':
             return self.__class__({frame: fill_value.maybe_get(frame) if feat is None else feat for frame, feat in self.items()}, name = self.name)
+        elif fill_value.__class__.__name__ == 'StreamFeatures':
+            return self.fillna(fill_value[self.name])
         else:
             return self.__class__({frame: fill_value if feat is None else feat for frame, feat in self.items()}, name = self.name)
       
@@ -482,6 +484,10 @@ class StreamFeature(StreamFeaturesBase):
         ### New principle: -> do not save None values! 
         saveSF = self.dropna()
         
+        if saveSF.is_empty():
+            print(f'Did not save {self}, all None!')
+            return None
+        
         contourNames = ['topPlayer', 'botPlayer']
         homographyNames = ['H']
         regionNames = ['scoreBoard']
@@ -494,6 +500,8 @@ class StreamFeature(StreamFeaturesBase):
             saveSF._save_projection(videoName, storeName)
         elif self.name in regionNames:
             saveSF._save_region(videoName, storeName)
+        elif self.name.endswith('Pt'):
+            saveSF._save_point(videoName, storeName)
         elif self.name.endswith('Ln'):
             saveSF._save_line(videoName, storeName)
         elif self.name.endswith('Lns'):
@@ -664,27 +672,7 @@ class StreamFeatures(StreamFeaturesBase):
         
         else:
             raise Exception('Invalid key, value combination to add to stream features.')
-            
-    def merge(self, otherSF):
-        features, features_other = self.get_features(), otherSF.get_features()
-        
-        features_overlap = [f for f in features if f in features_other]
-        if features_overlap != []:
-            raise Exception(f'features {features_overlap} exist in {self} and {otherSF}, can not combine')
-            
-        streamDict = {}    
-        for frame, featDict in self.streamDict.items():
-            try:
-                other_featObj = otherSF[frame]
-            except:
-                other_featObj = {f: None for f in features_other}
-            finally:
-                if isinstance(other_featObj, dict):
-                    streamDict[frame] = {**featDict, **other_featObj}
-                else:
-                    streamDict[frame] = {**featDict, otherSF.name: other_featObj}
-        return StreamFeatures(streamDict)
-    
+         
     def dropna(self):
         none_feature = {feat: None for feat in self.get_features()}
         return self.__class__({frame: featDict for frame, featDict in self.items() if featDict != none_feature}, name = self.name)
@@ -760,7 +748,9 @@ class StreamFeatures(StreamFeaturesBase):
         return self
     
     def squeeze(self):
-        if len(self.get_features()) == 1:
+        if self.is_empty():
+            return StreamFeature({})
+        elif len(self.get_features()) == 1:
             return self[self.get_features()[0]]
         else:
             return self
@@ -1240,6 +1230,7 @@ class SFList:
         outList.append(prevSF)
         return SFList(outList)
     
+    
     def add(self, key, value):
         return SFList([mySF.add(key, value) for mySF in self])
     
@@ -1254,6 +1245,15 @@ class SFList:
         else:    
             x, xs = self[0], self[1:]
         return StreamFeaturesBase.extend(x, xs.concatenate())
+    
+    def concatenate_and_plug(self):
+        ### fill back in the split elements
+        mySF = self.concatenate().unsqueeze()
+        fsFrm, lsFrm = mySF.get_frames()[0], mySF.get_frames()[-1]
+        feats = mySF.get_features()
+        
+        streamDict = {frame: mySF.maybe_get(frame) for frame in range(fsFrm, lsFrm + 1)}
+        return StreamFeatures(streamDict).squeeze()
     
     def join(self): 
         ### merges a list of features (along columns)
