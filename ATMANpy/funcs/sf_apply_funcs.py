@@ -67,6 +67,14 @@ def points_to_coords_net(bl, tl, tm, tr, br):
     bl, tl, tm, tr, br = bl.coords, tl.coords, tm.coords, tr.coords, br.coords
     return bl, tl, tm, tr, br
 
+def maybe_center(someCnt):
+    if someCnt is None:
+        somePt = None
+    else:
+        somePt = someCnt.center()
+    return somePt
+
+
 def correct_point(somePt, someReg):
     if somePt.within(someReg):
         return somePt, False

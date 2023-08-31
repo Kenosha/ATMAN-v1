@@ -22,7 +22,7 @@ from ATMANpy.types.Features import StreamFeatures, StreamFeature, BoolFeatures, 
 from ATMANpy.types.Streams import Stream
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Region
-from ATMANpy.types.Contours import Contours
+from ATMANpy.types.Contours import Contours, Contour
 
 import ATMANpy.funcs.util_funcs as ut
 import ATMANpy.funcs.sf_apply_funcs as sa
@@ -1036,7 +1036,7 @@ def even_smarter_interpolate_ball_contours(ballSF, itpl_distance = 25,
             pass
         else:
             
-            if cap is not None: 
+            if cap is not None:   ### very helpful if puzzled
                 ### show the previous and next position, speed and acceleration by making three contours respectively.
                 befPt = Point2D((dataDict['p_b_x'], dataDict['p_b_y']))
                 befSp = Point2D((dataDict['s_b_x'], dataDict['s_b_y']))
@@ -1047,16 +1047,22 @@ def even_smarter_interpolate_ball_contours(ballSF, itpl_distance = 25,
                 aftAc = Point2D((dataDict['a_a_x'], dataDict['a_a_y'])) 
                 
                 befPt2 = befPt - befSp
-                befPt3 = befPt2 - befSp - befAc
-                
+                befPt3 = befPt2 - (befSp - befAc)
+        
+                befPt2 = befPt2.round_point()
+                befPt3 = befPt3.round_point()
+        
                 aftPt2 = aftPt + aftSp
                 aftPt3 = aftPt2 + aftSp + aftAc 
-            
+        
+                aftPt2 = aftPt2.round_point()
+                aftPt3 = aftPt3.round_point()
+        
                 gFrm = Stream.from_SF(segSF, cap, target_color_space = 'grey').get(fsFrm, put = False)
                 cFrm = gFrm.to_BGR()
                 cFrm = cFrm.put(befPt, color = (0, 255, 0)).put(befPt2, color = (0, 200, 0)).put(befPt3, color = (0, 150, 0))
                 cFrm = cFrm.put(aftPt, color = (0, 0, 255)).put(aftPt2, color = (0, 0, 200)).put(aftPt3, color = (0, 0, 150))
-                
+                # cFrm.crop(Region.from_points(befPt2.up(20).left(20), befPt2.down(20).right(20))).zoom(20).show()
                 cFrm.show()
             
             ### Length of empty stretch to be interpolated
@@ -1077,7 +1083,7 @@ def even_smarter_interpolate_ball_contours(ballSF, itpl_distance = 25,
                 spdArr_bef[t, :, 1] = spdArr_bef[t-1, :, 1] + betas ** (t + 1) * dataDict['a_b_y']
             
             posArr_bef, spdArr_bef = posArr_bef[1:], spdArr_bef[1:] ### cut out first period, which is initial!
-            
+
             ##### Family of Lines emanating from Contours AFTER
             ### initialize Position and Speed Arrays
             posArr_aft = np.zeros((T + 1, N, 2)) # Time, Betas, Coordinates
@@ -1093,6 +1099,27 @@ def even_smarter_interpolate_ball_contours(ballSF, itpl_distance = 25,
                 posArr_aft[t-1] = posArr_aft[t] - spdArr_aft[t-1]
                 
             posArr_aft, spdArr_aft = posArr_aft[:-1], spdArr_aft[:-1] ### cut the last period, which is terminal
+            
+            if cap is not None:
+                gFrm = Stream.from_SF(segSF, cap, target_color_space = 'grey').get(fsFrm, put = False)
+                cFrm = gFrm.to_BGR()  
+                
+                sampleArr_bef = posArr_bef[::2,::10]
+                sampleArr_aft = posArr_aft[::2,::10]
+            
+                for idx, tArr in enumerate(sampleArr_bef):
+                    color = (0, 255 - idx * 20, 0)
+                    for coord in tArr:
+                        myPt = Point2D(tuple(coord))
+                        cFrm = cFrm.put(myPt, color = color)
+                        
+                for idx, tArr in enumerate(sampleArr_aft):
+                    color = (0, 0, 255 - idx * 20)
+                    for coord in tArr:
+                        myPt = Point2D(tuple(coord))
+                        cFrm = cFrm.put(myPt, color = color)
+                        
+                cFrm.show()
             
             ##### Calculate sum of squares, and minimize!
             posArr_bef_exp = posArr_bef[:, :, np.newaxis, :] ### expand, so as to allow betas to differ!
@@ -1137,7 +1164,12 @@ def even_smarter_interpolate_ball_contours(ballSF, itpl_distance = 25,
             sfList.append(StreamFeature(streamDict, name = 'ball'))
         
     itplSF = SFList(sfList).concatenate()
-    return ballSF.fillna(itplSF)
+    ### TODO: ITPLSF OBJECTS ARE POINT2D, ballSF OBJECTS MIGHT BE CONTOURS! HARMONIZE.
+    ### --> turn ballSF contours to center points.
+    
+    outSF = ballSF.apply(sa.maybe_center).fillna(itplSF).rename('ball_itplPt')
+    
+    return outSF
 
 def smarter_interpolate_ball_contours(ballSF, itpl_distance = 25, verbose = False):
     ### Instead of looking at three consecutive prior or past contours, these may now be spaced apart.

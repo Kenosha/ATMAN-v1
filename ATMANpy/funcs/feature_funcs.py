@@ -279,7 +279,9 @@ def single_2D_feature_to_object(singlefeatSeries):
             ### we have no speed info, therefore a CONTOUR!
             assert len(x_vals) == len(y_vals)
             num_points = len(x_vals) ### problem with this -> missing values are removed!
-            if len(singlefeatDict) / 2 <= 4:
+            if len(singlefeatDict) == 2: ### have a Point!
+                return Point2D((x_vals[0], y_vals[0]))
+            elif len(singlefeatDict) / 2 <= 4:
                 ### -> have a region!
                 myPoints = [Point2D((x, y)) for x, y in zip(x_vals, y_vals)]
                 return Region.from_points(*myPoints)
@@ -330,9 +332,10 @@ def load_stored_features(videoName, storeName, featnameList = None, keep_which =
     for featName in featnameList:
         featureFrame = read_feature_frame(featName, videoName, storeName, keep_which = keep_which)
         frameDict[featName] = featureFrame
-        frame_index_levels = featureFrame.index.get_level_values('idx0').unique().to_list()
-        indexList.extend(frame_index_levels)    ### construct the set of all frames (indices)
-                                                ### for which we have at least one feature.
+        if not featureFrame.empty:
+            frame_index_levels = featureFrame.index.get_level_values('idx0').unique().to_list()
+            indexList.extend(frame_index_levels)    ### construct the set of all frames (indices)
+                                                    ### for which we have at least one feature.
         
     ### keep unique frames. These will be our dictionary keys!
     indexList = sorted(list(set(indexList)))
