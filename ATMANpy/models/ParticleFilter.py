@@ -38,11 +38,28 @@ class ParticleFilter:
                           [0, 0, 1, 0],
                           [0, 0, 0, 1]]) 
 
-    # the close-to-player movement model with reversed thrust
-    A_primeprime = np.array([[1, 0, 0, 0],
+    ### The following three models are used jointly
+    # close-to-player model with no thrust -> if the ball stays on the racket for a frame
+    A_primeprime0 = np.array([[1, 0, 0, 0],
+                              [0, 1, 0, 0],
+                              [0, 0, 0, 0],
+                              [0, 0, 0, 0]]) 
+    
+
+    # the close-to-player movement model with 1-to-1 reversed thrust
+    A_primeprime1 = np.array([[1, 0, 0, 0],
                               [0, 1, 0, 0],
                               [0, 0, -1, 0],
                               [0, 0, 0, -1]]) 
+    
+    # the close-to-player movement model with 1-to-2 reversed thrust 
+    # (motivated by observation that ball tracking is most often lost if the ball is hit away very forcefully, i.e.
+    # it was still for one frame, "on the racket", and then accelerates out. In this case, we have to exaggerate the thrust reversal.)
+    A_primeprime2 = np.array([[1, 0, 0, 0],
+                              [0, 1, 0, 0],
+                              [0, 0, -2, 0],
+                              [0, 0, 0, -2]]) 
+    #########
 
     # the matrix that turns true state x into obversation z (which is only a location!)
     H = np.array([[1, 0, 0, 0],
@@ -157,6 +174,9 @@ class ParticleFilter:
         return propagation_rules
         
     def get_motion_model_with_contours(self, S, chamferCnts, closeHistories = None, modelHistories = None):
+        MODEL_THRESHOLD_A0 = 0.25
+        MODEL_THRESHOLD_A1 = 0.75 ### these are to be calibrated if necessary!
+        
         ### Check the histories for the particle, to see if it would qualify for a model switch
         if closeHistories is None and modelHistories is None:
             propagation_rules = np.ones(len(S), dtype = 'bool') ### if we have no history,
@@ -185,8 +205,15 @@ class ParticleFilter:
                 A_star = self.A   
             else:                   ### close to player
                 if switchBool: ### particle qualifies for a model switch! 
-                    if np.random.rand() < self.p_prime:
-                        A_star = self.A_primeprime ### note that our prime model of choice is actually primeprime -> thrust reversal!
+                    rand_0_1 = np.random.rand()
+                    if rand_0_1 < self.p_prime * MODEL_THRESHOLD_A0:
+                        A_star = self.A_primeprime0 ### note that our prime model of choice is actually primeprime -> thrust reversal!
+                        model_is_prime = True
+                    elif MODEL_THRESHOLD_A0 * self.p_prime <= rand_0_1 <  self.p_prime * MODEL_THRESHOLD_A1:
+                        A_star = self.A_primeprime1 ### note that our prime model of choice is actually primeprime -> thrust reversal!
+                        model_is_prime = True
+                    elif MODEL_THRESHOLD_A1 * self.p_prime <= rand_0_1 <  self.p_prime:
+                        A_star = self.A_primeprime2 ### note that our prime model of choice is actually primeprime -> thrust reversal!
                         model_is_prime = True
                     else:
                         A_star = self.A
