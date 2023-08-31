@@ -11,7 +11,7 @@ from ATMANpy.types.Lines import Line, Lines, Region
 from ATMANpy.types.Contours import Contour, Contours
 
 def put(someFrm, someObj, 
-        color = None, radius = None, thickness = None, where = None, size = None,
+        color = None, radius = None, thickness = None, where = None, size = None, marker = None,
         annotation = None, enumeration = False, verbose = False):
     
     offset_margin = 10
@@ -26,14 +26,17 @@ def put(someFrm, someObj,
     if someObj is None:
         return someFrm
     
-    if isinstance(someObj, Point2D):
+    if someObj.__class__.__name__ == 'Point2D':
         if verbose: print('Point2D!')
-        myFrm = InstClass(cv.circle(self_copy, someObj.round_coords(), radius, color, thickness))
+        if marker is None:
+            myFrm = InstClass(cv.circle(self_copy, someObj.round_coords(), radius, color, thickness))
+        else:
+            myFrm = InstClass(cv.drawMarker(self_copy, someObj.round_coords(), color, markerType = marker, markerSize = size, thickness = thickness))
         if annotation is not None:
             myFrm = myFrm.put(str(annotation), where = (someObj - offset_margin).coords)
         return myFrm
     
-    if isinstance(someObj, Line):
+    if someObj.__class__.__name__ == 'Line':
         if verbose: print('Line!')
         c1, c2 = someObj.leftPt.round_coords(), someObj.rightPt.round_coords()
         myFrm = InstClass(cv.line(self_copy, c1, c2, color, thickness))

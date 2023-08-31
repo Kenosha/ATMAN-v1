@@ -201,8 +201,8 @@ class Frame:
     def show(self):
         show(self.array, name = self.name)
 
-    def show_continuous(self, ms_between_frames = 30):
-        still_showing = show_continuous(self.array, ms_between_frames = ms_between_frames)
+    def show_continuous(self, ms_between_frames = 30, name = 'frame'):
+        still_showing = show_continuous(self.array, ms_between_frames = ms_between_frames, name = name)
         return still_showing
 
     def unique(self):
@@ -478,11 +478,11 @@ class BoolFrame(Frame):
         
     def put(self, anyObj, 
             color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
-            annotation = None, enumeration = False,
+            marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self.to_grey(), anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, 
+                   where = where, size = size, marker = marker,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
     
@@ -575,7 +575,7 @@ class MaskFrame(Frame):
             shape = like
         else:     ### assumed to be a frame
             shape = like.shape[:2]
-        return MaskFrame(np.zeros(shape, dtype = 'uint8'), name = likeFrm.name)
+        return MaskFrame(np.zeros(shape, dtype = 'uint8'), name = like.name)
     
     @staticmethod
     def true(like):
@@ -628,11 +628,11 @@ class MaskFrame(Frame):
         
     def put(self, anyObj, 
             color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
-            annotation = None, enumeration = False,
+            marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, 
+                   where = where, size = size, marker = marker,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
     
@@ -741,11 +741,11 @@ class GreyFrame(Frame):
     
     def put(self, anyObj, 
             color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
-            annotation = None, enumeration = False,
+            marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, 
+                   where = where, size = size, marker = marker,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
         
@@ -907,11 +907,11 @@ class BGRFrame(Frame):
     
     def put(self, anyObj, 
             color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
-            annotation = None, enumeration = False,
+            marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, 
+                   where = where, size = size, marker = marker,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
         
@@ -1014,11 +1014,11 @@ class HSVFrame(Frame):
     
     def put(self, anyObj, 
             color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
-            annotation = None, enumeration = False,
+            marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, 
+                   where = where, size = size, marker = marker,
                    annotation = annotation, enumeration = enumeration,
                    verbose = False)
         
