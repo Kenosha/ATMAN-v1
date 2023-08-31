@@ -37,6 +37,15 @@ class Contour:
         myPoints = np.dstack([x_vals, y_vals]).reshape((num_points, 1, 2)) ### bring them into shape
         return Contour(myPoints)
         
+    @staticmethod
+    def from_point(myPt, radius = 1, resolution = 6):
+        thetaArr = np.linspace(0, 2 * np.pi, num = resolution, endpoint = False)
+        unit_xArr, unit_yArr = np.cos(thetaArr), np.sin(thetaArr) 
+        unitArr = np.dstack([unit_xArr, unit_yArr]).reshape((resolution, 1, 2))
+        myPoints = unitArr * radius + myPt.coords
+        myPoints = myPoints.astype(int)
+        return Contour(myPoints)
+    
     def __eq__(self, othCnt):
         return np.array(self.points == othCnt.points).all()
         
@@ -133,11 +142,17 @@ class Contours:
     def __getitem__(self, index):
         return self.contourList[index]
     
-    def drop(self, index):
-        return Contours([cnt for idx, cnt in enumerate(self) if idx != index])
+    def drop(self, index_or_contour):
+        if isinstance(index_or_contour, int):
+            return Contours([cnt for idx, cnt in enumerate(self) if idx != index_or_contour])
+        else:
+            return Contours([cnt for cnt in self if cnt != index_or_contour])
     
     def append(self, someCnt):
         return Contours([*self.contourList, someCnt])
+    
+    def extend(self, someCnts):
+        return Contours([*self.contourList, *someCnts.contourList])
     
     def length(self):
         return len(self.contourList)
