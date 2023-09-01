@@ -66,9 +66,10 @@ if __name__ == '__main__':
     
     motiStms = StreamList.from_store('fine_motMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
     motiStms = motiStms.conform(playerSFs).attach(playerSFs).rename('motMask')
-    
+        
     ### Filter out Players from fine motion mask
-    params = {'dil_kernel': (5, 3)}
+    params = {'top_player_dil_kernel': (12, 7),
+              'bot_player_dil_kernel': (20, 12)}
     filtSFs = motiStms.extract_chunked_mp(ex.filter_player_movement, nwo, nch, **params)
     
     ### Get contours 

@@ -70,9 +70,9 @@ if __name__ == '__main__':
     
     # b) Initialize Particle Filter Model
     from ATMANpy.models.ParticleFilter import ParticleFilter
-    params = {'process_standard_deviation': 3, #5 * conf['scale_factor'],
-              'observation_standard_deviation': 3, #5 * conf['scale_factor'],
-              'spatial_lambda': (10 ** -7) / conf['scale_factor']}
+    params = {'process_standard_deviation': 1.5,
+              'observation_standard_deviation': 2,
+              'spatial_lambda': 10 ** -4}
     myFilter = ParticleFilter(**params)
     
     # c) run particle filter
@@ -81,7 +81,7 @@ if __name__ == '__main__':
               'frame_height': height,
               'pixel_per_meter_horizontal': base_length / const.COURT_WIDTH,
               'pixel_per_meter_vertical': side_length / const.SIDE_LENGTH,
-              'N': 1000,
+              'N': 1500,
               'fps': 25,
               'rectify': True}
     partSFs = mySFs.apply_whole_mp(myFilter.find_particles, nwo, **params) 
@@ -95,19 +95,62 @@ if __name__ == '__main__':
     jntSFs = kitaSFs.merge(mySFs.get_feature('candCnts'))
     choseSFs = jntSFs.apply(sa.choose_ball_contour, **params)
     
-    ### TESTING ###
+    chosePtSFs = choseSFs.apply(sa.maybe_center).rename('ball_choicePt')
+    chosePtSFs.save(vid, sto)
+    
+    params = {'itpl_distance': 25}
+    itplSFs = choseSFs.apply_whole_mp(sf.even_smarter_interpolate_ball_contours, nwo, **params)
+    
+    itplSFs.save(vid, sto)
+    
+    #%% Load Players, for testing!
+    
+    ### Load Players
+    playerSF = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayer', 'botPlayer'])
+    playerSFs = playerSF.conform(playBF.filter(playBF)).split()
+    
+          
+    #%% ### TESTING VISUAL ###
+    
     from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
     
-    seqNum = 8
+    ms = 100
+    # seqNum = 14
+    seqNum = 1
+    show_candidates = 0
+    show_particles = 0
+    show_kita = 0
+    show_choice = 0
+    show_itpl = 1
     
-    partSF = partSFs[seqNum]['particles']
-    ptSF = partSF.apply(particles_to_points, particles_to_produce = 100)
-    Stream.from_SF(ptSF, cap).show()
+    if show_candidates:
+        cntSF = cntSFs[seqNum]
+        plSF = playerSFs[seqNum]
+        showSF = cntSF.merge(plSF)
+        Stream.from_SF(showSF, cap).show(ms_between_frames = ms, frame_counter = True)
     
-    partSF = kitaSFs[seqNum]['smooth_particles']
-    ptSF = partSF.apply(particles_to_points, particles_to_produce = 100)
-    Stream.from_SF(ptSF, cap).show()
+    if show_particles:
+        partSF = partSFs[seqNum]['particles']
+        ptSF = partSF.apply(particles_to_points, particles_to_produce = 100)
+        Stream.from_SF(ptSF, cap).show(ms_between_frames = ms, frame_counter = True)
+        
+    if show_kita:
+        kitaSF = kitaSFs[seqNum]['smooth_particles']
+        ptSF = kitaSF.apply(particles_to_points, particles_to_produce = 100)
+        Stream.from_SF(ptSF, cap).show(ms_between_frames = ms, frame_counter = True)
+        
+    if show_choice:
+        Stream.from_SF(choseSFs[seqNum], cap).show(ms_between_frames = ms, frame_counter = True)
     
-    Stream.from_SF(choseSFs[seqNum], cap).show()
+    if show_itpl:
+        Stream.from_SF(itplSFs[seqNum], cap).show(ms_between_frames = ms, frame_counter = True)
+    
+    
+    
+    
+    
+    
+    
+    
     
     

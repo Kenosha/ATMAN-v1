@@ -39,6 +39,7 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_inters
 schemaLines = CourtLines.make().add_singles_netline()
 schemaFrm = fit_frame_to_lines(schemaLines)
 
+svm_dict_name = f'svm_proba_dict_r75_p60_2023-08-15'
 
 if __name__ == '__main__':
 
@@ -48,11 +49,8 @@ if __name__ == '__main__':
     cap = conf['cap']
 
     ### Load SVM for Inference ###
-    svm_model_name = vid
-    svm_dict_name = 'svm_proba_dict_2023-08-03'
-
     ballDict = ut.get_folder_struct('ball_svm')
-    fitPath = os.path.join(ballDict['main'], svm_model_name, 'fitted_svms')
+    fitPath = os.path.join(ballDict['main'], vid, 'fitted_svms')
     
     svmPath = os.path.join(fitPath, svm_dict_name + '.pickle')
 
@@ -68,7 +66,7 @@ if __name__ == '__main__':
     cntSFs = cntSF.conform(playBF.filter(playBF)).fillna(Contours([])).split()
     
     ### Make Contour Features into BallTable ###
-    frmSF = StreamFeatures.from_store(vid, sto, featnameList = ['ballTable'])
+    frmSF = StreamFeatures.from_store(vid, sto, featnameList = ['ballTable']).squeeze()
     if frmSF.is_empty():
         hStms = StreamList.from_SFList(cntSFs, cap, target_color_space = 'hsv')
         gStms = StreamList.from_SFList(cntSFs, cap, target_color_space = 'grey')
@@ -81,6 +79,8 @@ if __name__ == '__main__':
         frmSFs.save(vid, sto)
     else:
         frmSFs = frmSF.conform(playBF.filter(playBF)).split()
+        
+    frmSFs = frmSFs.rename('ballTable')
     
     ### Find Ball Candidates
     jntSFs = frmSFs.merge(cntSFs)
