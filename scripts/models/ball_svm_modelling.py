@@ -27,6 +27,9 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import confusion_matrix, plot_confusion_matrix
 from sklearn.decomposition import PCA
 
+LOWEST_ACCEPTABLE_PRECISION = 60 ### expressed in percent
+LOWEST_ACCEPTABLE_RECALL = 75    ### expressed in percent
+model_name = f'r{LOWEST_ACCEPTABLE_RECALL}_p{LOWEST_ACCEPTABLE_PRECISION}'
 
 if __name__ == '__main__':
     
@@ -44,11 +47,11 @@ if __name__ == '__main__':
     mulStm_balls = MulStream([greyStm, hsvStm]).attach(cntSF['svm_labelled_ballCnts'].rename('movCnts'))
     mulStm_other = MulStream([greyStm, hsvStm]).attach(cntSF['svm_labelled_nonballCnts'].rename('movCnts'))
     
-    params = {'zoom_factor': round(10 / conf['scale_factor']), 
+    feat_params = {'zoom_factor': round(10 / conf['scale_factor']), 
               'pixel_margin': max(round(3 * conf['scale_factor']), 1),
               'ksize': 3}
-    frmSF_balls = mulStm_balls.extract_mp(ex.get_feature_frames, nwo, **params)   
-    frmSF_other = mulStm_other.extract_mp(ex.get_feature_frames, nwo, **params)  
+    frmSF_balls = mulStm_balls.extract_mp(ex.get_feature_frames, nwo, **feat_params)   
+    frmSF_other = mulStm_other.extract_mp(ex.get_feature_frames, nwo, **feat_params)  
     
     ballsDF = frmSF_balls.to_frame()
     otherDF = frmSF_other.to_frame()
@@ -95,7 +98,11 @@ if __name__ == '__main__':
     
     ########### TRAIN SVC ############## 
     
-    def cv_scorer(clf, X, y):
+    def cv_scorer(clf, X, y,
+                  lowest_acceptable_precision = 0.35, ### what precision is "acceptable",
+                  lowest_acceptable_recall = 0.8,     ### what recall is equally "acceptable"
+                  ):
+        
         y_pred = clf.predict(X)
         cm = confusion_matrix(y, y_pred)
     
@@ -105,9 +112,6 @@ if __name__ == '__main__':
         except:
             return 0
         
-        lowest_acceptable_precision = 0.35 ### what precision is "acceptable"
-        lowest_acceptable_recall = 0.8     ### what recall is equally "acceptable"
-        
         xs_precision = max(precision - lowest_acceptable_precision, 0)
         xs_recall = max(recall - lowest_acceptable_recall, 0)
         
@@ -116,20 +120,30 @@ if __name__ == '__main__':
         
         return xs_precision_rate * xs_recall_rate
         
-    ### a) Fixed Params ###
-    params = {'class_weight': {1: 8},
-              'C': 10,
-              'gamma': 'scale',
-              'kernel': 'rbf'}
     
-    svc = SVC(random_state = 17, **params)
-    svc.fit(X_train, y_train)
+    def my_cv_scorer(clf, X, y):
+        lowest_acceptable_precision = LOWEST_ACCEPTABLE_PRECISION / 100
+        lowest_acceptable_recall = LOWEST_ACCEPTABLE_RECALL / 100
+        return cv_scorer(clf, X, y, 
+                         lowest_acceptable_precision = lowest_acceptable_precision,
+                         lowest_acceptable_recall = lowest_acceptable_recall)
     
-    plot_confusion_matrix(svc, X_test, y_test, normalize = None, 
-                          display_labels = ['Not Ball', 'Ball'])
     
-    plot_confusion_matrix(svc, X_test, y_test, normalize = 'true', 
-                          display_labels = ['Not Ball', 'Ball'])
+    
+    # ### a) Fixed Params ###
+    # params = {'class_weight': {1: 8},
+    #           'C': 10,
+    #           'gamma': 'scale',
+    #           'kernel': 'rbf'}
+    
+    # svc = SVC(random_state = 17, **params)
+    # svc.fit(X_train, y_train)
+    
+    # plot_confusion_matrix(svc, X_test, y_test, normalize = None, 
+    #                       display_labels = ['Not Ball', 'Ball'])
+    
+    # plot_confusion_matrix(svc, X_test, y_test, normalize = 'true', 
+    #                       display_labels = ['Not Ball', 'Ball'])
     
     
     #### b) Grid Search #####
@@ -139,7 +153,7 @@ if __name__ == '__main__':
                    'kernel': ['rbf']}]
     
     optimal_params = GridSearchCV(SVC(random_state = 17), param_grid, 
-                                  cv = 5, scoring = cv_scorer)
+                                  cv = 5, scoring = my_cv_scorer)
     
     optimal_params.fit(X_train, y_train)
     print(f'Out of the Box SVM, best params: {optimal_params.best_params_}')
@@ -162,10 +176,10 @@ if __name__ == '__main__':
     best_SVC = SVC(**best_params)
     best_SVC.fit(X_train, y_train)
     
-    fileName = f'svm_dict_{timestamp}.pickle'
+    fileName = f'svm_dict_{model_name}_{timestamp}.pickle'
     savePath = os.path.join(writePath, fileName)
     
-    pickleDict = {'feature_params': params, ### feature params, so we can use the same params for training and inference!
+    pickleDict = {'feature_params': feat_params, ### feature params, so we can use the same params for training and inference!
                   'features': features,
                   'mean': mean,
                   'std': std,
@@ -179,10 +193,10 @@ if __name__ == '__main__':
     best_SVC = SVC(**best_params, probability = True)
     best_SVC.fit(X_train, y_train)
     
-    fileName = f'svm_proba_dict_{timestamp}.pickle'
+    fileName = f'svm_proba_dict_{model_name}_{timestamp}.pickle'
     savePath = os.path.join(writePath, fileName)
     
-    pickleDict = {'feature_params': params,
+    pickleDict = {'feature_params': feat_params,
                   'features': features,
                   'mean': mean,
                   'std': std,
