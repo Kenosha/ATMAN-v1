@@ -60,9 +60,9 @@ def text_to_dict(textPath):
     outDict = {name.lower(): val for name, val in [parse(l) for l in lines]}
     return outDict
 
-def read_config(match_name):
+def read_config(match_name, config_name = '_config'):
     matchDir = get_folder_struct('scripts')['matches']
-    configPath = os.path.join(matchDir, match_name, '_config.txt')
+    configPath = os.path.join(matchDir, match_name, f'{config_name}.txt')
     
     configDict = text_to_dict(configPath)
 
@@ -137,6 +137,10 @@ def shift_array(arr, num, fill_value=np.nan):
     elif num > 0:
         arr[:num] = fill_value
     return arr
+
+def cartesian_product(x, y):
+    ### two lists of x and y coordinates
+    return np.dstack(np.meshgrid(x, y)).reshape(-1, 2)
 
 def split_into_contiguous(inList):
     ### take a strictly monotonously increasing list of integers and 

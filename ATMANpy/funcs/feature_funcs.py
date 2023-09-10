@@ -115,9 +115,23 @@ def extract_point_values(point):
 
 def get_and_make_save_path(featureName, videoName, storeName):
     featDict = atu.get_folder_struct('features_stored')
-    storePath = os.path.join(featDict['main'], videoName, storeName)
-    savePath = os.path.join(storePath, featureName)
     
+    ### Maybe make video path
+    videoPath = os.path.join(featDict['main'], videoName)
+    try:
+        os.mkdir(videoPath)
+    except FileExistsError:
+        pass
+    
+    ### Maybe make store path
+    storePath = os.path.join(videoPath, storeName)
+    try:
+        os.mkdir(storePath)
+    except FileExistsError:
+        pass
+    
+    ### Maybe make feature path
+    savePath = os.path.join(storePath, featureName)
     try:
         os.mkdir(savePath)
         print(f'    Creating new {featureName} data')
