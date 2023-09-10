@@ -236,9 +236,9 @@ class StreamFeature(StreamFeaturesBase):
     #### (like pd.Series) -> frames in index, objects (single feature) in values!
     name: str = None ### The name of a StreamFeature instance is the name of the stored feature.
     
-    @staticmethod
-    def from_series(featSer):
-        return StreamFeature(featSer.to_dict(), name = featSer.name)
+    @classmethod
+    def from_series(cls, featSer):
+        return cls(featSer.to_dict(), name = featSer.name)
     
     def __repr__(self):
         if self.is_empty():

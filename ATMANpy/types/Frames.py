@@ -420,14 +420,14 @@ class BoolFrame(Frame):
         if isinstance(like, tuple):
             shape = like
         else:
-            shape = likeFrm.shape
+            shape = like.shape
             if len(shape) == 2:
                 shape = tuple([*shape, 3])
-        return BoolFrame(np.zeros(shape, dtype = 'uint8'), name = likeFrm.name)
+        return BoolFrame(np.zeros(shape, dtype = 'uint8'), name = like.name)
     
     @staticmethod
-    def true(likeFrm):
-        return ~BoolFrame.false(likeFrm)
+    def true(like):
+        return ~BoolFrame.false(like)
     
     ####################
     
@@ -809,6 +809,10 @@ class GreyFrame(Frame):
         kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
         return GreyFrame(arr)
+    
+    def corners_of_interest(self, max_corners = 10, quality_level = 0.01, min_distance = 10):
+        pointArr = cv.goodFeaturesToTrack(self.array, max_corners, quality_level, min_distance)
+        return [Point2D((x, y)) for x, y in pointArr[:, 0, :]]
     
     def normalize(self):
         ### push values to be between 0 and 255

@@ -2104,8 +2104,6 @@ class NCStream:
                 still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
                 if not still_showing:
                     break
-            
-            frmNum += 1
         
         else:
             cv.destroyAllWindows()

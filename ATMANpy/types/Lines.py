@@ -762,22 +762,24 @@ class Region(Lines):
         p1, p2, p3, p4 = self.p1, self.p2, self.p3, self.p4
         
         if to_min_height is not None:
-            add_on_both_sides = (to_min_height - height) // 2 ### floor div so we keep an integer
+            diff = to_min_height - height
+            div, rem = diff // 2, diff % 2 ### so we keep integer sizes
             
-            if add_on_both_sides > 0:
-                p1 = p1.up(add_on_both_sides)
-                p2 = p2.up(add_on_both_sides)
-                p3 = p3.down(add_on_both_sides)
-                p4 = p4.down(add_on_both_sides)
+            if div > 0:
+                p1 = p1.up(div)
+                p2 = p2.up(div)
+                p3 = p3.down(div + rem)
+                p4 = p4.down(div + rem)
         
         if to_min_width is not None:
-            add_on_both_sides = (to_min_width - width) // 2 ### floor div so we keep an integer
+            diff = to_min_width - width
+            div, rem = diff // 2, diff % 2 ### so we keep integer sizes
             
-            if add_on_both_sides > 0:
-                p1 = p1.left(add_on_both_sides)
-                p2 = p2.right(add_on_both_sides)
-                p3 = p3.left(add_on_both_sides)
-                p4 = p4.right(add_on_both_sides)
+            if div > 0:
+                p1 = p1.left(div)
+                p2 = p2.right(div + rem)
+                p3 = p3.left(div)
+                p4 = p4.right(div + rem)
                 
         return Region.from_points(p1, p2, p3, p4) 
     
