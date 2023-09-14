@@ -236,6 +236,10 @@ class StreamFeature(StreamFeaturesBase):
     #### (like pd.Series) -> frames in index, objects (single feature) in values!
     name: str = None ### The name of a StreamFeature instance is the name of the stored feature.
     
+    @staticmethod
+    def from_store(video_id, store_name, featname = None):
+        return StreamFeatures.from_store(video_id, store_name, featnameList = [featname]).squeeze()
+        
     @classmethod
     def from_series(cls, featSer):
         return cls(featSer.to_dict(), name = featSer.name)
@@ -555,6 +559,9 @@ class StreamFeature(StreamFeaturesBase):
         
     def value_counts(self):
         return self.to_series().value_counts()
+    
+    def unique(self):
+        return self.to_series().unique()
 
 @dataclass(frozen = True)
 class StreamFeatures(StreamFeaturesBase):
@@ -1053,6 +1060,11 @@ class ConstFeatures(ConstFeaturesBase):
     
 @dataclass(frozen = True)
 class BoolFeature(StreamFeature):
+    
+    @staticmethod
+    def from_store(video_id, store_name, featname = None):
+        return BoolFeatures.from_store(video_id, store_name, featnameList = [featname]).squeeze()
+    
     def __repr__(self):
         if self.is_empty():
             return 'BoolFeature()'
