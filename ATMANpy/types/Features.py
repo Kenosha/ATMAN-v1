@@ -644,12 +644,23 @@ class StreamFeatures(StreamFeaturesBase):
                 streamDict[frame] = {feat: None for feat in self.get_features()}
         return StreamFeatures(streamDict, name = self.name)
       
+    def fillna(self, fill_value):
+        if fill_value.__class__.__name__ == 'StreamFeature':
+            return self.__class__({frame: {name: fill_value.maybe_get(frame) if feat is None else feat for frame, feat in featDict.items()} for frame, featDict in self.items()})
+        elif fill_value.__class__.__name__ == 'StreamFeatures':
+            return self.__class__({frame: {name: fill_value.maybe_get(frame)[name] if feat is None else feat for frame, feat in featDict.items()} for frame, featDict in self.items()})
+        else:
+            return self.__class__({frame: {name: fill_value if feat is None else feat for frame, feat in featDict.items()} for frame, featDict in self.items()})
+      
+    def isna(self):
+        return BoolFeatures({frame: {name: feat is None for name, feat in featDict.items()} for frame, featDict in self.items()})
+    
     def drop(self, item):
         if isinstance(item, int):
             ### drop a single frame feature dictionary!
             return super().drop(item)      
         if isinstance(item, str):
-            dropDict = {frame: {name: feat for name, feat in featDict.items() if name != item} for frame, featDict in self.streamDict.items()}
+            dropDict = {frame: {name: feat for name, feat in featDict.items() if name != item} for frame, featDict in self.items()}
         return StreamFeatures(dropDict)
     
     def keep(self, keepList):
@@ -658,7 +669,7 @@ class StreamFeatures(StreamFeaturesBase):
             return super().keep(keepList)
         if all([isinstance(item, str) for item in keepList]):
             ### keeping features!
-            streamDict = {frame: {feat: val for feat, val in featDict.items() if feat in keepList} for frame, featDict in self.streamDict.items()}
+            streamDict = {frame: {feat: val for feat, val in featDict.items() if feat in keepList} for frame, featDict in self.items()}
         return StreamFeatures(streamDict)            
     
     def add(self, key, value):
@@ -1065,6 +1076,14 @@ class BoolFeature(StreamFeature):
     def from_store(video_id, store_name, featname = None):
         return BoolFeatures.from_store(video_id, store_name, featnameList = [featname]).squeeze()
     
+    def __and__(self, otherBF):
+        mergedBF = self.merge(otherBF, how = 'outer').fillna(False).to_bool()
+        return mergedBF.all()
+    
+    def __or__(self, otherBF):
+        mergedSF = self.merge(otherBF, how = 'outer').fillna(True).to_bool()
+        return mergedBF.any()
+          
     def __repr__(self):
         if self.is_empty():
             return 'BoolFeature()'
