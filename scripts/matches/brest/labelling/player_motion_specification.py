@@ -69,112 +69,229 @@ for vid in vidList:
     
 #%%## Main Loop 
 
+breakBool = False
+
+### -> easier to do categories in one big batch
+# -> first sides, for serve and hit
+# -> spin, for hit
+# -> type, for hit
+
+show_margins_dict = {'side': (0, 0),
+                     'spin': (0, 0),
+                     'type': (15, 0)} ### how many frames before and after to show
+
+#################
+##### SIDE ######
+#################
+todo_category = 'side'
+
 for todo_video in vidList:
     
     cap = ut.get_video(todo_video)
     
-    ### HITS
-    todo_event = 'hit'
-    for todo_player in ['top', 'bot']:
-        for todo_category in ['side', 'spin', 'type']:
-        
-            try:
-                labSF = sfDict[todo_video][f'labelled_{todo_player}_{todo_event}_Flag'].dropna()
-            except:
-                continue
-            
-            try:
-                clsSF = clDict[todo_video][f'labelled_{todo_player}_{todo_event}_{todo_category}_Flag'].dropna()
-            except:
-                clsSF = StreamFeature({})
-        
-            #### CHECK WHAT HAS BEEN DONE ###
-            catSFs = []
-            if not clsSF.is_empty():
-                todoBF = clsSF.conform(labSF).isna()
-                labSF = labSF.filter(todoBF)
-            
-            ### CYCLE THROUGH INDIVIDUAL SHOTS!
-            for groupDict in group_events(labSF, todo_event):
-                frames = sorted(groupDict.keys())
-                fs, ls = frames[0], frames[-1]
-                
-                myStm = Stream(cap, fs, ls + 1)
-                
-                catSF, breakBool = classify_event(myStm, todo_player, todo_event, todo_category, zoom_factor = zoom_factor)
-                catSFs.append(catSF)
-            
-                if not catSF.is_empty():
-                    print(catSF.unique()[0])
-            
-                if breakBool:
-                    break
-            
-            catSF = SFList(catSFs).concatenate()
-            catSF.save(todo_video, sto)
-            
-            if breakBool:
-                break
-            
-        if breakBool:
-            break
-        
-    if breakBool:
-        break
-        
-    ### SERVES
+    ### SERVES ###
     todo_event = 'serve'
     for todo_player in ['top', 'bot']:
-        for todo_category in ['side']:
+        try:
+            labSF = sfDict[todo_video][f'labelled_{todo_player}_{todo_event}_Flag'].dropna()
+        except:
+            continue
         
-            try:
-                labSF = sfDict[todo_video][f'labelled_{todo_player}_{todo_event}_Flag'].dropna()
-            except:
-                continue
+        try:
+            clsSF = clDict[todo_video][f'labelled_{todo_player}_{todo_event}_{todo_category}_Flag'].dropna()
+        except:
+            clsSF = StreamFeature({})
             
-            try:
-                clsSF = clDict[todo_video][f'labelled_{todo_player}_{todo_event}_{todo_category}_Flag'].dropna()
-            except:
-                clsSF = StreamFeature({})
-                
-            #### CHECK WHAT HAS BEEN DONE ###
-            catSFs = []
-            if not clsSF.is_empty():
-                todoBF = clsSF.conform(labSF).isna()
-                labSF = labSF.filter(todoBF)
+        #### CHECK WHAT HAS BEEN DONE ###
+        catSFs = []
+        if not clsSF.is_empty():
+            todoBF = clsSF.conform(labSF).isna()
+            labSF = labSF.filter(todoBF)
+        
+        ### CYCLE THROUGH INDIVIDUAL SHOTS!
+        for groupDict in group_events(labSF, todo_event):
+            frames = sorted(groupDict.keys())
+            fs, ls = frames[0], frames[-1]
             
-            ### CYCLE THROUGH INDIVIDUAL SHOTS!
-            for groupDict in group_events(labSF, todo_event):
-                frames = sorted(groupDict.keys())
-                fs, ls = frames[0], frames[-1]
-                
-                myStm = Stream(cap, fs, ls + 1)
-                
-                catSF, breakBool = classify_event(myStm, todo_player, todo_event, todo_category, zoom_factor = zoom_factor)
-                catSFs.append(catSF)
+            myStm = Stream(cap, fs, ls + 1)
             
-                if not catSF.is_empty():
-                    print(catSF.unique()[0])
-            
-                if breakBool:
-                    break
-            
-            catSF = SFList(catSFs).concatenate()
-            catSF.save(todo_video, sto)
-            
+            catSF, breakBool = classify_event(myStm, todo_player, todo_event, todo_category, zoom_factor = zoom_factor)
+            catSFs.append(catSF)
+        
+            if not catSF.is_empty():
+                print(catSF.unique()[0])
+        
             if breakBool:
                 break
+        
+        catSF = SFList(catSFs).concatenate()
+        catSF.save(todo_video, sto)
+        
+        if breakBool:
+            break
             
+    if breakBool:
+        break  
+    
+    ### HITS ###
+    todo_event = 'hit'
+    for todo_player in ['top', 'bot']:
+    
+        try:
+            labSF = sfDict[todo_video][f'labelled_{todo_player}_{todo_event}_Flag'].dropna()
+        except:
+            continue
+        
+        try:
+            clsSF = clDict[todo_video][f'labelled_{todo_player}_{todo_event}_{todo_category}_Flag'].dropna()
+        except:
+            clsSF = StreamFeature({})
+    
+        #### CHECK WHAT HAS BEEN DONE ###
+        catSFs = []
+        if not clsSF.is_empty():
+            todoBF = clsSF.conform(labSF).isna()
+            labSF = labSF.filter(todoBF)
+        
+        ### CYCLE THROUGH INDIVIDUAL SHOTS!
+        for groupDict in group_events(labSF, todo_event):
+            frames = sorted(groupDict.keys())
+            fs, ls = frames[0], frames[-1]
+            
+            myStm = Stream(cap, fs, ls + 1)
+            
+            catSF, breakBool = classify_event(myStm, todo_player, todo_event, todo_category, zoom_factor = zoom_factor)
+            catSFs.append(catSF)
+        
+            if not catSF.is_empty():
+                print(catSF.unique()[0])
+        
+            if breakBool:
+                break
+        
+        catSF = SFList(catSFs).concatenate()
+        catSF.save(todo_video, sto)
+        
         if breakBool:
             break
         
     if breakBool:
         break
-            
+        
+###############
+##### SPIN ####
+###############
 
+todo_category = 'spin'
 
-
+for todo_video in vidList:
     
+    cap = ut.get_video(todo_video)
+    
+    ### HITS ###
+    todo_event = 'hit'
+    for todo_player in ['top', 'bot']:
+    
+        try:
+            labSF = sfDict[todo_video][f'labelled_{todo_player}_{todo_event}_Flag'].dropna()
+        except:
+            continue
+        
+        try:
+            clsSF = clDict[todo_video][f'labelled_{todo_player}_{todo_event}_{todo_category}_Flag'].dropna()
+        except:
+            clsSF = StreamFeature({})
+    
+        #### CHECK WHAT HAS BEEN DONE ###
+        catSFs = []
+        if not clsSF.is_empty():
+            todoBF = clsSF.conform(labSF).isna()
+            labSF = labSF.filter(todoBF)
+        
+        ### CYCLE THROUGH INDIVIDUAL SHOTS!
+        for groupDict in group_events(labSF, todo_event):
+            frames = sorted(groupDict.keys())
+            fs, ls = frames[0], frames[-1]
+            
+            myStm = Stream(cap, fs, ls + 1)
+            
+            catSF, breakBool = classify_event(myStm, todo_player, todo_event, todo_category, zoom_factor = zoom_factor)
+            catSFs.append(catSF)
+        
+            if not catSF.is_empty():
+                print(catSF.unique()[0])
+        
+            if breakBool:
+                break
+        
+        catSF = SFList(catSFs).concatenate()
+        catSF.save(todo_video, sto)
+        
+        if breakBool:
+            break
+        
+    if breakBool:
+        break
+      
+###############
+##### TYPE ####
+###############
+
+todo_category = 'type'
+bef, aft = show_margins_dict[todo_category]
+
+for todo_video in vidList:
+    
+    cap = ut.get_video(todo_video)
+    
+    ### HITS ###
+    todo_event = 'hit'
+    for todo_player in ['top', 'bot']:
+    
+        try:
+            labSF = sfDict[todo_video][f'labelled_{todo_player}_{todo_event}_Flag'].dropna()
+        except:
+            continue
+        
+        try:
+            clsSF = clDict[todo_video][f'labelled_{todo_player}_{todo_event}_{todo_category}_Flag'].dropna()
+        except:
+            clsSF = StreamFeature({})
+    
+        #### CHECK WHAT HAS BEEN DONE ###
+        catSFs = []
+        if not clsSF.is_empty():
+            todoBF = clsSF.conform(labSF).isna()
+            labSF = labSF.filter(todoBF)
+        
+        ### CYCLE THROUGH INDIVIDUAL SHOTS!
+        for groupDict in group_events(labSF, todo_event):
+            frames = sorted(groupDict.keys())
+            fs, ls = frames[0] - bef, frames[-1] + aft
+            
+            myStm = Stream(cap, fs, ls + 1)
+            
+            catSF, breakBool = classify_event(myStm, todo_player, todo_event, todo_category, zoom_factor = zoom_factor)
+            catSFs.append(catSF)
+        
+            if not catSF.is_empty():
+                print(catSF.unique()[0])
+        
+            if breakBool:
+                break
+        
+        catSF = SFList(catSFs).concatenate()
+        catSF.save(todo_video, sto)
+        
+        if breakBool:
+            break
+        
+    if breakBool:
+        break
+    
+ 
+    
+ 
  
     
  

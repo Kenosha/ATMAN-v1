@@ -5,7 +5,12 @@ Created on Sun Sep 10 17:20:47 2023
 @author: gianl
 """
 
+import time
+
+import numpy as np
+import pandas as pd
 import cv2 as cv
+
 from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.Features import StreamFeature
 
@@ -60,8 +65,19 @@ def get_fill_dict(event):
                'begin swinging': 'swinging', ## i.e. accelerating towards ball
                'impact': 'winding down'}
     
+    otherDict = {'begin standing to serve': 'standing to serve',
+                 'begin standing idle': 'standing idle',
+                 'begin standing ready': 'standing ready',
+                 'begin split stepping': 'split stepping',
+                 'begin shuffling': 'shuffling',
+                 'begin walking': 'walking',
+                 'begin running': 'running',
+                 'begin sliding': 'sliding',
+                 'end': None}
+    
     jointDict = {'serve': serveDict,
-                 'hit': hitDict}
+                 'hit': hitDict,
+                 'other': otherDict}
     
     return jointDict[event]
 
@@ -88,7 +104,8 @@ def get_category_dict(event, category):
         if category == 'type':
             return {1: 'groundstroke',
                     2: 'volley',
-                    3: 'overhead'}
+                    3: 'overhead',
+                    4: 'other'}
     
 
 def record_events(myStm, which_player = 'top', which_event = 'hit',
@@ -256,7 +273,10 @@ def group_events(singleSF, event):
         
     return groupList
         
-def check_group(groupDict, eventDict, dispensable_events = None):
+def check_group(groupDict, event):
+    eventDict = get_event_dict(event)
+    dispensable_events = get_dispensables(event)
+    
     if dispensable_events is not None:
         needed_events = [evt for evt in eventDict.values() if evt not in dispensable_events]
     else:
@@ -328,7 +348,10 @@ def classify_event(myStm, player, event, category, zoom_factor = 2, fps = 15):
         ### Create Base Frame
         showFrm = BGRFrame(frame).zoom(zoom_factor)
         showFrm = showFrm.put(f'Classifying {player} {event} {category}')
-        showFrm = showFrm.put(f'Options: {catDict}', where = (50, 100))
+        counter = 1
+        for key, value in catDict.items():    
+            showFrm = showFrm.put(f'{key}: {value}', where = (50, 50 + counter * 50))
+            counter += 1
 
         cv.imshow('frame', showFrm.array)
     
@@ -363,6 +386,82 @@ def classify_event(myStm, player, event, category, zoom_factor = 2, fps = 15):
     # cap.release()
     cv.destroyAllWindows()
 
+    time.sleep(0.5)
+
     return catSF, break_outer
 
 
+def group_to_dataframe(group, event, player, vid, clsSF):
+    eventDict = get_event_dict(event)
+    
+    def get_category_dict(group, clsSF):
+        """
+        for HITS: catDict = {'side': 'forehand', 'spin': 'topspin', 'type': 'groundstroke'}
+        for SERVES: catDict = {'side': 'left'}
+        """
+        fs_key = sorted(group.keys())[0]
+        catDict = {name: label for name, label in clsSF[fs_key].items() if label is not None}  
+        catDict = {name.split('_')[3]: label for name, label in catDict.items()}
+        return catDict
+    catDict = get_category_dict(group, clsSF)
+    
+    ### Prepare List of Derived, Unambiguous Groups from Group
+    groupDict_as_event = {frame: eventDict[key] for frame, key in group.items()}
+    groups = unambiguify_group(groupDict_as_event)
+    groups_reversed = [{v: k for k, v in group.items()} for group in groups]
+    
+    ### Build DataFrame
+    groupsDF = pd.DataFrame(groups_reversed).reindex(eventDict.values(), axis = 1) ### ensure that all, even the disposable categories, are in the group header
+    
+    for name, label in catDict.items():
+        groupsDF[name] = label        
+        
+    groupsDF['event'] = event
+    groupsDF['player'] = player
+    groupsDF['vid'] = vid
+    groupsDF['weight'] = 1 / len(groupsDF)
+    
+    return groupsDF
+    
+
+def check_other(singleSF):
+    redo_frames = []
+    
+    prev_frame, prev_label = None, None
+    for frame, label in singleSF.items():
+        if prev_label is None:
+            prev_frame, prev_label = frame, label
+            continue
+        
+        if label == prev_label:
+            ### erroneous!! can't have the same label twice
+            redo_frames.append((prev_frame, frame))
+        
+        prev_frame, prev_label = frame, label
+            
+    return redo_frames
+        
+    
+def other_to_dataframe(singleSF, player, vid):
+    eventDict = get_event_dict('other')
+    
+    group = singleSF.streamDict ### the whole SF is a single group -> there are no super-events!
+    group = {frame: ' '.join(label.split(' ')[1:]) for frame, label in group.items()} ### kill first item in string: 'other'
+    
+    prev_frame, prev_label = None, None
+    for frame, label in group.items():
+        if prev_label is None:
+            prev_frame, prev_label = frame, label
+            continue
+        
+        if label == 'end':
+            current_item = pd.Series({prev_label: prev_frame, label: frame}) ### HAVE TO GUARANTEE THAT NO TWO SUBSEQUENT LABELS ARE SAME!
+    
+    
+
+    
+    
+    
+    
+    
+    
