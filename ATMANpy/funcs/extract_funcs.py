@@ -260,23 +260,16 @@ def get_burn_in_mask_iterative(hFrm, H, median_backFrm, std_backFrm,
     if verbose: hFrm.mask(foregroundMask).show()
     return foregroundMask
 
-def get_shadow_mask(hFrm, H, median_backFrm,
-                    ROI = None,
-                    h_threshold = 5, s_threshold = 10, 
-                    v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
-                    v_threshold_upper = 0.97,
-                    opening_kernel = (15, 15),
-                    closing_kernel = (15, 15),
-                    back_frames_are_warped = True,
-                    verbose = False):
+def get_shadow_mask_simple(hFrm, median_backFrm, 
+                           ROI = None,
+                           h_threshold = 5, s_threshold = 10, 
+                           v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
+                           v_threshold_upper = 0.97,
+                           opening_kernel = (15, 15),
+                           closing_kernel = (15, 15),
+                           verbose = False):
     
-    if back_frames_are_warped:
-        like_backFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
-        if verbose: like_backFrm.show()
-    else:
-        like_backFrm = median_backFrm
-    
-    diffFrm = hFrm - like_backFrm
+    diffFrm = hFrm - median_backFrm
     
     if not ROI is None:
         diffFrm = diffFrm.mask(diffFrm.within_region(ROI))
@@ -289,13 +282,13 @@ def get_shadow_mask(hFrm, H, median_backFrm,
 
     if not s_threshold is None:
         ### S channel -> affected slightly, but usually lowered!
-        S_is_lowered = (hFrm.S() < like_backFrm.S())
+        S_is_lowered = (hFrm.S() < median_backFrm.S())
         SMask = (diffFrm.S() < s_threshold) & S_is_lowered
     else:
         SMask = MaskFrame.true(hFrm)
         
     ### V channel -> lowered by 10-20% typically, according to cucchiara et al 2001
-    ratioArr = hFrm.V().array.astype(float) / np.maximum(like_backFrm.V().array.astype(float), 1)
+    ratioArr = hFrm.V().array.astype(float) / np.maximum(median_backFrm.V().array.astype(float), 1)
     ratioFrm = Frame(ratioArr)
     VMask = (ratioFrm > v_threshold_lower) & (ratioFrm < v_threshold_upper)
     
@@ -313,6 +306,32 @@ def get_shadow_mask(hFrm, H, median_backFrm,
     
     if verbose: hFrm.mask(~shadowMask).show()
     
+    return shadowMask
+
+def get_shadow_mask(hFrm, H, median_backFrm,
+                    ROI = None,
+                    h_threshold = 5, s_threshold = 10, 
+                    v_threshold_lower = 0.75,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
+                    v_threshold_upper = 0.97,
+                    opening_kernel = (15, 15),
+                    closing_kernel = (15, 15),
+                    back_frames_are_warped = True,
+                    verbose = False):
+    
+    if back_frames_are_warped:
+        like_backFrm = median_backFrm.warp(H, cols = hFrm.cols, rows = hFrm.rows)
+        if verbose: like_backFrm.show()
+    else:
+        like_backFrm = median_backFrm
+    
+    shadowMask = get_shadow_mask_simple(hFrm, like_backFrm, 
+                                        ROI = ROI,
+                                        h_threshold = h_threshold, s_threshold = s_threshold, 
+                                        v_threshold_lower = v_threshold_lower,  ### the brighter the sun, the starker the shadow, the lower this value has to be.
+                                        v_threshold_upper = v_threshold_upper,
+                                        opening_kernel = opening_kernel,
+                                        closing_kernel = closing_kernel,
+                                        verbose = verbose)
     return shadowMask
 
 def get_projected_ROI(ROI, H):
@@ -388,7 +407,7 @@ def find_both_players_smart(gCache, featCache,
     return topPlayer, botPlayer
 
 def find_player_candidate_tracks_joint(foregroundCache, shadowCache, featCache,  
-                                         min_player_size = 50):
+                                       min_player_size = 50):
     fMask = foregroundCache[0]
     sMask = shadowCache[0]
     H = featCache[0]['H']
