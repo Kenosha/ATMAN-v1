@@ -283,6 +283,8 @@ class Stream:
     
     def recolor(self, new_target_color_space):
         updDict = {'target_color_space': new_target_color_space}
+        if self.name == nameMap[self.target_color_space]: ### if the old Stream has the default color name (like cFrm) ...
+            updDict['name'] = nameMap[new_target_color_space] ### ... we need to change it to the new default name
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
     
@@ -295,6 +297,13 @@ class Stream:
         updDict = {'features': mySF}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
+
+    def sample(self, number_of_frames):
+        frmNums = list(range(self.start_frame, self.stop_frame))
+        ncStm = NCStream(cap = self.cap, frmNums = frmNums, truncation_anchor = self.truncation_anchor,
+                         cap_color_space = self.cap_color_space, target_color_space = self.target_color_space,
+                         scale_factor = self.scale_factor, name = self.name, features = self.features)
+        return ncStm.sample(number_of_frames)
 
     def decap(self):
         framesType = framesTypeMap[self.target_color_space]
