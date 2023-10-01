@@ -646,11 +646,11 @@ class StreamFeatures(StreamFeaturesBase):
       
     def fillna(self, fill_value):
         if fill_value.__class__.__name__ == 'StreamFeature':
-            return self.__class__({frame: {name: fill_value.maybe_get(frame) if feat is None else feat for frame, feat in featDict.items()} for frame, featDict in self.items()})
+            return self.__class__({frame: {name: fill_value.maybe_get(frame) if feat is None else feat for name, feat in featDict.items()} for frame, featDict in self.items()})
         elif fill_value.__class__.__name__ == 'StreamFeatures':
-            return self.__class__({frame: {name: fill_value.maybe_get(frame)[name] if feat is None else feat for frame, feat in featDict.items()} for frame, featDict in self.items()})
+            return self.__class__({frame: {name: fill_value.maybe_get(frame)[name] if feat is None else feat for name, feat in featDict.items()} for frame, featDict in self.items()})
         else:
-            return self.__class__({frame: {name: fill_value if feat is None else feat for frame, feat in featDict.items()} for frame, featDict in self.items()})
+            return self.__class__({frame: {name: fill_value if feat is None else feat for name, feat in featDict.items()} for frame, featDict in self.items()})
       
     def isna(self):
         return BoolFeatures({frame: {name: feat is None for name, feat in featDict.items()} for frame, featDict in self.items()})
@@ -692,8 +692,9 @@ class StreamFeatures(StreamFeaturesBase):
             raise Exception('Invalid key, value combination to add to stream features.')
          
     def dropna(self):
-        none_feature = {feat: None for feat in self.get_features()}
-        return self.__class__({frame: featDict for frame, featDict in self.items() if featDict != none_feature}, name = self.name)
+        def all_are_none(featDict):
+            return all([feat is None for name, feat in featDict.items()])
+        return self.__class__({frame: featDict for frame, featDict in self.items() if not all_are_none(featDict)}, name = self.name)
     
     def replace(self, otherSF):
         outDict = self.streamDict.copy()
@@ -1081,7 +1082,7 @@ class BoolFeature(StreamFeature):
         return mergedBF.all()
     
     def __or__(self, otherBF):
-        mergedSF = self.merge(otherBF, how = 'outer').fillna(True).to_bool()
+        mergedBF = self.merge(otherBF, how = 'outer').fillna(True).to_bool()
         return mergedBF.any()
           
     def __repr__(self):
