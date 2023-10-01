@@ -109,7 +109,7 @@ def get_category_dict(event, category):
     
 
 def record_events(myStm, which_player = 'top', which_event = 'hit',
-                  zoom_factor = 3):
+                  zoom_factor = 3, auto_ending_event = None):
     ### Depending on whether which_event is Hit, Serve or Other...
         ### This function is ONLY for hit sequencing.
         # a) When the player begins loading the shot, charging legs, waiting for ball in fixed position
@@ -195,12 +195,27 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
             cap.set(cv.CAP_PROP_POS_FRAMES, go_to_frame) 
             continue
         
+        ### GO AHEAD 100
+        if keypress == ord('.'):
+            go_to_frame = min(frameNum + 100, stop_frame) ### can't go farther
+                                                            ## than start_frame
+            cap.set(cv.CAP_PROP_POS_FRAMES, go_to_frame) 
+            continue
+        
         ### REWIND
         if keypress == ord('b'): 
             back_to_frame = max(start_frame, frameNum - 1) ### can't go farther
                                                             ## than start_frame
             cap.set(cv.CAP_PROP_POS_FRAMES, back_to_frame) 
             continue
+        
+        ### REWIND 100
+        if keypress == ord(','): 
+            back_to_frame = max(start_frame, frameNum - 100) ### can't go farther
+                                                            ## than start_frame
+            cap.set(cv.CAP_PROP_POS_FRAMES, back_to_frame) 
+            continue
+        
         
         #### EXIT    
         if keypress == ord('q'): 
@@ -215,6 +230,12 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
     
     # cap.release()
     cv.destroyAllWindows()
+    
+    ### automatic insertion of an event that marks ending of sequence!
+    # only used in marking 'other' events 
+        # -> here, sequences are segmented by hits and serves, so that we want to automatically add an 'other end' Flag to mark that a move has ended, and the hit or serve begins.
+    if auto_ending_event is not None:
+        recorded_event_dict[stop_frame] = auto_ending_event
     
     ### avoid duplicates -> write only what is necessary! -> changes, additions, deletions
     write_event_dict = {}
@@ -309,8 +330,9 @@ def unambiguify_group(groupDict):
 
     return list_of_groups
 
-
-def fill_in_group(groupDict, fillDict):
+def fill_in_group(groupDict, event):
+    fillDict = get_fill_dict(event)
+    
     frames = sorted(groupDict.keys())
     fs, ls = frames[0], frames[-1]
     
@@ -328,6 +350,10 @@ def fill_in_group(groupDict, fillDict):
     filled_groupDict[frame] = current_filler ### add in last frame (not necessary, matter of convention. But in our case, the end swing event is last frame of "winding down")
         
     return filled_groupDict
+
+def group_map(groupDict, event):
+    eventDict = get_event_dict(event)
+    return {frame: eventDict[value] for frame, value in groupDict.items()}
     
 def classify_event(myStm, player, event, category, zoom_factor = 2, fps = 15):
     
@@ -427,24 +453,6 @@ def group_to_dataframe(group, event, player, vid, clsSF):
 def check_other(singleSF):
     redo_frames = []
     
-    prev_frame, prev_label = None, None
-    for frame, label in singleSF.items():
-        if prev_label is None:
-            prev_frame, prev_label = frame, label
-            continue
-        
-        if label == prev_label:
-            ### erroneous!! can't have the same label twice
-            redo_frames.append((prev_frame, frame))
-        
-        prev_frame, prev_label = frame, label
-            
-    return redo_frames
-        
-    
-def other_to_dataframe(singleSF, player, vid):
-    eventDict = get_event_dict('other')
-    
     group = singleSF.streamDict ### the whole SF is a single group -> there are no super-events!
     group = {frame: ' '.join(label.split(' ')[1:]) for frame, label in group.items()} ### kill first item in string: 'other'
     
@@ -454,11 +462,43 @@ def other_to_dataframe(singleSF, player, vid):
             prev_frame, prev_label = frame, label
             continue
         
+        if label == prev_label != 'end':
+            ### erroneous!! can't have the same label twice
+            redo_frames.append((prev_frame, frame))
+        
+        prev_frame, prev_label = frame, label
+            
+    return redo_frames
+        
+    
+def other_to_dataframe(singleSF, player, vid):
+    frames_to_redo = check_other(singleSF) 
+    assert frames_to_redo == [], f'Problematic frames: {frames_to_redo} --> do in player_motion_checking script!'
+    
+    group = singleSF.streamDict ### the whole SF is a single group -> there are no super-events!
+    group = {frame: ' '.join(label.split(' ')[1:]) for frame, label in group.items()} ### kill first item in string: 'other'
+    
+    items = []
+    
+    prev_frame, prev_label = None, None
+    for frame, label in group.items():
+        if prev_label is not None:
+            current_item = pd.Series({prev_label: prev_frame, 'end': frame - 1})
+            items.append(current_item)
+        
         if label == 'end':
-            current_item = pd.Series({prev_label: prev_frame, label: frame}) ### HAVE TO GUARANTEE THAT NO TWO SUBSEQUENT LABELS ARE SAME!
+            prev_frame, prev_label = None, None
+        else:
+            prev_frame, prev_label = frame, label
+        
+    groupDF = pd.concat(items, axis = 1).T
+        
+    groupDF['event'] = 'other'
+    groupDF['player'] = player
+    groupDF['vid'] = vid
+    groupDF['weight'] = 1
     
-    
-
+    return groupDF
     
     
     
