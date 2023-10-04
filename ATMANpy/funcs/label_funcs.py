@@ -106,6 +106,9 @@ def get_category_dict(event, category):
                     2: 'volley',
                     3: 'overhead',
                     4: 'other'}
+    if event == 'uncaught_check':
+        return {1: 'ok',
+                2: 'redo'}
     
 
 def record_events(myStm, which_player = 'top', which_event = 'hit',
@@ -244,7 +247,8 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
         try:
             rec_evt = recorded_event_dict[frame]
         except KeyError: ### deletion!
-            write_event_dict[frame] = previously_recorded_event_dict[frame]
+            # write_event_dict[frame] = previously_recorded_event_dict[frame]
+            write_event_dict[frame] = 'deletion'
         
         try:
             prev_evt = previously_recorded_event_dict[frame]
@@ -291,6 +295,9 @@ def group_events(singleSF, event):
         
         prev_event_key = event_key
         prev_frame = frame
+        
+    if len(current_group) > 0:
+        groupList.append(current_group)
         
     return groupList
         

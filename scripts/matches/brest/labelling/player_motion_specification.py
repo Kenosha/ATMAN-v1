@@ -77,13 +77,14 @@ breakBool = False
 # -> type, for hit
 
 show_margins_dict = {'side': (0, 0),
-                     'spin': (0, 0),
+                     'spin': (0, 15),
                      'type': (15, 0)} ### how many frames before and after to show
 
 #################
 ##### SIDE ######
 #################
 todo_category = 'side'
+bef, aft = show_margins_dict[todo_category]
 
 for todo_video in vidList:
     
@@ -124,7 +125,7 @@ for todo_video in vidList:
             if breakBool:
                 break
         
-        catSF = SFList(catSFs).concatenate()
+        catSF = SFList([sf for sf in catSFs if not sf.is_empty()]).concatenate()
         catSF.save(todo_video, sto)
         
         if breakBool:
@@ -156,7 +157,7 @@ for todo_video in vidList:
         ### CYCLE THROUGH INDIVIDUAL SHOTS!
         for groupDict in group_events(labSF, todo_event):
             frames = sorted(groupDict.keys())
-            fs, ls = frames[0], frames[-1]
+            fs, ls = frames[0] - bef, frames[-1] + aft
             
             myStm = Stream(cap, fs, ls + 1)
             
@@ -169,7 +170,7 @@ for todo_video in vidList:
             if breakBool:
                 break
         
-        catSF = SFList(catSFs).concatenate()
+        catSF = SFList([sf for sf in catSFs if not sf.is_empty()]).concatenate()
         catSF.save(todo_video, sto)
         
         if breakBool:
@@ -183,6 +184,7 @@ for todo_video in vidList:
 ###############
 
 todo_category = 'spin'
+bef, aft = show_margins_dict[todo_category]
 
 for todo_video in vidList:
     
@@ -211,7 +213,7 @@ for todo_video in vidList:
         ### CYCLE THROUGH INDIVIDUAL SHOTS!
         for groupDict in group_events(labSF, todo_event):
             frames = sorted(groupDict.keys())
-            fs, ls = frames[0], frames[-1]
+            fs, ls = frames[0] - bef, frames[-1] + aft
             
             myStm = Stream(cap, fs, ls + 1)
             
@@ -224,7 +226,7 @@ for todo_video in vidList:
             if breakBool:
                 break
         
-        catSF = SFList(catSFs).concatenate()
+        catSF = SFList([sf for sf in catSFs if not sf.is_empty()]).concatenate()
         catSF.save(todo_video, sto)
         
         if breakBool:
@@ -280,7 +282,7 @@ for todo_video in vidList:
             if breakBool:
                 break
         
-        catSF = SFList(catSFs).concatenate()
+        catSF = SFList([sf for sf in catSFs if not sf.is_empty()]).concatenate()
         catSF.save(todo_video, sto)
         
         if breakBool:

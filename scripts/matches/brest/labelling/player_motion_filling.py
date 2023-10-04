@@ -71,18 +71,18 @@ todo_player, todo_event = todo_player_event.split('_')
 
 #%% FILL IN LABELLED SEGMENTS
 
+labSF = sfDict[todo_video]
+
 def group_dict_with_events(groupDict, eventDict):
     return {frame: eventDict[key] for frame, key in groupDict.items()}
 
 def make_fill_from_eventSF(singleSF, event):
     eventDict = get_event_dict(event)
     fillDict = get_fill_dict(event)
-    dispensables = get_dispensables(event)
     
-    rev_eventDict = {event + ' ' + v: k for k, v in eventDict.items()}
-    groupList = group_events(singleSF, rev_eventDict)
+    groupList = group_events(singleSF, event)
     
-    ok_groupList = [groupDict for groupDict in groupList if check_group(groupDict, eventDict, dispensable_events = dispensables)]
+    ok_groupList = [groupDict for groupDict in groupList if check_group(groupDict, event)]
     event_groupList = [group_dict_with_events(groupDict, eventDict) for groupDict in ok_groupList]
     unambiguous_groupList = [unambiguous_groupDict  for groupDict in event_groupList for unambiguous_groupDict in unambiguify_group(groupDict)]
     
@@ -114,7 +114,7 @@ else:
       
 jntDict = {**serveDict, **hitDict}
 sortDict = dict(sorted(jntDict.items()))
-fillSF = StreamFeature(sortDict, name = 'filled_top')
+fillSF = StreamFeature(sortDict, name = f'filled_{todo_player}')
 
 ### Construct a new segmenter --> where do we have no hit or serve, but still a court?
 segBF = BoolFeature.from_store(todo_video, sto, featname = 'isCourt')
@@ -149,7 +149,7 @@ for idx, myStm in enumerate(myStms):
     
     evtSF, breakBool = record_events(myStm, 
                                      which_player = player, which_event = 'other', 
-                                     zoom_factor = zoom_factor)
+                                     zoom_factor = zoom_factor, auto_ending_event = 'other end')
 
     evtSF.save(todo_video, sto)
     
