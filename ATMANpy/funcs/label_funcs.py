@@ -358,6 +358,35 @@ def fill_in_group(groupDict, event):
         
     return filled_groupDict
 
+def fill_in_group_2(groupDict, event):
+    ### this actually preserves the impact label!
+    fillDict = get_fill_dict(event)
+    fillDict['end swing'] = 'winding down'
+    
+    frames = sorted(groupDict.keys())
+    fs, ls = frames[0], frames[-1]
+    
+    filled_groupDict = {}
+    for frame in range(fs, ls): ### note how the last frame (which coincides with end swing) will not be iterated over!
+        try:
+            current_event = groupDict[frame] ### this will succeed in first iteration!
+            on_event = True
+        except:
+            on_event = False
+            pass ### in this case, previous current_event remains in this iteration
+        
+        if current_event == 'impact' and on_event:
+            current_filler = 'impact'
+        else:
+            current_filler = fillDict[current_event]
+    
+        filled_groupDict[frame] = current_filler
+        
+    filled_groupDict[frame] = current_filler ### add in last frame (not necessary, matter of convention. But in our case, the end swing event is last frame of "winding down")
+        
+    return filled_groupDict
+
+
 def group_map(groupDict, event):
     eventDict = get_event_dict(event)
     return {frame: eventDict[value] for frame, value in groupDict.items()}
