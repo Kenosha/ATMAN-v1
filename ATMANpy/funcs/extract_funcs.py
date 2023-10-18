@@ -406,14 +406,42 @@ def find_both_players_smart(gCache, featCache,
     ### ROI Masks are returned only for checking...
     return topPlayer, botPlayer
 
-def find_player_candidate_tracks_joint(foregroundCache, shadowCache, featCache,  
-                                       min_player_size = 50):
+def find_player_candidate_tracks_joint(foregroundCache, shadowCache, featCache,
+                                       ROI = None, min_player_size = 50, 
+                                       frame_offset = 1):
     fMask = foregroundCache[0]
     sMask = shadowCache[0]
-    H = featCache[0]['H']
-    player_candidates_prev = featCache[-1]['player_candidates']
+    player_candidates_prev = featCache[-frame_offset]['player_candidates']
     
     jointMask =  fMask & ~sMask  
+    if not ROI is None:
+        jointMask = jointMask & jointMask.within_region(ROI)
+    
+    currCnts = find_contours(jointMask, min_size = min_player_size)
+    
+    if player_candidates_prev is None:
+        player_candidates, player_parents = currCnts, [[]] * currCnts.length()
+    else:
+        player_candidates, player_parents = find_player_candidate_contours_with_overlap(currCnts, player_candidates_prev)
+    
+    return player_candidates, player_parents
+    
+def find_player_candidate_tracks_joint_timeblur(foregroundCache, shadowCache, featCache,
+                                                ROI = None, min_player_size = 50, 
+                                                frame_offset = 1, frame_blur = 1):
+    ### TODO: Implement a Stream with regular skips, so that we don't extract 
+    # with this function for every frame, but instead for every frame_offset frames.
+    player_candidates_prev = featCache[-frame_offset]['player_candidates']
+    
+    jointMask = MaskFrame.false(foregroundCache[0])
+    for blur_frame in list(range(-frame_blur, frame_blur + 1)):
+        fMask = foregroundCache[blur_frame]
+        sMask = shadowCache[blur_frame]
+        frameMask = fMask & ~sMask  
+        if not ROI is None:
+            frameMask = frameMask & jointMask.within_region(ROI)
+        jointMask = jointMask | frameMask
+    
     currCnts = find_contours(jointMask, min_size = min_player_size)
     
     if player_candidates_prev is None:

@@ -225,14 +225,21 @@ def get_median_and_deviation_frame(wrpSF):
     return medFrm, stdFrm
 
 def split_player_candidate_tracks(plSF, 
+                                  frame_offset = 1,
                                   critical_number_of_tracks = 2000,
                                   verbose = False, super_verbose = False):
 
     if verbose: 
         start_time = time.time()
 
+    ### Clear up offset
+    frames = plSF.get_frames()
+    frames_of_interest = frames[::frame_offset]
+    rev_frames_of_interest = list(reversed(frames_of_interest))
+    lastFrm, other_frames = rev_frames_of_interest[0], rev_frames_of_interest[1:]
+    
     ### get data from last frame
-    lastFrm, lastDict = plSF.last()    
+    lastDict = plSF[lastFrm]
     lastPars = lastDict['player_parents']
     
     ### initialize list of tracks
@@ -246,9 +253,6 @@ def split_player_candidate_tracks(plSF,
                 trackDict = {'cnt_idx': currIdx, 'parent': par}
                 last_trackList.append({lastFrm: trackDict})
          
-    ### iterate over frames, backward, from penultimate
-    other_frames = list(reversed(plSF.get_frames()[:-1]))
-
     if verbose:
         loop_begin_time = time.time()
 
@@ -269,7 +273,7 @@ def split_player_candidate_tracks(plSF,
             
             ### Handle previously finished tracks ###
             try:
-                childDict = last_track[frame + 1]
+                childDict = last_track[frame + frame_offset]
             except KeyError: 
                 ### in this case, the track was previously completed from end to beginning, so we add it in unmodified
                 curr_trackList.append(last_track)
@@ -326,14 +330,14 @@ def split_player_candidate_tracks(plSF,
             print(f'   ... done with childless: took {round(time.time() - chk, 1)} secs')
             chk = time.time()
         
+        ### emergency exit
+        if len(curr_trackList) > critical_number_of_tracks:
+            print(f'Had to exit {plSF} at frame {frame} --> too many tracks! ({len(curr_trackList)})')
+            break ### breaking the loop, thereby ensuring that the tracks which are found are not lost, only shortened (at the beginning)
+    
         last_trackList = list(curr_trackList)
         del curr_trackList
         
-        ### emergency exit
-        if len(last_trackList) > critical_number_of_tracks:
-            print(f'Had to exit {plSF} at frame {frame} --> too many tracks! ({len(last_trackList)})')
-            break ### breaking the loop, thereby ensuring that the tracks which are found are not lost, only shortened (at the beginning)
-    
         if super_verbose:
             print(f'   ... done copying: took {round(time.time() - chk, 1)} secs')
             chk = time.time()
@@ -385,6 +389,27 @@ def split_player_candidate_tracks(plSF,
     
     return trackDF
     
+def compare_tracklists(last_trackList, curr_trackList, frame): 
+    ### a little function to diagnose issues with the above function
+    last_trackList[40]
+    curr_trackList[40]
+    
+    cut_trackList = [{f: itemDict for f, itemDict in trackDict.items() if not f == frame} for trackDict in curr_trackList]
+    alive_trackList = [trackDict for trackDict in curr_trackList if frame in trackDict]
+    
+    checkDict = {}
+    for orig_idx, orig_track in enumerate(last_trackList):
+        new_idxs = [idx for idx, cut_track in enumerate(cut_trackList) if cut_track == orig_track]
+        checkDict[orig_idx] = new_idxs
+    
+    
+    extra_tracks = [t for t in cut_trackList if not t in last_trackList]
+    len(extra_tracks)
+    len(alive_trackList)
+    
+    frame
+    
+
 def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to apply_starmap method of  SFList!
                                granularity = 10,
                                # max_meter_per_second = 8
@@ -421,7 +446,8 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     # max_meter_per_frame = max_meter_per_second / fps
     max_conceivable_ratio_outliers = 0.5 / area_outlier_iqr_multiple #### in theory, up to 50% of observations could be outliers, 
                                                                         # but we scale it by the multiple, to make the metric more sensitive.                                              
-    all_frames = cntSF.get_frames() ### all frames (as opposed to some tracks, which are only partially full (but always contiguous!)
+    
+    all_frames = splitDF.index ### all frames, but since there can be an offset, or the track splitting can terminate early (due to too many tracks...), we use splitDF
     all_tracks = splitDF.columns 
     
     ### Build Look-Up Tables
@@ -534,14 +560,13 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
         areas = []
         nstills = []
         
-        for frame in trackSer.index:
+        prev_frame, track_frames = trackSer.index[0], trackSer.index[1:]
+        
+        for frame in track_frames:
             
             ### figure out relevant track indices!
             frame_idx = trackSer[frame]
-            try:
-                prev_frame_idx = trackSer[frame - 1]
-            except KeyError:
-                continue
+            prev_frame_idx = trackSer[prev_frame]
             
             ### get LUT entries for specific frame
             FDCD_entry = FDCD_LUT[frame]
@@ -564,6 +589,8 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
             ### gather not-stills
             nstill = FDCDPD_entry['nstill'][frame_idx, prev_frame_idx]
             nstills.append(nstill)
+            
+            prev_frame = frame
             
         ### Build the Evaluation Metrics!
         metricDict = {}
