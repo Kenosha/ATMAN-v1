@@ -743,7 +743,7 @@ class Region(Lines):
         return Region.from_points(p1_new, p2_new, p3_new, p4_new)
     
     def scale_equal(self, factor):
-        ### as above, but it increases height and weight equally.
+        ### as above, but it increases height and width equally.
         diag = self.p4 - self.p1 ### width and the height of the region
         mean_diag = (diag.coords[0] + diag.coords[1]) / 2
         scale_amount = mean_diag * (factor - 1) ### the amount that each point has to move towards the middle.
@@ -755,27 +755,28 @@ class Region(Lines):
     
         return Region.from_points(p1_new, p2_new, p3_new, p4_new)
         
-    def enlarge(self, to_min_height = None, to_min_width = None):
+    def resize(self, to_height = None, to_width = None, how = 'strict'):
+        ### how: 'strict', 'enlarge', 'shrink'
         diag = self.p4 - self.p1
         width, height = diag.coords
         
         p1, p2, p3, p4 = self.p1, self.p2, self.p3, self.p4
         
-        if to_min_height is not None:
-            diff = to_min_height - height
-            div, rem = diff // 2, diff % 2 ### so we keep integer sizes
+        if to_height is not None:
+            diff = to_height - height
+            if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how == 'strict' and diff != 0): 
+                div, rem = diff // 2, diff % 2 ### so we keep integer sizes
             
-            if div > 0:
                 p1 = p1.up(div)
                 p2 = p2.up(div)
                 p3 = p3.down(div + rem)
                 p4 = p4.down(div + rem)
         
-        if to_min_width is not None:
-            diff = to_min_width - width
-            div, rem = diff // 2, diff % 2 ### so we keep integer sizes
-            
-            if div > 0:
+        if to_width is not None:
+            diff = to_width - width
+            if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how == 'strict' and diff != 0): 
+                div, rem = diff // 2, diff % 2 ### so we keep integer sizes
+    
                 p1 = p1.left(div)
                 p2 = p2.right(div + rem)
                 p3 = p3.left(div)
@@ -838,5 +839,26 @@ class Regions:
     
     def centroids(self):
         return [myReg.centroid() for myReg in self]
+    
+    def cover(self):
+        ### constructs the covering region
+        lu_xs, lu_ys, rl_xs, rl_ys = [], [], [], []
+        for myReg in self:
+            left_upper, right_lower = myReg.p1, myReg.p4
+            lu_x, lu_y = left_upper.coords
+            rl_x, rl_y = right_lower.coords
+            
+            lu_xs.append(lu_x)
+            lu_ys.append(lu_y)
+            rl_xs.append(rl_x)
+            rl_ys.append(rl_y)
+        
+        p1 = min(lu_xs), min(lu_ys)
+        p4 = max(rl_xs), max(rl_ys)
+        
+        return Region.from_points(Point2D(p1), Point2D(p4))
+        
+        
+    
     
     

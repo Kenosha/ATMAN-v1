@@ -1263,6 +1263,10 @@ class StreamList:
         cap = self[0].cap ### needs generalisation...
         return NCStream(cap, frameList)
     
+    def show(self, ms_between_frames = 25, frame_counter = False):
+        for myStm in self:
+            myStm.show(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    
     # def chunk_generator(self, chunksize = None): 
     #     ### chunks are simply the elements!
     #     ### UPDATE: If the chunks get too large, they can not be pickled anymore! In this case,
@@ -1841,8 +1845,8 @@ class CachedStream(Stream):
         return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, 
                                  cache_size = self.cache_size, name = self.name)
 
-    def show(self):
-        self.decache().show()
+    def show(self, ms_between_frames = 30, frame_counter = False):
+        self.decache().show(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
     
     
 @dataclass(frozen = True)

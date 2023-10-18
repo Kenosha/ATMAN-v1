@@ -234,7 +234,7 @@ class StreamFeaturesBase:
 @dataclass(frozen = True)
 class StreamFeature(StreamFeaturesBase):
     #### (like pd.Series) -> frames in index, objects (single feature) in values!
-    name: str = None ### The name of a StreamFeature instance is the name of the stored feature.
+    name: str = 'feature' ### The name of a StreamFeature instance is the name of the stored feature.
     
     @staticmethod
     def from_store(video_id, store_name, featname = None):
@@ -589,7 +589,7 @@ class StreamFeatures(StreamFeaturesBase):
     def __getitem__(self, item):
         if isinstance(item, list):
             if all([isinstance(el, int) for el in item]):
-                return self.__class__.type_squeeze()({frame: featDict for frame, featDict in self.items() if frame in item})
+                return self.__class__({frame: featDict for frame, featDict in self.items() if frame in item})
             elif all([isinstance(el, str) for el in item]):
                 missing_in_feature = [el for el in item if el not in self.get_features()]
                 if len(missing_in_feature) > 0:

@@ -15,6 +15,7 @@ import ATMANpy.funcs.util_funcs as atu
 from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
 from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame, MaskFrame
 
+from skvideo.io import FFmpegWriter
 
 class FramesIterator:
     def __init__(self, frameType, array, name):
@@ -109,7 +110,10 @@ class Frames:
     def __getitem__(self, item):
         framesType = self.__class__
         frameType = framesType.get_constituent()
-        if isinstance(item, int):
+        
+        try:
+            len(item)
+        except:
             return frameType(self.array[item], name = self.name)
         else:
             return framesType(self.array[item], name = self.name)
@@ -194,6 +198,47 @@ class Frames:
         
         outArr = np.array([cv.warpPerspective(imgArr, H, (cols, rows)) for imgArr, H in zip(self.array, HArr)])
         return framesType(outArr, name = self.name)
+    
+    def crop(self, cropRegion):
+        framesType = self.__class__
+        top_left, bot_right = cropRegion.p1, cropRegion.p4
+        
+        outArr = np.array([imgArr[top_left.y:bot_right.y, top_left.x:bot_right.x] for imgArr in self.array])
+        return framesType(outArr, name = self.name)
+    
+    def zoom(self, zoom_factor, interpolation = cv.INTER_LINEAR):
+        framesType = self.__class__
+        outArr = np.array([cv.resize(imgArr, None, fx = zoom_factor, fy = zoom_factor, interpolation = interpolation) for imgArr in self.array])
+        if framesType.__name__ == 'MaskFrames':
+            return GreyFrames(outArr) > 127
+        elif framesType.__name__ == 'BoolFrames':
+            return BGRFrames(outArr) > 127
+        else:
+            return framesType(outArr, name = self.name)
+        
+    def save(self, savePath, saveName, lossless = True):
+        if not saveName.endswith('.avi'):
+            saveName = saveName + '.avi'
+            
+        fullPath = os.path.join(savePath, saveName)
+        
+        if lossless:
+            outputdict = {
+              '-vcodec': 'libx264',  #use the h.264 codec
+              '-crf': '0',           #set the constant rate factor to 0, which is lossless
+              '-preset':'veryslow'   #the slower the better compression, in princple, try 
+                                     #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+             }
+        else:
+            outputdict = {}
+            
+        writer = FFmpegWriter(fullPath, outputdict = outputdict)
+        
+        rgbArr = np.flip(self.array, 3) ### self.array.shape = T, H, W, C --> need to flip the channels to get RGB.
+        for myArr in rgbArr:
+            writer.writeFrame(myArr)
+        
+        writer.close()
     
 @dataclass(frozen = True)
 class BGRFrames(Frames):
