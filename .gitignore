@@ -8,6 +8,7 @@ executables/
 trajectories_stored/
 features_stored/
 Tracktor/
+cnn/
 *.ods
 *.csv
 *.stats
