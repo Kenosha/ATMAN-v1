@@ -1373,6 +1373,15 @@ class DecapStream:
     def size(self, unit = 'GB'):
         return self.frames.size(unit = unit)
     
+    def conform(self, start_frame, stop_frame):
+        rectified_start_frame = start_frame - self.start_frame
+        rectified_stop_frame = stop_frame - self.stop_frame + 1 ### last frame is included!
+        confFrms = self.frames[rectified_start_frame:rectified_stop_frame]
+        
+        updDict = {'frames': confFrms, 'start_frame': start_frame, 'stop_frame': stop_frame}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return DecapStream(**newDict)
+    
     def attach(self, mySF: StreamFeatures):
         return Stream.attach(self, mySF)
     
@@ -1576,6 +1585,10 @@ class CachedStream(Stream):
                   cache_size = 1, force_fill_cache = False,
                   cap_color_space = 'bgr', target_color_space = 'bgr',
                   scale_factor = 1):
+        if not os.path.exists(filePath):
+            print(f'{filePath} does not exist.')
+            return None
+        
         cap = cv.VideoCapture(filePath)
         
         fileName = os.path.basename(filePath)
@@ -1600,6 +1613,9 @@ class CachedStream(Stream):
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
+        if not os.path.exists(videoPath):
+            print(f'file {fileName} in {videoName}, {storeName}, {featureName} does not exist.')
+            return None
         return CachedStream.from_file(videoPath, cache_size = cache_size, force_fill_cache = force_fill_cache,
                                       name = featureName,
                                       cap_color_space = cap_color_space, target_color_space = target_color_space,
