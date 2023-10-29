@@ -755,7 +755,7 @@ class Region(Lines):
     
         return Region.from_points(p1_new, p2_new, p3_new, p4_new)
         
-    def resize(self, to_height = None, to_width = None, how = 'strict'):
+    def resize(self, to_height = None, to_width = None, how = 'any'):
         ### how: 'strict', 'enlarge', 'shrink'
         diag = self.p4 - self.p1
         width, height = diag.coords
@@ -764,17 +764,31 @@ class Region(Lines):
         
         if to_height is not None:
             diff = to_height - height
-            if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how == 'strict' and diff != 0): 
+            if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how in ['any', 'force'] and diff != 0): 
                 div, rem = diff // 2, diff % 2 ### so we keep integer sizes
             
                 p1 = p1.up(div)
                 p2 = p2.up(div)
                 p3 = p3.down(div + rem)
                 p4 = p4.down(div + rem)
-        
+                
+                if how == 'force':
+                    ### we explicitly check the resulting moves left and right and ensure that they actually correspond to div and div + rem
+                    ### only in one edge case (enlarging where one dimension would go below zero), this makes a difference!
+                    d_y_up = self.p1.y - p1.y
+                    d_y_down = p4.y - self.p4.y
+                    
+                    add_down = div - d_y_up         ### what couldnt be reached up, we add down
+                    add_up = div + rem - d_y_down   ### what couldnt be reached down, we add up
+                    
+                    p1 = p1.up(add_up)
+                    p2 = p2.up(add_up)
+                    p3 = p3.down(add_down)
+                    p4 = p4.down(add_down)
+  
         if to_width is not None:
             diff = to_width - width
-            if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how == 'strict' and diff != 0): 
+            if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how in ['any', 'force'] and diff != 0): 
                 div, rem = diff // 2, diff % 2 ### so we keep integer sizes
     
                 p1 = p1.left(div)
@@ -782,6 +796,20 @@ class Region(Lines):
                 p3 = p3.left(div)
                 p4 = p4.right(div + rem)
                 
+                if how == 'force':
+                    ### we explicitly check the resulting moves left and right and ensure that they actually correspond to div and div + rem
+                    ### only in one edge case (enlarging where one dimension would go below zero), this makes a difference!
+                    d_x_left = self.p1.x - p1.x
+                    d_x_right = p4.x - self.p4.x
+                    
+                    add_right = div - d_x_left          ### what couldnt be reached left, we add right
+                    add_left = div + rem - d_x_right    ### what couldnt be reached right, we add left
+                    
+                    p1 = p1.left(add_left) 
+                    p2 = p2.right(add_right)
+                    p3 = p3.left(add_left)
+                    p4 = p4.right(add_right)
+                    
         return Region.from_points(p1, p2, p3, p4) 
     
     def get_homography(self, othRegion):
