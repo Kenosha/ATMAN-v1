@@ -88,10 +88,17 @@ def get_dispensables(event):
         return ['begin loading']
 
 def get_category_dict(event, category):
+    if event == 'event':
+        return {1: 'serve',
+                2: 'hit'}
     if event == 'serve':
         if category == 'side':
             return {1: 'left', ### top -> deuce; bot -> ad
                     2: 'right' ### top -> ad; bot -> deuce
+                    }
+        if category == 'hand':
+            return {1: 'left',
+                    2: 'right'
                     }
     if event == 'hit':
         if category == 'side':
@@ -106,6 +113,10 @@ def get_category_dict(event, category):
                     2: 'volley',
                     3: 'overhead',
                     4: 'other'}
+        if category == 'hand':
+            return {1: 'left',
+                    2: 'right'
+                    }
     if event == 'uncaught_check':
         return {1: 'ok',
                 2: 'redo'}
@@ -138,13 +149,15 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
     start_frame, stop_frame = myStm.start_frame, myStm.stop_frame
     cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
     
-    eventUpper = which_event.upper()
-    eventLower = which_event.lower()
-    
     playerUpper = which_player.upper()
     playerLower = which_player.lower()
     
-    feature_name = f'labelled_{playerLower}_{eventLower}_Flag'
+    if which_event is not None:
+        eventUpper = which_event.upper()
+        eventLower = which_event.lower()
+        feature_name = f'labelled_{playerLower}_{eventLower}_Flag'
+    else:
+        feature_name = f'labelled_{playerLower}_Flag'
     
     break_outer = False
 
@@ -167,7 +180,10 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
         except KeyError:
             recorded_event = 'None'
         
-        showFrm = showFrm.put(f'Recording {eventUpper} for {playerUpper}')
+        if which_event is not None:
+            showFrm = showFrm.put(f'Recording {eventUpper} for {playerUpper}')
+        else:
+            showFrm = showFrm.put(f'Recording for {playerUpper}')
         showFrm = showFrm.put(f'Recorded: {recorded_event}', where = (50, 100))
         showFrm = showFrm.put(str(frameNum), where = (50, 150))
         
@@ -177,15 +193,24 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
         keypress = cv.waitKey(0) 
     
         ### Sub Events
-        subeventDict = get_event_dict(eventLower)
-        try:
-            num = int(chr(keypress))
-        except:
-            pass
+        if which_event is not None:
+            subeventDict = get_event_dict(eventLower)
+            try:
+                num = int(chr(keypress))
+            except:
+                pass
+            else:
+                if num in subeventDict:
+                    sub_event = subeventDict[num]
+                    recorded_event_dict[frameNum] = eventLower + ' ' + sub_event
         else:
-            if num in subeventDict:
-                sub_event = subeventDict[num]
-                recorded_event_dict[frameNum] = eventLower + ' ' + sub_event
+            try:
+                num = int(chr(keypress))
+            except:
+                pass
+            else:
+                if num == 1:
+                    recorded_event_dict[frameNum] = 'impact'
                 
         ### DELETE
         if keypress == 8: ### backspace key
@@ -391,11 +416,25 @@ def group_map(groupDict, event):
     eventDict = get_event_dict(event)
     return {frame: eventDict[value] for frame, value in groupDict.items()}
     
-def classify_event(myStm, player, event, category, zoom_factor = 2, fps = 15):
+def classify_event(myStm, player, event, category, zoom_factor = 2, fps = 15,
+                   kill_event_name = False, kill_category_name = False):
     
     cap = myStm.cap
     start, stop = myStm.start_frame, myStm.stop_frame
+    
+    ### if event is 'event', we are doing serve or hit -> event itself!
     catDict = get_category_dict(event, category)
+    
+    if kill_event_name:
+        if kill_category_name:
+            raise Exception('either event or category have to have a value.')
+        else:
+            out_name = f'labelled_{player}_{category}_Flag'
+    else:
+        if kill_category_name:
+            out_name = f'labelled_{player}_{event}_Flag'
+        else:
+            out_name = f'labelled_{player}_{event}_{category}_Flag'
     
     break_outer = False
     
@@ -410,6 +449,7 @@ def classify_event(myStm, player, event, category, zoom_factor = 2, fps = 15):
         ### Create Base Frame
         showFrm = BGRFrame(frame).zoom(zoom_factor)
         showFrm = showFrm.put(f'Classifying {player} {event} {category}')
+       
         counter = 1
         for key, value in catDict.items():    
             showFrm = showFrm.put(f'{key}: {value}', where = (50, 50 + counter * 50))
@@ -441,7 +481,7 @@ def classify_event(myStm, player, event, category, zoom_factor = 2, fps = 15):
     
     try:
         outDict = {frame: cat_label for frame in range(start, stop + 1)}
-        catSF = StreamFeature(outDict, name = f'labelled_{player}_{event}_{category}_Flag')
+        catSF = StreamFeature(outDict, name = out_name)
     except NameError:
         catSF = StreamFeature({})
 
