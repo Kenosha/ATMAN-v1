@@ -147,6 +147,10 @@ class StreamFeaturesBase:
             streamDict[key] = value
             return self.__class__(streamDict, name = self.name)
     
+    def sort(self):
+        sorted_streamDict = dict(sorted(self.streamDict.items()))
+        return self.__class__(sorted_streamDict, name = self.name)
+    
     def extend(self, otherSF):
         ### In the subclasses, check for feature name or feature names (for SF and SFs resp.)
         frames, frames_other = self.get_frames(), otherSF.get_frames()
@@ -613,18 +617,17 @@ class StreamFeatures(StreamFeaturesBase):
             raise Exception('Pass in a frame (int) or an feature name (str) or a list of these.')
 
     def __eq__(self, otherObj):
-        shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
-        if isinstance(otherObj, StreamFeatures):
+        if isinstance(otherObj, str):
+            return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj) for feat in self.get_features()} for frame in self.get_frames()}) 
+        elif isinstance(otherObj, StreamFeature):
+            ### behaviour -> checks every feature in self against StreamFeature given, regardless of name of otherObj
+            return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj[frame]) for feat in self.get_features()} for frame in self.get_frames()})
+        elif isinstance(otherObj, StreamFeatures):
+            shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
             return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj[frame][feat]) for feat in shared_features} for frame in self.get_frames()})
-        else:
-            return BoolFeatures({frame: {feat + '_equal': eqFunc(self[frame][feat], otherObj) for feat in shared_features} for frame in self.get_frames()})
-        
+           
     def __ne__(self, otherObj):
-        shared_features = [f for f in self.get_features() if f in otherObj.get_features()]
-        if isinstance(otherObj, StreamFeatures):
-            return BoolFeatures({frame: {feat + '_unequal': eqFunc(self[frame][feat], otherObj[frame][feat]) for feat in shared_features} for frame in self.get_frames()})
-        else:
-            return BoolFeatures({frame: {feat + '_unequal': not eqFunc(self[frame][feat], otherObj) for feat in shared_features} for frame in self.get_frames()})
+        return (self == otherObj).neg()
         
     def maybe_get(self, item):
         try:
