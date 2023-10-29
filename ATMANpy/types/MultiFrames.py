@@ -111,12 +111,15 @@ class Frames:
         framesType = self.__class__
         frameType = framesType.get_constituent()
         
-        try:
-            len(item)
-        except:
-            return frameType(self.array[item], name = self.name)
-        else:
+        if isinstance(item, slice):
             return framesType(self.array[item], name = self.name)
+        else:
+            try:
+                len(item)
+            except:
+                return frameType(self.array[item], name = self.name)
+            else:
+                return framesType(self.array[item], name = self.name)
     
     def __iter__(self):
         framesType = self.__class__
@@ -177,6 +180,15 @@ class Frames:
         myArr = np.std(self.array, axis = 0).astype('uint8')
         return frameType(myArr)
     
+    def mask(self, maskFrms):
+        assert isinstance(maskFrms, MaskFrames)
+        assert self.length() == maskFrms.length()
+        framesType = self.__class__
+        
+        outArr = np.array([cv.bitwise_and(imgArr, imgArr, mask = maskArr) for imgArr, maskArr in zip(self.array, maskFrms.array)])
+        return framesType(outArr, name = self.name)
+        
+    
     def rescale(self, scale_factor):
         framesType = self.__class__
         
@@ -186,15 +198,35 @@ class Frames:
         resArr = np.array([cv.resize(imgArr, dim, interpolation = cv.INTER_AREA) for imgArr in self.array])
         return framesType(resArr, name = self.name)
         
+    def pad(self, to_height = None, to_width = None):
+        framesType = self.__class__
+        
+        hdiff = to_height - self.rows()
+        wdiff = to_width - self.cols()
+    
+        hdiv, hmod = hdiff // 2, hdiff % 2
+        top_add = hdiv
+        bot_add = hdiv + hmod
+        
+        wdiv, wmod = wdiff // 2, wdiff % 2
+        left_add = wdiv
+        right_add = wdiv + wmod
+        
+        outArr = np.array([cv.copyMakeBorder(imgArr, 
+                                             top_add, bot_add, left_add, right_add, 
+                                             cv.BORDER_CONSTANT, value = 0) for imgArr in self.array])
+        
+        return framesType(outArr, name = self.name)
+        
     def warp(self, HArr, cols = None, rows = None):
         assert len(HArr) == self.length(), f'Trying to warp MultiFrame of length {self.length()} with {len(HArr)} Homographies.'
         
         framesType = self.__class__
         
         if cols is None:
-            cols = self.cols
+            cols = self.cols()
         if rows is None:
-            rows = self.rows
+            rows = self.rows()
         
         outArr = np.array([cv.warpPerspective(imgArr, H, (cols, rows)) for imgArr, H in zip(self.array, HArr)])
         return framesType(outArr, name = self.name)

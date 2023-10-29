@@ -382,6 +382,26 @@ class Frame:
         
         return InstClass(resArr.astype('uint8'), name = self.name)
     
+    def pad(self, to_height = None, to_width = None):
+        InstClass = self.__class__
+        self_copy = self.array.copy()
+        
+        hdiff = to_height - self.rows
+        wdiff = to_width - self.cols
+    
+        hdiv, hmod = hdiff // 2, hdiff % 2
+        top_add = hdiv
+        bot_add = hdiv + hmod
+        
+        wdiv, wmod = wdiff // 2, wdiff % 2
+        left_add = wdiv
+        right_add = wdiv + wmod
+        
+        outArr = cv.copyMakeBorder(self_copy, top_add, bot_add, left_add, right_add, cv.BORDER_CONSTANT, value = 0)
+        
+        return InstClass(outArr, name = self.name)
+        
+    
     ###############
 
 @dataclass(frozen = True)
