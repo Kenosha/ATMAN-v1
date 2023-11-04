@@ -7,6 +7,7 @@ Created on Sat Oct 21 13:49:37 2023
 
 import os
 import math
+import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -22,13 +23,13 @@ from ATMANpy.types.Streams import DecapStream
 
 from itertools import product
 
-def clip_to_stream(clip):
+def clip_to_stream(clip, zoom = 1):
     clipArr = clip.numpy()
     if not clipArr.dtype == 'uint8':
         clipArr = (clipArr * 255).astype('uint8')
     clipArr = np.moveaxis(clipArr, 0, -1) ### right now, shape is C, T, H, W --> we want T, H, W, C
     clipArr = np.flip(clipArr, -1) ### additionally, flip RGB to BGR
-    clipFrms = BGRFrames(clipArr)
+    clipFrms = BGRFrames(clipArr).zoom(zoom)
     clipStm = DecapStream(clipFrms, start_frame = 0, stop_frame = len(clipArr))
     return clipStm
 
@@ -40,7 +41,9 @@ class ClipDataset(Dataset):
     def __init__(self, data_path, dataset_folder, 
                  vid_indices = None, zero_out_clips = False,
                  d_crop_size = 112, t_crop_size = 32, ### crop is done first
-                 d_scale_size = 112): ### rescaling is done afterwards
+                 d_scale_size = 112, ### rescaling is done afterwards
+                 flip_prob = 0.5,
+                 ): 
         dataset_path = os.path.join(data_path, dataset_folder)
         
         clip_lengths = {}
@@ -71,6 +74,7 @@ class ClipDataset(Dataset):
         self.d_crop_size = d_crop_size
         self.t_crop_size = t_crop_size
         self.d_scale_size = d_scale_size
+        self.flip_prob = flip_prob
         
         ### write more useful stuff
         self.dataset_path = dataset_path
@@ -143,25 +147,34 @@ class ClipDataset(Dataset):
        
         return vid_name, clip_number
       
-    def set_relabel_maps(self, hit_side_map = None, hit_spin_map = None, hit_type_map = None, 
-                         serve_side_map = None):
+    def set_relabel_maps(self, 
+                         hit_side_map = None, hit_hand_map = None, hit_spin_map = None, hit_type_map = None, 
+                         serve_side_map = None, serve_hand_map = None):
         
         hit_side_labels = ['forehand', 'backhand']
+        hit_hand_labels = ['left', 'right']
         hit_spin_labels = ['topspin', 'slice', 'flat']
         hit_type_labels = ['groundstroke', 'volley', 'overhead']
+        
         serve_side_labels = ['left', 'right']
+        serve_hand_labels = ['left', 'right']
         
         if hit_side_map is None:
             hit_side_map = {x: x for x in hit_side_labels}
+        if hit_hand_map is None:
+            hit_hand_map = {x: x for x in hit_hand_labels}
         if hit_spin_map is None:
             hit_spin_map = {x: x for x in hit_spin_labels}
         if hit_type_map is None:
             hit_type_map = {x: x for x in hit_type_labels}
+            
         if serve_side_map is None:
             serve_side_map = {x: x for x in serve_side_labels}
-        
-        self.hit_relabel_maps = {'side': hit_side_map, 'spin': hit_spin_map, 'type': hit_type_map}
-        self.serve_relabel_maps = {'side': serve_side_map}
+        if serve_hand_map is None:
+            serve_hand_map = {x: x for x in serve_hand_labels}
+
+        self.hit_relabel_maps = {'side': hit_side_map, 'hand': hit_hand_map, 'spin': hit_spin_map, 'type': hit_type_map}
+        self.serve_relabel_maps = {'side': serve_side_map, 'hand': serve_hand_map}
         
     def set_proximity_function(self, prox_func):
         self.prox_func = prox_func
@@ -187,11 +200,11 @@ class ClipDataset(Dataset):
         all_labels = self.get_all_labels()
         
         ### Prepare Hit and Serve Frames
-        hit_frame = label_frame[label_frame['hit_event'] == 'impact'][['hit_side', 'hit_spin', 'hit_type']]
-        serve_frame = label_frame[label_frame['serve_event'] == 'impact'][['serve_side']]
+        hit_frame = label_frame[label_frame['event'] == 'hit'][['side', 'hand', 'spin', 'type']]
+        serve_frame = label_frame[label_frame['event'] == 'serve'][['side', 'hand']]
         
-        hit_frame.columns = [c.split('_')[1] for c in hit_frame]
-        serve_frame.columns = [c.split('_')[1] for c in serve_frame]
+        # hit_frame.columns = [c.split('_')[1] for c in hit_frame]
+        # serve_frame.columns = [c.split('_')[1] for c in serve_frame]
         
         hit_frame = hit_frame.replace(self.hit_relabel_maps)
         serve_frame = serve_frame.replace(self.serve_relabel_maps)
@@ -241,7 +254,7 @@ class ClipDataset(Dataset):
         
         clip_name = f'clip_{clip_number}.avi'
         
-        label_frame = self.label_frames[vid].loc[clip_number]
+        label_frame = self.label_frames[vid].loc[clip_number].copy()
         
         clip_path = os.path.join(vid_path, clip_name)
         clip, audio, metadata = read_video(clip_path, pts_unit = 'sec')
@@ -264,6 +277,11 @@ class ClipDataset(Dataset):
         clip = tf.CenterCrop(self.d_crop_size)(clip)
         clip = tf.Resize(self.d_scale_size, antialias = True)(clip)
         
+        hflip = random.random() < self.flip_prob
+        if hflip:
+            clip = tf.functional.horizontal_flip(clip)
+            label_frame['hand'] = label_frame['hand'].replace({'left': 'right', 'right': 'left'})
+        
         ### crop to desired length (16 or 32 emulate the 2+1 D paper)
         T = clip.shape[1]
         if T > self.t_crop_size:
@@ -284,7 +302,7 @@ class ClipDataset(Dataset):
             clip = torch.zeros(clip.shape, dtype = clip.dtype)
         
         return clip, self.label_frame_to_vector(label_frame)
-        
+    
     
 class TwoPlusOneBlock(nn.Module):
     def __init__(self, in_channels, out_channels, d, t, 
@@ -405,7 +423,7 @@ class SmallModel(nn.Module):
     
     def __init__(self, num_labels = 14, T = 32, D = 112, share_other = 0.9):
         super(SmallModel, self).__init__()
-        
+       
         self.conv1 = TwoPlusOneBlock(3, 64, 3, 3, 
                                      stride_d = 2, stride_t = 1)
         
@@ -467,6 +485,98 @@ class SmallModel(nn.Module):
         # z = self.softmax(self.fc_out(self.flatten(ypool)))
         ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
         z = self.fc_out(self.flatten(ypool))
+        if verbose: print(f'  ... of Output:            {z.shape}')
+        
+        return z
+     
+class SmallFullConvModel(nn.Module):
+    
+    def __init__(self, num_labels = 14, T = 32, D = 112, share_other = 0.9):
+        super(SmallFullConvModel, self).__init__()
+       
+        self.stride_d1, self.stride_t1 = 2, 1 
+        self.conv1 = TwoPlusOneBlock(3, 64, 3, 3, 
+                                     stride_d = self.stride_d1, stride_t = self.stride_t1)
+        
+        self.stride_d2, self.stride_t2 = 1, 1 ### note that strides > 1 are applied only to the first residual block, as per the (2+1)D paper.
+        self.conv2_1 = ResidualBlock(64, 64, 3, 3, 
+                                     stride_d = self.stride_d2, stride_t = self.stride_t2)
+        self.conv2_2 = ResidualBlock(64, 64, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.stride_d3, self.stride_t3 = 2, 2 ### note that strides > 1 are applied only to the first residual block, as per the (2+1)D paper.
+        self.conv3_1 = ResidualBlock(64, 128, 3, 3, 
+                                     stride_d = self.stride_d3, stride_t = self.stride_t3)
+        self.conv3_2 = ResidualBlock(128, 128, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.stride_d4, self.stride_t4 = 2, 2 ### note that strides > 1 are applied only to the first residual block, as per the (2+1)D paper.
+        self.conv4_1 = ResidualBlock(128, 256, 3, 3, 
+                                     stride_d = self.stride_d4, stride_t = self.stride_t4)
+        self.conv4_2 = ResidualBlock(256, 256, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.stride_d = self.stride_d1 * self.stride_d2 * self.stride_d3 * self.stride_d4
+        self.stride_t = self.stride_t1 * self.stride_t2 * self.stride_t3 * self.stride_t4
+        
+        self.avgpool_d = math.ceil(D / self.stride_d) ### 3 times stride_d == 2
+        self.avgpool_t = math.ceil(T / self.stride_t) ### 2 times stride_t == 2
+        
+        ### now, as opposed to the models with fully connected layers
+        ### we add a stride of 1 to the global average pooling 
+        ### (default is kernel size (= (4, 7, 7)))
+        ### with a stride of 1, we can apply average pooling in an overlapping manner.
+        self.global_avgpool = nn.AvgPool3d((self.avgpool_t, self.avgpool_d, self.avgpool_d),
+                                           stride = 1) 
+        
+        ### also, we replace the flatten and fc layer with num_labels 1x1x1 3D convolutions
+        ### each convolution spans all 256 input channels,
+        ### and so implements a linear function with 256 weights and a single bias.
+        ### num_labels of these therefore act like a fully connected layer,
+        ### turning 256 input channels into num_labels output activations,
+        ### shaped like batch_size x num_labels x 1 x 1 x 1.
+        ### Note that 1 x 1 x 1 kernel is only because we average pool over the last conv layer conv4_2.
+        ### Note also now that if we have an input larger than the training images,
+        ### we will get as output something shaped batch_size x num_labels x a x b x c
+        ### where a, b, c can be larger than 1. 
+        ### In each of these channels, we then find the logits for a different part of the input image!
+        
+        self.conv_fc_out = nn.Conv3d(256, num_labels, kernel_size = (1, 1, 1))
+        
+        ### re-initialize conv_fc_out biases
+        # idea: initially, the output of the (convolutionally implemented) FC layer with Softmax has to (roughly) match
+        # the empirical share of hits and serves and others, etc.
+        # to do this, we set the first bias (for "other") to zero.
+        # all other biases are the same -> topspin backhand groundstroke same as serve
+        # given share_other, what do the other biases need to equal?
+        bias_event = np.log(1 - share_other) - np.log(share_other) - np.log(num_labels - 1)
+        bias_other = 0
+        biases = [bias_other, *[bias_event] * (num_labels - 1)]
+        biases = nn.Parameter(torch.Tensor(biases))
+        self.conv_fc_out.bias = biases
+        
+        # self.softmax = nn.Softmax(dim = 1) ### dim = 1 --> the label dimension
+        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
+        
+    def forward(self, x, verbose = False):
+        if verbose: print(f'Shape of Input:             {x.shape}')
+        
+        y1 = self.conv1(x)
+        if verbose: print(f'  ... after conv1:          {y1.shape}')
+        
+        y2 = self.conv2_2(self.conv2_1(y1))
+        if verbose: print(f'  ... after conv2:          {y2.shape}')
+            
+        y3 = self.conv3_2(self.conv3_1(y2))
+        if verbose: print(f'  ... after conv3:          {y3.shape}')
+            
+        y4 = self.conv4_2(self.conv4_1(y3))
+        if verbose: print(f'  ... after conv4:          {y4.shape}')
+        
+        ypool = self.global_avgpool(y4)
+        if verbose: print(f'  ... after global avgpool: {ypool.shape}')
+        
+        z = self.conv_fc_out(ypool)
         if verbose: print(f'  ... of Output:            {z.shape}')
         
         return z
