@@ -864,6 +864,10 @@ class ConstFeature(ConstFeaturesBase):
     feature: np.ndarray
     frameList: List
     
+    @staticmethod
+    def from_store(video_id, store_name, featname = None, featType = None, frameList = None):
+        return ConstFeatures.from_store(video_id, store_name, featnameList = [featname], featTypeList = [featType], frameList = frameList).squeeze()
+    
     def __repr__(self):
         if self.is_empty():
             return 'ConstFeature()'
