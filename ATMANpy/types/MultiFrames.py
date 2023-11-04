@@ -396,6 +396,15 @@ class MaskFrames(Frames):
     def __repr__(self):
         return Frames.__repr__(self)
     
+    def __or__(self, other):
+        return MaskFrames(cv.bitwise_or(self.array, other.array), name = f'{self.name}_or_{other.name}')
+
+    def __and__(self, other):
+        return MaskFrames(cv.bitwise_and(self.array, other.array), name = f'{self.name}_and_{other.name}')
+    
+    def __invert__(self):
+        return MaskFrames(cv.bitwise_not(self.array), name = f'{self.name}_not')
+    
     @classmethod
     def get_constituent(cls):
         return MaskFrame
