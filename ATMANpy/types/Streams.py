@@ -133,6 +133,9 @@ class Stream:
     def from_file(filePath, name = None,
                   cap_color_space = 'bgr', target_color_space = 'bgr',
                   scale_factor = 1):
+        if not os.path.exists(filePath):
+            print(f'{filePath} does not exist.')
+            return None
         cap = cv.VideoCapture(filePath)
         
         fileName = os.path.basename(filePath)
@@ -156,6 +159,9 @@ class Stream:
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
+        if not os.path.exists(videoPath):
+            print(f'file {fileName} in {videoName}, {storeName}, {featureName} does not exist.')
+            return None
         return Stream.from_file(videoPath, name = featureName,
                                 cap_color_space = cap_color_space, target_color_space = target_color_space,
                                 scale_factor = scale_factor)
@@ -752,6 +758,9 @@ class StillStream:
     def from_file(framePath, name = None, 
                   cap_color_space = 'bgr', target_color_space = 'bgr',
                   scale_factor = 1):
+        if not os.path.exists(filePath):
+            print(f'{filePath} does not exist.')
+            return None
         imgArr = np.load(framePath)
         stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
         stillFrm = stillFrm.rename(name)
@@ -775,6 +784,9 @@ class StillStream:
         featPath = featDict['main']
         ### find video
         videoPath = os.path.join(featPath, videoName, storeName, featureName, fileName)
+        if not os.path.exists(videoPath):
+            print(f'file {fileName} in {videoName}, {storeName}, {featureName} does not exist.')
+            return None
         return StillStream.from_file(videoPath, name = featureName,
                                      cap_color_space = cap_color_space, target_color_space = target_color_space,
                                      scale_factor = scale_factor)
