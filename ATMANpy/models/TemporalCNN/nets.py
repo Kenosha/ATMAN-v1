@@ -66,137 +66,23 @@ class ResidualBlock(nn.Module):
         down_x = self.downsample_id(x)
         return down_x + f_x
     
-class OrigModel(nn.Module):
+# class FullConvModel(nn.Module):
     
-    def __init__(self, num_labels = 14, T = 32, D = 112):
-        super(OrigModel, self).__init__()
+#     def __init__(self, *conv_args,
+#                  num_labels = 14, T = 32, D = 112, share_other = 0.9):
+#         ### conv_args are a list of dictionaries which have the following keys:
+#             ### channels, kernel, stride_d, stride_t
+#         super(FullConvModel, self).__init__()
         
-        self.conv1 = TwoPlusOneBlock(3, 64, 7, 3, 
-                                     stride_d = 2, stride_t = 1)
+#         self.num_labels = num_labels
+#         self.T = T
+#         self.D = D
+#         self.share_other = share_other
         
-        self.conv2_1 = ResidualBlock(64, 64, 3, 3, 
-                                     stride_d = 1, stride_t = 1)
-        self.conv2_2 = ResidualBlock(64, 64, 3, 3,
-                                     stride_d = 1, stride_t = 1)
-        
-        self.conv3_1 = ResidualBlock(64, 128, 3, 3, 
-                                     stride_d = 2, stride_t = 2)
-        self.conv3_2 = ResidualBlock(128, 128, 3, 3,
-                                     stride_d = 1, stride_t = 1)
-        
-        self.conv4_1 = ResidualBlock(128, 256, 3, 3, 
-                                     stride_d = 2, stride_t = 2)
-        self.conv4_2 = ResidualBlock(256, 256, 3, 3,
-                                     stride_d = 1, stride_t = 1)
-        
-        self.conv5_1 = ResidualBlock(256, 512, 3, 3, 
-                                     stride_d = 2, stride_t = 2)
-        self.conv5_2 = ResidualBlock(512, 512, 3, 3,
-                                     stride_d = 1, stride_t = 1)
-  
-        avgpool_t = math.ceil(T / (2 ** 3)) ### 3 times stride_t == 2
-        avgpool_d = math.ceil(D / (2 ** 4)) ### 4 times stride_d == 2
+#         conv_args[0] = TwoPlusOneBlock(...)
+#         conv_args[1, 2, 3, ...] = ResidualBlock(...)
     
-        self.global_avgpool = nn.AvgPool3d((avgpool_t, avgpool_d, avgpool_d))
-        self.flatten = nn.Flatten()
-        self.fc_out = nn.Linear(512, num_labels)
-        # self.softmax = nn.Softmax(dim = 1) ### dim = 1 --> the label dimension
-        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
-        
-    def forward(self, x, verbose = False):
-        y1 = self.conv1(x)
-        y2 = self.conv2_2(self.conv2_1(y1))
-        y3 = self.conv3_2(self.conv3_1(y2))
-        y4 = self.conv4_2(self.conv4_1(y3))
-        y5 = self.conv5_2(self.conv5_1(y4))
-        
-        ypool = self.global_avgpool(y5)
-        # z = self.softmax(self.fc_out(self.flatten(ypool)))
-        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
-        z = self.fc_out(self.flatten(ypool))
-        
-        if verbose:
-            print(f'Shape of Input:             {x.shape}')
-            print(f'  ... after conv1:          {y1.shape}')
-            print(f'  ... after conv2:          {y2.shape}')
-            print(f'  ... after conv3:          {y3.shape}')
-            print(f'  ... after conv4:          {y4.shape}')
-            print(f'  ... after conv5:          {y5.shape}')
-            print(f'  ... after global avgpool: {ypool.shape}')
-            print(f'  ... of Output:            {z.shape}')
-        
-        return z
     
-class SmallModel(nn.Module):
-    
-    def __init__(self, num_labels = 14, T = 32, D = 112, share_other = 0.9):
-        super(SmallModel, self).__init__()
-       
-        self.conv1 = TwoPlusOneBlock(3, 64, 3, 3, 
-                                     stride_d = 2, stride_t = 1)
-        
-        self.conv2_1 = ResidualBlock(64, 64, 3, 3, 
-                                     stride_d = 1, stride_t = 1)
-        self.conv2_2 = ResidualBlock(64, 64, 3, 3,
-                                     stride_d = 1, stride_t = 1)
-        
-        self.conv3_1 = ResidualBlock(64, 128, 3, 3, 
-                                     stride_d = 2, stride_t = 2)
-        self.conv3_2 = ResidualBlock(128, 128, 3, 3,
-                                     stride_d = 1, stride_t = 1)
-        
-        self.conv4_1 = ResidualBlock(128, 256, 3, 3, 
-                                     stride_d = 2, stride_t = 2)
-        self.conv4_2 = ResidualBlock(256, 256, 3, 3,
-                                     stride_d = 1, stride_t = 1)
-        
-        avgpool_t = math.ceil(T / (2 ** 2)) ### 2 times stride_t == 2
-        avgpool_d = math.ceil(D / (2 ** 3)) ### 3 times stride_d == 2
-    
-        self.global_avgpool = nn.AvgPool3d((avgpool_t, avgpool_d, avgpool_d))
-        self.flatten = nn.Flatten()
-        self.fc_out = nn.Linear(256, num_labels)
-        
-        ### re-initialize fc_out biases
-        # idea: initially, the output of the FC layer with Softmax has to (roughly) match
-        # the empirical share of hits and serves and others, etc.
-        # to do this, we set the first bias (for "other") to zero.
-        # all other biases are the same -> topspin backhand groundstroke same as serve
-        # given share_other, what do the other biases need to equal?
-        bias_event = np.log(1 - share_other) - np.log(share_other) - np.log(num_labels - 1)
-        bias_other = 0
-        biases = [bias_other, *[bias_event] * (num_labels - 1)]
-        biases = nn.Parameter(torch.Tensor(biases))
-        self.fc_out.bias = biases
-        
-        # self.softmax = nn.Softmax(dim = 1) ### dim = 1 --> the label dimension
-        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
-        
-    def forward(self, x, verbose = False):
-        if verbose: print(f'Shape of Input:             {x.shape}')
-        
-        y1 = self.conv1(x)
-        if verbose: print(f'  ... after conv1:          {y1.shape}')
-        
-        y2 = self.conv2_2(self.conv2_1(y1))
-        if verbose: print(f'  ... after conv2:          {y2.shape}')
-            
-        y3 = self.conv3_2(self.conv3_1(y2))
-        if verbose: print(f'  ... after conv3:          {y3.shape}')
-            
-        y4 = self.conv4_2(self.conv4_1(y3))
-        if verbose: print(f'  ... after conv4:          {y4.shape}')
-        
-        ypool = self.global_avgpool(y4)
-        if verbose: print(f'  ... after global avgpool: {ypool.shape}')
-        
-        # z = self.softmax(self.fc_out(self.flatten(ypool)))
-        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
-        z = self.fc_out(self.flatten(ypool))
-        if verbose: print(f'  ... of Output:            {z.shape}')
-        
-        return z
-     
 class SmallFullConvModel(nn.Module):
     
     def __init__(self, num_labels = 14, T = 32, D = 112,
@@ -310,3 +196,137 @@ class SmallFullConvModel(nn.Module):
         if verbose: print(f'  ... of Output:            {z.shape}')
         
         return z
+
+
+class SmallModel(nn.Module):
+    
+    def __init__(self, num_labels = 14, T = 32, D = 112, share_other = 0.9):
+        super(SmallModel, self).__init__()
+       
+        self.conv1 = TwoPlusOneBlock(3, 64, 3, 3, 
+                                     stride_d = 2, stride_t = 1)
+        
+        self.conv2_1 = ResidualBlock(64, 64, 3, 3, 
+                                     stride_d = 1, stride_t = 1)
+        self.conv2_2 = ResidualBlock(64, 64, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.conv3_1 = ResidualBlock(64, 128, 3, 3, 
+                                     stride_d = 2, stride_t = 2)
+        self.conv3_2 = ResidualBlock(128, 128, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.conv4_1 = ResidualBlock(128, 256, 3, 3, 
+                                     stride_d = 2, stride_t = 2)
+        self.conv4_2 = ResidualBlock(256, 256, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        avgpool_t = math.ceil(T / (2 ** 2)) ### 2 times stride_t == 2
+        avgpool_d = math.ceil(D / (2 ** 3)) ### 3 times stride_d == 2
+    
+        self.global_avgpool = nn.AvgPool3d((avgpool_t, avgpool_d, avgpool_d))
+        self.flatten = nn.Flatten()
+        self.fc_out = nn.Linear(256, num_labels)
+        
+        ### re-initialize fc_out biases
+        # idea: initially, the output of the FC layer with Softmax has to (roughly) match
+        # the empirical share of hits and serves and others, etc.
+        # to do this, we set the first bias (for "other") to zero.
+        # all other biases are the same -> topspin backhand groundstroke same as serve
+        # given share_other, what do the other biases need to equal?
+        bias_event = np.log(1 - share_other) - np.log(share_other) - np.log(num_labels - 1)
+        bias_other = 0
+        biases = [bias_other, *[bias_event] * (num_labels - 1)]
+        biases = nn.Parameter(torch.Tensor(biases))
+        self.fc_out.bias = biases
+        
+        # self.softmax = nn.Softmax(dim = 1) ### dim = 1 --> the label dimension
+        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
+        
+    def forward(self, x, verbose = False):
+        if verbose: print(f'Shape of Input:             {x.shape}')
+        
+        y1 = self.conv1(x)
+        if verbose: print(f'  ... after conv1:          {y1.shape}')
+        
+        y2 = self.conv2_2(self.conv2_1(y1))
+        if verbose: print(f'  ... after conv2:          {y2.shape}')
+            
+        y3 = self.conv3_2(self.conv3_1(y2))
+        if verbose: print(f'  ... after conv3:          {y3.shape}')
+            
+        y4 = self.conv4_2(self.conv4_1(y3))
+        if verbose: print(f'  ... after conv4:          {y4.shape}')
+        
+        ypool = self.global_avgpool(y4)
+        if verbose: print(f'  ... after global avgpool: {ypool.shape}')
+        
+        # z = self.softmax(self.fc_out(self.flatten(ypool)))
+        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
+        z = self.fc_out(self.flatten(ypool))
+        if verbose: print(f'  ... of Output:            {z.shape}')
+        
+        return z
+    
+
+class OrigModel(nn.Module):
+    
+    def __init__(self, num_labels = 14, T = 32, D = 112):
+        super(OrigModel, self).__init__()
+        
+        self.conv1 = TwoPlusOneBlock(3, 64, 7, 3, 
+                                     stride_d = 2, stride_t = 1)
+        
+        self.conv2_1 = ResidualBlock(64, 64, 3, 3, 
+                                     stride_d = 1, stride_t = 1)
+        self.conv2_2 = ResidualBlock(64, 64, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.conv3_1 = ResidualBlock(64, 128, 3, 3, 
+                                     stride_d = 2, stride_t = 2)
+        self.conv3_2 = ResidualBlock(128, 128, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.conv4_1 = ResidualBlock(128, 256, 3, 3, 
+                                     stride_d = 2, stride_t = 2)
+        self.conv4_2 = ResidualBlock(256, 256, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+        
+        self.conv5_1 = ResidualBlock(256, 512, 3, 3, 
+                                     stride_d = 2, stride_t = 2)
+        self.conv5_2 = ResidualBlock(512, 512, 3, 3,
+                                     stride_d = 1, stride_t = 1)
+  
+        avgpool_t = math.ceil(T / (2 ** 3)) ### 3 times stride_t == 2
+        avgpool_d = math.ceil(D / (2 ** 4)) ### 4 times stride_d == 2
+    
+        self.global_avgpool = nn.AvgPool3d((avgpool_t, avgpool_d, avgpool_d))
+        self.flatten = nn.Flatten()
+        self.fc_out = nn.Linear(512, num_labels)
+        # self.softmax = nn.Softmax(dim = 1) ### dim = 1 --> the label dimension
+        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
+        
+    def forward(self, x, verbose = False):
+        y1 = self.conv1(x)
+        y2 = self.conv2_2(self.conv2_1(y1))
+        y3 = self.conv3_2(self.conv3_1(y2))
+        y4 = self.conv4_2(self.conv4_1(y3))
+        y5 = self.conv5_2(self.conv5_1(y4))
+        
+        ypool = self.global_avgpool(y5)
+        # z = self.softmax(self.fc_out(self.flatten(ypool)))
+        ### do not calculate softmax -> CrossEntropyLoss softmaxes by itself.
+        z = self.fc_out(self.flatten(ypool))
+        
+        if verbose:
+            print(f'Shape of Input:             {x.shape}')
+            print(f'  ... after conv1:          {y1.shape}')
+            print(f'  ... after conv2:          {y2.shape}')
+            print(f'  ... after conv3:          {y3.shape}')
+            print(f'  ... after conv4:          {y4.shape}')
+            print(f'  ... after conv5:          {y5.shape}')
+            print(f'  ... after global avgpool: {ypool.shape}')
+            print(f'  ... of Output:            {z.shape}')
+        
+        return z
+    
