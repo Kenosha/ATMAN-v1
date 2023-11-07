@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision.transforms.v2 as tf
 from torchvision.io import read_video
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, IterableDataset, get_worker_info
 
 from itertools import product
 
@@ -289,3 +289,43 @@ class ClipDataset(Dataset):
         
         return clip, self.label_frame_to_vector(label_frame)
 
+
+def inference_sample_generator(vidArr, # C, T, H, W
+                               start_frame = None, stop_frame = None,
+                               frames_in_sample = 256, stride_t = 4, T = 16):
+    if start_frame is None:
+        start_frame = 0
+    if stop_frame is None:
+        stop_frame = vidArr.shape[1]
+    
+    ### Important to remember: There must be a slight overlap between samples!
+    ### --> some duplication of conv. calculation can not be avoided!
+    ### This is because if we don't overlap, 
+    ### the overall stride between samples will be much larger than stride_t
+    #### ---> rectification of start frames
+    
+    for start_sample in range(start_frame, stop_frame, frames_in_sample):
+        start_sample_rect = max(start_sample - T + stride_t, 0)
+        stop_sample_rect = min(start_sample + frames_in_sample, stop_frame)
+        subArr = vidArr[:, start_sample_rect:stop_sample_rect]
+        # idxArr = [start_sample_rect, stop_sample_rect]
+        yield torch.Tensor(subArr)
+    
+    
+class InferenceIterableDataset(IterableDataset):
+    def __init__(self, vidArr, frames_in_sample = 256, stride_t = 4, T = 16):
+        super(InferenceIterableDataset).__init__()
+        self.vidArr = vidArr ### TODO: Do preprocessing here?!
+        self.frames_in_sample = frames_in_sample
+        self.stride_t = stride_t
+        self.T = T
+        
+    def __iter__(self):
+        worker_info = get_worker_info()
+        if worker_info is None: ### Single Process Data Loading
+            inf_gen = inference_sample_generator(self.vidArr, 
+                                                 start_frame = None, stop_frame = None,
+                                                 frames_in_sample = self.frames_in_sample,
+                                                 stride_t = self.stride_t, T = self.T)
+            return inf_gen
+        
