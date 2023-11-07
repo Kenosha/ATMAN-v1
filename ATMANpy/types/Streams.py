@@ -758,8 +758,8 @@ class StillStream:
     def from_file(framePath, name = None, 
                   cap_color_space = 'bgr', target_color_space = 'bgr',
                   scale_factor = 1):
-        if not os.path.exists(filePath):
-            print(f'{filePath} does not exist.')
+        if not os.path.exists(framePath):
+            print(f'{framePath} does not exist.')
             return None
         imgArr = np.load(framePath)
         stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
@@ -1387,7 +1387,7 @@ class DecapStream:
     
     def conform(self, start_frame, stop_frame):
         rectified_start_frame = start_frame - self.start_frame
-        rectified_stop_frame = stop_frame - self.stop_frame + 1 ### last frame is included!
+        rectified_stop_frame = stop_frame - self.start_frame + 1 ### last frame is included!
         confFrms = self.frames[rectified_start_frame:rectified_stop_frame]
         
         updDict = {'frames': confFrms, 'start_frame': start_frame, 'stop_frame': stop_frame}
