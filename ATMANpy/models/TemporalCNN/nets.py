@@ -82,17 +82,16 @@ class ResidualBlock(nn.Module):
 #         conv_args[0] = TwoPlusOneBlock(...)
 #         conv_args[1, 2, 3, ...] = ResidualBlock(...)
     
-    
 class SmallFullConvModel(nn.Module):
     
-    def __init__(self, num_labels = 14, T = 32, D = 112,
+    def __init__(self, labels, T = 32, D = 112,
                  stride_d1 = 2, stride_d2 = 1, stride_d3 = 2, stride_d4 = 2,
                  stride_t1 = 1, stride_t2 = 1, stride_t3 = 2, stride_t4 = 2,
-                 share_other = 0.9):
+                 share_other = 0.9, share_right = 0.8): 
         super(SmallFullConvModel, self).__init__()
         
         ### Write Init Params
-        self.num_labels = num_labels
+        self.num_labels = len(labels)
         self.T = T
         self.D = D
         self.share_other = share_other
@@ -157,7 +156,7 @@ class SmallFullConvModel(nn.Module):
         ### we will get as output something shaped batch_size x num_labels x a x b x c
         ### where a, b, c can be larger than 1. 
         ### In each of these channels, we then find the logits for a different part of the input image!
-        self.conv_fc_out = nn.Conv3d(256, num_labels, kernel_size = (1, 1, 1))
+        self.conv_fc_out = nn.Conv3d(256, self.num_labels, kernel_size = (1, 1, 1))
         
         ### re-initialize conv_fc_out biases
         # idea: initially, the output of the (convolutionally implemented) FC layer with Softmax has to (roughly) match
@@ -165,9 +164,23 @@ class SmallFullConvModel(nn.Module):
         # to do this, we set the first bias (for "other") to zero.
         # all other biases are the same -> topspin backhand groundstroke same as serve
         # given share_other, what do the other biases need to equal?
-        bias_event = np.log(1 - share_other) - np.log(share_other) - np.log(num_labels - 1)
+        # Update: All event biases adjusted depending on whether they're left handed or right handed
+        assert self.num_labels % 2 == 1
+        labels_no_other = [lab for lab in labels if not lab[0] == 'other']
+        M = (self.num_labels - 1) // 2 ### number of right handed (or left handed) event labels
+        
         bias_other = 0
-        biases = [bias_other, *[bias_event] * (num_labels - 1)]
+        bias_rh = np.log(1 - share_other) - np.log(share_other) + np.log(share_right) - np.log(M)
+        bias_lh = np.log(1 - share_other) - np.log(share_other) + np.log(1 - share_right) - np.log(M)
+        
+        biases = [bias_other]
+        for lab in labels_no_other:
+            if lab[1] == 'right':
+                biases.append(bias_rh)
+            elif lab[1] == 'left':
+                biases.append(bias_lh)
+        assert len(biases) == self.num_labels
+        
         biases = nn.Parameter(torch.Tensor(biases))
         self.conv_fc_out.bias = biases
         
