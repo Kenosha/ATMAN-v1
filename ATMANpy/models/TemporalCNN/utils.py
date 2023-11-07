@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from ATMANpy.types.MultiFrames import BGRFrames
-from ATMANpy.types.Streams import DecapStream
+from ATMANpy.types.Streams import Stream, DecapStream
 
 from itertools import product
 
@@ -22,6 +22,23 @@ def clip_to_stream(clip, zoom = 1):
     clipFrms = BGRFrames(clipArr).zoom(zoom)
     clipStm = DecapStream(clipFrms, start_frame = 0, stop_frame = len(clipArr))
     return clipStm
+
+def frames_to_stream(myFrms):
+    return DecapStream(myFrms, start_frame = 0, stop_frame = myFrms.length())
+
+def get_masked_video_frames(cap, vid, sto, fs = 0, ls = 1000):
+    
+    foreStm = Stream.from_store(f'from_{fs}_to_{ls}.avi', 'foregroundMask', vid, sto,
+                                cap_color_space = 'bool', target_color_space = 'mask')
+    moveStm = Stream.from_store(f'from_{fs}_to_{ls}.avi', 'fine_motMask', vid, sto,
+                                cap_color_space = 'bool', target_color_space = 'mask')
+    foreFrms = foreStm.decap().frames
+    moveFrms = moveStm.decap().frames
+    maskFrms = foreFrms | moveFrms
+    
+    vidFrms = BGRFrames.from_video(cap, fs, ls)
+    masked_vidFrms = vidFrms.mask(maskFrms)
+    return masked_vidFrms
 
 def plot_confusion_matrix(cm, class_names):
     """
