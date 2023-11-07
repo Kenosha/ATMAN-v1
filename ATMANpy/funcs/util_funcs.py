@@ -142,7 +142,7 @@ def cartesian_product(x, y):
     ### two lists of x and y coordinates
     return np.dstack(np.meshgrid(x, y)).reshape(-1, 2)
 
-def split_into_contiguous(inList):
+def split_into_contiguous(inList, offset = 1):
     ### take a strictly monotonously increasing list of integers and 
     ### split it into lists with contiguous integers
     
@@ -155,7 +155,7 @@ def split_into_contiguous(inList):
     currList = [x1]
     
     for x2 in xs:
-        if x2 == x1 + 1:
+        if x2 == x1 + offset:
             currList.append(x2)
         else:
             outList.append(currList)
