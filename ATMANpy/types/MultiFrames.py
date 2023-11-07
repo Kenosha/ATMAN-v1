@@ -201,16 +201,29 @@ class Frames:
     def pad(self, to_height = None, to_width = None):
         framesType = self.__class__
         
+        if to_height is None:
+            to_height = self.rows()
+        if to_width is None:
+            to_width = self.cols()
+            
         hdiff = to_height - self.rows()
         wdiff = to_width - self.cols()
     
-        hdiv, hmod = hdiff // 2, hdiff % 2
-        top_add = hdiv
-        bot_add = hdiv + hmod
+        if hdiff > 0:
+            hdiv, hmod = hdiff // 2, hdiff % 2
+            top_add = hdiv
+            bot_add = hdiv + hmod
+        else:
+            top_add = 0
+            bot_add = 0
         
-        wdiv, wmod = wdiff // 2, wdiff % 2
-        left_add = wdiv
-        right_add = wdiv + wmod
+        if wdiff > 0:
+            wdiv, wmod = wdiff // 2, wdiff % 2
+            left_add = wdiv
+            right_add = wdiv + wmod
+        else:
+            left_add = 0
+            right_add = 0
         
         outArr = np.array([cv.copyMakeBorder(imgArr, 
                                              top_add, bot_add, left_add, right_add, 
