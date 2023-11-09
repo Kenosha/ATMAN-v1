@@ -17,11 +17,38 @@ import torchvision.transforms.v2 as tf
 from torchvision.io import read_video
 from torch.utils.data import Dataset, IterableDataset, get_worker_info
 
+from ATMANpy.types.Contours import Contours
+from ATMANpy.types.MultiFrames import BGRFrames
+from ATMANpy.types.Streams import Stream, DecapStream
+
 from itertools import product
 
 def label_frame_to_series(label_frame, data):
     label_frame.index = label_frame.index.droplevel('clip')
     return pd.Series(data.label_frame_to_vector(label_frame).numpy())
+
+def get_masked_video_frames(cap, vid, sto, fs = 0, ls = 1000):
+    
+    foreStm = Stream.from_store(f'from_{fs}_to_{ls}.avi', 'foregroundMask', vid, sto,
+                                cap_color_space = 'bool', target_color_space = 'mask')
+    moveStm = Stream.from_store(f'from_{fs}_to_{ls}.avi', 'fine_motMask', vid, sto,
+                                cap_color_space = 'bool', target_color_space = 'mask')
+    foreFrms = foreStm.decap().frames
+    moveFrms = moveStm.decap().frames
+    maskFrms = foreFrms | moveFrms
+    
+    vidFrms = BGRFrames.from_video(cap, fs, ls)
+    masked_vidFrms = vidFrms.mask(maskFrms)
+    return masked_vidFrms
+
+### Pre-Process
+def preprocess_cropped_frames(crop_vidFrms, D, D_SC):
+    pad_vidFrms = crop_vidFrms.pad(to_height = D, to_width = D)
+    vidFrms = pad_vidFrms.zoom(D_SC / D)
+    vidArr = vidFrms.array / 255 ### right now, we have T x H x W x C
+    vidArr = np.moveaxis(vidArr, -1, 0) ### for 3d convolutions, we need C x T x H x W
+    vidArr = np.flip(vidArr, axis = 0).copy() ### flip channels -> BGRFrames need to become RGB
+    return vidArr
 
 class ClipDataset(Dataset):
     def __init__(self, data_path, dataset_folder, 
@@ -289,10 +316,70 @@ class ClipDataset(Dataset):
         
         return clip, self.label_frame_to_vector(label_frame)
 
+def baseline_centered_clip_generator(cap, vid, sto, 
+                                     courtBF, baselineROI,
+                                     frames_in_sample = 256,
+                                     D = 112, D_SC = 56,
+                                     stride_t = 4, T = 16):
+    courtBFs = courtBF.filter(courtBF).split()
+    center_offset = (T - 1) / 2 ### the center of a clip of length T
+    
+    for segBF in courtBFs:
+            
+        fs, ls = segBF.first()[0], segBF.last()[0]
+        masked_vidFrms = get_masked_video_frames(cap, vid, sto, 
+                                                 fs = fs, ls = ls)
+        crop_vidFrms = masked_vidFrms.crop(baselineROI)
+        vidArr = preprocess_cropped_frames(crop_vidFrms, D, D_SC) ### C, T, H, W
 
-def inference_sample_generator(vidArr, # C, T, H, W
-                               start_frame = None, stop_frame = None,
-                               frames_in_sample = 256, stride_t = 4, T = 16):
+        # segment the segment vidArr to small, frames_in_sample length samples to be inferred over convolutionally.
+        start_frame, stop_frame = 0, vidArr.shape[1]
+        for start_sample in range(start_frame, stop_frame, frames_in_sample):
+            start_sample_rect = max(start_sample - T + stride_t, 0)
+            stop_sample_rect = min(start_sample + frames_in_sample, stop_frame)
+            subArr = vidArr[:, start_sample_rect:stop_sample_rect]
+            
+            ### figure out temporal center frames of clips that will be inferred over convolutionally.
+            start_sample_rect_relative = start_sample_rect + fs
+            stop_sample_rect_relative = stop_sample_rect + fs
+            
+            first_central_frame = start_sample_rect_relative + center_offset
+            last_central_frame = stop_sample_rect_relative - center_offset - 1
+            idxs = np.arange(first_central_frame, last_central_frame + 0.01, stride_t) ### add a little epsilon to endpoint to include it
+                                                                                        ## if and only if the frames_in_sample 
+                                                                                        ## are perfectly strided over without redundancy
+            yield torch.Tensor(subArr), torch.Tensor(idxs)
+
+class BaselineInferenceDataset(IterableDataset):
+    def __init__(self, cap, vid, sto, courtBF, baselineROI, 
+                 frames_in_sample = 256, D = 112, D_SC = 56,
+                 stride_t = 4, T = 16):
+        self.cap = cap
+        self.vid = vid
+        self.sto = sto
+        self.courtBF = courtBF
+        self.baselineROI = baselineROI
+        
+        self.frames_in_sample = frames_in_sample
+        self.D = D
+        self.D_SC = D_SC
+        self.stride_t = stride_t
+        self.T = T
+        
+    def __iter__(self):
+        worker_info = get_worker_info()
+        if worker_info is None: ### Single Process Data Loading
+            inf_gen = baseline_centered_clip_generator(self.cap, self.vid, self.sto, 
+                                                       self.courtBF, self.baselineROI, 
+                                                       frames_in_sample = self.frames_in_sample, 
+                                                       D = self.D, D_SC = self.D_SC,
+                                                       stride_t = self.stride_t, T = self.T)
+            return inf_gen
+
+
+def convolutional_inference_generator(vidArr, # C, T, H, W
+                                      start_frame = None, stop_frame = None,
+                                      frames_in_sample = 256, stride_t = 4, T = 16):
     if start_frame is None:
         start_frame = 0
     if stop_frame is None:
@@ -312,9 +399,9 @@ def inference_sample_generator(vidArr, # C, T, H, W
         yield torch.Tensor(subArr)
     
     
-class InferenceIterableDataset(IterableDataset):
+class ServeInferenceDataset(IterableDataset):
     def __init__(self, vidArr, frames_in_sample = 256, stride_t = 4, T = 16):
-        super(InferenceIterableDataset).__init__()
+        super(ServeInferenceDataset).__init__()
         self.vidArr = vidArr ### TODO: Do preprocessing here?!
         self.frames_in_sample = frames_in_sample
         self.stride_t = stride_t
@@ -323,9 +410,97 @@ class InferenceIterableDataset(IterableDataset):
     def __iter__(self):
         worker_info = get_worker_info()
         if worker_info is None: ### Single Process Data Loading
-            inf_gen = inference_sample_generator(self.vidArr, 
-                                                 start_frame = None, stop_frame = None,
-                                                 frames_in_sample = self.frames_in_sample,
-                                                 stride_t = self.stride_t, T = self.T)
+            inf_gen = convolutional_inference_generator(self.vidArr, 
+                                                        start_frame = None, stop_frame = None,
+                                                        frames_in_sample = self.frames_in_sample,
+                                                        stride_t = self.stride_t, T = self.T)
             return inf_gen
+       
+
+def player_centered_clip_generator(cap, vid, sto, 
+                                   courtBF, playBF, playerSF,
+                                   stride_t = 4, T = 16, D = 112, D_SC = 56):
+    courtBFs = courtBF.filter(courtBF).split()
+    
+    for cBF in courtBFs:
+        pBF = cBF.merge(playBF).to_bool().all()
+        
+        fs, ls = pBF.first()[0], pBF.last()[0]
+        
+        masked_vidFrms = get_masked_video_frames(cap, vid, sto, 
+                                                 fs = fs, ls = ls)
+        masked_vidStm = DecapStream(masked_vidFrms, start_frame = fs, stop_frame = ls)
+        
+        pBFs = pBF.filter(pBF).split()
+        for pntBF in pBFs:
+            pnt_fs, pnt_ls = pntBF.get_frames()[0], pntBF.get_frames()[-1]
+        
+            left_frames = range(pnt_fs, pnt_ls - T, stride_t) 
+        
+            for left_frame in left_frames:                    
+                right_frame = left_frame + T 
+                choice_frames = list(range(left_frame, right_frame))
+                
+                conf_masked_vidStm = masked_vidStm.conform(left_frame, right_frame - 1) ### last frame is included, so we kill it.
+                myFrms = conf_masked_vidStm.frames
+                          
+                ####### CROP ONTO PLAYER ############
+                plCnts = []
+                for f in choice_frames:
+                    try:
+                        plCnt = playerSF[f]
+                    except KeyError:
+                        continue
+                    plCnts.append(plCnt)
+                
+                plCnts = Contours(plCnts)
+                if plCnts.length() == 0:
+                    continue ### in this case, we have an ok point for the player side (chkBF above), but no player contour in this moment.
+                    
+                plReg = plCnts.enclosing_regions().cover()
+                plReg_shrunk = plReg.resize(to_height = D, to_width = D, how = 'any') ### shrink excess height or width --> the rest we do with padding! 
+                cropFrms = myFrms.crop(plReg_shrunk)
+                
+                vidArr = preprocess_cropped_frames(cropFrms, D, D_SC)
+                
+                yield torch.Tensor(vidArr), torch.Tensor(choice_frames)
+     
+class PlayerInferenceDataset(IterableDataset):
+    def __init__(self, cap, vid, sto, courtBF, playBF, playerSF,
+                 stride_t = 4, T = 16, D = 112, D_SC = 56):
+        super(PlayerInferenceDataset).__init__()
+        
+        self.cap = cap
+        self.vid = vid
+        self.sto = sto
+        
+        self.courtBF = courtBF
+        self.playBF = playBF
+        self.playerSF = playerSF
+        
+        self.stride_t = stride_t
+        self.T = T
+        self.D = D
+        self.D_SC = D_SC
+        
+    def __iter__(self):
+        worker_info = get_worker_info()
+        if worker_info is None: ### Single Process Data Loading
+            inf_gen = player_centered_clip_generator(self.cap, self.vid, self.sto, 
+                                                     self.courtBF, self.playBF, self.playerSF,
+                                                     stride_t = self.stride_t, T = self.T, D = self.D, D_SC = self.D_SC)
+            return inf_gen
+        
+        
+        
+        
+    
+    
+    
+    
+    
+    
+    
+        
+        
         
