@@ -1085,11 +1085,13 @@ class BoolFeature(StreamFeature):
         return BoolFeatures.from_store(video_id, store_name, featnameList = [featname]).squeeze()
     
     def __and__(self, otherBF):
-        mergedBF = self.merge(otherBF, how = 'outer').fillna(False).to_bool()
+        left, right = self.rename('left'), otherBF.rename('right') ### to avoid name clashes which prevent merging
+        mergedBF = left.merge(right, how = 'outer').fillna(False).to_bool()
         return mergedBF.all()
     
     def __or__(self, otherBF):
-        mergedBF = self.merge(otherBF, how = 'outer').fillna(True).to_bool()
+        left, right = self.rename('left'), otherBF.rename('right') ### to avoid name clashes which prevent merging
+        mergedBF = left.merge(right, how = 'outer').fillna(True).to_bool()
         return mergedBF.any()
           
     def __repr__(self):
