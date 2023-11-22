@@ -19,6 +19,7 @@ import numpy as np
 from ATMANpy.types.Features import StreamFeatures
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
+from ATMANpy.types.Contours import Contour
 
 from ATMANpy.types.Lines import CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
@@ -74,6 +75,12 @@ def maybe_center(someCnt):
         somePt = someCnt.center()
     return somePt
 
+def maybe_contour(somePt):
+    if somePt is None:
+        someCnt = None
+    else:
+        someCnt = Contour.from_point(somePt)
+    return someCnt
 
 def correct_point(somePt, someReg):
     if somePt.within(someReg):

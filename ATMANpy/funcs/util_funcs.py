@@ -29,6 +29,13 @@ def get_folder_struct(source, verbose = True):
     else:
         if verbose: print(f'No such directory: {sourceDir}')
 
+def maybe_make_folder(dir_that_exists, folder_to_maybe_create):
+    fullPath = os.path.join(dir_that_exists, folder_to_maybe_create)
+    try:
+        os.mkdir(fullPath)
+    except FileExistsError:
+        pass
+    return fullPath
 
 def make_timestamp():
     ts = time.time()

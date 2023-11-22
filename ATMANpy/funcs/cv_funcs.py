@@ -71,6 +71,8 @@ def get_framelist(cap, frameList):
         
     return np.array(outFrames)
 
+def get_width_height(cap):
+    return cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)
 
 def join_video_captures(cap_feature, videoName, storeName):
     ### Due to chunking, it can happen that contiguous video captures are stored in different files

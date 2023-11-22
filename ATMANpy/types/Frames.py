@@ -386,6 +386,11 @@ class Frame:
         InstClass = self.__class__
         self_copy = self.array.copy()
         
+        if to_height is None:
+            to_height = self.rows()
+        if to_width is None:
+            to_width = self.cols()
+            
         hdiff = to_height - self.rows
         wdiff = to_width - self.cols
     
