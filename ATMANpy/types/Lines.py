@@ -118,16 +118,24 @@ class Line:
     # hence we need meaningful separate methods for is_right and is_below
 
     ### METHODS ###
-    def up(self, points, name = 'Line'):
+    def up(self, points, name = None):
+        if name is None:
+            name = self.name
         return Line(self.leftPt.up(points), self.rightPt.up(points), name = name)
 
-    def down(self, points, name = 'Line'):
+    def down(self, points, name = None):
+        if name is None:
+            name = self.name
         return Line(self.leftPt.down(points), self.rightPt.down(points), name = name)
 
-    def left(self, points, name = 'Line'):
+    def left(self, points, name = None):
+        if name is None:
+            name = self.name
         return Line(self.leftPt.left(points), self.rightPt.left(points), name = name)
 
-    def right(self, points, name = 'Line'):
+    def right(self, points, name = None):
+        if name is None:
+            name = self.name
         return Line(self.leftPt.right(points), self.rightPt.right(points), name = name)
 
     def length(self):
@@ -344,6 +352,15 @@ class Lines:
             return (primary_key, secondary_key)
         
         return Lines(sorted(self.lineList, key = key_func))
+    
+    def up(self, points):
+        return Lines([myLn.up(points) for myLn in self.lineList], name = self.name)
+    def down(self, points):
+        return Lines([myLn.down(points) for myLn in self.lineList], name = self.name)
+    def left(self, points):
+        return Lines([myLn.left(points) for myLn in self.lineList], name = self.name)
+    def right(self, points):
+        return Lines([myLn.right(points) for myLn in self.lineList], name = self.name)
     
     def merge(self, mergeFunc, flushedLines = None):
         """
@@ -729,7 +746,16 @@ class Region(Lines):
         tl, bl, tr, br = avg(tl1, tl2), avg(bl1, bl2), avg(tr1, tr2), avg(br1, br2)
         
         return Region.from_points(tl, bl, tr, br)
-        
+    
+    def up(self, points):
+        return Region([myLn.up(points) for myLn in self.lineList], name = self.name)
+    def down(self, points):
+        return Region([myLn.down(points) for myLn in self.lineList], name = self.name)
+    def left(self, points):
+        return Region([myLn.left(points) for myLn in self.lineList], name = self.name)
+    def right(self, points):
+        return Region([myLn.right(points) for myLn in self.lineList], name = self.name)
+    
     def scale(self, factor):
         diag = self.p4 - self.p1 ### width and the height of the region
         diag_scaled = diag * (factor - 1) ### the width and heigth the region has to be increased or reduced by.
@@ -755,22 +781,25 @@ class Region(Lines):
     
         return Region.from_points(p1_new, p2_new, p3_new, p4_new)
         
-    def resize(self, to_height = None, to_width = None, how = 'any'):
-        ### how: 'strict', 'enlarge', 'shrink'
+    def resize(self, to_height = None, to_width = None, how = 'any', ratio = 0.5):
+        ### how: 'force', 'any', 'enlarge', 'shrink'
         diag = self.p4 - self.p1
         width, height = diag.coords
+        
+        assert 0 <= ratio <= 1
         
         p1, p2, p3, p4 = self.p1, self.p2, self.p3, self.p4
         
         if to_height is not None:
             diff = to_height - height
             if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how in ['any', 'force'] and diff != 0): 
-                div, rem = diff // 2, diff % 2 ### so we keep integer sizes
-            
-                p1 = p1.up(div)
-                p2 = p2.up(div)
-                p3 = p3.down(div + rem)
-                p4 = p4.down(div + rem)
+                up = int(np.ceil(diff * ratio)) if ratio >= 0.5 else int(np.floor(diff * ratio))
+                down = diff - up
+                
+                p1 = p1.up(up)
+                p2 = p2.up(up)
+                p3 = p3.down(down)
+                p4 = p4.down(down)
                 
                 if how == 'force':
                     ### we explicitly check the resulting moves left and right and ensure that they actually correspond to div and div + rem
@@ -778,8 +807,8 @@ class Region(Lines):
                     d_y_up = self.p1.y - p1.y
                     d_y_down = p4.y - self.p4.y
                     
-                    add_down = div - d_y_up         ### what couldnt be reached up, we add down
-                    add_up = div + rem - d_y_down   ### what couldnt be reached down, we add up
+                    add_down = up - d_y_up         ### what couldnt be reached up, we add down
+                    add_up = down - d_y_down   ### what couldnt be reached down, we add up
                     
                     p1 = p1.up(add_up)
                     p2 = p2.up(add_up)
@@ -789,12 +818,13 @@ class Region(Lines):
         if to_width is not None:
             diff = to_width - width
             if (how == 'enlarge' and diff > 0) or (how == 'shrink' and diff < 0) or (how in ['any', 'force'] and diff != 0): 
-                div, rem = diff // 2, diff % 2 ### so we keep integer sizes
-    
-                p1 = p1.left(div)
-                p2 = p2.right(div + rem)
-                p3 = p3.left(div)
-                p4 = p4.right(div + rem)
+                left = int(np.ceil(diff * ratio)) if ratio >= 0.5 else int(np.floor(diff * ratio))
+                right = diff - left
+                
+                p1 = p1.left(left)
+                p2 = p2.right(right)
+                p3 = p3.left(left)
+                p4 = p4.right(right)
                 
                 if how == 'force':
                     ### we explicitly check the resulting moves left and right and ensure that they actually correspond to div and div + rem
@@ -802,8 +832,8 @@ class Region(Lines):
                     d_x_left = self.p1.x - p1.x
                     d_x_right = p4.x - self.p4.x
                     
-                    add_right = div - d_x_left          ### what couldnt be reached left, we add right
-                    add_left = div + rem - d_x_right    ### what couldnt be reached right, we add left
+                    add_right = left - d_x_left          ### what couldnt be reached left, we add right
+                    add_left = right - d_x_right    ### what couldnt be reached right, we add left
                     
                     p1 = p1.left(add_left) 
                     p2 = p2.right(add_right)
@@ -886,6 +916,44 @@ class Regions:
         
         return Region.from_points(Point2D(p1), Point2D(p4))
         
+@dataclass(frozen = True)
+class Raster:
+    myReg: Region
+    stride: int = 5
+    size: int = 10
+    
+    def __post_init__(self):
+        # object.__setattr__(self, 'height', self.myReg.height())
+        # object.__setattr__(self, 'width', self.myReg.width())
+        
+        assert self.myReg.is_rectangle(), 'Rectangular Region required to make Raster'
+        
+    def height(self):
+        return self.myReg.height()
+    def width(self):
+        return self.myReg.width()
+        
+    def __getitem__(self, coords):
+        x, y = coords
+        p1 = self.myReg.p1
+        cell_p1 = p1.right(x * self.stride).down(y * self.stride)
+        cell_p4 = cell_p1.right(self.size).down(self.size)
+        return Region.from_points(cell_p1, cell_p4)
+        
+        
+if __name__ == '__main__':
+    
+    
+    ### Test Raster
+    p1 = Point2D(coords=(174, 118), value=None)
+    p2 = Point2D(coords=(467, 268), value=None)
+    myReg = Region.from_points(p1, p2)
+    
+    myRst = Raster(myReg, stride = 16, size = 112)
+    myRst[0, 2]
+    
+    
+    
         
     
     
