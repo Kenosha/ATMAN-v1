@@ -829,17 +829,23 @@ class ConstFeaturesBase:
         return self.frameList
     
     def is_empty(self):
-        return len(self.frameList) == 0
+        if self.frameList is None:
+            return False
+        else:
+            return len(self.frameList) == 0
     
     def first(self):
+        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before asking for first'   
         frame = self.get_frames()[0]
         return frame, self[frame]
     
     def last(self):
+        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before asking for last'   
         frame = self.get_frames()[-1]
         return frame, self[frame]
    
     def filter(self, boolSF):
+        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before asking for filtering'   
         frameList = [frame for frame in self.frameList if boolSF[frame]]
         return self.__class__(self.name, self.feature, frameList)
     
@@ -862,7 +868,7 @@ class ConstFeature(ConstFeaturesBase):
     ### a feature that is always the same, associated with a set of frames.
     name: str
     feature: np.ndarray
-    frameList: List
+    frameList: List = None ### maybe List! (if None is passed in here, then the ConstFeature is assumed to apply everywhere!)
     
     @staticmethod
     def from_store(video_id, store_name, featname = None, featType = None, frameList = None):
@@ -877,11 +883,14 @@ class ConstFeature(ConstFeaturesBase):
             return f'ConstFeature({self.name}, frames: {min_frame} to {max_frame})' ### looks like it's contiguous, but it need not be!
     
     def __getitem__(self, item):
-        if item in self.frameList:
+        if self.frameList is None:
             return self.feature
         else:
-            raise KeyError(f'Frame {item} not part of {self}')
-    
+            if item in self.frameList:
+                return self.feature
+            else:
+                raise KeyError(f'Frame {item} not part of {self}')
+        
     def maybe_get(self, item):
         try:
             return self[item]
@@ -892,6 +901,7 @@ class ConstFeature(ConstFeaturesBase):
         return [self.name]
     
     def to_SF(self):
+        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before turning to SF'    
         return StreamFeature({frame: self.feature for frame in self.frameList}, name = self.name)
               
     def apply(self, func, **kwargs): ### TODO: at some point, allow *args, **kwargs
@@ -914,6 +924,8 @@ class ConstFeature(ConstFeaturesBase):
             return ConstFeatures(featDict, self.frameList)
     
     def split(self, min_feature_length = 0):
+        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before splitting'    
+            
         prev_frame, frames = self.frameList[0], self.frameList[1:]
         
         curr_frame_list = [prev_frame]
@@ -949,14 +961,10 @@ class ConstFeature(ConstFeaturesBase):
 class ConstFeatures(ConstFeaturesBase):
     ### a dict of features that is always the same, associated with a set of frames. 
     featDict: dict
-    frameList: List
+    frameList: List = None ### maybe list! (if None is passed in here, then the ConstFeatures are assumed to apply everywhere!)
     
     @staticmethod
-    def from_store(video_id, store_name, featnameList, featTypeList = None, 
-                   frameList = None):
-        if frameList is None:
-            frameList = []
-        
+    def from_store(video_id, store_name, featnameList, featTypeList = None, frameList = None):
         pathDict = get_folder_struct('features_stored')
         storePath = os.path.join(pathDict['main'], video_id, store_name)
         
@@ -1000,11 +1008,14 @@ class ConstFeatures(ConstFeaturesBase):
         if isinstance(item, str):
             return ConstFeature(item, self.featDict[item], self.frameList)
         else:
-            if item in self.frameList:
+            if self.frameList is None:
                 return self.featDict
             else:
-                raise KeyError(f'Frame {item} not part of {self}')
-        
+                if item in self.frameList:
+                    return self.featDict
+                else:
+                    raise KeyError(f'Frame {item} not part of {self}')
+            
     def maybe_get(self, item):
         try:
             return self[item]
@@ -1015,6 +1026,7 @@ class ConstFeatures(ConstFeaturesBase):
         return list(self.featDict.keys())
     
     def to_SF(self):
+        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before turning to SF'    
         return StreamFeatures({frame: self.featDict for frame in self.frameList})
     
     def apply(self, func, **kwargs): ###TODO: at some point, allow *args, **kwargs
@@ -1043,6 +1055,8 @@ class ConstFeatures(ConstFeaturesBase):
             return ConstFeatures(featDict, self.frameList) 
     
     def split(self, min_feature_length = 0):
+        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before splitting'    
+        
         prev_frame, frames = self.frameList[0], self.frameList[1:]
         
         curr_frame_list = [prev_frame]
