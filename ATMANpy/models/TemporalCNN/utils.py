@@ -127,8 +127,7 @@ def infer_with_index(model, loader, device = 'cpu', report_frequency = 10):
 
 def make_cat_frame(category_names, prbArr, index):
     ### Input shape: Labels x Samples x ... 
-    npArr = prbArr.numpy()
-    dims = len(npArr.shape)
+    dims = len(prbArr.shape)
     
     ### Gather unique categories to be aggregated
     unique_categories = sorted(set(category_names))
@@ -148,7 +147,7 @@ def make_cat_frame(category_names, prbArr, index):
         other_idx = [idx for idx, c in enumerate(category_names) if c[0] == 'other' or c == 'other']
         assert len(other_idx) == 1
         other_idx = other_idx[0]
-        othArr = npArr[other_idx]
+        othArr = prbArr[other_idx]
 
         # do argmin over flattened othArr
         min_idx = othArr.reshape(othArr.shape[0], -1).argmin(1)    
@@ -158,7 +157,7 @@ def make_cat_frame(category_names, prbArr, index):
     catSers = []
     for cat in unique_categories:
         cat_idxs = [idx for idx, c in enumerate(category_names) if c == cat]
-        catArr = npArr[cat_idxs]
+        catArr = prbArr[cat_idxs]
         catArr = catArr.sum(axis = 0) ### sum over contained labels to aggregate
         
         if dims > 2: ### in this case, we have more than just labels and points in time
