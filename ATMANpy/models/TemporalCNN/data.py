@@ -55,7 +55,7 @@ class ClipDataset(Dataset):
                  vid_indices = None, zero_out_clips = False,
                  d_crop_size = 112, t_crop_size = 32, ### crop is done first
                  d_scale_size = 112, ### rescaling is done afterwards
-                 flip_prob = 0.5,
+                 flip_prob = 0.5, with_crops = False,
                  ): 
         dataset_path = os.path.join(data_path, dataset_folder)
         
@@ -74,7 +74,11 @@ class ClipDataset(Dataset):
             
             clip_names = [file for file in os.listdir(vid_path) if file.startswith('clip')]
             clip_lengths[vid] = len(clip_names)
-            clip_indices[vid] = sorted([int(f.split('.')[0].split('_')[1]) for f in clip_names])
+            clip_name_fragments = [f.split('.')[0].split('_') for f in clip_names]
+            if with_crops:
+                clip_indices[vid] = sorted([(int(f[1]), int(f[2])) for f in clip_name_fragments])
+            else:        
+                clip_indices[vid] = sorted([int(f[1]) for f in clip_name_fragments])
             
             label_file = pd.read_csv(os.path.join(vid_path, 'labels.csv'), index_col = [0, 1])
             label_frames[vid] = label_file
@@ -88,6 +92,7 @@ class ClipDataset(Dataset):
         self.t_crop_size = t_crop_size
         self.d_scale_size = d_scale_size
         self.flip_prob = flip_prob
+        self.with_crops = with_crops
         
         ### write more useful stuff
         self.dataset_path = dataset_path
@@ -108,7 +113,7 @@ class ClipDataset(Dataset):
         shares_dev = np.abs(shares - share_train)
         cutoff_idx = np.argmin(shares_dev) + 1
         
-        train_idxs = list(range(0, cutoff_idx ))
+        train_idxs = list(range(0, cutoff_idx))
         test_idxs = list(range(cutoff_idx, len(lengths)))
         
         train_data = ClipDataset(self.data_path, self.dataset_folder, 
@@ -116,13 +121,17 @@ class ClipDataset(Dataset):
                                  zero_out_clips = self.zero_out_clips,
                                  d_crop_size = self.d_crop_size,
                                  t_crop_size = self.t_crop_size,
-                                 d_scale_size = self.d_scale_size)
+                                 d_scale_size = self.d_scale_size,
+                                 flip_prob = self.flip_prob, 
+                                 with_crops = self.with_crops)
         test_data = ClipDataset(self.data_path, self.dataset_folder,  
                                  vid_indices = test_idxs, 
                                  zero_out_clips = self.zero_out_clips,
                                  d_crop_size = self.d_crop_size,
                                  t_crop_size = self.t_crop_size,
-                                 d_scale_size = self.d_scale_size)
+                                 d_scale_size = self.d_scale_size,
+                                 flip_prob = self.flip_prob, 
+                                 with_crops = self.with_crops)
         
         train_data.hit_relabel_maps = self.hit_relabel_maps
         train_data.serve_relabel_maps = self.serve_relabel_maps
@@ -265,7 +274,11 @@ class ClipDataset(Dataset):
         if vid is None:
             raise IndexError(f'{idx} out of range in dataset of length {len(self)}')
         
-        clip_name = f'clip_{clip_number}.avi'
+        if self.with_crops:
+            clip_number, crop_number = clip_number
+            clip_name = f'clip_{clip_number}_{crop_number}.avi'
+        else:
+            clip_name = f'clip_{clip_number}.avi'
         
         label_frame = self.label_frames[vid].loc[clip_number].copy()
         
@@ -332,7 +345,7 @@ def baseline_centered_clip_generator(cap, vid, sto,
         crop_vidFrms = masked_vidFrms.crop(baselineROI)
         vidArr = preprocess_cropped_frames(crop_vidFrms, D, D_SC) ### C, T, H, W
 
-        # segment the segment vidArr to small, frames_in_sample length samples to be inferred over convolutionally.
+        # segment the vidArr to small, frames_in_sample length samples to be inferred over convolutionally.
         start_frame, stop_frame = 0, vidArr.shape[1]
         for start_sample in range(start_frame, stop_frame, frames_in_sample):
             start_sample_rect = max(start_sample - T + stride_t, 0)
@@ -375,7 +388,6 @@ class BaselineInferenceDataset(IterableDataset):
                                                        D = self.D, D_SC = self.D_SC,
                                                        stride_t = self.stride_t, T = self.T)
             return inf_gen
-
 
 def convolutional_inference_generator(vidArr, # C, T, H, W
                                       start_frame = None, stop_frame = None,
@@ -464,7 +476,7 @@ def player_centered_clip_generator(cap, vid, sto,
                 vidArr = preprocess_cropped_frames(cropFrms, D, D_SC)
                 
                 yield torch.Tensor(vidArr), torch.Tensor(choice_frames)
-     
+
 class PlayerInferenceDataset(IterableDataset):
     def __init__(self, cap, vid, sto, courtBF, playBF, playerSF,
                  stride_t = 4, T = 16, D = 112, D_SC = 56):
@@ -490,17 +502,5 @@ class PlayerInferenceDataset(IterableDataset):
                                                      self.courtBF, self.playBF, self.playerSF,
                                                      stride_t = self.stride_t, T = self.T, D = self.D, D_SC = self.D_SC)
             return inf_gen
-        
-        
-        
-        
-    
-    
-    
-    
-    
-    
-    
-        
-        
-        
+
+
