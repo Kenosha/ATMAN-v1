@@ -14,7 +14,7 @@ import pandas as pd
 
 ### GET VIDEO ###
 from ATMANpy.funcs.util_funcs import get_video
-from ATMANpy.funcs.cv_funcs import join_video_captures
+from ATMANpy.funcs.cv_funcs import join_video_captures, get_width_height
 
 ### GET SCHEMA ###
 from ATMANpy.types.Lines import CourtLines, NetLines
@@ -40,7 +40,7 @@ schemaFrm = fit_frame_to_lines(schemaLines)
 START_FRAME = 0
 STOP_FRAME = 100000
 VIDEO_ID = '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano'
-STORE_NAME = 'svm_run'
+STORE_NAME = 'svm_run_seg_lossless'
 NUM_WORKERS = 24
 CHUNKSIZE = 1000
 
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     someFrm = randStm.get(some_frame, put = False)
     # someFrm.show()
     
-    p1, p2, p3, p4 = Point2D((200, 0)), Point2D((440, 0)), Point2D((0, 295)), Point2D((width, 295))
+    p1, p2, p3, p4 = Point2D((200, 12)), Point2D((440, 12)), Point2D((0, 295)), Point2D((width, 295))
     ROI = Region.from_points(p1, p2, p3, p4)
     someFrm.put(ROI).show()
     
@@ -86,6 +86,36 @@ if __name__ == '__main__':
     fullPath = os.path.join(savePath, fileName)
     roiArr = ff.extract_region_values(ROI)
     np.save(fullPath, roiArr)
+    
+    ### Serve ROIs
+    HSF = ConstFeature.from_store(VIDEO_ID, STORE_NAME, featname = 'H', frameList = [0])
+    H = HSF.feature
+    courtLines = sa.find_courtlines(H, schemaLines = schemaLines)
+    
+    # a) Top Serve
+    loLn, hiLn = courtLines['Top Baseline'].down(20), courtLines['Top Baseline'].up(60)
+    p1, p2, p3, p4 = hiLn.leftPt, hiLn.rightPt, loLn.leftPt, loLn.rightPt
+    ROI = Region.from_points(p1, p2, p3, p4)
+    someFrm.put(ROI).show()
+    
+    savePath = ff.get_and_make_save_path('topserveReg', VIDEO_ID, STORE_NAME)
+    fileName = f'from_{START_FRAME}_to_{STOP_FRAME}.npy'
+    fullPath = os.path.join(savePath, fileName)
+    roiArr = ff.extract_region_values(ROI)
+    np.save(fullPath, roiArr)
+    
+    # b) Bot Serve
+    loLn, hiLn = courtLines['Bottom Baseline'].down(30), courtLines['Bottom Baseline'].up(82)
+    p1, p2, p3, p4 = hiLn.leftPt, hiLn.rightPt, loLn.leftPt, loLn.rightPt
+    ROI = Region.from_points(p1, p2, p3, p4)
+    someFrm.put(ROI).show()
+    
+    savePath = ff.get_and_make_save_path('botserveReg', VIDEO_ID, STORE_NAME)
+    fileName = f'from_{START_FRAME}_to_{STOP_FRAME}.npy'
+    fullPath = os.path.join(savePath, fileName)
+    roiArr = ff.extract_region_values(ROI)
+    np.save(fullPath, roiArr)
+    
     
     #### Ball Kid ROIs
     myRegs = []
