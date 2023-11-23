@@ -426,13 +426,8 @@ def find_player_candidate_tracks_joint(foregroundCache, shadowCache, featCache,
     
     return player_candidates, player_parents
     
-def find_player_candidate_tracks_joint_timeblur(foregroundCache, shadowCache, featCache,
-                                                ROI = None, min_player_size = 50, 
-                                                frame_offset = 1, frame_blur = 1):
-    ### TODO: Implement a Stream with regular skips, so that we don't extract 
-    # with this function for every frame, but instead for every frame_offset frames.
-    player_candidates_prev = featCache[-frame_offset]['player_candidates']
-    
+def find_player_candidate_contours_timeblur(foregroundCache, shadowCache, featCache,
+                                            ROI = None, min_player_size = 50, frame_blur = 1):
     jointMask = MaskFrame.false(foregroundCache[0])
     for blur_frame in list(range(-frame_blur, frame_blur + 1)):
         fMask = foregroundCache[blur_frame]
@@ -442,50 +437,58 @@ def find_player_candidate_tracks_joint_timeblur(foregroundCache, shadowCache, fe
             frameMask = frameMask & jointMask.within_region(ROI)
         jointMask = jointMask | frameMask
     
-    currCnts = find_contours(jointMask, min_size = min_player_size)
+    foreCnts = find_contours(jointMask, min_size = min_player_size)
+    return foreCnts
+
+def find_player_candidate_links(foregroundCache, shadowCache, featCache,
+                                                frame_offset = 1):
+    ### TODO: Implement a Stream with regular skips, so that we don't extract 
+    # with this function for every frame, but instead for every frame_offset frames.
+    player_candidates_prev = featCache[-frame_offset]['player_candidates']
+    foreCnts = featCache[0]['foreCnts']
     
     if player_candidates_prev is None:
-        player_candidates, player_parents = currCnts, [[]] * currCnts.length()
+        player_candidates, player_parents = foreCnts, [[]] * foreCnts.length()
     else:
-        player_candidates, player_parents = find_player_candidate_contours_with_overlap(currCnts, player_candidates_prev)
+        player_candidates, player_parents = find_player_candidate_contours_with_overlap(foreCnts, player_candidates_prev)
     
     return player_candidates, player_parents
     
-def find_player_candidate_tracks(foregroundCache, shadowCache, featCache,  
-                                 min_player_size = 50,
-                                 initial_ROI_upper = None, initial_ROI_lower = None):
+# def find_player_candidate_tracks(foregroundCache, shadowCache, featCache,  
+#                                  min_player_size = 50,
+#                                  initial_ROI_upper = None, initial_ROI_lower = None):
     
-    fMask = foregroundCache[0]
-    sMask = shadowCache[0]
-    H = featCache[0]['H']
-    candCnts_top_prev = featCache[-1]['topPlayer_candidates']
-    candCnts_bot_prev = featCache[-1]['botPlayer_candidates']
+#     fMask = foregroundCache[0]
+#     sMask = shadowCache[0]
+#     H = featCache[0]['H']
+#     candCnts_top_prev = featCache[-1]['topPlayer_candidates']
+#     candCnts_bot_prev = featCache[-1]['botPlayer_candidates']
     
-    initialize = candCnts_top_prev is None or candCnts_bot_prev is None
-    jointMask =  fMask & ~sMask  
+#     initialize = candCnts_top_prev is None or candCnts_bot_prev is None
+#     jointMask =  fMask & ~sMask  
     
-    if initialize:
-        initial_projROI = get_projected_ROI(initial_ROI_upper, H)
-        roiMask = fMask.within_region(initial_projROI)
-        jointMask_top = jointMask & roiMask      
+#     if initialize:
+#         initial_projROI = get_projected_ROI(initial_ROI_upper, H)
+#         roiMask = fMask.within_region(initial_projROI)
+#         jointMask_top = jointMask & roiMask      
     
-        initial_projROI = get_projected_ROI(initial_ROI_lower, H)
-        roiMask = fMask.within_region(initial_projROI)
-        jointMask_bot = jointMask & roiMask      
+#         initial_projROI = get_projected_ROI(initial_ROI_lower, H)
+#         roiMask = fMask.within_region(initial_projROI)
+#         jointMask_bot = jointMask & roiMask      
     
-        topPlayer_candidates = find_contours(jointMask_top, min_size = min_player_size)
-        botPlayer_candidates = find_contours(jointMask_bot, min_size = min_player_size)
+#         topPlayer_candidates = find_contours(jointMask_top, min_size = min_player_size)
+#         botPlayer_candidates = find_contours(jointMask_bot, min_size = min_player_size)
         
-        topPlayer_parents = [[]] * topPlayer_candidates.length()
-        botPlayer_parents = [[]] * botPlayer_candidates.length()
+#         topPlayer_parents = [[]] * topPlayer_candidates.length()
+#         botPlayer_parents = [[]] * botPlayer_candidates.length()
     
-    else:
-        currCnts = find_contours(jointMask, min_size = min_player_size)
+#     else:
+#         currCnts = find_contours(jointMask, min_size = min_player_size)
     
-        topPlayer_candidates, topPlayer_parents = find_player_candidate_contours_with_overlap(currCnts, candCnts_top_prev)
-        botPlayer_candidates, botPlayer_parents = find_player_candidate_contours_with_overlap(currCnts, candCnts_bot_prev)
+#         topPlayer_candidates, topPlayer_parents = find_player_candidate_contours_with_overlap(currCnts, candCnts_top_prev)
+#         botPlayer_candidates, botPlayer_parents = find_player_candidate_contours_with_overlap(currCnts, candCnts_bot_prev)
     
-    return topPlayer_candidates, topPlayer_parents, botPlayer_candidates, botPlayer_parents
+#     return topPlayer_candidates, topPlayer_parents, botPlayer_candidates, botPlayer_parents
 
     
 def find_motion_mask(gCache, 
