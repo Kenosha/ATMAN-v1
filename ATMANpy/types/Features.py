@@ -845,8 +845,14 @@ class ConstFeaturesBase:
         return frame, self[frame]
    
     def filter(self, boolSF):
-        assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before asking for filtering'   
-        frameList = [frame for frame in self.frameList if boolSF[frame]]
+        # assert self.frameList is not None, f'{self} has no frameList; give it one by conforming before asking for filtering' 
+        ### instead of the above: use the other boolSF to create the frameList!
+        if self.frameList is None:
+            fs, ls = boolSF.first()[0], boolSF.last()[0]
+            frameList = list(range(fs, ls + 1))
+        else:
+            frameList = self.frameList
+        frameList = [frame for frame in frameList if boolSF[frame]]
         return self.__class__(self.name, self.feature, frameList)
     
     def merge(self, otherSF):
@@ -875,7 +881,9 @@ class ConstFeature(ConstFeaturesBase):
         return ConstFeatures.from_store(video_id, store_name, featnameList = [featname], featTypeList = [featType], frameList = frameList).squeeze()
     
     def __repr__(self):
-        if self.is_empty():
+        if self.frameList is None:
+            return f'ConstFeature({self.name})'
+        elif self.is_empty():
             return 'ConstFeature()'
         else:
             frames = self.get_frames()
@@ -955,7 +963,20 @@ class ConstFeature(ConstFeaturesBase):
     def conform(self, frameList):
         return ConstFeature(self.name, self.feature, frameList)
     
-    
+    def save(self, videoName, storeName, extract_func = None):
+        savePath = ff.get_and_make_save_path(self.name, videoName, storeName)
+        if self.frameList is None:
+            fileName = 'const.npy'
+        else:
+            fs, ls = self.first()[0], self.last()[0]
+            fileName = f'from_{fs}_to_{ls}.npy'
+        fullPath = os.path.join(savePath, fileName)
+        if extract_func is None:
+            featArr = self.feature
+        else:
+            featArr = extract_func(self.feature)
+        np.save(fullPath, featArr)
+        
     
 @dataclass(frozen = True)
 class ConstFeatures(ConstFeaturesBase):
@@ -972,7 +993,8 @@ class ConstFeatures(ConstFeaturesBase):
         if featnameList is None: 
             featnameList = [f for f in os.listdir(storePath) if not f.endswith('.csv')]
         else:
-            featnameList = [f for f in featnameList if f in os.listdir(storePath)]
+            not_available = [f for f in featnameList if f not in os.listdir(storePath)]
+            assert len(not_available) == 0, f'The following features could not be found: {not_available}'
         
         ### figure out types
         if featTypeList is None:
@@ -987,7 +1009,7 @@ class ConstFeatures(ConstFeaturesBase):
             last_file = os.listdir(featPath)[-1] ### this has to be improved! Along with feature IO in general
             fullPath = os.path.join(featPath, last_file)
             
-            myArr = np.load(fullPath) 
+            myArr = np.load(fullPath, allow_pickle = True) 
             if featType is None:
                 featDict[featName] = myArr
             else:
