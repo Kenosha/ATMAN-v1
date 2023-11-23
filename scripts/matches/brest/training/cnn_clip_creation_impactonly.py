@@ -144,7 +144,7 @@ if __name__ == '__main__':
                 left_frames = range(fs_frm, ls_frm - T_LENGTH, T_STRIDE)
                 
                 for left_frame in left_frames:                    
-                    right_frame = left_frame + T_LENGTH
+                    right_frame = left_frame + T_LENGTH - 1 ### last frame is included, so we kill it.
                     choice_frames = list(range(left_frame, right_frame))
                     
                     conf_masked_vidStm = masked_vidStm.conform(left_frame, right_frame)

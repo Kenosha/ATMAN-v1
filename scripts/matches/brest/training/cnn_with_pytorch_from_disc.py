@@ -11,12 +11,14 @@ TODO:
 """
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, split_into_contiguous
-from ATMANpy.models.TemporalCNN import clip_to_stream, label_frame_to_series
-from ATMANpy.models.TemporalCNN import ClipDataset, SmallModel, SmallFullConvModel
+from ATMANpy.models.TemporalCNN.utils import clip_to_stream, plot_confusion_matrix
+from ATMANpy.models.TemporalCNN.data import ClipDataset, label_frame_to_series
+from ATMANpy.models.TemporalCNN.nets import SmallFullConvModel
 
 import os
 import math
 import random
+from time import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -36,7 +38,6 @@ from datetime import datetime
 
 from torchmetrics import ConfusionMatrix
 import sklearn.metrics
-from ATMANpy.models.TemporalCNN import plot_confusion_matrix
 
 
 ### TODO: Data augmentation -> how?
@@ -47,11 +48,37 @@ from ATMANpy.models.TemporalCNN import plot_confusion_matrix
 
 ### TODO: Model weights or oversample or undersample the non-event clips?
 
+PLAYER = 'bot'
+
+VID_INDICES = None #[0, 1, 2] ## None for all data!
+# D_CROP_SIZE = 80 if PLAYER == 'top' else 120
+D_CROP_SIZE = 56 if PLAYER == 'top' else 88
+T_CROP_SIZE = 16
+D_SCALE_SIZE = 56
+# D_SCALE_SIZE = D_CROP_SIZE ### try a model that is NOT pre-scaled. UPDATE: Gets very hard very fast to train models larger than 56
+WITH_CROPS = True
+FLIP_PROB = 0.2
+SHARE_TRAIN = 0.8
+NUM_WORKERS = 4
+BATCH_SIZE = 32
+
+STRIDE_D1, STRIDE_D2, STRIDE_D3, STRIDE_D4 = 2, 1, 2, 2
+STRIDE_T1, STRIDE_T2, STRIDE_T3, STRIDE_T4 = 1, 1, 1, 2
+
+DETERMINISTIC = False
+DEVICE = 'cuda'
+
+EPOCHS = 40
+LEARNING_RATE = 0.0003
+MOMENTUM = 0.9
+
+REPORT_FREQ = 100
+
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
 DATA_PATH = get_folder_struct('video_files')['labelled_data']
-DATASET_FOLDER = 'bot_player_labels_foremotion32'
-DATASET_FOLDER_DENSE = 'bot_player_labels_foremotion32_highoverlap'
+DATASET_FOLDER = f'{PLAYER}_foremotion_T{T_CROP_SIZE}_S8_randcrop5_dim{D_CROP_SIZE}'
+DATASET_FOLDER_DENSE = None #'bot_player_labels_foremotion32_highoverlap'
 
 LOG_PATH = get_folder_struct('cnn')['runs']
 RES_PATH = get_folder_struct('cnn')['weights']
@@ -68,24 +95,6 @@ res_save_where = os.path.join(RES_PATH, RES_NAME)
 prm_save_where = os.path.join(PRM_PATH, PRM_NAME)
 
 
-VID_INDICES = None #[0, 1, 2] ## None for all data!
-D_CROP_SIZE = 112
-T_CROP_SIZE = 16
-D_SCALE_SIZE = 56
-FLIP_PROB = 0.2
-SHARE_TRAIN = 0.8
-NUM_WORKERS = 4
-BATCH_SIZE = 32
-
-DETERMINISTIC = False
-DEVICE = 'cuda'
-
-EPOCHS = 40
-LEARNING_RATE = 0.0003
-MOMENTUM = 0.9
-
-REPORT_FREQ = 100
-
 TRAIN_DATA_INDEPENDENT_BASELINE = False
 DO_TEST_PROXFUNC = False
 DO_TENSORBOARD = True
@@ -97,11 +106,14 @@ DO_CHECK_TIMING = False
 DO_PLOT_CONF_MATRICES = False
 DO_ANALYTICS = False
 
+# MODEL_TO_KEEP_TRAINING = 'bot_player_labels_foremotion32_small_fullconv_model_foremotion_20231105_171815'
+MODEL_TO_KEEP_TRAINING = None
+
 # MODEL_TO_READ = f'bot_player_labels_foremotion32_small_model_foremotion_20231101_132442'
 # MODEL_TO_READ = f'bot_player_labels_foremotion32_small_model_foremotion_20231101_230538'
 MODEL_TO_READ = None
 
-SHARE_OTHER = None # 0.92 ### if you want a more precise estimate, set to None.
+SHARE_OTHER = None #None #0.92 #None # 0.92 ### if you want a more precise estimate, set to None.
                             # if you want speed, set it to somewhere between 0.9 and 0.95, 
                             # which is good enough
 
@@ -131,6 +143,8 @@ def get_share_other(train_data):
     train_labels = []
     for vid, trainDF in train_data.label_frames.items():
         clip_indices = train_data.clip_indices[vid]
+        if isinstance(clip_indices[0], tuple): ### in this case, the clips are clipnum_cropnum
+            clip_indices = sorted(set([c[0] for c in clip_indices]))
         relevantDF = trainDF.loc[clip_indices]
         vid_train_labels = relevantDF.groupby('clip').apply(label_frame_to_series, data)
         train_labels.append(vid_train_labels)
@@ -173,7 +187,8 @@ if __name__ == '__main__':
                        d_crop_size = D_CROP_SIZE, 
                        t_crop_size = T_CROP_SIZE,
                        d_scale_size = D_SCALE_SIZE,
-                       flip_prob = FLIP_PROB)
+                       flip_prob = FLIP_PROB,
+                       with_crops = WITH_CROPS)
     data.set_proximity_function(PROX_FUNC)    
     data.set_relabel_maps(hit_spin_map = {'topspin': 'topspin', 'slice': 'slice_or_flat', 'flat': 'slice_or_flat'},
                           serve_side_map = {'left': 'any', 'right': 'any'}) 
@@ -207,9 +222,14 @@ if __name__ == '__main__':
         
     ### Initialize model
     share_other = get_share_other(train_data) if SHARE_OTHER is None else SHARE_OTHER
-    model = SmallFullConvModel(num_labels = len(data.get_all_labels()), 
+    model = SmallFullConvModel(data.get_all_labels(), 
                                T = T_CROP_SIZE, D = D_SCALE_SIZE,
+                               stride_d1 = STRIDE_D1, stride_d2 = STRIDE_D2, stride_d3 = STRIDE_D3, stride_d4 = STRIDE_D4, 
+                               stride_t1 = STRIDE_T1, stride_t2 = STRIDE_T2, stride_t3 = STRIDE_T3, stride_t4 = STRIDE_T4,
                                share_other = share_other)
+    if not MODEL_TO_KEEP_TRAINING is None:
+        res_read_where = os.path.join(RES_PATH, MODEL_TO_KEEP_TRAINING)
+        model.load_state_dict(torch.load(res_read_where))
     model.to(DEVICE)
     
     criterion = nn.CrossEntropyLoss()
@@ -239,16 +259,27 @@ if __name__ == '__main__':
     ### Test forward pass
     if DO_TEST_FORWARD:
         with torch.inference_mode():
+            start_time = time()
             clips, labels = next(iter(train_loader))
             clips = clips.to(DEVICE)
             labels = labels.to(DEVICE)
+            load_time = time()
             out = model(clips, verbose = True)
-            print('Output Means: ')
-            print(torch.mean(out, axis = 0))
+            infr_time = time()
+            # print('Output Means: ')
+            # print(torch.mean(out, axis = 0))
             probs = nn.Softmax(dim = 1)(out)
+            prob_mean = torch.mean(probs, axis = 0).squeeze().cpu()
+            probSer = pd.Series(prob_mean, index = data.get_all_labels())
             print('Probability Means: ')
-            print(torch.mean(probs, axis = 0))
+            print(probSer)
             loss = criterion(out[:, :, 0, 0, 0], labels)
+            print(f'Loss: {loss}')
+        
+        load_dur = round(load_time - start_time, 1)
+        infr_dur = round(infr_time - load_time, 1)
+        print(f'Loading took {load_dur} seconds.')
+        print(f'Inference took {infr_dur} seconds.')
 
     if DO_TENSORBOARD:
         ### Prepare TensorBoard
@@ -260,9 +291,8 @@ if __name__ == '__main__':
         print(f'TensorBoard launched on {url}')
         
         clips, labels = next(iter(train_loader))
-        clips = clips.to(DEVICE)
-        writer.add_graph(model, clips)
-        writer.flush()
+        # writer.add_graph(model, clips)
+        # writer.flush()
         
         clips_large = tf.Resize(D_CROP_SIZE, antialias = True)(clips)
         clips_swap = torch.swapaxes(clips_large, 1, 2) ### convolutions need (N,C,T,H,W), add_video needs (N,T,C,H,W)
@@ -298,6 +328,8 @@ if __name__ == '__main__':
                   'D_CROP_SIZE': D_CROP_SIZE,
                   'T_CROP_SIZE': T_CROP_SIZE,
                   'D_SCALE_SIZE': D_SCALE_SIZE,
+                  'STRIDES_D': (STRIDE_D1, STRIDE_D2, STRIDE_D3, STRIDE_D4),
+                  'STRIDES_T': (STRIDE_T1, STRIDE_T2, STRIDE_T3, STRIDE_T4),
                   'FLIP_PROB': FLIP_PROB,
                   'SHARE_TRAIN': SHARE_TRAIN,
                   'NUM_WORKERS': NUM_WORKERS,
@@ -327,7 +359,8 @@ if __name__ == '__main__':
                 labels = labels.to(DEVICE)
                 
                 optimizer.zero_grad(set_to_none = True)
-                outputs = model(inputs).squeeze()
+                outputs = model(inputs)
+                outputs = outputs.squeeze(dim = (2, 3, 4)) ### squeeze out only T x H x W (which, with the fully convolutional models, remain)
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
@@ -365,7 +398,8 @@ if __name__ == '__main__':
                         vinputs, vlabels = vdata
                         vinputs = vinputs.to(DEVICE)
                         vlabels = vlabels.to(DEVICE)
-                        voutputs = model(vinputs).squeeze()
+                        voutputs = model(vinputs)
+                        voutputs = voutputs.squeeze(dim = (2, 3, 4)) ### squeeze out only T x H x W (which, with the fully convolutional models, remain)
                         vloss = criterion(voutputs, vlabels)
                         running_vloss += vloss
                     
