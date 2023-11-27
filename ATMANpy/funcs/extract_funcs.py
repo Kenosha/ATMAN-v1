@@ -382,29 +382,29 @@ def find_both_players_smart(gCache, featCache,
     
     gFrm = gCache[0]
     H = featCache[0]['H']
-    topPlayer = featCache[-1]['topPlayer']
-    botPlayer = featCache[-1]['botPlayer']
+    topPlayerCnt = featCache[-1]['topPlayerCnt']
+    botPlayerCnt = featCache[-1]['botPlayerCnt']
     
-    topROIMask = adaptive_player_ROI(topPlayer, initial_ROI_upper, H, gFrm,
+    topROIMask = adaptive_player_ROI(topPlayerCnt, initial_ROI_upper, H, gFrm,
                                      player_tracking_scale_factor = player_tracking_scale_factor,
                                      min_bounding_height = top_min_bounding_height,
                                      min_bounding_width = top_min_bounding_width,
                                      halfcourtLine = halfcourtLine_upper, keep_below_or_above = 'above')
     
-    botROIMask = adaptive_player_ROI(botPlayer, initial_ROI_lower, H, gFrm,
+    botROIMask = adaptive_player_ROI(botPlayerCnt, initial_ROI_lower, H, gFrm,
                                  player_tracking_scale_factor = player_tracking_scale_factor,
                                  min_bounding_height = bot_min_bounding_height,
                                  min_bounding_width = bot_min_bounding_width,
                                  halfcourtLine = halfcourtLine_lower, keep_below_or_above = 'below')
     
-    topPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, topROIMask, topPlayer, 
+    topPlayerCnt = find_player_contour_with_overlap(gFrm, foregroundMask, topROIMask, topPlayerCnt, 
                                                  shadowMask = shadowMask)
     
-    botPlayer = find_player_contour_with_overlap(gFrm, foregroundMask, botROIMask, botPlayer,
+    botPlayerCnt = find_player_contour_with_overlap(gFrm, foregroundMask, botROIMask, botPlayerCnt,
                                                  shadowMask = shadowMask)
 
     ### ROI Masks are returned only for checking...
-    return topPlayer, botPlayer
+    return topPlayerCnt, botPlayerCnt
 
 def find_player_candidate_tracks_joint(foregroundCache, shadowCache, featCache,
                                        ROI = None, min_player_size = 50, 
@@ -440,8 +440,7 @@ def find_player_candidate_contours_timeblur(foregroundCache, shadowCache, featCa
     foreCnts = find_contours(jointMask, min_size = min_player_size)
     return foreCnts
 
-def find_player_candidate_links(foregroundCache, shadowCache, featCache,
-                                                frame_offset = 1):
+def find_player_candidate_links(foregroundCache, shadowCache, featCache, frame_offset = 1):
     ### TODO: Implement a Stream with regular skips, so that we don't extract 
     # with this function for every frame, but instead for every frame_offset frames.
     player_candidates_prev = featCache[-frame_offset]['player_candidates']
@@ -548,18 +547,18 @@ def find_motion_mask_three_channel(hCache,
         
     return HMask, SMask, VMask 
 
-def filter_player_movement(motMask, topPlayer, botPlayer,
+def filter_player_movement(motMask, topPlayerCnt, botPlayerCnt,
                            top_player_dil_kernel = (12, 7),
                            bot_player_dil_kernel = (20, 12),
                            verbose = False):
     
-    if not topPlayer is None:
-        topMask = motMask.within_contour(topPlayer).dilate(top_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
+    if not topPlayerCnt is None:
+        topMask = motMask.within_contour(topPlayerCnt).dilate(top_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
         topMask = MaskFrame.false(motMask)
         
-    if not botPlayer is None:
-        botMask = motMask.within_contour(botPlayer).dilate(bot_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
+    if not botPlayerCnt is None:
+        botMask = motMask.within_contour(botPlayerCnt).dilate(bot_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
         botMask = MaskFrame.false(motMask)
     
@@ -600,14 +599,14 @@ def get_movement_contours(gCache, featCache,
                           dil_kernel = (20, 10), open_kernel = (5, 5),
                           max_number_of_contours = 40):
     
-    topPlayer = featCache[0]['topPlayer']
-    botPlayer = featCache[0]['botPlayer']
+    topPlayerCnt = featCache[0]['topPlayerCnt']
+    botPlayerCnt = featCache[0]['botPlayerCnt']
     
     motMask = find_motion_mask(gCache, 
                                intensity_threshold = intensity_threshold, 
                                relevant_indices = relevant_indices)
     
-    intMask = filter_player_movement(motMask, topPlayer, botPlayer, 
+    intMask = filter_player_movement(motMask, topPlayerCnt, botPlayerCnt, 
                                      dil_kernel = dil_kernel)
     
     movCnts = get_contours_from_mask(intMask, 
@@ -641,8 +640,8 @@ def get_movement_contours_and_frame(gCache, hCache, featCache,
                                     dil_kernel_dims = (20, 10), open_kernel_dims = (5, 5),
                                     max_number_of_contours = 40):
     
-    topPlayer = featCache[0]['topPlayer']
-    botPlayer = featCache[0]['botPlayer']
+    topPlayerCnt = featCache[0]['topPlayerCnt']
+    botPlayerCnt = featCache[0]['botPlayerCnt']
     gFrm = gCache[0]
     hFrm = hCache[0]
     
@@ -650,7 +649,7 @@ def get_movement_contours_and_frame(gCache, hCache, featCache,
                                intensity_threshold = intensity_threshold, 
                                relevant_indices = relevant_indices)
     
-    intMask = refine_motion_mask(motMask, topPlayer, botPlayer, 
+    intMask = refine_motion_mask(motMask, topPlayerCnt, botPlayerCnt, 
                                  dil_kernel_dims = dil_kernel_dims,
                                  open_kernel_dims = open_kernel_dims)
     
@@ -664,20 +663,20 @@ def get_movement_contours_and_frame(gCache, hCache, featCache,
     
     return movCnts, ballTable
     
-def get_chamfer_mask(gFrm, topPlayer, botPlayer, threshold = 50):
+def get_chamfer_mask(gFrm, topPlayerCnt, botPlayerCnt, threshold = 50):
     import ATMANpy.funcs.particle_funcs_vectorized as pf
     
     ########## DECIDE PARTICLE PROPAGATION #########
-    if topPlayer is None or botPlayer is None:
+    if topPlayerCnt is None or botPlayerCnt is None:
         chamferMask = MaskFrame.false(gFrm)
     else:
-        chamferMask = pf.chamfer_distance(gFrm, topPlayer, botPlayer,
+        chamferMask = pf.chamfer_distance(gFrm, topPlayerCnt, botPlayerCnt,
                                           threshold = threshold) 
         
     return chamferMask
 
-def get_chamfer_contours(gFrm, topPlayer, botPlayer, threshold = 50):
-    chamferMask = get_chamfer_mask(gFrm, topPlayer, botPlayer, threshold = threshold)
+def get_chamfer_contours(gFrm, topPlayerCnt, botPlayerCnt, threshold = 50):
+    chamferMask = get_chamfer_mask(gFrm, topPlayerCnt, botPlayerCnt, threshold = threshold)
     chamferCnts, _ = chamferMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     return chamferCnts
 
@@ -692,8 +691,8 @@ def find_particles(chamferCache, featCache,
     chamferMask = chamferCache[-1]
     
     ### Exogenous Features ###
-    # topPlayer = featCache[-1]['topPlayer']
-    # botPlayer = featCache[-1]['botPlayer']
+    # topPlayerCnt = featCache[-1]['topPlayerCnt']
+    # botPlayerCnt = featCache[-1]['botPlayerCnt']
     ballContours = featCache[-1]['ballContours']
     
     ### Endogenous Features ###
@@ -735,8 +734,8 @@ def get_joint_movement_mask(gCache, featCache,
     ### detect movement contours in sf_postprocess_funcs.py
     
     courtLines = featCache[0]['courtLines']
-    topPlayer = featCache[0]['topPlayer']
-    botPlayer = featCache[0]['botPlayer']
+    topPlayerCnt = featCache[0]['topPlayerCnt']
+    botPlayerCnt = featCache[0]['botPlayerCnt']
     ballCnt = featCache[0]['ballCnt']
     scoreBoard = featCache[0]['scoreBoard']
     
@@ -748,15 +747,15 @@ def get_joint_movement_mask(gCache, featCache,
     
     courtlineMask = zeroMask.put(courtLines, thickness = line_thickness) > 0
             
-    if not topPlayer is None:
+    if not topPlayerCnt is None:
         dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, top_player_kernel)
-        topMask = zeroMask.within_contour(topPlayer).dilate(dil_kernel)
+        topMask = zeroMask.within_contour(topPlayerCnt).dilate(dil_kernel)
     else:
         topMask = zeroMask
     
-    if not botPlayer is None:
+    if not botPlayerCnt is None:
         dil_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, bot_player_kernel)
-        botMask = zeroMask.within_contour(botPlayer).dilate(dil_kernel)
+        botMask = zeroMask.within_contour(botPlayerCnt).dilate(dil_kernel)
     else:
         botMask = zeroMask
     
