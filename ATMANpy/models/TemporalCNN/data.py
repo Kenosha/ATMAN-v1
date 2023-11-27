@@ -435,7 +435,10 @@ def player_centered_clip_generator(cap, vid, sto,
     courtBFs = courtBF.filter(courtBF).split()
     
     for cBF in courtBFs:
-        pBF = cBF.merge(playBF).to_bool().all()
+        if playBF is None:
+            pBF = cBF
+        else:
+            pBF = cBF.merge(playBF).to_bool().all()
         
         fs, ls = pBF.first()[0], pBF.last()[0]
         
@@ -497,7 +500,7 @@ class PlayerInferenceDataset(IterableDataset):
         
     def __iter__(self):
         worker_info = get_worker_info()
-        if worker_info is None: ### Single Process Data Loading
+        if worker_info is None: ### Single Process Data Loading TODO: parallelize  (see todo_cnn)
             inf_gen = player_centered_clip_generator(self.cap, self.vid, self.sto, 
                                                      self.courtBF, self.playBF, self.playerSF,
                                                      stride_t = self.stride_t, T = self.T, D = self.D, D_SC = self.D_SC)
