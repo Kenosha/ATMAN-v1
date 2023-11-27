@@ -655,11 +655,47 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     #### only now do we actually build the track!!!
     topidxSer = splitDF[top_choice].dropna().astype(int)
     botidxSer = splitDF[bot_choice].dropna().astype(int)
-    topSF = StreamFeature({frame: cntSF[frame][topidxSer[frame]] for frame in topidxSer.index}, name = 'topPlayer')
-    botSF = StreamFeature({frame: cntSF[frame][botidxSer[frame]] for frame in botidxSer.index}, name = 'botPlayer')
+    topSF = StreamFeature({frame: cntSF[frame][topidxSer[frame]] for frame in topidxSer.index}, name = 'topPlayerCnt')
+    botSF = StreamFeature({frame: cntSF[frame][botidxSer[frame]] for frame in botidxSer.index}, name = 'botPlayerCnt')
     
     return topSF.merge(botSF, how = 'outer')
     
+def interpolate_players(playerSF, frame_offset = 5, which = 'top',
+                        minimum_overlap_between_candidate_and_interpolation_position = 0.1):
+    candSF = playerSF['foreCnts']
+    plSF = playerSF[f'{which}PlayerCnt']
+    
+    outDict = plSF.streamDict
+    
+    for left_frame in plSF.dropna():
+        leftCnt = plSF[left_frame]
+        
+        right_frame = left_frame + frame_offset
+        try:
+            rightCnt = plSF[right_frame]
+        except KeyError: ### in this case, there is no right player, so we don't interpolate.
+            continue
+        
+        for itpl_frame in range(1, frame_offset): ### itpl points: 1, 2, ..., FRAME_OFFSET - 1  
+            itpl_lambda = itpl_frame / frame_offset      
+            abs_frame = left_frame + itpl_frame
+    
+            candCnts = candSF[abs_frame]
+            min_ovlp = minimum_overlap_between_candidate_and_interpolation_position
+            itplCnt = None
+
+            for candCnt in candCnts:
+                ovlp = (1 - itpl_lambda) * candCnt.overlap_factor(leftCnt) + itpl_lambda * candCnt.overlap_factor(rightCnt)
+                if ovlp > min_ovlp:
+                    itplCnt = candCnt
+                    min_ovlp = ovlp
+                    
+            outDict[abs_frame] = itplCnt
+            
+    return StreamFeature(outDict, name = plSF.name)
+                
+
+
 
 def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
                          probability_threshold = None):
