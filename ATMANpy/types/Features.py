@@ -496,17 +496,11 @@ class StreamFeature(StreamFeaturesBase):
             print(f'Did not save {self}, all None!')
             return None
         
-        contourNames = ['topPlayer', 'botPlayer']
-        homographyNames = ['H']
-        regionNames = ['scoreBoard']
-        
-        if self.name in contourNames:
-            saveSF._save_contour(videoName, storeName, compression = compression)
         elif self.name == 'H':
             saveSF._save_homography(videoName, storeName)
         elif self.name == 'P':
             saveSF._save_projection(videoName, storeName)
-        elif self.name in regionNames:
+        elif self.name.endswith('Reg'):
             saveSF._save_region(videoName, storeName)
         elif self.name.endswith('Pt'):
             saveSF._save_point(videoName, storeName)
@@ -1229,7 +1223,7 @@ class SFList:
     
     def apply_whole(self, func, *args, **kwargs):
         outList = [func(mySF, *args, **kwargs) for mySF in self] ### these dont necessarily have to be StreamFeatures!
-        if isinstance(outList[0], StreamFeature):
+        if isinstance(outList[0], StreamFeaturesBase):
             return SFList(outList)
         else:
             return outList
@@ -1311,11 +1305,12 @@ class SFList:
     def add(self, key, value):
         return SFList([mySF.add(key, value) for mySF in self])
     
-    def merge(self, otherSFList):
+    def merge(self, otherSFList, how = 'left'):
         assert self.length() == otherSFList.length(), 'Lists to be merged have to be of same length!'
-        return SFList([aSF.merge(bSF) for aSF, bSF in zip(self, otherSFList)])
+        return SFList([aSF.merge(bSF, how = how) for aSF, bSF in zip(self, otherSFList)])
     
     def concatenate(self):
+        ### TODO: Very slow, add something that handles simple cases (like boolfeature concatenation.)
         ### extends a list of features (along index)
         if self.length() == 0:
             return StreamFeatures({})
