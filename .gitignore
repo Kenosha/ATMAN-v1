@@ -8,7 +8,8 @@ executables/
 trajectories_stored/
 features_stored/
 Tracktor/
-cnn/
+cnn_player/
+cnn_ball/
 *.ods
 *.csv
 *.stats
