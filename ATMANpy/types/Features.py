@@ -50,9 +50,9 @@ def try_getattr(obj, methodStr):
     try:
         return getattr(obj, methodStr)
     except:
-        def noneFunc(*args, **kwargs):
-            return None
-        return noneFunc
+        def idFunc(*args, **kwargs):
+            return obj
+        return idFunc
 
 def extract_mp_timer(extractMethod):
 
@@ -571,6 +571,22 @@ class StreamFeatures(StreamFeaturesBase):
         featDict = ff.load_stored_features(video_id, store_name, featnameList = featnameList)
         return cls(featDict)
     
+    @classmethod
+    def from_dataframe(cls, myDF, cast_to = None):
+        streamDict = myDF.to_dict(orient = 'index')
+        if cast_to == int: ### this is for getting an integer type --> dataframes are float if nans are introduced
+            def maybe_int(featDict):
+                outDict = {}
+                for key, val in featDict.items():
+                    try:
+                        repl_val = int(val)
+                    except: 
+                        repl_val = None
+                    outDict[key] = repl_val
+                return outDict
+            streamDict = {frm: maybe_int(featDict) for frm, featDict in streamDict.items()}
+        return cls(streamDict)
+    
     @staticmethod
     def type_squeeze(): ### weird!
         return StreamFeature
@@ -718,7 +734,7 @@ class StreamFeatures(StreamFeaturesBase):
 
     def rescale(self, scale_factor):
         featList = [self[featName].rescale(scale_factor) for featName in self.get_features()]
-        return SFList(featList).concatenate(axis = 1)
+        return SFList(featList).join()
 
     def length(self):
         return len(self.streamDict)
@@ -751,7 +767,7 @@ class StreamFeatures(StreamFeaturesBase):
         applyDict = {}
         for frame in self:
             
-            funcOut = func(*[self[frame][arg] for arg in funcArgs])
+            funcOut = func(*[self[frame][arg] for arg in funcArgs], **kwargs)
             
             if len(funcVals) == 1:
                 applyDict[frame] = {name: funcOut}
@@ -1216,6 +1232,10 @@ class SFList:
     
     def rescale(self, scale_factor):
         featList = [mySF.rescale(scale_factor) for mySF in self]
+        return SFList(featList)
+    
+    def to_bool(self):
+        featList = [mySF.to_bool() for mySF in self]
         return SFList(featList)
     
     def apply(self, func, **kwargs):
