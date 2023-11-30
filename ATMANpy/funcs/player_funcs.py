@@ -604,18 +604,30 @@ def find_contours(myMask, min_size = 25, retr = cv.RETR_EXTERNAL, approx = cv.CH
     myCnts = Contours([myCnt for myCnt in myCnts if myCnt.area() > min_size])
     return myCnts
 
-def find_player_candidate_contours_with_overlap(currCnts, candCnts_prev):
+def find_player_candidate_contours_with_overlap(currCnts, candCnts_prev, relative_to = 'other'):
     candCnts = Contours([]) ### the initialized list of contours that actually have a parent -> the candidates
     parLists = []
     for currCnt in currCnts:
         parList = [] ### the list of the parents of the current contour
         
         for par_idx, candCnt_prev in enumerate(candCnts_prev):
-            if currCnt.overlap_factor(candCnt_prev, relative_to = 'other') > 0: # other, because the interpretation is simple: how much of the previous contour is present in the current contour?
+            if currCnt.overlap_factor(candCnt_prev, relative_to = relative_to) > 0: # other, because the interpretation is simple: how much of the previous contour is present in the current contour?
                 parList.append(par_idx)
         
         candCnts = candCnts.append(currCnt) ### Contours are not mutable...
         parLists.append(parList) ### ... while lists are.
             
     return candCnts, parLists 
+
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+

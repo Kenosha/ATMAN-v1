@@ -224,6 +224,164 @@ def get_median_and_deviation_frame(wrpSF):
     
     return medFrm, stdFrm
 
+def split_player_candidate_tracks_forward(plSF, 
+                                          frame_offset = 1,
+                                          critical_number_of_tracks = 2000,
+                                          verbose = False, super_verbose = False):
+    
+    if verbose: 
+        start_time = time.time()
+        
+    ### Clear up offset
+    frames = plSF.get_frames()
+    frames_of_interest = frames[::frame_offset]
+    fsFrm, other_frames = frames_of_interest[0], frames_of_interest[1:]
+    
+    ### get data from first frame 
+    fsDict = plSF[fsFrm]
+    fsChildren = fsDict['player_children']
+    
+    ### initialize a list of tracks
+    last_trackList = []
+    for currIdx, fsChild in enumerate(fsChildren):
+        if fsChild == []:
+            trackDict = {'cnt_idx': currIdx, 'child': None}
+            last_trackList.append({fsFrm: trackDict})
+        else:
+            for child in fsChild:
+                trackDict = {'cnt_idx': currIdx, 'child': child}
+                last_trackList.append({fsFrm: trackDict})
+    
+    if verbose:
+        loop_begin_time = time.time()
+        
+    for frame in other_frames:
+        
+        if super_verbose:
+            chk = time.time()
+            print(f'Frame Number: {frame} (until {plSF.last()[0]})')
+            print(f'Number of Tracks: {len(last_trackList)}')
+    
+        featDict = plSF[frame]
+        currChildren = featDict['player_children']
+        
+        curr_indices = []
+        curr_trackList = [] ### this list of tracks is populated in the loop
+        
+        for last_track in last_trackList:
+            
+            ### Handle previously finished tracks ###
+            try:
+                parDict = last_track[frame - frame_offset]
+            except KeyError:
+                ### in this case, the track was previously completed from end to beginning, so we add it in unmodified
+                curr_trackList.append(last_track)
+                continue
+        
+            currIdx = parDict['child']
+            
+            ### Handle just finished tracks ###
+            if currIdx is None: ### in this case, the track is just completed, so we add it in unmodified.
+                curr_trackList.append(last_track)
+                continue
+            else:
+                curr_indices.append(currIdx)
+                
+            currChild = currChildren[currIdx]
+            
+            if currChild == []: ### in this case, the track has no children, so it terminates here
+                curr_track = last_track
+                currDict = {'cnt_idx': currIdx, 'child': None}
+                curr_track[frame] = currDict
+                curr_trackList.append(curr_track)
+    
+            else:
+                for child in currChild:
+                    curr_track = dict(last_track) ### need to do this due to mutability and the loop over parents...
+                    currDict = {'cnt_idx': currIdx, 'child': child}
+                    curr_track[frame] = currDict
+                    curr_trackList.append(curr_track)
+                    
+        if super_verbose:
+            print(f'   ... done with track check: took {round(time.time() - chk, 1)} secs')
+            chk = time.time()
+                
+        ### Handle tracks which are just begun: they are not pointed to by a parent.
+        current_parless = [idx for idx in range(len(currChildren)) if idx not in curr_indices]
+        
+        for currIdx in current_parless:
+            currChild = currChildren[currIdx]
+            
+            if currChild == []: ### in this case, the track has no child, and so it terminates here.
+                ### it's childless and parentless -> appears and disappears.
+                currDict = {'cnt_idx': currIdx, 'child': None}
+                curr_track = {frame: currDict}
+                curr_trackList.append(curr_track)
+            else:
+                for child in currChild:
+                    currDict = {'cnt_idx': currIdx, 'child': child}
+                    curr_track = {frame: currDict}
+                    curr_trackList.append(curr_track)  
+           
+        if super_verbose:
+            print(f'   ... done with parentless: took {round(time.time() - chk, 1)} secs')
+            chk = time.time()
+        
+        ### emergency exit
+        if len(curr_trackList) > critical_number_of_tracks:
+            print(f'Had to exit {plSF} at frame {frame} --> too many tracks! ({len(curr_trackList)})')
+            break ### breaking the loop, thereby ensuring that the tracks which are found are not lost, only shortened (at the beginning)
+             
+        last_trackList = list(curr_trackList)
+        del curr_trackList
+        
+        if super_verbose:
+            print(f'   ... done copying: took {round(time.time() - chk, 1)} secs')
+            chk = time.time()
+              
+    if verbose:
+        loop_end_time = time.time()
+        
+    ### keep only the contour index
+    small_trackList = []
+    for track in last_trackList:
+        small_track = {frame: track[frame]['cnt_idx'] for frame in track}
+        small_trackList.append(small_track)
+    
+    del last_trackList
+    
+    if verbose:
+        sort_time = time.time()
+        
+    serList = [pd.Series(track, name = idx) for idx, track in enumerate(small_trackList)]
+    
+    if verbose:
+        gather_time = time.time()
+    
+    # trackSF = SFList(stream_features).join()
+    trackDF = pd.concat(serList, axis = 1)
+    
+    if verbose:
+        end_time = time.time()
+        
+        time_before_loop = round(loop_begin_time - start_time, 1)
+        time_in_loop = round(loop_end_time - loop_begin_time, 1)
+        time_to_sort = round(sort_time - loop_end_time, 1)
+        time_to_gather = round(gather_time - sort_time, 1)
+        time_to_join = round(end_time - gather_time, 1)
+        time_total = round(end_time - start_time, 1)
+        
+        print(f'{plSF}: Found {len(small_trackList)} tracks.')
+        print(f'Took {time_total} seconds:')
+        print(f'   Time spent before loop: {time_before_loop} seconds.')
+        print(f'   Time spent in loop: {time_in_loop} seconds.')
+        print(f'   Time spent sorting: {time_to_sort} seconds.')
+        print(f'   Time spent gathering: {time_to_gather} seconds.')
+        print(f'   Time spent joining: {time_to_join} seconds.')
+        
+    return trackDF
+    
+    
 def split_player_candidate_tracks(plSF, 
                                   frame_offset = 1,
                                   critical_number_of_tracks = 2000,
@@ -426,6 +584,8 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     ROISF = candSF['courtroiReg']
     ### get the candidates
     cntSF = candSF['player_candidates']
+    ### get the top and bot points at serve/return
+    topSF, botSF = candSF['topPt'], candSF['botPt']
     
     ### some auxiliary functions
     def beta(x, optimum, strictness):
@@ -478,11 +638,17 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     FDCD_LUT = {}
     for frame in all_frames:
         frameCnts = cntSF[frame]
+        top_srvPt, bot_srvPt = topSF[frame], botSF[frame] ### points at serve and return frames
         
         top_dist_norms = []
         bot_dist_norms = []
+        top_serve_dist_norms = []
+        bot_serve_dist_norms = []
         areas = []
         for frameCnt in frameCnts:
+            
+            top_dist_max = FDCI_LUT[frame]['top_dist_max']
+            bot_dist_max = FDCI_LUT[frame]['bot_dist_max']
             
             ### to calculate normalized distance to baselines...
             # a) construct a line traversing the contour from top to bottom 
@@ -496,21 +662,31 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
             top_dist = min([topPt.distance_to(cntPt) for cntPt in cntPts for topPt in topPts])
             bot_dist = min([botPt.distance_to(cntPt) for cntPt in cntPts for botPt in botPts])
             
-            # c) normalize
-            top_dist_max = FDCI_LUT[frame]['top_dist_max']
-            bot_dist_max = FDCI_LUT[frame]['bot_dist_max']
             top_dist_norm = top_dist / top_dist_max
             bot_dist_norm = bot_dist / bot_dist_max
-    
+            
             top_dist_norms.append(top_dist_norm)
             bot_dist_norms.append(bot_dist_norm)
-    
+            
+            # c) calculate distance to points during serve
+            if top_srvPt is not None:
+                top_serve_dist = min([top_srvPt.distance_to(cntPt) for cntPt in cntPts])
+                top_serve_dist_norm = top_serve_dist / top_dist_max
+                top_serve_dist_norms.append(top_serve_dist_norm)
+                
+            if bot_srvPt is not None:
+                bot_serve_dist = min([bot_srvPt.distance_to(cntPt) for cntPt in cntPts])
+                bot_serve_dist_norm = bot_serve_dist / bot_dist_max
+                bot_serve_dist_norms.append(bot_serve_dist_norm)
+            
             ### to calculate area...
             area = frameCnt.area()
             areas.append(area)
             
         FDCD_LUT[frame] = {'top_dist_norm': top_dist_norms,
                            'bot_dist_norm': bot_dist_norms,
+                           'top_serve_dist_norm': top_serve_dist_norms,
+                           'bot_serve_dist_norm': bot_serve_dist_norms,
                            'areas': areas}
         
     # c) Frame Dependent, Contour Dependent, Previous Contour Dependent Quantities
@@ -554,8 +730,8 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
         
         top_dists = []
         bot_dists = []
-        # top_speeds = []
-        # bot_speeds = []
+        top_serve_dists = []
+        bot_serve_dists = []
         ovlps = []
         areas = []
         nstills = []
@@ -578,6 +754,14 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
             top_dists.append(top_dist_norm)
             bot_dists.append(bot_dist_norm)
             
+            if FDCD_entry['top_serve_dist_norm'] != []:
+                top_serve_dist_norm = FDCD_entry['top_serve_dist_norm'][frame_idx]
+                top_serve_dists.append(top_serve_dist_norm)
+            
+            if FDCD_entry['bot_serve_dist_norm'] != []:
+                bot_serve_dist_norm = FDCD_entry['bot_serve_dist_norm'][frame_idx]
+                bot_serve_dists.append(bot_serve_dist_norm)
+            
             ### gather areas
             area = FDCD_entry['areas'][frame_idx]   
             areas.append(area)
@@ -599,6 +783,16 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
         # otherwise, it can get very small, even substantially less than zero! 
         metricDict['top_dist_score'] = 1 - np.median(np.array(top_dists) ** 2) 
         metricDict['bot_dist_score'] = 1 - np.median(np.array(bot_dists) ** 2)
+        
+        ### if the player is at the serving/returning spot when serve and return had previously been detected, this should be close to one
+        if not top_serve_dists == []: ### this occurs if track is not online during serve/return
+            metricDict['top_serve_dist_score'] = 1 - np.median(np.array(top_serve_dists) ** 2)
+        else:
+            metricDict['top_serve_dist_score'] = 0
+        if not bot_serve_dists == []:
+            metricDict['bot_serve_dist_score'] = 1 - np.median(np.array(bot_serve_dists) ** 2)
+        else:
+            metricDict['bot_serve_dist_score'] = 0
         
         ### if the player is moving fast, this should be closer to one!
         # metricDict['top_speed_score'] = np.mean(np.array(top_speeds) ** 2) ### using the median here causes many zeroes and few positive values.
@@ -631,10 +825,10 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     ### Evaluate all tracks according to metrics, and the weights assigned
     
     # a) gather the metrics that enter linearly
-    topDF = metricDF[['top_dist_score', 'ovlp_score', 'move_score', 'area_score']]
+    topDF = metricDF[['top_dist_score', 'top_serve_dist_score', 'ovlp_score', 'move_score', 'area_score']]
     topDF.columns = [col.replace('top_', '').replace('_score', '') for col in topDF.columns]
     
-    botDF = metricDF[['bot_dist_score', 'ovlp_score', 'move_score', 'area_score']]
+    botDF = metricDF[['bot_dist_score', 'bot_serve_dist_score', 'ovlp_score', 'move_score', 'area_score']]
     botDF.columns = [col.replace('bot_', '').replace('_score', '') for col in botDF.columns]
     
     # b) the proportion of frames that a player can be seen in enters multiplicatively!
@@ -1720,4 +1914,60 @@ def find_ballkid_sequences(cntSF, namedROIs, fill_limit = 3,
     ### TODO: Widen the segments of play towards the back -> often, they cut out a bit too early.
     return ballkidBF
 
+def find_player_candidate_links(candSF, frame_offset = 5, relative_to = 'other'):
+    from ATMANpy.funcs.player_funcs import find_player_candidate_contours_with_overlap
     
+    sfDict = {}
+    
+    player_candidates_prev = None
+    for idx, frame in enumerate(candSF):
+        if idx % frame_offset != 0:
+            featDict = {'player_candidates': None,
+                        'player_parents': None}
+        else:
+            candCnts = candSF[frame]
+            
+            if player_candidates_prev is None:
+                player_candidates, player_parents = candCnts, [[]] * candCnts.length()
+            else:
+                player_candidates, player_parents = find_player_candidate_contours_with_overlap(candCnts, player_candidates_prev, 
+                                                                                                relative_to = relative_to)
+            player_candidates_prev = player_candidates
+                
+            featDict = {'player_candidates': player_candidates,
+                        'player_parents': player_parents}
+                
+        sfDict[frame] = featDict
+        
+    return StreamFeatures(sfDict)
+
+def find_player_candidate_links_forward(candSF, frame_offset = 5, relative_to = 'self'):
+    from ATMANpy.funcs.player_funcs import find_player_candidate_contours_with_overlap
+        
+    sfDict = {}
+    player_candidates_next = None
+    
+    frames = candSF.get_frames()
+    idxs_rev = reversed(range(len(frames)))
+    frames_rev = reversed(frames)
+    
+    for idx, frame in zip(idxs_rev, frames_rev):
+        if idx % frame_offset != 0:
+            featDict = {'player_candidates': None,
+                        'player_children': None}
+        else:
+            candCnts = candSF[frame]
+            
+            if player_candidates_next is None:
+                player_candidates, player_children = candCnts, [[]] * candCnts.length()
+            else:
+                player_candidates, player_children = find_player_candidate_contours_with_overlap(candCnts, player_candidates_next, 
+                                                                                                 relative_to = relative_to)
+            player_candidates_next = player_candidates
+                
+            featDict = {'player_candidates': player_candidates,
+                        'player_children': player_children}
+        
+        sfDict[frame] = featDict
+        
+    return StreamFeatures(sfDict).sort()
