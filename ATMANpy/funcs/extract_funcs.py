@@ -816,9 +816,12 @@ def frame_comparison(cFrm, median_backFrm, std_backFrm, std_multiple = 3):
     match_ratio = match_pixels / all_pixels
     return match_ratio
 
-def black_comparison(foregroundMask):
-    on_pixels = foregroundMask.sum((0, 1)) // 255
-    all_pixels = foregroundMask.rows * foregroundMask.cols
+def black_comparison(foregroundMask, ROI = None):
+    on_pixels = foregroundMask.count_true()
+    if ROI is None:
+        all_pixels = foregroundMask.rows * foregroundMask.cols
+    else:
+        all_pixels = MaskFrame.true(foregroundMask).within_region(ROI).count_true() ### This is constant! feed into function, so it's computed only once.
     on_ratio = on_pixels / all_pixels
     return on_ratio
 
