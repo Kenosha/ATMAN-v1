@@ -46,9 +46,22 @@ class Contour:
         myPoints = myPoints.astype(int)
         return Contour(myPoints)
     
+
+    def __getitem__(self, item):
+        item_mod = item % self.num_points()
+        coords = self.points[item_mod].squeeze()
+        return Point2D(coords)
+    
     def __eq__(self, othCnt):
         return np.array(self.points == othCnt.points).all()
-        
+    
+    def num_points(self):
+        return len(self.points)
+    
+    def sample_points(self, samples = 4):
+        idxList = np.linspace(0, self.num_points(), num = samples, dtype = 'int', endpoint = False)
+        return [self[idx] for idx in idxList]
+    
     def moments(self):
         return cv.moments(self.points)
     
