@@ -784,15 +784,18 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
         metricDict['top_dist_score'] = 1 - np.median(np.array(top_dists) ** 2) 
         metricDict['bot_dist_score'] = 1 - np.median(np.array(bot_dists) ** 2)
         
+        metricDict['top_dist_time_score'] = (np.array(top_dists) < 0.5).mean() ### time spent close to the baseline
+        metricDict['bot_dist_time_score'] = (np.array(bot_dists) < 0.5).mean() ### time spent close to the baseline
+        
         ### if the player is at the serving/returning spot when serve and return had previously been detected, this should be close to one
         if not top_serve_dists == []: ### this occurs if track is not online during serve/return
-            metricDict['top_serve_dist_score'] = 1 - np.median(np.array(top_serve_dists) ** 2)
+            metricDict['top_dist_serve_score'] = 1 - np.median(np.array(top_serve_dists) ** 2)
         else:
-            metricDict['top_serve_dist_score'] = 0
+            metricDict['top_dist_serve_score'] = 0
         if not bot_serve_dists == []:
-            metricDict['bot_serve_dist_score'] = 1 - np.median(np.array(bot_serve_dists) ** 2)
+            metricDict['bot_dist_serve_score'] = 1 - np.median(np.array(bot_serve_dists) ** 2)
         else:
-            metricDict['bot_serve_dist_score'] = 0
+            metricDict['bot_dist_serve_score'] = 0
         
         ### if the player is moving fast, this should be closer to one!
         # metricDict['top_speed_score'] = np.mean(np.array(top_speeds) ** 2) ### using the median here causes many zeroes and few positive values.
@@ -825,10 +828,10 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     ### Evaluate all tracks according to metrics, and the weights assigned
     
     # a) gather the metrics that enter linearly
-    topDF = metricDF[['top_dist_score', 'top_serve_dist_score', 'ovlp_score', 'move_score', 'area_score']]
+    topDF = metricDF[['top_dist_score', 'top_dist_time_score', 'top_dist_serve_score', 'ovlp_score', 'move_score', 'area_score']]
     topDF.columns = [col.replace('top_', '').replace('_score', '') for col in topDF.columns]
     
-    botDF = metricDF[['bot_dist_score', 'bot_serve_dist_score', 'ovlp_score', 'move_score', 'area_score']]
+    botDF = metricDF[['bot_dist_score', 'bot_dist_time_score', 'bot_dist_serve_score', 'ovlp_score', 'move_score', 'area_score']]
     botDF.columns = [col.replace('bot_', '').replace('_score', '') for col in botDF.columns]
     
     # b) the proportion of frames that a player can be seen in enters multiplicatively!
@@ -1971,3 +1974,70 @@ def find_player_candidate_links_forward(candSF, frame_offset = 5, relative_to = 
         sfDict[frame] = featDict
         
     return StreamFeatures(sfDict).sort()
+
+
+def find_matching_tracks(candSF, splitDF, frame_offset = 5, num_points = 6, threshold_distance = 20):
+    dicts = []
+    for col in splitDF:
+        idx = splitDF[col].dropna().index
+        fs, ls = idx[0], idx[-1]
+        myDict = {'first': fs, 'last': ls}
+        dicts.append(myDict)
+    fslsFrm = pd.DataFrame(dicts, index = splitDF.columns)
+        
+    fsSer = fslsFrm['first'].sort_values()
+    lsSer = fslsFrm['last'].sort_values() 
+        
+    ### for each track, find a track that would complement it (if possible)
+    ### i.e, another track that begins right after that track ends.
+    tracks_to_add = []
+    for track_id, frame_ls in lsSer.iteritems():
+        frame_after_ls = frame_ls + frame_offset
+        
+        begin_after_ls_series = fsSer == frame_after_ls
+        tracks_beginning_after_ls = begin_after_ls_series[begin_after_ls_series].index.tolist()
+    
+        for track_after_id in tracks_beginning_after_ls:
+            myCnt_idx = splitDF.loc[frame_ls, track_id].astype(int)
+            aftCnt_idx = splitDF.loc[frame_after_ls, track_after_id].astype(int)
+            
+            myCnt = candSF['player_candidates'][frame_ls][myCnt_idx]
+            aftCnt = candSF['player_candidates'][frame_after_ls][aftCnt_idx]
+            
+            myPts, aftPts = myCnt.sample_points(samples = num_points), aftCnt.sample_points(samples = num_points)
+            
+            d = min([myPt.distance_to(aftPt) for myPt in myPts for aftPt in aftPts])
+            if d < threshold_distance:
+                mySer = splitDF[track_id].dropna()
+                aftSer = splitDF[track_after_id].dropna()
+                
+                jointSer = pd.concat([mySer, aftSer])
+                jointSer.name = str(mySer.name) + '_' + str(aftSer.name)
+                tracks_to_add.append(jointSer)
+    
+    if tracks_to_add == []:
+        return None
+    else:
+        addFrm = pd.concat(tracks_to_add, axis = 1)
+        dup_cols = addFrm.columns.duplicated(keep = 'first')
+        addFrm = addFrm.loc[:, ~dup_cols]
+        return addFrm
+    
+def iteratively_match_tracks(candSF, splitDF, frame_offset = 5, num_points = 6, threshold_distance = 20):
+    addFrm = find_matching_tracks(candSF, splitDF, 
+                                  frame_offset = frame_offset, 
+                                  num_points = num_points, 
+                                  threshold_distance = threshold_distance)
+    if addFrm is None:
+        return splitDF
+ 
+    new_columns = [c for c in addFrm if c not in splitDF]
+    if new_columns == []:
+        return splitDF
+    else:
+        new_splitDF = splitDF.merge(addFrm[new_columns], left_index = True, right_index = True, how = 'left')
+        return iteratively_match_tracks(candSF, new_splitDF, 
+                                        frame_offset = frame_offset, 
+                                        num_points = num_points, 
+                                        threshold_distance = threshold_distance)
+        
