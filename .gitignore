@@ -10,6 +10,7 @@ features_stored/
 Tracktor/
 cnn_player/
 cnn_ball/
+cnn_sound/
 *.ods
 *.csv
 *.stats
