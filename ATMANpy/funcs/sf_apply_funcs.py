@@ -21,7 +21,7 @@ from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 from ATMANpy.types.Contours import Contour
 
-from ATMANpy.types.Lines import CourtLines
+from ATMANpy.types.Lines import Line, CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
 
 from ATMANpy.models.ParticleFilter import ParticleFilter
@@ -271,8 +271,12 @@ def find_known_ball_positions_3D(ballCnt, P, exp_eventFlag, topPlayer_3D, botPla
     ball_3D = Point3D(ball_3D_tuple)
     return ball_3D
 
-def exceeds_threshold(match_ratio, threshold = 0.75):
+def exceeds_threshold(match_ratio, threshold = 0.5):
     return match_ratio > threshold
+
+def below_threshold(match_ratio, threshold = 0.5):
+    return match_ratio < threshold
+
     
 def threshold_false_positives_negatives(fp_rate, fn_rate, fp_threshold = 0.05, fn_threshold = 0.3):
     if fp_threshold is not None:
@@ -288,6 +292,21 @@ def threshold_false_positives_negatives(fp_rate, fn_rate, fp_threshold = 0.05, f
     isCourt = fp_bool & fn_bool
     
     return isCourt
-    
 
+def get_locations_at_serve(topPlayer_srvReg, botPlayer_srvReg, courtLines = None):
+    midPt = courtLines['Net Line'].center()
+    if botPlayer_srvReg is None:
+        servePt = topPlayer_srvReg['Bottom'].center()
+        serveLn = Line(servePt, midPt)
+        returner_baseLn = courtLines['Bottom Baseline']
+        returnPt = serveLn.weak_intersect(returner_baseLn)
+        topPt, botPt = servePt, returnPt
+    elif topPlayer_srvReg is None:
+        servePt = botPlayer_srvReg['Bottom'].center()
+        serveLn = Line(servePt, midPt)
+        returner_baseLn = courtLines['Top Baseline']
+        returnPt = serveLn.weak_intersect(returner_baseLn)
+        topPt, botPt = returnPt, servePt
+    return topPt, botPt
+        
     
