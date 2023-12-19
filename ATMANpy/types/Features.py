@@ -121,6 +121,9 @@ class StreamFeaturesBase:
         frame = self.get_frames()[-1]
         return frame, self.streamDict[frame]
     
+    def fs_ls(self):
+        return self.first()[0], self.last()[0] 
+    
     def update(self, item, value):
         outDict = self.streamDict.copy()
         outDict[item] = value

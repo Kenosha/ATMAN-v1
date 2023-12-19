@@ -16,16 +16,17 @@ from typing import Union
 mainDir = r'C:\Users\gianl\Documents\GitHub\ATMAN'
 
 def get_folder_struct(source, verbose = True):
-    sourceDir = os.path.join(mainDir, source)
+    if source is None:
+        sourceDir = mainDir
+    else:
+        sourceDir = os.path.join(mainDir, source)
     
     if os.path.isdir(sourceDir):
-        
         outDict = {'main': sourceDir}
         for f in os.listdir(sourceDir):
             outDict.update({f: os.path.join(sourceDir, f)})
             
         return outDict
-        
     else:
         if verbose: print(f'No such directory: {sourceDir}')
 
