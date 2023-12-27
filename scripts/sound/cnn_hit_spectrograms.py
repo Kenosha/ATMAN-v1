@@ -32,19 +32,40 @@ from ATMANpy.models.SoundCNN.utils import calculate_proximity, plot_waveform, pl
 
 HOP_LENGTH = 512
 WINDOW_LENGTH = 1024
-CNN_WING_SIZE = 10 ### this is the one-sided wing size of the clips we feed into the cnn, measured in fft hops.
+CNN_WING_SIZE = 40 ### this is the one-sided wing size of the clips we feed into the cnn, measured in fft hops.
 CNN_SCOPE = CNN_WING_SIZE * 2 + 1  # if CNN_WING_SIZE = 10, the scope of the CNN (i.e, what it sees, in hops), is 10 * 2 + 1
 SEMIHITS_PER_HIT = 4
 NONHITS_PER_HIT = 50
+MEL_BANDS = 128
+MEL_NAME = f'MEL{MEL_BANDS}' if MEL_BANDS is not None else 'SPEC' 
+
+_sr = 44100 ### is the correct value, check sample rate below
+print(f'Scope of CNN: {CNN_SCOPE} hops at {HOP_LENGTH} samples per hop')
+print(f'Length of scope: {HOP_LENGTH * CNN_SCOPE / _sr} seconds')
 
 ### save where
-DATA_NAME = f'data_HL{HOP_LENGTH}_WL{WINDOW_LENGTH}_WS{CNN_WING_SIZE}_1_{SEMIHITS_PER_HIT}_{NONHITS_PER_HIT}'
-dataPath = ut.get_folder_struct('cnn_sound')['data']
-save_where = ut.maybe_make_folder(dataPath, DATA_NAME)
+DATA_NAME = 'train'
 
+full_name = f'{DATA_NAME}_{MEL_NAME}_HL{HOP_LENGTH}_WL{WINDOW_LENGTH}_WS{CNN_WING_SIZE}_1_{SEMIHITS_PER_HIT}_{NONHITS_PER_HIT}'
+dataPath = ut.get_folder_struct('cnn_sound')['data']
+save_where = ut.maybe_make_folder(dataPath, full_name)
 
 PLOT_PROXFUNC = False
 PLOT_PROXVALS = False
+
+SEED = 42
+rng = np.random.default_rng(seed = SEED)
+
+### Test Proximity Function
+
+if PLOT_PROXFUNC:
+    ### plot proximity function
+    windows = np.arange(0, 100, 1)
+    hit_windows = [np.floor(np.mean(windows)), np.ceil(np.mean(windows))]
+    proxArr = calculate_proximity(windows, hit_windows, CNN_WING_SIZE)
+    plt.plot(windows, proxArr)
+    plt.show()
+    plt.close()
  
 ### vidDict maps the video id to the first and last isCourt segment we want to label.
 vidDict = {
@@ -57,7 +78,7 @@ vidDict = {
             '2021-7341-ms008-brest-luca-van-assche-vs-manuel-guinard': (0, 1),
             '2021-7341-ms009-brest-alexandre-muller-vs-stefano-travaglia': (1, 1), ### has warm up as first isCourt segment!
             '2021-7341-ms010-brest-brandon-nakashima-vs-bernabe-zapata-miralles': (1, 2), ### has warm up as first isCourt segment!
-            '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano': (0, 3)
+            # '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano': (0, 3)
            }
 
 specList = []
@@ -103,15 +124,6 @@ for vid in vidDict:
     
     #%% Create a bunch of spectrograms of hits and non-hits
     
-    if PLOT_PROXFUNC:
-        ### plot proximity function
-        windows = np.arange(0, 100, 1)
-        hit_windows = [np.floor(np.mean(windows)), np.ceil(np.mean(windows))]
-        proxArr = calculate_proximity(windows, hit_windows, CNN_WING_SIZE)
-        plt.plot(windows, proxArr)
-        plt.show()
-        plt.close()
-    
     ################################
     
     all_specs = []
@@ -129,13 +141,24 @@ for vid in vidDict:
         sf_form = mono_waveform[fs_sample:ls_sample]
         
         ### make spectrogram
-        fts = librosa.stft(sf_form, n_fft = WINDOW_LENGTH, hop_length = HOP_LENGTH)
-        num_freqs, num_ts = fts.shape
-        spec = np.abs(fts) ** 2 ### squared magnitude gives spectrogram values
-        # db_spec = librosa.power_to_db(spec) # dont transform so that the output 
-                                              # does not depend on the reference value 
-                                              # within the spectrogram of mySF
-        
+        if MEL_BANDS is None:
+            fts = librosa.stft(sf_form, 
+                               n_fft = WINDOW_LENGTH, 
+                               hop_length = HOP_LENGTH)
+            spec = np.abs(fts) ** 2 ### squared magnitude gives spectrogram values
+            # db_spec = librosa.power_to_db(spec) # dont transform so that the output 
+                                                  # does not depend on the reference value 
+                                                  # within the spectrogram of mySF
+                                                  # later, once all spectrograms are created, we transform!
+            num_freqs, num_ts = spec.shape
+        else:
+            melFunc = T.MelSpectrogram(sample_rate = sample_rate, 
+                                       n_fft = WINDOW_LENGTH, 
+                                       hop_length = HOP_LENGTH, 
+                                       n_mels = MEL_BANDS)
+            spec = melFunc(torch.Tensor(sf_form)).numpy()
+            num_freqs, num_ts = spec.shape
+             
         ### divide into hit regions and non-hit regions
         hit_windows = []
         for hit_sample in audSF.unique():    
@@ -157,9 +180,7 @@ for vid in vidDict:
         hit_windows_flat = np.array(hit_windows_flat)
             
         ### sample clear hits, shifted hits, and non-hits
-        ### --> each with different sample probabilities.
-        rng = np.random.default_rng(seed = 42)
-        
+        ### --> each with different sample probabilities.        
         windows = np.arange(0, num_ts)
         proxArr_strict = calculate_proximity(windows, hit_windows_flat, CNN_WING_SIZE)
         proxArr_lenient = calculate_proximity(windows, hit_windows_flat, CNN_SCOPE)
@@ -222,10 +243,9 @@ labArr = np.array(labList)
 print('____________')
 print('DONE!')
 print(f'Spectrograms shape: {specArr.shape}')
-print(f'Spectrograms size on disc: {specArr.size / 1000000} MB')
+print(f'Spectrograms size on disc: {specArr.size * specArr.dtype.itemsize / 1000000} MB')
 print(f'Labels shape: {labArr.shape}')
-print(f'Spectrograms size on disc: {labArr.size / 1000000} MB')
-
+print(f'Spectrograms size on disc: {labArr.size * labArr.dtype.itemsize / 1000000} MB')
 
 specFile = os.path.join(save_where, 'specs.npy')
 np.save(specFile, specArr)
