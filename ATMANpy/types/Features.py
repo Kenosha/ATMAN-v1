@@ -313,14 +313,10 @@ class StreamFeature(StreamFeaturesBase):
         if isinstance(conformList, StreamFeaturesBase) or isinstance(conformList, ConstFeaturesBase):
             conformList = conformList.get_frames() 
         
-        streamDict = {}
-        for frame in conformList:
-            if frame in self.get_frames():
-                streamDict[frame] = self[frame]
-            else:
-                streamDict[frame] = None
-        return self.__class__(streamDict, name = self.name)  
-      
+        reidxSer = self.to_series().reindex(conformList).replace({np.nan: None})
+        reidxSer.name = self.name
+        return StreamFeature.from_series(reidxSer)
+        
     def fillna(self, fill_value):
         if fill_value.__class__.__name__ == 'StreamFeature':
             return self.__class__({frame: fill_value.maybe_get(frame) if feat is None else feat for frame, feat in self.items()}, name = self.name)
@@ -652,14 +648,9 @@ class StreamFeatures(StreamFeaturesBase):
         if isinstance(conformList, StreamFeaturesBase):
             conformList = conformList.get_frames()
         
-        streamDict = {}
-        for frame in conformList:
-            if frame in self.get_frames():
-                streamDict[frame] = self[frame]
-            else:
-                streamDict[frame] = {feat: None for feat in self.get_features()}
-        return StreamFeatures(streamDict, name = self.name)
-      
+        reidxFrm = self.to_dataframe().reindex(conformList).replace({np.nan: None})
+        return StreamFeatures.from_dataframe(reidxFrm)
+        
     def fillna(self, fill_value):
         if fill_value.__class__.__name__ == 'StreamFeature':
             return self.__class__({frame: {name: fill_value.maybe_get(frame) if feat is None else feat for name, feat in featDict.items()} for frame, featDict in self.items()})
