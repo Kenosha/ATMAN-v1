@@ -33,6 +33,7 @@ FPS = 25
 class LabelledSpectroData(Dataset):
     
     def __init__(self, name = 'data', 
+                 data_descriptor = None, label_descriptor = None,
                  hop_length = 512, window_length = 1024, 
                  wing_size = 10, mel_bands = None,
                  semihits_per_hit = 4, nonhits_per_hit = 50,
@@ -41,12 +42,20 @@ class LabelledSpectroData(Dataset):
         super(LabelledSpectroData).__init__()
         
         mel_name = f'MEL{mel_bands}' if mel_bands is not None else 'SPEC' 
-        
-        data_name = f'{name}_{mel_name}_HL{hop_length}_WL{window_length}_WS{wing_size}_1_{semihits_per_hit}_{nonhits_per_hit}'
+
+        if data_descriptor is None:
+            data_name = f'{name}_{mel_name}_HL{hop_length}_WL{window_length}_WS{wing_size}_1_{semihits_per_hit}_{nonhits_per_hit}'
+        else:
+            data_name = f'{name}_{data_descriptor}_{mel_name}_HL{hop_length}_WL{window_length}_WS{wing_size}_1_{semihits_per_hit}_{nonhits_per_hit}'
         data_path = os.path.join(ut.get_folder_struct('cnn_sound')['data'], data_name)
         
         specArr = np.load(os.path.join(data_path, 'specs.npy'))
-        labArr = np.load(os.path.join(data_path, 'labels.npy'))
+        
+        if label_descriptor is None:
+            label_name = 'labels.npy'
+        else:
+            label_name = f'{label_descriptor}_labels.npy'
+        labArr = np.load(os.path.join(data_path, label_name))
 
         ### adapt the type of the labels to the type of specArr
         labArr = labArr.astype('float32')

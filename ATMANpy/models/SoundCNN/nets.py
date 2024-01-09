@@ -20,8 +20,6 @@ def calc_dims(in_dim, kernel = 3, padding = 0, dilation = 1, stride = 1):
     den = stride
     return int(num / den + 1)
 
-calc_dims(100)
-
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, conv_kernel_size, pool_kernel_size):
         super(ConvBlock, self).__init__()
@@ -106,6 +104,7 @@ class SoundModel_avgpool(nn.Module):
         return p
             
 class SoundModel_FC(nn.Module):
+    ### fully connected layers implemented convolutionally
     def __init__(self, conv_filters, conv_kernels, pool_kernels, fc_neurons,
                  frequencies = 512, hops = 81, share_shots = 0.1):
         super(SoundModel_FC, self).__init__()
@@ -143,7 +142,54 @@ class SoundModel_FC(nn.Module):
             y = convBlock(y)
         
         y_fc = self.conv_fc_in(y)
-        z = self.conv_fc_out(y_fc)
-        p = self.sigmoid(z)
-        return p
+        logits = self.conv_fc_out(y_fc)
+        probs = self.sigmoid(logits)
+        return probs
             
+
+class SoundModel_MN(nn.Module):
+    ### Multinomial implementation of the soundmodel, without final sigmoid.
+    def __init__(self, conv_filters, conv_kernels, pool_kernels, fc_neurons,
+                 frequencies = 512, hops = 81, initial_output_shares = [0.1]):
+        super(SoundModel_MN, self).__init__()
+        
+        out_channels = len(initial_output_shares)
+        initial_output_shares = torch.Tensor(initial_output_shares)
+        
+        ### Populate Convolutional Blocks
+        self.conv_blocks = nn.ModuleList()
+        prev_n = 1
+        curr_dims = frequencies, hops
+        for n, c_k, p_k in zip(conv_filters, conv_kernels, pool_kernels):
+            ### populate conv blocks
+            currBlock = ConvBlock(prev_n, n, c_k, p_k)
+            self.conv_blocks.append(currBlock)
+            
+            ### calculate dimensions
+            curr_dims = currBlock.calculate_out_dimensions(curr_dims)
+            
+            ### output channels become next input channels
+            prev_n = n
+            
+        ### Fully Connected Layer In (implemented convolutionally)
+        self.conv_fc_in = nn.Conv2d(in_channels = n, out_channels = fc_neurons, kernel_size = curr_dims) ## note that n here is the last number of conv_filters n 
+        
+        ### Fully Connected Layer Out (implemented convolutionally)
+        self.conv_fc_out = nn.Conv2d(in_channels = fc_neurons, out_channels = out_channels, kernel_size = 1)  
+        
+        ### Reset Bias Terms to match prior proportion of shots heard / bounces heard
+        # since shots and bounces are orthogonal in this model 
+        # (the probability of a shot being heard does not diminish the probability of a bounce being heard),
+        # we can initialise the biases like we would in binary cross entropy, for each output channel
+        prior_biases = - torch.log(1 - initial_output_shares) + torch.log(initial_output_shares)
+        self.conv_fc_out.bias = nn.Parameter(prior_biases)
+    
+    def forward(self, x):
+        y = x
+        for convBlock in self.conv_blocks:
+            y = convBlock(y)
+        
+        y_fc = self.conv_fc_in(y)
+        logits = self.conv_fc_out(y_fc)
+        return logits
+    

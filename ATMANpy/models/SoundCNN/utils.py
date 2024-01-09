@@ -6,6 +6,7 @@ Created on Tue Dec 19 20:24:58 2023
 """
 
 import torch
+import torch.nn as nn
 import numpy as np
 
 from itertools import product
@@ -52,13 +53,31 @@ def last_window_with_sample(sample_index, hop_length, window_length):
         return i - 1
 
 def calculate_proximity(units, hit_units, maximum_allowable_distance):
-    unitArr, hitArr = np.array(units)[:, np.newaxis], np.array(hit_units)[np.newaxis, :]
-    distance_to_nearest_hit_window = np.min(np.absolute(unitArr - hitArr), axis = 1)
-    
-    overlap = np.maximum(maximum_allowable_distance - distance_to_nearest_hit_window, 0)
-    overlap_share = overlap / maximum_allowable_distance
-    
-    return overlap_share ** 2
+    if len(hit_units) == 0:
+        return np.zeros(units.shape) 
+    else:
+        unitArr, hitArr = np.array(units)[:, np.newaxis], np.array(hit_units)[np.newaxis, :]
+        distance_to_nearest_hit_window = np.min(np.absolute(unitArr - hitArr), axis = 1)
+        
+        overlap = np.maximum(maximum_allowable_distance - distance_to_nearest_hit_window, 0)
+        overlap_share = overlap / maximum_allowable_distance
+        
+        return overlap_share ** 2
+
+def join_hit_and_bounce_prox(hit_prox, bounce_prox):
+    ### normalize the proximities so that they can not exceed 1, in sum!
+    ### they can be under 1, since then we probably have neither a hit nor a bounce.
+    if hit_prox + bounce_prox > 1:
+        hit_num = hit_prox * (1 - bounce_prox)
+        bounce_num = bounce_prox * (1 - hit_prox)
+        
+        den = hit_num + bounce_num
+        
+        hit_prob, bounce_prob = hit_num / den, bounce_num / den
+    else:
+        hit_prob, bounce_prob = hit_prox, bounce_prox
+
+    return hit_prob, bounce_prob
 
 def plot_waveform(ax, waveform, sample_rate, first_sample_index = 0):
     x_axis = np.arange(0, len(waveform)) + first_sample_index
@@ -122,9 +141,9 @@ def plot_confusion_matrix(cm, class_names):
     plt.xlabel('Predicted label')
     return figure
 
-def make_confusion_matrix(vprobs, vlabels):
+def make_confusion_matrix(vprobs, vlabels, name = 'shot'):
     CONV_MAT_CUTOFFS = [0.001, 0.4, 0.9]
-    CONV_MAT_NAMES = ['not a shot', 'barely a shot', 'off-center shot', 'shot']
+    CONV_MAT_NAMES = [f'not a {name}', f'barely a {name}', f'off-center {name}', name]
     
     predicted_segment = segment_probabilities(vprobs, CONV_MAT_CUTOFFS)
     true_segment = segment_probabilities(vlabels, CONV_MAT_CUTOFFS)
@@ -167,7 +186,7 @@ def train_one_epoch(epoch_index, tb_writer,
             
     return running_loss / i
 
-def run_inference(model, data_loader, loss_function, device):
+def run_inference(model, data_loader, loss_function, device, as_logits = False):
     with torch.inference_mode():
         running_vloss = 0
         vlabel_list = []
@@ -177,11 +196,16 @@ def run_inference(model, data_loader, loss_function, device):
             vinputs = vinputs.to(device)
             vlabels = vlabels.to(device)
             
-            vprobs = model(vinputs)
-            vprobs = vprobs.squeeze(dim = (1, 2, 3)) ### squeeze out only T x H x W (which, with the fully convolutional models, remain)
+            voutputs = model(vinputs)
+            voutputs = voutputs.squeeze(dim = (1, 2, 3)) ### squeeze out only T x H x W (which, with the fully convolutional models, remain)
             
-            vloss = loss_function(vprobs, vlabels)
+            vloss = loss_function(voutputs, vlabels)
             running_vloss += vloss
+            
+            if as_logits:
+                vprobs = nn.Sigmoid()(voutputs)
+            else:
+                vprobs = voutputs
             
             vprob_list.append(vprobs)
             vlabel_list.append(vlabels)
@@ -192,7 +216,7 @@ def run_inference(model, data_loader, loss_function, device):
     
     return avg_vloss, vprobs, vlabels
 
-def run_inference_on_arbitrary_spectrum(model, data_loader, device, report_frequency = 10):
+def run_inference_on_arbitrary_spectrum(model, data_loader, device, as_logits = False, report_frequency = 10):
     ### this is supposed to run on the PointSpectroData -> has no labels (at the moment)
     outArrs = []
     sample_bounds = []
@@ -203,7 +227,13 @@ def run_inference_on_arbitrary_spectrum(model, data_loader, device, report_frequ
             specArr, fsArr, lsArr = batchObj
             specArr = specArr.to(device)
             
-            outArr = model(specArr).to('cpu').squeeze().numpy()
+            outArr = model(specArr).to('cpu').squeeze()
+            
+            if as_logits:
+                outArr = nn.Sigmoid()(outArr)
+                
+            outArr = outArr.numpy()
+
             outArrs.append(outArr)
             
             fs = fsArr.squeeze().item() ### this works because batch size is 1
