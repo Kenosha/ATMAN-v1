@@ -154,7 +154,7 @@ def split_into_contiguous(inList, offset = 1):
     ### take a strictly monotonously increasing list of integers and 
     ### split it into lists with contiguous integers
     
-    if inList == []:
+    if len(inList) == 0:
         return []
     
     x1, xs = inList[0], inList[1:]

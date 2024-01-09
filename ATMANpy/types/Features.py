@@ -315,7 +315,7 @@ class StreamFeature(StreamFeaturesBase):
         
         reidxSer = self.to_series().reindex(conformList).replace({np.nan: None})
         reidxSer.name = self.name
-        return StreamFeature.from_series(reidxSer)
+        return self.__class__.from_series(reidxSer)
         
     def fillna(self, fill_value):
         if fill_value.__class__.__name__ == 'StreamFeature':
@@ -649,7 +649,7 @@ class StreamFeatures(StreamFeaturesBase):
             conformList = conformList.get_frames()
         
         reidxFrm = self.to_dataframe().reindex(conformList).replace({np.nan: None})
-        return StreamFeatures.from_dataframe(reidxFrm)
+        return self.__class__.from_dataframe(reidxFrm)
         
     def fillna(self, fill_value):
         if fill_value.__class__.__name__ == 'StreamFeature':
