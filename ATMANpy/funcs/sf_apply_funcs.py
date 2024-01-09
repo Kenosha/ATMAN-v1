@@ -308,5 +308,62 @@ def get_locations_at_serve(topPlayer_srvReg, botPlayer_srvReg, courtLines = None
         returnPt = serveLn.weak_intersect(returner_baseLn)
         topPt, botPt = returnPt, servePt
     return topPt, botPt
+
+def get_inferred_hit_points(hitFlag, topPlayerCnt, botPlayerCnt,
+                            stroke_px_r_top = 10, stroke_px_r_bot = 10,  ### move to the right, in pixels
+                            stroke_px_u_top = -2, stroke_px_u_bot = 10,
+                            serve_px_u_top = 20, serve_px_u_bot = 20,    ### move up, in pixels
+                            do_top = True, do_bot = True,
+                            hand_top = 'right', hand_bot = 'right'):
+    
+    try:
+        side, hit = hitFlag.split('_') ### if we have a serve
+        is_serve = True
+    except:
+        side, stroke, kind = hitFlag.split('_') ### if we have a groundstroke
+        is_serve = False
+    
+    if side == 'top':
+        if not do_top:
+            return None
+        
+        myCnt = topPlayerCnt
+        
+        serve_px_u = serve_px_u_top
+        stroke_px_u = stroke_px_u_top
+        stroke_px_r = stroke_px_r_top
+        
+        side_sign = -1
+        hand_sign = 1 if hand_top == 'right' else -1
+        
+    elif side == 'bot':
+        if not do_bot:
+            return None
+        
+        myCnt = botPlayerCnt
+        
+        serve_px_u = serve_px_u_bot
+        stroke_px_u = stroke_px_u_bot
+        stroke_px_r = stroke_px_r_bot
+        
+        side_sign = 1
+        hand_sign = 1 if hand_top == 'right' else -1
+    
+    cPt = myCnt.center()
+        
+    if is_serve:
+        hPt = cPt.up(serve_px_u)
+    else:
+        stroke_sign = 1 if stroke == 'fh' else -1
+        
+        stroke_px_r_corrected = side_sign * hand_sign * stroke_sign * stroke_px_r
+        hPt = cPt.right(stroke_px_r_corrected).up(stroke_px_u)
+    
+    hitCnt = Contour.from_point(hPt, radius = 1)
+    
+    return hitCnt
+    
+
+    
         
     
