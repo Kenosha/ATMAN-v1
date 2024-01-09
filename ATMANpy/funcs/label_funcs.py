@@ -45,10 +45,16 @@ def get_event_dict(event):
                  0: 'end' ### usually, not necessary -> a move is ended by the beginning of a next move. However, sometimes, we can not categorize some frames between, so we just say this.
                  }
     
+    bounceDict = {1: 'first', ### first bounce of the ball
+                  2: 'second', ## second bounce of the ball
+                  3: 'third', ### third bounce of the ball (not that this would be very important, but ok)
+                  # 0: 'serve',  ### this is a serve bounce ## -> not being done! for training, we look at rallys only, where pre-serve is cut out.
+                  }
+     
     jointDict = {'serve': serveDict,
                  'hit': hitDict,
-                 'other': otherDict}
-    ###############
+                 'other': otherDict,
+                 'bounce': bounceDict}
     return jointDict[event]
 
 def get_fill_dict(event):
@@ -144,29 +150,43 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
         # e) Sliding
         # ...
         ####
+    ### Edit: Additionally, this function ought to be able to record bounces (note: they are 'playerless')
     
+    ### Initialize video capture
     cap = myStm.cap
     start_frame, stop_frame = myStm.start_frame, myStm.stop_frame
     cap.set(cv.CAP_PROP_POS_FRAMES, start_frame)
     
-    playerUpper = which_player.upper()
-    playerLower = which_player.lower()
-    
+    ### sort out the name of the feature and what to print on the frame
+    feature_name_elements = ['labelled']
+    show_message_elements = ['Recording']
+
+    if which_player is not None:
+        playerUpper = which_player.upper()
+        playerLower = which_player.lower()
+        feature_name_elements.append(playerLower)
+        show_message_elements.append(f'for {playerUpper}:')
+        
     if which_event is not None:
         eventUpper = which_event.upper()
         eventLower = which_event.lower()
-        feature_name = f'labelled_{playerLower}_{eventLower}_Flag'
-    else:
-        feature_name = f'labelled_{playerLower}_Flag'
+        feature_name_elements.append(eventLower)
+        show_message_elements.append(eventUpper)
+        
+    feature_name_elements.append('Flag')
+    feature_name = '_'.join(feature_name_elements)
     
-    break_outer = False
-
+    show_message = ' '.join(show_message_elements)
+    
+    ### Check for previously recorded events
     try:
         previously_recorded_event_dict = myStm.features[feature_name].streamDict ###  (mostly, there will be none, so this will be empty)
     except:
         previously_recorded_event_dict = {}
     recorded_event_dict = dict(previously_recorded_event_dict) ### initialize with a COPY of pre-recorded features
     
+    ### Record
+    break_outer = False
     while cap.isOpened():
         frameNum = int(cap.get(cv.CAP_PROP_POS_FRAMES))
         ret, frame = cap.read()
@@ -180,10 +200,7 @@ def record_events(myStm, which_player = 'top', which_event = 'hit',
         except KeyError:
             recorded_event = 'None'
         
-        if which_event is not None:
-            showFrm = showFrm.put(f'Recording {eventUpper} for {playerUpper}')
-        else:
-            showFrm = showFrm.put(f'Recording for {playerUpper}')
+        showFrm = showFrm.put(show_message)
         showFrm = showFrm.put(f'Recorded: {recorded_event}', where = (50, 100))
         showFrm = showFrm.put(str(frameNum), where = (50, 150))
         
