@@ -761,7 +761,14 @@ class StillStream:
         if not os.path.exists(framePath):
             print(f'{framePath} does not exist.')
             return None
-        imgArr = np.load(framePath)
+        imgArr = np.load(framePath, allow_pickle = True)
+        
+        if imgArr.shape == ():
+            ### the image array is simply the cap_color_space frame in an unsized array!
+            inFrm = imgArr.item()
+            assert inFrm.get_color() == cap_color_space, f'pickled {inFrm.get_color()} frame being read, but cap_color_space given as {cap_color_space}'
+            imgArr = imgArr.item().array
+      
         stillFrm = color_converter(imgArr, cap_color_space, target_color_space)
         stillFrm = stillFrm.rename(name)
         
