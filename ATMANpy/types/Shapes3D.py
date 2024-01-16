@@ -20,7 +20,10 @@ class Point3D:
     """
     A point in 3D: tuple of integers, signifying x, y and z coordinates
     """
-    coords: tuple
+    coords: tuple ### a tuple of numbers (this is a single point) or vectors (a set of points)
+    
+    _DEFAULT_COLOR = const.BGR['bright_grey']
+    color: Optional[tuple] = _DEFAULT_COLOR
     
     def __post_init__(self):
         #### IMMUTABILITY BREAKS ####
@@ -28,7 +31,7 @@ class Point3D:
         object.__setattr__(self, 'y', self.coords[1])
         object.__setattr__(self, 'z', self.coords[2])
         #############################
-    
+
     @staticmethod
     def from_point(aPt, x = None, y = None, z = None):
         if x is not None:
@@ -52,29 +55,29 @@ class Point3D:
     
     def __add__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
-        outCoords = self.coords[0] + op_x, self.coords[1] + op_y, self.coords[2] + op_z
+        outCoords = self.x + op_x, self.y + op_y, self.z + op_z
         return Point3D(outCoords)
     def __sub__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
-        outCoords = self.coords[0] - op_x, self.coords[1] - op_y, self.coords[2] - op_z
+        outCoords = self.x - op_x, self.y - op_y, self.z - op_z
         return Point3D(outCoords)
     def __mul__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
-        outCoords = self.coords[0] * op_x, self.coords[1] * op_y, self.coords[2] * op_z
+        outCoords = self.x * op_x, self.y * op_y, self.z * op_z
         return Point3D(outCoords)
     def __truediv__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
-        outCoords = self.coords[0] / op_x, self.coords[1] / op_y, self.coords[2] / op_z
+        outCoords = self.x / op_x, self.y / op_y, self.z / op_z
         return Point3D(outCoords)
     def __floordiv__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
-        outCoords = self.coords[0] // op_x, self.coords[1] // op_y, self.coords[2] // op_z
+        outCoords = self.x // op_x, self.y // op_y, self.z // op_z
         return Point3D(outCoords)
     def __abs__(self):
-        outCoords = abs(self.coords[0]), abs(self.coords[1]), abs(self.coords[2])
+        outCoords = abs(self.x), abs(self.y), abs(self.z)
         return Point3D(outCoords)
     def __round__(self, ndigits = None):
-        outCoords = round(self.coords[0], ndigits = ndigits), round(self.coords[1], ndigits = ndigits), round(self.coords[2], ndigits = ndigits)
+        outCoords = round(self.x, ndigits = ndigits), round(self.y, ndigits = ndigits), round(self.z, ndigits = ndigits)
         return Point3D(outCoords)
     
     ### METHODS ###
@@ -178,6 +181,35 @@ class Point3D:
     def cross(self, otherPt):
         return Point3D(tuple(np.cross(self.coords, otherPt.coords)))
     
+    def is_vectorized(self):
+        try:
+            len(self.x)
+        except:
+            return False
+        else:
+            return True
+        
+    def rasterize(self, resolution = None):
+        if not self.is_vectorized():
+            ptArr = np.array(self.coords)[np.newaxis, :] 
+        else:
+            ptArr = np.vstack(self.coords).T
+        return ptArr
+        
+    def project(self, P):
+        ### make a ptArr with shape N x 3
+        ptArr = self.rasterize()
+        num_points, dims = ptArr.shape
+        
+        ### Turn coordinates homogenous
+        homArr = np.concatenate([ptArr, np.ones((num_points, 1))], axis = 1)
+        
+        ### 
+        homArr_2D = np.einsum('ij, nj -> ni', P, homArr)
+        pixArr = homArr_2D[:, :2] / homArr_2D[:, 2][:, np.newaxis]
+        
+        return pixArr
+    
 
 @dataclass(frozen = True)
 class Ball3D(Point3D):
@@ -185,9 +217,12 @@ class Ball3D(Point3D):
     A sphere: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
     """   
     _DEFAULT_COLOR = const.BGR['bright_grey']
-    radius: float
+    radius: float = 1
     
     color: Optional[tuple] = _DEFAULT_COLOR
+    limit_phi: Optional[tuple] = None
+    limit_theta: Optional[tuple] = None
+    
     name: str = 'Ball3D'
     
     def __post_init__(self):
@@ -217,19 +252,41 @@ class Ball3D(Point3D):
     def rasterize(self, resolution, offset = 0.5):
         ### resolution -> points in a area of 1 sq. unit size 
         ## area, not volume, since we're only rasterizing surfaces! -> everything pictured is hollow!
+        limit_phi = self.limit_phi
+        limit_theta = self.limit_theta
         
         surface = 4 * np.pi * self.radius ** 2 
         num_points = int(surface * resolution) + 1 ### ceiling function
         
         indices = np.arange(0, num_points, dtype = float) + offset
         
+        ### sunflower spacing (i.e. fibonacci spacing), from:
+            # https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
         phi = np.arccos(1 - 2 * indices / num_points)
-        theta = np.pi * (1 + 5 ** 0.5) * indices
+        theta = np.pi * (1 + 5 ** 0.5) * indices 
+        theta = theta % (2 * np.pi)
         
-        unit_circle = np.array([np.cos(theta) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi)]).T
+        ### filter out points that are outside the angle limits specified
+        ## -> this is how to create half balls, ball sections, etc.
+        if limit_phi is not None:
+            lo, hi = limit_phi
+            phi_filter = (lo < phi) & (phi < hi)
+        else:
+            phi_filter = np.ones(num_points, dtype = 'bool')
+        
+        if limit_theta is not None:
+            lo, hi = limit_theta
+            theta_filter = (lo < theta) & (theta < hi)
+        else:
+            theta_filter = np.ones(num_points, dtype = 'bool')
+        
+        angle_filter = phi_filter & theta_filter
+        phi_filtered = phi[angle_filter]
+        theta_filtered = theta[angle_filter]
+        
+        unit_circle = np.array([np.cos(theta_filtered) * np.sin(phi_filtered), np.sin(theta_filtered) * np.sin(phi_filtered), np.cos(phi_filtered)]).T
         
         return unit_circle * self.radius + np.array(self.coords)[np.newaxis, :]
-
 
 @dataclass(frozen = True)
 class Line3D:
@@ -438,7 +495,6 @@ class Lines3D:
     def recolor(self, new_bgr):
         return self.__class__(self.lineList, name = self.name, color = new_bgr)    
     
-    
     def rasterize(self, resolution):
         return np.concatenate([aLn.rasterize(resolution) for aLn in self.lineList], axis = 0)
         
@@ -633,6 +689,36 @@ class Regions3D():
     def rasterize(self, resolution):
         return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
         
-        
+    
+if __name__ == '__main__':
+    
+    from ATMANpy.types.Visual3D import Scene, Camera, View
+    
+    ### Testing angular limits on the ball
+    courtScn = Scene.make_court()
+    myCam = Camera.calibrated_AO_behind()
+    
+    resolution = 1
+    offset = 0.5
+    height = 5 * const.SCALE ### in feet
+    radius = 3 * const.SCALE ### in feet
+    
+    myBall = Ball3D((200, 200, height), radius = radius)
+    myScn = courtScn.put(myBall)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+    
+    limit_phi = (0, 0.5 * np.pi)
+    limit_theta = None
+    myBall = Ball3D((200, 200, height), radius = radius, limit_phi = limit_phi, limit_theta = limit_theta)
+    myScn = courtScn.put(myBall)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+    
+    limit_phi = None
+    limit_theta = (0, 0.5 * np.pi)
+    myBall = Ball3D((200, 200, height), radius = radius, limit_phi = limit_phi, limit_theta = limit_theta)
+    myScn = courtScn.put(myBall)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+    
+    self = myBall
         
     
