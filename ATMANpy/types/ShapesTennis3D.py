@@ -54,6 +54,7 @@ class Court(Regions3D):
             
         return Court(courtRegions3D, name = 'Courtlines', color = color)    
     
+    
 @dataclass(frozen = True)
 class Net(Regions3D):
     _NET_COLOR = const.BGR['bright_blue'] ### a nice aquamarine
@@ -141,6 +142,15 @@ class Player(Region3D):
     
     def get_foot_point(self):
         return self.lineList['Bottom'].center_point()
+    
+    def get_shoulder_point(self, which = 'right'):
+        assert which in ['left', 'right']
+        _DEFAULT_SHOULDER_HEIGHT = 4 * const.SCALE
+        
+        bottomLn = self.lineList['Bottom']
+        bottomPt = bottomLn.right_point() if which == 'right' else bottomLn.left_point()
+        
+        return bottomPt.up(_DEFAULT_SHOULDER_HEIGHT)
     
 @dataclass(frozen = True)
 class Racquet(Region3D):
