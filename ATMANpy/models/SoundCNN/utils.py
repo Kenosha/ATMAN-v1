@@ -5,9 +5,13 @@ Created on Tue Dec 19 20:24:58 2023
 @author: gianl
 """
 
+import os
 import torch
 import torch.nn as nn
 import numpy as np
+import dill as pickle
+
+from ATMANpy.funcs.util_funcs import get_folder_struct
 
 from itertools import product
 import librosa
@@ -242,8 +246,28 @@ def run_inference_on_arbitrary_spectrum(model, data_loader, device, as_logits = 
             
     return outArrs, sample_bounds ### we do not concatenate since the array have different sizes, for outArrs
             
+def load_cnn(model_name, model_type, device = 'cuda'):
+    pathDict = get_folder_struct('cnn_sound')
+    resPath, prmPath = pathDict['weights'], pathDict['params']
+    
+    res_read_where = os.path.join(resPath, model_name)
+    prm_read_where = os.path.join(prmPath, model_name + '.pkl')
+    
+    ### Read Parameters 
+    with open(prm_read_where, 'rb') as fp:
+        params = pickle.load(fp)
+        print('Read parameters: ')
+        print(params)
 
+    ### Read CNN
+    model = model_type(params['conv_filters'], params['conv_kernels'], params['pool_kernels'], params['fc_neurons'],
+                       frequencies = params['freqs'], hops = params['hops'], initial_output_shares = [0.1, 0.1])
+    
+    model.to(device)
+    model.load_state_dict(torch.load(res_read_where))
+    model.train(False)
 
+    return model, params
 
 
 

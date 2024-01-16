@@ -10,11 +10,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import dill as pickle
 
 import torch
 import torch.nn as nn
 
-from ATMANpy.funcs.util_funcs import split_into_contiguous
+from ATMANpy.funcs.util_funcs import split_into_contiguous, get_folder_struct
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Streams import Stream, DecapStream
             
@@ -245,7 +246,63 @@ def split_and_group(inList, offset = 1):
     outList = [int(np.median(evt)) for evt in outList]
     return outList
 
+def load_cnn(model_name, model_type, device = 'cuda'):
+    pathDict = get_folder_struct('cnn_player')
+    resPath, prmPath = pathDict['weights'], pathDict['params']
     
+    res_read_where = os.path.join(resPath, model_name)
+    prm_read_where = os.path.join(prmPath, model_name + '.pkl')
+    
+    ### Read Parameters 
+    with open(prm_read_where, 'rb') as fp:
+        params = pickle.load(fp)
+        print('Read parameters: ')
+        print(params)
+
+    ### Read CNN
+    T, D = params['T_CROP_SIZE'], params['D_SCALE_SIZE']
+    d1, d2, d3, d4 = params['STRIDES_D']
+    t1, t2, t3, t4 = params['STRIDES_T']
+    
+    model = model_type(labels = params['LABELS'], 
+                       T = T, D = D,
+                       stride_d1 = d1, stride_d2 = d2, stride_d3 = d3, stride_d4 = d4,
+                       stride_t1 = t1, stride_t2 = t2, stride_t3 = t3, stride_t4 = t4,
+                       share_other = 0.9)
+    model.to(device)
+    model.load_state_dict(torch.load(res_read_where))
+    model.train(False)
+
+    return model, params
+
+def label_map(label):
+    ### TODO: what to do if one player is left handed?
+    if label[0] == 'other':
+        return 'oth'
+    elif label[0] == 'any':
+        return 'srv'
+    else:
+        lab_side, lab_hand, lab_spin, lab_shot = label
+        if lab_hand == 'left':
+            lab_side = 'fh' if lab_side == 'backhand' else 'bh' ### invert for left handed strokes
+        else:
+            lab_side = 'fh' if lab_side == 'forehand' else 'bh'
+        lab_spin = 'ts' if lab_spin == 'topspin' else 'sf'
+        return lab_side + '_' + lab_spin
+
+def sum_over_distinct_labels(prbArr, labels):
+    unique_labels = sorted(set(labels))
+    
+    out_probs = []
+    for ulab in unique_labels:
+        ulab_idxs = [idx for idx, lab in enumerate(labels) if lab == ulab]
+        sumArr = prbArr[:, ulab_idxs].sum(axis = 1)
+        out_probs.append(sumArr)
+    
+    return np.array(out_probs).swapaxes(0, 1), unique_labels ### labels x samples --> samples x labels
+
+
+
 
 
 
