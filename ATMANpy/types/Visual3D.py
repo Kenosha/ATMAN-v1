@@ -11,6 +11,7 @@ from typing import Optional, List
 
 from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.ShapesTennis3D import Court, Net
+from ATMANpy.types.Lines import CourtLines
 
 import ATMANpy.auxil.constants as const
 
@@ -73,7 +74,7 @@ class Camera:
     def pinhole_origin_aligned(f_x, f_y, o_x, o_y, s_x, s_y):
         M_int = np.array([[f_x, 0, o_x, 0],
                           [0, f_y, o_y, 0],
-                          [0,   1,   1, 0]])
+                          [0,   0,   1, 0]])
         
         M_ext = np.array([[1, 0, 0, 0],
                           [0, 1, 0, 0],
@@ -94,13 +95,64 @@ class Camera:
         sensor_dims = (1920, 1080)
         return Camera(M_int, M_ext, sensor_dims)
     
+    @staticmethod
+    def calibrated_brest_behind():
+        M_int = np.array([[ 627.24737689,   -5.45750558,  322.70521678,    0.        ],
+                          [   0.        ,  572.64800278, -202.07292776,    0.        ],
+                          [   0.        ,    0.        ,    1.        ,    0.        ]])
+        M_ext = np.array([[-9.99999954e-01, -2.88825399e-04, -9.50716679e-05, 2.92589667e+02],
+                          [-1.46423494e-04,  1.83377177e-01,  9.83042618e-01, -6.16863613e+02],
+                          [-2.66493703e-04,  9.83042587e-01, -1.83377211e-01, -1.55133005e+03],
+                          [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00, 1.00000000e+00]])
+        sensor_dims = (640, 360)
+        return Camera(M_int, M_ext, sensor_dims) 
+    
+    @staticmethod
+    def low_angled_behind():
+        baseCam = Camera.calibrated_AO_behind()
+        myCam = baseCam.left(20).into(14).pan(-0.06).down(4)
+        return myCam
+
+    @staticmethod
+    def mid_lateral():
+        baseCam = Camera.calibrated_AO_behind()
+        myCam = baseCam.right(55).pan(0.5).rotate(0.005).right(133).zoom(0.175)
+        myCam = myCam.tilt(-0.05).pan(0.008)
+        return myCam
+    
+    @staticmethod
+    def birds_eye(cam_height = 100, sensor_dims = (1920, 1080),
+                  f = 3650, o_x = 812, o_y = -190):
+        ctPt = CourtLines.make().get_center_point()
+        x, y = ctPt.coords
+        
+        coords_cam = np.array([x, y, cam_height])
+        
+        R = np.array([[-1,  0,  0],
+                      [ 0, -1,  0],
+                      [ 0,  0,  1]])
+        t = - R @ coords_cam
+        
+        R_t = np.hstack([R, t[:, np.newaxis]])
+        M_ext = np.vstack([R_t, np.array([0, 0, 0, 1])])
+        
+        M_int = np.array([[ f, 0, o_x, 0],
+                          [ 0, f, o_y, 0],
+                          [ 0, 0,   1, 0]])
+        
+        return Camera(M_int, M_ext, sensor_dims) 
+        
     def get_K(self):
         return self.M_int[:3, :3]
-    def get_t(self):
-        return self.M_ext[:3, 3]
     def get_R(self):
         return self.M_ext[:3, :3]
-        
+    def get_R_inv(self):
+        return np.linalg.inv(self.get_R())
+    def get_t(self): ### center of camera, in rotated coordinates
+        return self.M_ext[:3, 3] 
+    def get_cw(self): ### center of camera, in world coordinates
+        return - self.get_R_inv() @ self.get_t()
+    
     def project_points(self, ptArr):
         num_points, num_dims = ptArr.shape
         if num_dims == 4: ### --> already in homogenous coordinates!
@@ -204,8 +256,40 @@ class Camera:
         M_ext_new[2, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
     
+    def get_camera_ray_params(self, somePt):
+        """
+        Parameters of the ray going through a point, in camera-coordinate parameters
+        ### this could potentially be improved by exploiting that M_int[0,1] is NOT zero, 
+        ### as it usually is in the pinhole camera model.
+        """
+        
+        u, v = somePt.coords
+        o_x, o_y = self.M_int[0, 2], self.M_int[1, 2]
+        f_x, f_y = self.M_int[0, 0], self.M_int[1, 1]
+        z_norm = self.M_int[2, 2]
+        
+        coeff_x_c = (z_norm * (u - o_x)) / f_x
+        coeff_y_c = (z_norm * (v - o_y)) / f_y
+        coeff_z_c = 1       ### since z_c is distance from camera aperture in camera coordinates, 
+                            # and we need a parameter for the line, we choose z_c for convenience. 
+                            # Note: z_c > 0 -> line_parameter > 0
+        
+        slope = np.array([coeff_x_c, coeff_y_c, coeff_z_c])
+        intercept = np.zeros(3)
+        return slope, intercept
+        
+    def get_world_ray_params(self, somePt):
+        """
+        Parameters of the ray going through a point, in world-coordinate parameters
+        """
+        m_c, b_c = self.get_camera_ray_params(somePt)
+        
+        R, t = self.get_R(), self.get_t()
+        slope = R.T @ m_c
+        intercept = - R.T @ t
     
-    
+        return slope, intercept
+        
 @dataclass(frozen = True)
 class View:
     ### a View combines a camera and a scene: 
@@ -217,32 +301,43 @@ class View:
     pxArr: np.array ### points in 2D space -> 3D points projected onto screen
     dsArr: np.array ### distance of objects to camera
     
+    sensor_dims: tuple = (1920, 1080)
+    
     @staticmethod
-    def make_empty():
+    def make_empty(sensor_dims = (1920, 1080)):
         return View(np.zeros((0, 3)), 
                     np.zeros((0, 3)), 
                     np.zeros((0, 2), dtype = int),  ### pixels need to be integer!
-                    np.zeros(0))
+                    np.zeros(0),
+                    sensor_dims = sensor_dims)
     
     @staticmethod
-    def make(myCamera, myScene, resolution = 10, do_sort = True, do_filter = True):
+    def make(myCamera, myScene, resolution = 10, do_sort = True, do_filter = True,
+             suppress_negative_coordinates = True):
+        
         if myScene.is_empty(): 
             return View.make_empty()
         else:
-            ### 1) Project Point Cloud in 3D onto 2D Sensor
+            ### 1) Collect real world points and their colors
             ptArr, clArr = myScene.rasterize(resolution)
+            if suppress_negative_coordinates:
+                all_positive_indices = (ptArr >= 0).all(axis = 1)
+                ptArr = ptArr[all_positive_indices]
+                clArr = clArr[all_positive_indices]
+            
+            ### 2) Project Point Cloud in 3D onto 2D Sensor
             pxArr = myCamera.project_points(ptArr).astype(int)
             
-            ### 2) For every point, get distance from Pinhole
-            dsArr = ((ptArr - myCamera.get_t()) ** 2).sum(axis = 1) ** 0.5
-            aView = View(ptArr, clArr, pxArr, dsArr)
+            ### 3) For every point, get distance from Pinhole
+            dsArr = ((ptArr - myCamera.get_cw()) ** 2).sum(axis = 1) ** 0.5
+            aView = View(ptArr, clArr, pxArr, dsArr, sensor_dims = myCamera.sensor_dims)
             
             if do_sort:
-                ### 3) Sort view by distance from pinhole
+                ### 4) Sort view by distance from pinhole
                 aView = aView.sort_by_distance()
             
             if do_filter:
-                ### 4) Filter out duplicate pixel
+                ### 5) Filter out duplicate pixel
                 aView = aView.filter_duplicates()
             
             return aView
@@ -250,7 +345,8 @@ class View:
     def sort_by_distance(self):
         ### 2) For every point, get distance from Pinhole, and sort vectors by it!
         sort_idxs = np.argsort(self.dsArr)
-        return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], self.pxArr[sort_idxs], self.dsArr[sort_idxs])
+        return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], self.pxArr[sort_idxs], self.dsArr[sort_idxs],
+                    sensor_dims = self.sensor_dims)
         
     def filter_duplicates(self, verbose = False):
         def mask_firstocc_with_unique(a):
@@ -264,12 +360,12 @@ class View:
             keep_pct = round(fs_mask.sum() / len(fs_mask) * 100)
             print(f'Keeping {keep_pct}% of points!')
         
-        return View(self.ptArr[fs_mask], self.clArr[fs_mask], self.pxArr[fs_mask], self.dsArr[fs_mask])
+        return View(self.ptArr[fs_mask], self.clArr[fs_mask], self.pxArr[fs_mask], self.dsArr[fs_mask],
+                    sensor_dims = self.sensor_dims)
 
-    def snap(self, sensor_dims = (1920, 1080)):
-        
+    def snap(self):
         ### 4) Pluck every point onto a frame with the correct value, and show it!
-        rows, cols = sensor_dims[1], sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
+        rows, cols = self.sensor_dims[1], self.sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
         snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
 
         for pixel, color in zip(self.pxArr, self.clArr):
