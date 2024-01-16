@@ -967,6 +967,9 @@ class ConstFeature(ConstFeaturesBase):
     def conform(self, frameList):
         return ConstFeature(self.name, self.feature, frameList)
     
+    def rename(self, new_name):
+        return ConstFeature(new_name, self.feature, self.frameList)
+    
     def save(self, videoName, storeName, extract_func = None):
         savePath = ff.get_and_make_save_path(self.name, videoName, storeName)
         if self.frameList is None:
@@ -1013,9 +1016,12 @@ class ConstFeatures(ConstFeaturesBase):
             last_file = os.listdir(featPath)[-1] ### this has to be improved! Along with feature IO in general
             fullPath = os.path.join(featPath, last_file)
             
-            myArr = np.load(fullPath, allow_pickle = True) 
+            myArr = np.load(fullPath, allow_pickle = True)
             if featType is None:
-                featDict[featName] = myArr
+                if myArr.shape == (): ### the image array is simply the cap_color_space frame in an unsized array!
+                    featDict[featName] = myArr.item()
+                else:
+                    featDict[featName] = myArr
             else:
                 featDict[featName] = featType.from_array(myArr)
     
@@ -1349,9 +1355,12 @@ class SFList:
             x, xs = self[0], self[1:]
         return StreamFeaturesBase.merge(x, xs.join(), how = 'outer')
     
-    def save(self, videoName, storeName, compression = 24, lossless = False):
+    def save(self, videoName, storeName, compression = 24, lossless = False, extract_func = None):
         for mySF in self:
-            mySF.save(videoName, storeName, compression = compression, lossless = lossless)
+            if mySF.__class__.__name__ == 'ConstFeature':
+                mySF.save(videoName, storeName, extract_func = extract_func)
+            else:
+                mySF.save(videoName, storeName, compression = compression, lossless = lossless)
         
         
 #%% Testing

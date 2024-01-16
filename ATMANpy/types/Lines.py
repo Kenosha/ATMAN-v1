@@ -9,7 +9,6 @@ import numpy as np
 from dataclasses import dataclass
 
 from ATMANpy.types.Points import Point2D, SafePoint2D
-
 from typing import List
 
 import ATMANpy.auxil.constants as const
@@ -608,6 +607,9 @@ class CourtLines(Lines):
     
     def pixel_in_foot(self):
         return self['Bottom Baseline'].length() / 36
+
+    def get_center_point(self):
+        return Line(self['Bottom Baseline'].center(), self['Top Baseline'].center()).center()
 
     def get_3D_corner_points(self, width = 'Doubles'):
         courtReg = self.get_court_region(width = width)

@@ -86,7 +86,8 @@ class Contour:
     def enclosing_region(self, margin = 0):
         x, y, w, h = cv.boundingRect(self.points)
         p1, p2 = Point2D((x - margin, y - margin)), Point2D((x + w + margin, y + h + margin))
-        return Region.from_points(p1, p2)
+        enclReg = Region.from_points(p1, p2)
+        return enclReg
         
     def fit_ellipse(self):
         ## returns: centerCoords, majminAxis, rotAngle 
