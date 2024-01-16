@@ -16,10 +16,13 @@ Z
 
 import numpy as np
 
+import ATMANpy.auxil.constants as const
 from ATMANpy.types.Features import StreamFeatures
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
-from ATMANpy.types.Contours import Contour
+from ATMANpy.types.Contours import Contour, Contours
+
+from ATMANpy.types.Shapes3D import Point3D, Ball3D
 
 from ATMANpy.types.Lines import Line, CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
@@ -180,7 +183,7 @@ def certainty_out_far_court(courtLines, ballCnt):
         return dF
     
     
-def find_player_positions_3D(P, topPlayer, botPlayer):
+def find_player_positions_3D(P, topPlayerCnt, botPlayerCnt):
     from ATMANpy.funcs.court_funcs import make_P_cond_inv
     from ATMANpy.types.Shapes3D import Point3D
     
@@ -188,19 +191,19 @@ def find_player_positions_3D(P, topPlayer, botPlayer):
     cond_dim = 2 ### axis is z dimension -> height!
     P_cond_inv = make_P_cond_inv(P, cond_val, cond_dim)
    
-    if topPlayer is None:   
+    if topPlayerCnt is None:   
         topPlayer_3D = None
     else:
-        top_x, top_y = topPlayer.enclosing_region()['Bottom'].center().coords
+        top_x, top_y = topPlayerCnt.enclosing_region()['Bottom'].center().coords
         top_3D_homogeneous = P_cond_inv @ np.array([top_x, top_y, 1])
         top_3D = top_3D_homogeneous[:2] / top_3D_homogeneous[2]
         topPlayer_3D = np.insert(top_3D, cond_dim, cond_val)
         topPlayer_3D = Point3D(tuple(topPlayer_3D))
     
-    if botPlayer is None:
+    if botPlayerCnt is None:
         botPlayer_3D = None
     else:
-        bot_x, bot_y = botPlayer.enclosing_region()['Bottom'].center().coords
+        bot_x, bot_y = botPlayerCnt.enclosing_region()['Bottom'].center().coords
         bot_3D_homogeneous = P_cond_inv @ np.array([bot_x, bot_y, 1])
         bot_3D = bot_3D_homogeneous[:2] / bot_3D_homogeneous[2]
         botPlayer_3D = np.insert(bot_3D, cond_dim, cond_val)
@@ -314,7 +317,8 @@ def get_inferred_hit_points(hitFlag, topPlayerCnt, botPlayerCnt,
                             stroke_px_u_top = -2, stroke_px_u_bot = 10,
                             serve_px_u_top = 20, serve_px_u_bot = 20,    ### move up, in pixels
                             do_top = True, do_bot = True,
-                            hand_top = 'right', hand_bot = 'right'):
+                            hand_top = 'right', hand_bot = 'right',
+                            resolution = 6):
     
     try:
         side, hit = hitFlag.split('_') ### if we have a serve
@@ -359,11 +363,132 @@ def get_inferred_hit_points(hitFlag, topPlayerCnt, botPlayerCnt,
         stroke_px_r_corrected = side_sign * hand_sign * stroke_sign * stroke_px_r
         hPt = cPt.right(stroke_px_r_corrected).up(stroke_px_u)
     
-    hitCnt = Contour.from_point(hPt, radius = 1)
+    hitCnt = Contour.from_point(hPt, radius = 1, resolution = resolution)
     
     return hitCnt
-    
 
+def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag, 
+                           reaches_in_feet = [2.5, 3, 3.5, 4, 4.5, 5],
+                           height_in_feet = 5,
+                           resolution = 5):
+    ### as opposed to the above function get_inferred_hit_points, 
+        # we calculate a cloud of potential hit points, not a single hit point
+        # the cloud is calculated in 3D.
+    try:
+        side, hit = hitFlag.split('_') ### if we have a serve
+        is_serve = True
+    except:
+        side, stroke, kind = hitFlag.split('_') ### if we have a groundstroke
+        is_serve = False
+        
+    topPt3D, botPt3D = find_player_positions_3D(P, topPlayerCnt, botPlayerCnt)
+    
+    basePt3D = topPt3D if side == 'top' else botPt3D
+    height_in_axis_units = height_in_feet * const.SCALE
+    hingePt3D = basePt3D.up(height_in_axis_units)
+    
+    ### TODO: Make depend on HANDEDNESS!
+    #### decide angular limits
+    if side == 'top':
+        if is_serve:
+            ### need to go mostly up, and slightly in front
+            phi_rad_min, phi_rad_max = 0, 0.15
+            theta_rad_min, theta_rad_max = 0, 1
+        else:
+            if stroke == 'fh':
+                ### need to go to the forehand side, and in front
+                phi_rad_min, phi_rad_max = 0, 1
+                theta_rad_min, theta_rad_max = 0.5, 1
+            elif stroke == 'bh':
+                ### need to go to the backhand side, and in front
+                phi_rad_min, phi_rad_max = 0, 1
+                theta_rad_min, theta_rad_max = 0, 0.5
+    elif side == 'bot':
+        if is_serve:
+            ### need to go mostly up, and slightly in front
+            phi_rad_min, phi_rad_max = 0, 0.15
+            theta_rad_min, theta_rad_max = 1, 2
+        else:
+            if stroke == 'fh':
+                ### need to go to the forehand side, and in front
+                phi_rad_min, phi_rad_max = 0, 1
+                theta_rad_min, theta_rad_max = 1.5, 2
+            elif stroke == 'bh':
+                ### need to go to the backhand side, and in front
+                phi_rad_min, phi_rad_max = 0, 1
+                theta_rad_min, theta_rad_max = 1, 1.5
+        
+    limit_phi = phi_rad_min * np.pi, phi_rad_max * np.pi
+    limit_theta = theta_rad_min * np.pi, theta_rad_max * np.pi
+
+    pointList = []
+    for reach_ft in reaches_in_feet:
+        reach_in_axis_units = reach_ft * const.SCALE
+        reachable_ball = Ball3D(hingePt3D.coords, radius = reach_in_axis_units, limit_phi = limit_phi, limit_theta = limit_theta)
+        reachable_points = reachable_ball.rasterize(resolution = resolution)
+        pointList.append(reachable_points)
+        
+    pointArr = np.concatenate(pointList)
+    x, y, z = pointArr.T
+    cldPt3D = Point3D((x, y, z)) ### this is vectorized! Point3D can hold many points.
+    return cldPt3D  
+    
+def project_hit_point_cloud(cldPt3D, P):
+    cldPts2D_float = cldPt3D.project(P)
+    cldPts2D_int = cldPts2D_float.astype(int)
+    cldPts2D_unique = np.unique(cldPts2D_int, axis = 0)
+    return cldPts2D_unique
+    
+### Define Criteria that a serving player contour has to fulfill.
+# Criterion 1) center of shape is inside of the serve ROI
+def keep_contours_in_roi(myCnts, ROI = None):
+    inCnts = Contours([cnt for cnt in myCnts if cnt.center().within(ROI)])
+    return inCnts
+    
+# Auxiliary function
+def get_distance_to_baseline(myCnt, which = 'Top', courtLines = None):
+    assert which in ['Top', 'Bottom']
+    
+    baseLine = courtLines[f'{which} Baseline']
+    botPt = myCnt.enclosing_region()['Bottom'].center()
+    linePt = botPt.project_vertically(baseLine)
+    
+    ### make it so that negative distances are not admissible -> they are in front of the line!
+    ### then, the task is simply to choose the smallest positive distance.
+    if which == 'Top':
+        dist = linePt.y - botPt.y
+    elif which == 'Bottom':
+        dist = botPt.y - linePt.y
+    
+    return dist
+    
+### Criterion 2) bottom of shape is behind the respective baseline, keep the closest to baseline among these.
+def keep_closest_contour_behind_baseline(myCnts, which = 'Top', courtLines = None, margin = 5):
+    assert which in ['Top', 'Bottom']
+   
+    bestCnt, best_dist = None, None
+    for myCnt in myCnts:
+        mrg_dist = get_distance_to_baseline(myCnt, which = which, courtLines = courtLines) + margin # to not exclude players at baseline, add a little margin
+        if mrg_dist > 0: ### accept only contours whose bottom is behind the respective line
+            if best_dist is None:
+                bestCnt = myCnt
+                best_dist = mrg_dist
+            else:
+                if mrg_dist < best_dist:
+                    bestCnt = myCnt
+                    best_dist = mrg_dist
+    
+    return bestCnt
+
+def merge_contour_into_contours(candCnts, hitCnt):
+    if candCnts is None:
+        candCnts = Contours([])
+        
+    if hitCnt is None:
+        candplusCnts = candCnts
+    else:
+        candplusCnts = candCnts.append(hitCnt)
+    return candplusCnts
     
         
     
