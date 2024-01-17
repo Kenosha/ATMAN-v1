@@ -57,7 +57,7 @@ RGB = {'ball_yellow': (223, 255, 79),
        'strong_pink': (238, 34, 74),
        
        'rose_orange': (238, 87, 61),
-       'sign_orange': (26, 87, 143),
+       'sign_orange': (143, 87, 26),
     
        'intense_red': (238, 37, 36),
 
