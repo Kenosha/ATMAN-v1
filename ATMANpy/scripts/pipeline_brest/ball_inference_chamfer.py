@@ -1,0 +1,76 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Jul 22 22:26:01 2023
+
+@author: gianl
+"""
+
+
+import os
+import time
+
+import cv2 as cv
+import numpy as np
+import pandas as pd
+
+### GET VIDEO ###
+from ATMANpy.funcs.util_funcs import get_video
+from ATMANpy.funcs.cv_funcs import join_video_captures
+
+### GET SCHEMA ###
+from ATMANpy.types.Lines import CourtLines, NetLines
+
+import ATMANpy.auxil.constants as const
+import ATMANpy.funcs.util_funcs as ut
+import ATMANpy.funcs.sf_funcs as sf
+import ATMANpy.funcs.sf_apply_funcs as sa
+import ATMANpy.funcs.extract_funcs as ex
+import ATMANpy.funcs.feature_funcs as ff
+
+from ATMANpy.types.Streams import Stream, CachedStream, NCStream, NCDecapStream, DecapStream, StreamList, MulStream, RandStream, StillStream
+from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, BoolFeatures, SFList, ConstFeature, ConstFeatures
+from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
+
+from ATMANpy.types.Points import Point2D
+from ATMANpy.types.Lines import CourtLines, Region, Regions
+from ATMANpy.types.Contours import Contour, Contours
+
+from ATMANpy.funcs.player_funcs import get_service_ROIs, get_half_court_Lines
+from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_intersection_points
+schemaLines = CourtLines.make().add_singles_netline()
+schemaFrm = fit_frame_to_lines(schemaLines)
+
+def load(vid, sto):
+    plSF = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayerCnt', 'botPlayerCnt'])
+    return plSF
+
+def save(chamfSFs, vid, sto, **save_params):
+    chamfSFs.rename('chamferCnts').save(vid, sto, **save_params)
+    
+
+def main(conf, params):
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    nwo, nch = conf['num_workers'], conf['chunksize']
+    cap = get_video(vid)
+
+    plSF = load(vid, sto)
+    
+    plSFs = plSF.split()
+    
+    ### Make Chamfer Contours ###
+    greyStms = StreamList.from_SFList(plSFs, cap, name = 'gFrm',
+                                      cap_color_space = 'bgr', target_color_space = 'grey')
+    
+    chamfSFs = greyStms.extract_chunked_mp(ex.get_chamfer_contours, nwo, nch, **params)
+    
+    save(chamfSFs, vid, sto, compression = conf['compression_players'])
+    
+
+if __name__ == '__main__':
+
+    conf = ut.read_config('brest', config_name = '_config_pipe2')
+    
+    params = {'threshold': 50 * conf['scale_factor']}
+    
+    main(conf, params)
+    
