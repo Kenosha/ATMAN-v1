@@ -210,6 +210,9 @@ class Point3D:
         
         return pixArr
     
+    def recolor(self, new_bgr):
+        return self.__class__(self.coords, color = new_bgr)    
+    
 
 @dataclass(frozen = True)
 class Ball3D(Point3D):
@@ -448,6 +451,44 @@ class Line3D:
             outArr = np.tile(scaledArr, (len(lineArr), 1)) + np.repeat(lineArr, num_circle_points, axis = 0)
             return outArr
     
+    def parametrise(self):
+        """
+        Point y on line can be described by:
+            
+            y = line_orig + n * line_vec
+        """
+
+        line_orig = self.leftPt
+        line_vec = self.to_vector()
+        return line_orig, line_vec
+    
+    def intersect(self, myReg):
+        """
+        find intersection of this line with a region (a plane)
+        """
+        
+        ### point on plane can now be described by:
+            # x = reg_orig + l * reg_vec1 + m * reg_vec2
+        reg_orig, reg_vec1, reg_vec2 = myReg.parametrise()
+        
+        ### point on line can now be described by:
+            # y = line_origin + n * line_vec
+        line_orig, line_vec = self.parametrise()
+            
+        ### -> solve for x = y is equivalent to solving
+        # A * (lambda, mu, nu) = line_origin - region_origin
+        # where A = ...
+        A = np.vstack([np.array(reg_vec1.coords), 
+                       np.array(reg_vec2.coords), 
+                       - np.array(line_vec.coords)]).T
+        
+        orig_diff = line_orig - reg_orig
+        
+        l, m, n = np.linalg.inv(A) @ np.array(orig_diff.coords)
+        
+        outPt = line_orig + line_vec * n
+        
+        return outPt, (l, m, n)
     
 @dataclass(frozen = True)
 class Lines3D:
@@ -637,6 +678,23 @@ class Region3D():
         outArr = outArr.reshape(-1, outArr.shape[-1]) ### flatten the first two dims
         
         return outArr
+    
+    def parametrise(self):
+        """
+        Point x on plane can now be described by:
+            
+            x = reg_orig + l * reg_vec1 + m * reg_vec2
+        """
+        
+        topLn, leftLn = self['Top'], self['Left']
+        assert topLn.leftPt == leftLn.leftPt
+        
+        reg_orig = topLn.leftPt
+        reg_vec1, reg_vec2 = topLn.to_vector(), leftLn.to_vector()
+        return reg_orig, reg_vec1, reg_vec2
+
+    def intersect(self, aLn):
+        return aLn.intersect(self)
 
 
 @dataclass(frozen = True)
@@ -688,7 +746,8 @@ class Regions3D():
     ### METHODS ###
     def rasterize(self, resolution):
         return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
-        
+    
+    
     
 if __name__ == '__main__':
     
@@ -697,28 +756,46 @@ if __name__ == '__main__':
     ### Testing angular limits on the ball
     courtScn = Scene.make_court()
     myCam = Camera.calibrated_AO_behind()
-    
     resolution = 1
-    offset = 0.5
-    height = 5 * const.SCALE ### in feet
-    radius = 3 * const.SCALE ### in feet
     
-    myBall = Ball3D((200, 200, height), radius = radius)
-    myScn = courtScn.put(myBall)
+    # offset = 0.5
+    # height = 5 * const.SCALE ### in feet
+    # radius = 3 * const.SCALE ### in feet
+    
+    # myBall = Ball3D((200, 200, height), radius = radius)
+    # myScn = courtScn.put(myBall)
+    # View.make(myCam, myScn, resolution = resolution).snap().show()
+    
+    # limit_phi = (0, 0.5 * np.pi)
+    # limit_theta = None
+    # myBall = Ball3D((200, 200, height), radius = radius, limit_phi = limit_phi, limit_theta = limit_theta)
+    # myScn = courtScn.put(myBall)
+    # View.make(myCam, myScn, resolution = resolution).snap().show()
+    
+    # limit_phi = None
+    # limit_theta = (0, 0.5 * np.pi)
+    # myBall = Ball3D((200, 200, height), radius = radius, limit_phi = limit_phi, limit_theta = limit_theta)
+    # myScn = courtScn.put(myBall)
+    # View.make(myCam, myScn, resolution = resolution).snap().show()
+    
+    ### Testing intersection of Line and Ball
+    
+    regLn = Line3D(Point3D((270, 340, 0)), Point3D((340, 990, 0)))
+    myReg = Region3D.from_line(regLn, width = 150, dim = 'z', color = const.BGR['leafy_green'])
+    
+    myLn = Line3D(Point3D((200, 1000, 50)), Point3D((400, 200, 50)), color = const.BGR['sign_orange'])
+    
+    myScn = courtScn.put(myReg).put(myLn)
     View.make(myCam, myScn, resolution = resolution).snap().show()
     
-    limit_phi = (0, 0.5 * np.pi)
-    limit_theta = None
-    myBall = Ball3D((200, 200, height), radius = radius, limit_phi = limit_phi, limit_theta = limit_theta)
-    myScn = courtScn.put(myBall)
+    intPt, params = myLn.intersect(myReg)
+    intBall = Ball3D(intPt.coords, radius = 4, color = const.BGR['strong_pink'])
+    
+    myScn = myScn.put(intBall)
     View.make(myCam, myScn, resolution = resolution).snap().show()
     
-    limit_phi = None
-    limit_theta = (0, 0.5 * np.pi)
-    myBall = Ball3D((200, 200, height), radius = radius, limit_phi = limit_phi, limit_theta = limit_theta)
-    myScn = courtScn.put(myBall)
-    View.make(myCam, myScn, resolution = resolution).snap().show()
     
-    self = myBall
-        
+    
+    
+    
     
