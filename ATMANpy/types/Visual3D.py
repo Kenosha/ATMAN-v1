@@ -256,10 +256,10 @@ class Camera:
         M_ext_new[2, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
     
-    def get_camera_ray_params(self, somePt):
+    def get_camera_ray_params(self, somePt, correct_for_epsilon = True):
         """
-        Parameters of the ray going through a point, in camera-coordinate parameters
-        ### this could potentially be improved by exploiting that M_int[0,1] is NOT zero, 
+        Parameters of the pinhole camera ray going through a point, in camera-coordinate parameters
+        ### this is improved by exploiting that M_int[0,1] (named epsilon) is not always zero, 
         ### as it usually is in the pinhole camera model.
         """
         
@@ -273,6 +273,11 @@ class Camera:
         coeff_z_c = 1       ### since z_c is distance from camera aperture in camera coordinates, 
                             # and we need a parameter for the line, we choose z_c for convenience. 
                             # Note: z_c > 0 -> line_parameter > 0
+        
+        if correct_for_epsilon:
+            epsilon = self.M_int[0, 1]
+            correction = epsilon * coeff_y_c / f_x
+            coeff_x_c = coeff_x_c - correction
         
         slope = np.array([coeff_x_c, coeff_y_c, coeff_z_c])
         intercept = np.zeros(3)
@@ -327,6 +332,12 @@ class View:
             
             ### 2) Project Point Cloud in 3D onto 2D Sensor
             pxArr = myCamera.project_points(ptArr).astype(int)
+            px_on_sensor = ((0, 0) <= pxArr) & (pxArr <  myCamera.sensor_dims)
+            px_filter = px_on_sensor.all(axis = 1)
+            
+            ptArr = ptArr[px_filter]
+            clArr = clArr[px_filter]
+            pxArr = pxArr[px_filter]
             
             ### 3) For every point, get distance from Pinhole
             dsArr = ((ptArr - myCamera.get_cw()) ** 2).sum(axis = 1) ** 0.5
