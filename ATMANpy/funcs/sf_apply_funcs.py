@@ -22,7 +22,7 @@ from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 from ATMANpy.types.Contours import Contour, Contours
 
-from ATMANpy.types.Shapes3D import Point3D, Ball3D
+from ATMANpy.types.Shapes3D import Point3D, Ball3D, Line3D
 
 from ATMANpy.types.Lines import Line, CourtLines
 schemaLines = CourtLines.make().add_singles_netline()
@@ -392,8 +392,8 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag,
     if side == 'top':
         if is_serve:
             ### need to go mostly up, and slightly in front
-            phi_rad_min, phi_rad_max = 0, 0.15
-            theta_rad_min, theta_rad_max = 0, 1
+            phi_rad_min, phi_rad_max = 0, 0.3 #0, 0.15
+            theta_rad_min, theta_rad_max = 0, 2#0, 1
         else:
             if stroke == 'fh':
                 ### need to go to the forehand side, and in front
@@ -406,8 +406,8 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag,
     elif side == 'bot':
         if is_serve:
             ### need to go mostly up, and slightly in front
-            phi_rad_min, phi_rad_max = 0, 0.15
-            theta_rad_min, theta_rad_max = 1, 2
+            phi_rad_min, phi_rad_max = 0, 0.3 
+            theta_rad_min, theta_rad_max = 0, 2 #1, 2
         else:
             if stroke == 'fh':
                 ### need to go to the forehand side, and in front
@@ -433,12 +433,15 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag,
     cldPt3D = Point3D((x, y, z)) ### this is vectorized! Point3D can hold many points.
     return cldPt3D  
     
-def project_hit_point_cloud(cldPt3D, P):
+def project_hit_point_cloud(cldPt3D, P, unique = True):
     cldPts2D_float = cldPt3D.project(P)
     cldPts2D_int = cldPts2D_float.astype(int)
-    cldPts2D_unique = np.unique(cldPts2D_int, axis = 0)
-    return cldPts2D_unique
-    
+    if not unique:
+        cldPts2D = cldPts2D_int 
+    else:
+        cldPts2D = np.unique(cldPts2D_int, axis = 0)
+    return cldPts2D
+        
 ### Define Criteria that a serving player contour has to fulfill.
 # Criterion 1) center of shape is inside of the serve ROI
 def keep_contours_in_roi(myCnts, ROI = None):
@@ -479,6 +482,15 @@ def keep_closest_contour_behind_baseline(myCnts, which = 'Top', courtLines = Non
                     best_dist = mrg_dist
     
     return bestCnt
+
+def make_camline(ball_choicePt, myCamera = None):
+    if ball_choicePt is None:
+        camLine = None
+    else:
+        m_w, b_w = myCamera.get_world_ray_params(ball_choicePt)
+        camPt, camVec = Point3D(b_w), Point3D(m_w)
+        camLine = Line3D(camPt, camPt - camVec, color = const.BGR['strong_pink'])
+    return camLine
 
 def merge_contour_into_contours(candCnts, hitCnt):
     if candCnts is None:
