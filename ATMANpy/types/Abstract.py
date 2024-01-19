@@ -55,32 +55,32 @@ class PlayerMovement:
 
 @dataclass(frozen = True)
 class Trajectory:
-    trajSFs: StreamFeatures ### with keys: ball, event
+    trajSF: StreamFeatures ### with keys: ball, event
     
     def __iter__(self):
-        return iter(self.trajSFs)
+        return iter(self.trajSF)
     
     def __getitem__(self, item):
-        return self.trajSFs.__getitem__(item)
+        return self.trajSF.__getitem__(item)
     
     def __repr__(self):
         initial_event = self.get_initial_event()
-        frames = self.trajSFs.get_frames()
+        frames = self.trajSF.get_frames()
         min_frame, max_frame = frames[0], frames[-1]
         
         return f'Trajectory({initial_event}, frames: {min_frame} to {max_frame})'
     
     @staticmethod
-    def from_features(trajSFs):
-        assert 'ball' in trajSFs.get_features(), f'ball feature not found in trajectory init with {trajSFs}'
-        assert 'event' in trajSFs.get_features(), f'event feature not found in trajectory init with {trajSFs}'
-        return Trajectory(trajSFs.keep(['ball', 'event']))
+    def from_features(trajSF):
+        assert 'ball' in trajSF.get_features(), f'ball feature not found in trajectory init with {trajSF}'
+        assert 'event' in trajSF.get_features(), f'event feature not found in trajectory init with {trajSF}'
+        return Trajectory(trajSF.keep(['ball', 'event']))
     
     ### Trajectory Functions
     # -> last serve, hit or bounce frame, all flight frames!
     def get_trajectory_dataframe(self, keep_before = 1): ### keep x frames before the beginning of flight 
 
-        eventDict = self.trajSFs['event']
+        eventDict = self.trajSF['event']
         
         last_initial_frame = self.get_initial_frames()[-1]
         traj_frames = [frame for frame, event in eventDict.items() if event[0] == 'F'] ## init with flight frames
@@ -89,7 +89,7 @@ class Trajectory:
             if add_frame in eventDict:
                 traj_frames = [add_frame, *traj_frames]
         
-        ballSer = self.trajSFs['ball'].to_series()[traj_frames] ### get series of balls of interest
+        ballSer = self.trajSF['ball'].to_series()[traj_frames] ### get series of balls of interest
         ballSer = ballSer.dropna() ### drop None ball events --> usually occur at end of point!
         coordSer = ballSer.map(lambda myBall: myBall.get_point().coords) ### get coordinates
         coordFrm = coordSer.apply(pd.Series) ### how the hell does this work?
@@ -111,19 +111,19 @@ class Trajectory:
     ### Initial Functions 
     # -> Serve, Hit, or Bounce frames!
     def get_initial_event(self):
-        eventDict = self.trajSFs['event']
+        eventDict = self.trajSF['event']
         eventList = [event for event in eventDict.values() if not event.startswith('F')]
         eventList = list(set(eventList))
         assert len(eventList) == 1
         return eventList[0]
     
     def get_initial_frames(self):
-        eventDict = self.trajSFs['event']
+        eventDict = self.trajSF['event']
         return [frame for frame, event in eventDict.items() if not event.startswith('F')]
     
     def get_initial_position(self, how = 'mean'):
         ### how: mean, first, last -> which of the bounces do we want?
-        ballDict = self.trajSFs['ball']
+        ballDict = self.trajSF['ball']
         hit_or_bounce_points = [ballDict[frame].get_point() for frame in self.get_initial_frames()]
         
         if how == 'mean':
@@ -137,23 +137,23 @@ class Trajectory:
     ### Flight Functions
     # -> Flight frames
     def get_flight_event(self):
-        eventDict = self.trajSFs['event']
+        eventDict = self.trajSF['event']
         eventList = [event for event in eventDict.values() if event.startswith('F')]
         eventList = list(set(eventList))
         assert len(eventList) == 1
         return eventList[0]
     
     def get_flight_frames(self):
-        eventDict = self.trajSFs['event']
+        eventDict = self.trajSF['event']
         return [frame for frame, event in eventDict.items() if event.startswith('F')]
     
     ### Other Functions
     def get_frames(self):
-        return self.trajSFs.get_frames()
+        return self.trajSF.get_frames()
     
     def get_frame_event_series(self):
         initial_frames = self.get_initial_frames()
-        return self.trajSFs['event'].to_series()[initial_frames]
+        return self.trajSF['event'].to_series()[initial_frames]
     
     def get_frame_event_pairs(self, how = 'last'):
         idx = 0 if how == 'first' else -1
@@ -213,13 +213,13 @@ class Trajectory:
         vert_direction = Point3D((0, 0, 1))
         ground_direction = self.get_trajectory_direction(keep_before = keep_before) 
         if ground_direction is None: ### at the end of a point -> no direction because no interpolation!
-            return TrajectoryFitted(self.trajSFs, None, None, None)
+            return TrajectoryFitted(self.trajSF, None, None, None)
         vert_direction, ground_direction = vert_direction * unit_rescale, ground_direction * unit_rescale
         
         ### calculate 3D position from planar direction unit vectors
         flight_frames = self.get_trajectory_frames(keep_before = keep_before)
         ball_fit_dict = {}
-        for frame in self.trajSFs:
+        for frame in self.trajSF:
             try:
                 flight_idx = flight_frames.index(frame) ### check if frame is in flight frames
             except ValueError:
@@ -230,14 +230,14 @@ class Trajectory:
                 ball_fit_dict[frame] = start_position + ground_direction * x + vert_direction * z
             
         ball_fit_SF = StreamFeature(ball_fit_dict, name = 'ball_fit')
-        new_trajSFs = self.trajSFs.merge(ball_fit_SF)
+        new_trajSF = self.trajSF.merge(ball_fit_SF)
         
-        return TrajectoryFitted(new_trajSFs, v_init_ground, v_init_vert, spin_rpm)
+        return TrajectoryFitted(new_trajSF, v_init_ground, v_init_vert, spin_rpm)
         
     ### Feature Getters ###
     def feat_splines(self):
         flight_frames = self.get_trajectory_frames(keep_before = 1)
-        splineDict = self.trajSFs.spline_3D(pointFeature = 'ball', frameList = flight_frames)
+        splineDict = self.trajSF.spline_3D(pointFeature = 'ball', frameList = flight_frames)
         return StreamFeature(splineDict, 'ball_spline')
     
 @dataclass(frozen = True)
@@ -253,7 +253,7 @@ class TrajectoryFitted(Trajectory):
     ### Feature Getters ###
     def feat_fit_splines(self):
         flight_frames = self.get_trajectory_frames(keep_before = 1)
-        splineDict = self.trajSFs.spline_3D(pointFeature = 'ball_fit', frameList = flight_frames)
+        splineDict = self.trajSF.spline_3D(pointFeature = 'ball_fit', frameList = flight_frames)
         return StreamFeature(splineDict, 'ball_fit_spline')
     
     
@@ -483,9 +483,9 @@ class Shot:
             return self.feat_rec_player()
         
     def feat_ball(self):
-        ballSF = self.shotTraj.trajSFs['ball']
+        ballSF = self.shotTraj.trajSF['ball']
         for bounceTraj in self.bounceList:
-            ballSF = ballSF.extend(bounceTraj.trajSFs['ball'])
+            ballSF = ballSF.extend(bounceTraj.trajSF['ball'])
         return ballSF
     
     def feat_hit_racquet(self, prevShot):
@@ -1046,8 +1046,8 @@ for methodStr in dir(Shot):
 # myTrajFit = myTraj.fit_trajectory(groundArr, vertArr, 
 #                                   v_init_ground_space, v_init_vert_space, spin_rate_space)
 
-# myTrajFit.trajSFs['ball']
-# myTrajFit.trajSFs['ball_fit']
+# myTrajFit.trajSF['ball']
+# myTrajFit.trajSF['ball_fit']
 
 # myTraj.spline()
 # myTrajFit.spline()
