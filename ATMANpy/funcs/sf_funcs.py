@@ -23,6 +23,7 @@ from ATMANpy.types.Streams import Stream
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Region
 from ATMANpy.types.Contours import Contours, Contour
+from ATMANpy.types.Shapes3D import Point3D, Line3D, Region3D
 
 import ATMANpy.funcs.util_funcs as ut
 import ATMANpy.funcs.sf_apply_funcs as sa
@@ -2041,3 +2042,173 @@ def iteratively_match_tracks(candSF, splitDF, frame_offset = 5, num_points = 6, 
                                         num_points = num_points, 
                                         threshold_distance = threshold_distance)
         
+def test_trajectories(anchorSF, shapeSF, camlnSF, P):
+    
+    ### TODO
+    # 1) exclude flight planes using projected trajectories fitted -> flight planes may not imply pathological spin, speeds
+    # 2) start and end points must be 'reasonably close' to 0 and 1
+    # 3) ball heigth must be consistent with one or two parabolas
+    
+    flight_plane_size = 100
+    flight_plane_heigth = flight_plane_size / 2 ### half of it is overground
+    
+    anchor_frames = anchorSF.dropna().get_frames()
+    
+    trajFrms = []
+    for idx in range(len(anchor_frames) - 1): ### dont do the last one!
+        frm_currhit, frm_nexthit = anchor_frames[idx], anchor_frames[idx + 1]
+        anchorPts_curr, anchorPts_next = anchorSF[frm_currhit], anchorSF[frm_nexthit]
+        ballPt_curr, ballPt_next = shapeSF[frm_currhit], shapeSF[frm_nexthit]
+        
+        flight_frames = list(range(frm_currhit, frm_nexthit + 1))
+        non_na_frmArr = np.array([(i, f) for i, f in enumerate(flight_frames) if f in shapeSF.dropna().get_frames()])
+        
+        distance_threshold = 5
+        ptArr_curr = sa.filter_hit_candidates_with_ball(anchorPts_curr, ballPt_curr, P, distance_threshold = distance_threshold)
+        ptArr_next = sa.filter_hit_candidates_with_ball(anchorPts_next, ballPt_next, P, distance_threshold = distance_threshold)
+        
+        ptArr_curr_ground = np.copy(ptArr_curr)
+        ptArr_curr_ground[:, 2] = 0
+        ptArr_next_ground = np.copy(ptArr_next)
+        ptArr_next_ground[:, 2] = 0
+            
+        num_curr_points = len(ptArr_curr_ground)
+        num_next_points = len(ptArr_next_ground)
+        num_flight_frames = len(flight_frames)
+        
+        pointArr = np.full((num_curr_points, num_next_points, 2, 3), fill_value = np.nan) ### use this to store the current and next point
+        coordArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
+        paramArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
+        # planeArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
+        for curr_idx in range(num_curr_points):
+            currptArr = ptArr_curr[curr_idx]
+            currptArr_ground = ptArr_curr_ground[curr_idx]
+            currPt_ground = Point3D(tuple(currptArr_ground))
+            
+            pointArr[curr_idx, :, 0] = currptArr
+            
+            for next_idx in range(num_next_points):
+                nextptArr = ptArr_next[next_idx]
+                nextptArr_ground = ptArr_next_ground[next_idx]
+                nextPt_ground = Point3D(tuple(nextptArr_ground))
+        
+                pointArr[curr_idx, next_idx, 1] = nextptArr
+        
+                ### make flight plane
+                flightLn = Line3D(currPt_ground, nextPt_ground)
+                top_bottom = '+y' if flightLn.to_vector().y > 0 else '-y'
+                left_right = '+x' if flightLn.to_vector().x > 0 else '-x'
+                flightReg = Region3D.from_line(flightLn, flight_plane_size, dim = 'z', top_bottom = top_bottom, left_right = left_right)
+                
+                for frame_idx, frame_num in enumerate(flight_frames):
+                    camLn = camlnSF[frame_num]
+                    if camLn is not None:
+                        ballPt3D, params = camLn.intersect(flightReg, rectify_plane = True)
+                        
+                        coordArr[curr_idx, next_idx, frame_idx] = ballPt3D.coords
+                        paramArr[curr_idx, next_idx, frame_idx] = params
+                        # planeArr[curr_idx, next_idx, frame_idx] = 
+            
+        ### verify the integrity of the coordinates
+        # first, get the non nan arrays 
+        non_na_idxs = non_na_frmArr[:, 0]
+        coordArr_non_nan = coordArr[:, :, non_na_idxs, :]    
+        paramArr_non_nan = paramArr[:, :, non_na_idxs, :]     
+        
+        num_trajectories = num_curr_points * num_next_points
+        print(f'Out of {num_trajectories} trajectories...')
+    
+        # a) their height can not be negative
+        muArr = paramArr_non_nan[:, :, :, 1] ## get only flight path lambdas along ground
+        mu_above_ground = muArr >= 0 ### TODO: maybe have a slightly negative allowed value here.
+        
+        traj_above_ground = mu_above_ground.all(axis = 2)
+        num_traj_above_ground = traj_above_ground.sum()    
+        print(f'   ... {num_traj_above_ground} are always above ground')
+        
+        # a2) calculate a penalty
+        traj_below_ground_penalty = - np.clip(muArr, a_min = None, a_max = 0).mean(axis = 2)
+        
+        # b) they must have monotonously increasing lambdas along the flight path at ground
+        lambdaArr = paramArr_non_nan[:, :, :, 0] ## get only flight path lambdas along ground
+        delta_lambdaArr = np.diff(lambdaArr, axis = 2) ## first difference these in time
+        
+        monotonous_lambdas = (delta_lambdaArr > 0).all(axis = 2)
+        num_monotonous_lambdas = monotonous_lambdas.sum()    
+        print(f'   ... {num_monotonous_lambdas} are fully monotonously increasing')
+        
+        # b2) calculate a penalty
+        traj_nonmonotonous_penalty = - np.clip(delta_lambdaArr, a_min = None, a_max = 0).mean(axis = 2)
+        
+        # c) the lambdas must have monotonously decreasing first derivatives
+        ### -> the ball decelerates in flight!
+        # for this, we calculate the lambda divided by the index
+        frame_cutoff = 5 ### calculate the lambda per time only after frame_cutoff frames -> avoid division by zero, avoid instability
+        keep_filt = non_na_idxs >= frame_cutoff
+        lambda_per_time = lambdaArr[:, :, keep_filt] / non_na_idxs[np.newaxis, np.newaxis, keep_filt]
+        
+        # this metric (essentially measuring the average ground speed up to each observed point)
+        # ought to be decreasing -> at the beginning, speed is very high, then decreases
+        delta_lambda_per_time = np.diff(lambda_per_time, axis = 2)
+        
+        decelerating_lambdas = (delta_lambda_per_time < 0).all(axis = 2)
+        num_decelerating_lambdas = decelerating_lambdas.sum()    
+        print(f'   ... {num_decelerating_lambdas} are fully decelerating')
+        
+        traj_nondecelerating_penalty = np.clip(delta_lambda_per_time, a_min = 0, a_max = None).mean(axis = 2)
+    
+        # d) start and end points must be 'reasonably close' to 0 and 1
+        
+        # e) ball heigth must be consistent with one or two parabolas
+        
+        # join all the conditions
+        flawless_trajectory = traj_above_ground & monotonous_lambdas & decelerating_lambdas
+        num_flawless_trajectories = flawless_trajectory.sum()
+        print(f'   ... {num_flawless_trajectories} are flawless!')
+        
+        # calculate a penalty term
+        penalty = traj_below_ground_penalty + traj_nonmonotonous_penalty + traj_nondecelerating_penalty
+        tiny_pen_thresh, small_pen_thresh = 0.01, 0.1
+        tiny_pen, small_pen = penalty < tiny_pen_thresh, penalty < small_pen_thresh
+        num_tiny_pen = tiny_pen.sum()
+        num_small_pen = small_pen.sum()
+        print(f'   ... {num_tiny_pen} are completely acceptable')
+        print(f'   ... {num_small_pen} are reasonably good')
+        
+        if num_flawless_trajectories > 0: ### take the mean of all flawless trajectories.
+            weightArr = flawless_trajectory / num_flawless_trajectories
+            coordArr_opt = (coordArr * weightArr[:, :, np.newaxis, np.newaxis]).sum(axis = (0, 1))
+            paramArr_opt = (paramArr * weightArr[:, :, np.newaxis, np.newaxis]).sum(axis = (0, 1))
+            pointArr_opt = (pointArr * weightArr[:, :, np.newaxis, np.newaxis]).sum(axis = (0, 1))
+        else: ### take the minimum penalty trajectory!
+            min_curr_idx, min_next_idx = ut.argmin_multidim(penalty)
+            coordArr_opt = coordArr[min_curr_idx, min_next_idx]
+            paramArr_opt = paramArr[min_curr_idx, min_next_idx]
+            pointArr_opt = pointArr[min_curr_idx, min_next_idx]
+        
+        coordFrm = pd.DataFrame(coordArr_opt, index = flight_frames, columns = ['x', 'y', 'z'])
+        paramFrm = pd.DataFrame(paramArr_opt, index = flight_frames, columns = ['l', 'm', 'n'])
+    
+        ### additionally, we want to find the heights of the start and end points to be able to parametrise them
+        hit_coordFrm = pd.DataFrame(pointArr_opt, index = [frm_currhit, frm_nexthit], columns = ['x', 'y', 'z'])
+        hit_lms = np.array([0, 1])
+        hit_mus = pointArr_opt[:, 2] / flight_plane_heigth
+        hit_params = np.stack([hit_lms, hit_mus]).T
+        
+        hit_paramFrm = pd.DataFrame(hit_params, index = [frm_currhit, frm_nexthit], columns = ['l', 'm'])
+    
+        ### output!
+        trajFrm_observed = pd.concat([coordFrm, paramFrm], axis = 1)
+        trajFrm_observed['source'] = np.where(np.array([i in non_na_idxs for i, f in enumerate(flight_frames)]), 'observed', None)
+        
+        trajFrm_hit = pd.concat([hit_coordFrm, hit_paramFrm], axis = 1)
+        trajFrm_hit['source'] = 'hit'
+        
+        trajFrm = trajFrm_observed.fillna(trajFrm_hit)
+        
+        trajFrms.append(trajFrm)
+        
+    return trajFrms
+    
+    
+    
