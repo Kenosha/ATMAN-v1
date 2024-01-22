@@ -138,13 +138,18 @@ def find_last_and_next_list_member(number_of_interest,
         return ls_member, nx_member
 
 import numpy as np
-def shift_array(arr, num, fill_value=np.nan):
-    arr = np.roll(arr,num)
+def shift_array(arr, num, axis = 0, fill_value=np.nan):
+    swapArr = np.swapaxes(arr, 0, axis) ### move axis to front
+    rollArr = np.roll(swapArr, num)
     if num < 0:
-        arr[num:] = fill_value
+        rollArr[num:] = fill_value
     elif num > 0:
-        arr[:num] = fill_value
-    return arr
+        rollArr[:num] = fill_value
+    outArr = np.swapaxes(rollArr, 0, axis)
+    return outArr
+
+def argmin_multidim(arr):
+    return np.unravel_index(arr.argmin(), arr.shape)
 
 def cartesian_product(x, y):
     ### two lists of x and y coordinates
