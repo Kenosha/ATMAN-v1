@@ -189,6 +189,9 @@ class Point3D:
         else:
             return True
         
+    def get_ground_point(self):
+        return Point2D((self.x, self.y))
+        
     def rasterize(self, resolution = None):
         if not self.is_vectorized():
             ptArr = np.array(self.coords)[np.newaxis, :] 
@@ -462,7 +465,7 @@ class Line3D:
         line_vec = self.to_vector()
         return line_orig, line_vec
     
-    def intersect(self, myReg):
+    def intersect(self, myReg, rectify_plane = False):
         """
         find intersection of this line with a region (a plane)
         """
@@ -470,6 +473,12 @@ class Line3D:
         ### point on plane can now be described by:
             # x = reg_orig + l * reg_vec1 + m * reg_vec2
         reg_orig, reg_vec1, reg_vec2 = myReg.parametrise()
+        
+        if rectify_plane: ## in this case, we check if the plane is orthogonal to the ground.
+                            # if it is, reg_vec1 is made to run on ground, and reg_vec2 looks up!
+            if reg_vec1.z == 0 and reg_vec2.x == 0 and reg_vec2.y == 0:
+                reg_orig = Point3D((reg_orig.x, reg_orig.y, 0))
+                reg_vec2 = Point3D((0, 0, -reg_vec2.z))
         
         ### point on line can now be described by:
             # y = line_origin + n * line_vec
