@@ -140,7 +140,7 @@ def find_last_and_next_list_member(number_of_interest,
 import numpy as np
 def shift_array(arr, num, axis = 0, fill_value=np.nan):
     swapArr = np.swapaxes(arr, 0, axis) ### move axis to front
-    rollArr = np.roll(swapArr, num)
+    rollArr = np.roll(swapArr, num, axis = 0)
     if num < 0:
         rollArr[num:] = fill_value
     elif num > 0:
@@ -154,6 +154,30 @@ def argmin_multidim(arr):
 def cartesian_product(x, y):
     ### two lists of x and y coordinates
     return np.dstack(np.meshgrid(x, y)).reshape(-1, 2)
+
+def add_in_nan_rows(arr, is_nan_idxs, axis = 0):
+    """
+    add nan entries back into an array with removed nan entries along one dimension (the axis argument).
+    along the axis dimension, the length of the array == is_nan_idxs.sum().
+    wherever is_nan_idxs is False, we add in a np.nan array of matching shape.
+    """
+    
+    swapArr = np.swapaxes(arr, 0, axis) ### bring axis to front
+    
+    arrList = []
+    non_nan_idx = 0
+    for is_nan in is_nan_idxs:
+        if is_nan:
+            fillArr = np.full_like(swapArr[0], fill_value = np.nan)
+        else:
+            fillArr = swapArr[non_nan_idx]
+            non_nan_idx += 1
+        arrList.append(fillArr)
+    
+    outArr = np.stack(arrList, axis = 0)
+    outArr = np.swapaxes(outArr, axis, 0)
+    return outArr
+    
 
 def split_into_contiguous(inList, offset = 1):
     ### take a strictly monotonously increasing list of integers and 
