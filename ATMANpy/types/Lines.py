@@ -591,6 +591,9 @@ class CourtLines(Lines):
         p4 = self[f'{side} Singles Ad Line'].weak_intersect(self[f'{side} Service Line'])
         return Region.from_points(p1, p2, p3, p4)
     
+    def get_half_line(self):
+        return Line(self['Top Baseline'].center(), self['Bottom Baseline'].center())
+    
     def transform(self, lineFunc, *args, **kwargs):
         if isinstance(lineFunc, str):
             return CourtLines([getattr(l, lineFunc)(*args, name = l.name, **kwargs) for l in self.lineList], 
