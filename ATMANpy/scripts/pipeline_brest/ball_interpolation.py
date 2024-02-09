@@ -37,6 +37,7 @@ from ATMANpy.types.Contours import Contour, Contours
 from ATMANpy.funcs.player_funcs import get_service_ROIs, get_half_court_Lines
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_intersection_points
 
+
 from ATMANpy.types.Visual3D import Scene, Camera, View
 from ATMANpy.types.ShapesTennis3D import Player
 
@@ -56,10 +57,19 @@ def load(vid, sto):
 def save(vid, sto):
     pass
 
-def check(myPlayer3D, myBall3D, resolution = 10):
+
+s_x, s_y = 1920, 1080
+sensor_dims = s_x, s_y
+cam_height = 4000
+o_x = s_x / 2
+o_y = s_y / 2
+
+def check(*objs, resolution = 10):
     ### Visualise
-    courtScn = Scene.make_court()
-    myScene = courtScn.put(myPlayer3D).put(myBall3D)
+    myScene = Scene.make_court()
+    
+    for obj in objs:
+        myScene = myScene.put(obj)
     
     ctPt = CourtLines.make().get_center_point()
     x, y = ctPt.coords
@@ -91,30 +101,144 @@ def check(myPlayer3D, myBall3D, resolution = 10):
     # testView = View.make(myCamera, testScene, resolution = resolution)
     # testView.snap().show()
 
-
-def view3D(thing3D, resolution = 10):
+def view3D(objects3D, resolution = 10):
     ### Visualise
-    courtScn = Scene.make_court()
-    myScene = courtScn.put(thing3D)
+    myScn = Scene.make_court()
     
-    myCamera = Camera.calibrated_brest_behind()
-    myView = View.make(myCamera, myScene, resolution = resolution)
+    for obj in objects3D:
+        myScn = myScn.put(obj)
+    
+    myCamera = Camera.calibrated_AO_behind()
+    myView = View.make(myCamera, myScn, resolution = resolution)
     myView.snap().show()
 
 sample_frame = 255
 resolution = 5
 
 distance_threshold = 10
-def filter_hit_candidates_with_ball(hitPts3D, ballPt2D, P, distance_threshold = 10):
-    ptArr = hitPts3D.rasterize()
-    if ballPt2D is None:
-        ptArr_filtered = ptArr
-    else:
-        projArr = sa.project_hit_point_cloud(hitPts3D, P, unique = False)
-        dist = ((projArr - ballPt2D.coords) ** 2).sum(axis = 1) ** 0.5
-        ptArr_filtered = ptArr[dist < distance_threshold]
-    return ptArr_filtered
+
+##### TRAJECTORIES ####
+from ATMANpy.models.BallTrajectory.flight_bounce_model import load_trajectories, initialize
+groundArr, vertArr, rpmArr, trajDict = load_trajectories('FullTrajectories_tight', dtype = 'float32')
+
+# groundArr_halfstep, vertArr_halfstep, trajDict_halfstep = load_trajectories('TrajectoriesRPM_tight_halfstep', dtype = 'float32')
+
+### initialise search spaces with proper arguments
+import inspect
+kwargList = inspect.getargspec(initialize).args
+kwargs = {k: v for k, v in trajDict.items() if k in kwargList}
+v_init_ground_space, v_init_vert_space, spin_rate_space, height_space = initialize(dtype = 'float32', 
+                                                                                   squeeze = True,  
+                                                                                   **kwargs)
+
+def visualize_penalties(points, pens, resolution = 0.5):
+    bad_color = const.BGR['intense_red']
+    good_color = const.BGR['grass_green']
+    
+    def mix_colors(c1, c2, lmbd):
+        return tuple(np.round(np.array(c1) * lmbd + np.array(c2) * (1 - lmbd), 0).astype(int))
         
+    fs, ls = pens.shape
+    
+    points_re = points.reshape((fs * ls, 2, 3))
+    pens_re = pens.reshape((fs * ls))
+    
+    fs_re = points_re[:, 0]
+    ls_re = points_re[:, 1]
+    
+    ### figure out penalty quantiles
+    pcts = np.linspace(0, 1, 11)
+    quantiles = np.quantile(pens_re, pcts)
+    
+    ### Visualise
+    myScn = Scene.make_court()
+    
+    for fs_coords, ls_coords, pen in zip(fs_re, ls_re, pens_re):
+        ### figure out color
+        q = pcts[np.argmin(np.abs(quantiles - pen))]
+        c = mix_colors(bad_color, good_color, q)
+        
+        fsPt, lsPt = Point3D(fs_coords), Point3D(ls_coords)
+        myLn = Line3D(fsPt, lsPt, color = c)
+        
+        myScn = myScn.put(myLn)
+    
+    myCamera = Camera.calibrated_AO_behind()
+    myView = View.make(myCamera, myScn, resolution = resolution)
+    myView.snap().show()
+    
+    # myCamera = Camera.mid_lateral()
+    # myView = View.make(myCamera, myScn, resolution = resolution)
+    # myView.snap().show()
+    
+    myCamera = Camera.birds_eye(cam_height = cam_height, o_x = o_x, o_y = o_y, sensor_dims = sensor_dims)
+    myView = View.make(myCamera, myScn, resolution = resolution)
+    myView.snap().show()
+        
+def resample(coordArr, paramArr, planeArr, pointArr, penalties,
+             logit_coeff = 1, sampling_rate = None, sampling_number = None):
+    # logit_coeff ---> the higher the number, the more we favor low penalty points
+    if penalties is None:
+        return None, None, None, None, None
+    
+    if np.isnan(penalties).all(): ### this happens only if there is not a single observation in the flight path.
+        penalties = np.zeros_like(penalties) # in this case, all hit and rec points have the same penalty of 0
+    
+    rng = np.random.default_rng()
+    
+    logit = np.exp(-logit_coeff * penalties)
+    probs = logit / logit.sum()
+    
+    hit_n, rec_n = probs.shape
+    prob_n = hit_n * rec_n
+    
+    if sampling_rate is not None:
+        out_n = int(sampling_rate * prob_n) + 1
+    elif sampling_number is not None:
+        out_n = sampling_number
+    else:
+        raise Exception('Specify either a sampling_number or a sampling_rate')
+    
+    probs_flat = probs.flatten()
+    prob_idxs_resampled_flat = rng.choice(prob_n, out_n, p = probs_flat, replace = True)
+    
+    hit_idxs_resampled, rec_idxs_resampled = prob_idxs_resampled_flat // rec_n, prob_idxs_resampled_flat % rec_n
+    
+    coordArr_resampled = coordArr[hit_idxs_resampled, rec_idxs_resampled]
+    paramArr_resampled = paramArr[hit_idxs_resampled, rec_idxs_resampled]
+    planeArr_resampled = planeArr[hit_idxs_resampled, rec_idxs_resampled]
+    pointArr_resampled = pointArr[hit_idxs_resampled, rec_idxs_resampled]
+    penalties_resampled = penalties[hit_idxs_resampled, rec_idxs_resampled]
+    
+    return coordArr_resampled, paramArr_resampled, planeArr_resampled, pointArr_resampled, penalties_resampled
+
+def resampled_point_cloud(trajDict, logit_coeff = 10, std_in_vx = 3):
+    rng = np.random.default_rng()
+    
+    resampled_point_pen_dict = {}
+    for hit_frame in trajDict:
+        coordArr, paramArr, planeArr, pointArr, penalties = trajDict[hit_frame]
+        if pointArr is None and penalties is None: ### fails on the last frame -> not a hit frame, strictly, but a hypothetical flight frame
+            resampled_point_pen_dict[hit_frame] = Point3D(rec_pts_resampled.T)
+        else:
+            ### Resample
+            hit_n = coordArr.shape[0]
+            _, _, _, pointArr_resampled, _ = resample(coordArr, paramArr, planeArr, pointArr, penalties,
+                                                      logit_coeff = logit_coeff, sampling_number = hit_n)
+            ### Add Uncertainty
+            pointArr_resampled = rng.normal(pointArr_resampled, std_in_vx)
+            
+            ### Write to Dict
+            hit_pts_resampled, rec_pts_resampled = pointArr_resampled[:, 0], pointArr_resampled[:, 1]
+            resampled_point_pen_dict[hit_frame] = Point3D(hit_pts_resampled.T)
+    
+        ### TODO: use the previous rec points to regularize the following hit points (-> is same!)
+        ### Do this here or after trajectories are actually done?
+        
+    resSF = StreamFeature(resampled_point_pen_dict, name = 'cldPt3D')
+    return resSF
+
+########################
 
 def main(conf, params):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
@@ -127,6 +251,8 @@ def main(conf, params):
     courtLines = CourtLines.make()
     courtDims = courtLines.see_dimensions()
     
+    audSF = StreamFeatures.from_dataframe(audFrm)
+    
     P = HPCF['P'].feature
     H = HPCF['H'].feature
     M_int = HPCF['M_int'].feature
@@ -138,124 +264,315 @@ def main(conf, params):
     ply3DSF = mySF.apply(sa.find_player_positions_3D)
     
     ### make point cloud
-    mySF = hitSF.merge(plySF).merge(HPCF['P'])
+    hit_player_ball_SF = hitSF.merge(plySF).merge(HPCF['P']).merge(ballSF)
     params = {'reaches_in_feet': [2.5, 3, 3.5, 4, 4.5, 5],
-              'resolution': 0.01}
-    cld3DSF = mySF.apply(sa.get_3D_hit_point_cloud, **params)
+              'resolution_general': 0.005, 'resolution_observed': 0.5, 
+              'quantile_threshold': 0.01}
+    cld3DSF_hits = hit_player_ball_SF.apply(sa.get_3D_hit_point_cloud, **params)
     
-    ### check point cloud
-    check_frame = 275
-    player3D = ply3DSF[check_frame]['topPlayer_3D']
-    check(player3D, cld3DSF[check_frame])
-    BGRFrame.from_video(cap, check_frame).show()
+    ### add in a points cloud after the last shot, to simulate the ball flying off after last hit.
+    hit_player_ball_SF = hitSF.merge(plySF).merge(HPCF['P']).merge(ballSF, how = 'outer')
+    hit_player_ball_SFs = hit_player_ball_SF.conform(segBF).filter(segBF).split()
     
-    mySFs = ballSF.merge(cld3DSF, how = 'outer').conform(segBF).filter(segBF).split()
+    params = {'height_in_feet': 5, 'resolution': 0.02, 'radius_in_feet': 15}
+    cld3DSFs_last = hit_player_ball_SFs.apply_whole(sf.add_in_hit_point, **params)
+    cld3DSF_last = cld3DSFs_last.concatenate()
+    
+    cld3DSF = cld3DSF_hits.extend(cld3DSF_last).sort()
+    
+    # # ### check point cloud
+    # for frame in cld3DSF_last.get_frames()[3:6]:
+    #     topplayer3D = ply3DSF[frame]['topPlayer_3D']
+    #     botplayer3D = ply3DSF[frame]['botPlayer_3D']
+    #     topplayer3D = Player.make(topplayer3D.coords)
+    #     botplayer3D = Player.make(botplayer3D.coords)
+    #     check(topplayer3D, botplayer3D, cld3DSF_last[frame])
+    #     BGRFrame.from_video(cap, frame).show()
+    
+    ### from player positions at hit and bounce audio, calculate the probability of bounce
+    mySFs = hitSF.merge(ply3DSF, how = 'outer').merge(audSF, how = 'outer').conform(segBF).filter(segBF).split()
+    bounceSF = mySFs.apply_whole(sf.combine_bounce_priors_and_probs).concatenate()
+    
+    ### Calculate Trajectories
+    mySFs = ballSF.merge(cld3DSF, how = 'outer').merge(bounceSF, how = 'outer').conform(segBF).filter(segBF).split()
     mySF = mySFs[0]
+    
+    trajDicts_raw = mySFs[:1].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
+    
+    params = {'logit_coeff': 10, 'std_in_vx': 3}
+    cld3DSFs_resampled = SFList([resampled_point_cloud(trajDict, **params) for trajDict in trajDicts_raw])
+    cld3DSF_resampled = cld3DSFs_resampled.concatenate()
+    
+    ### Resampling like this works well when the low penalty hit points at two successive hits are close to each other
+    ### Note that when we re-launch the trajectory test in the second instance, 
+    ### the receiving points for any iteration except the last are not used 
+    ### -> instead, we use the next hit points. however, low penalties apply to hit and receive points in the previous shot.
+    ### TODO: Therefore, introduce another penalty that somehow penalises rec points which are far away from successive hit points
+    
+    ### Idea for this penalty -> look at implied paths somehow 
+        # -> get the points, and connect at previous rec point and next hit point
+        # by calculating distance. probability of a path decreases with increasing distance (viterbi?)
+    
+    mySFs = ballSF.merge(cld3DSF_resampled, how = 'outer').merge(bounceSF, how = 'outer').conform(segBF).filter(segBF).split()
+    mySF = mySFs[0]
+    
+    trajDicts_resampled = mySFs[:1].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
+        
+    trajDict = trajDicts_resampled[0]
+    
+    params = {'logit_coeff': 10, 'sampling_rate': 0.05}
+    trajDict_downsampled = {frame: resample(*arrays, **params) for frame, arrays in trajDict.items()}
+    
+    coordArr, paramArr, planeArr, pointArr, penalties = trajDict_downsampled[275]
+    
+    # points, pens = point_pen_pairs[0][319]
+    # points, pens = point_pen_pairs2[0][319]
+    # visualize_penalties(points, pens, resolution = 1)
     
     anchorSF = mySF['cldPt3D']
     shapeSF = mySF['ball_choicePt']
     camlnSF = shapeSF.apply(sa.make_camline, myCamera = matchCamera)
+    bncSF = mySF[['bounce_prob_cond1', 'bounce_prob_cond2', 'prior0', 'prior1', 'prior2']]
     
-    anchor_frames = anchorSF.dropna().get_frames()
+    Stream.from_SF(mySF, cap).show()
     
-    idx = 0
-    frm_currhit, frm_nexthit = anchor_frames[idx], anchor_frames[idx + 1]
-    anchorPts_curr, anchorPts_next = anchorSF[frm_currhit], anchorSF[frm_nexthit]
-    ballPt_curr, ballPt_next = shapeSF[frm_currhit], shapeSF[frm_nexthit]
     
-    flight_frames = list(range(frm_currhit, frm_nexthit + 1))
-    non_na_frmArr = np.array([(i, f) for i, f in enumerate(flight_frames) if f in shapeSF.dropna().get_frames()])
+    trajFrms = mySFs[:5].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
     
-    distance_threshold = 5
-    ptArr_curr = filter_hit_candidates_with_ball(anchorPts_curr, ballPt_curr, P, distance_threshold = distance_threshold)
-    ptArr_next = filter_hit_candidates_with_ball(anchorPts_next, ballPt_next, P, distance_threshold = distance_threshold)
     
-    ptArr_curr_ground = np.copy(ptArr_curr)
-    ptArr_curr_ground[:, 2] = 0
-    ptArr_next_ground = np.copy(ptArr_next)
-    ptArr_next_ground[:, 2] = 0
+    
+    import matplotlib.pyplot as plt
+    trajFrm = trajFrms[1]
+    x, y = trajFrm['l'].values, trajFrm['m'].values
+    plt.scatter(x, y)
+    
+    ### Attempt to find 'best' bounce points for the function.
+    # idea: add a bounce point at different lambdas (with mu = 0, since height = 0)
+    # and then check the fit of a constructed spline representation
+    # the quality of the fit is a measure of the support for the bounce point hypothesis.
+    from ATMANpy.funcs.spin_funcs import calculate_planar_ball_flight, get_optimal_trajectory_indices
+    
+    def get_planar_vector(trajFrm):
+        """ return vector of length 1m in planar direction """
+        fsPt, lsPt = trajFrm.iloc[0][['x', 'y']], trajFrm.iloc[-1][['x', 'y']]
+        vecPt = lsPt - fsPt
+        len_vecPt = (vecPt ** 2).sum() ** 0.5
+        norm_vecPt = (vecPt / len_vecPt) * const.SCALE / const.FOOT_TO_METER
+        return norm_vecPt
+    
+    planFrm = calculate_planar_ball_flight(trajFrm[['x', 'y', 'z']])
+    curr_hit_frame, next_hit_frame = int(planFrm.index[0]), int(planFrm.index[-1])
+    planVec = get_planar_vector(trajFrm)
+    planOrig = trajFrm.iloc[0][['x', 'y']]
+    hit_height = trajFrm.loc[curr_hit_frame, 'z']
+    
+    idx_vals = planFrm.index.values
+    idx_vals_halfstep = idx_vals + 0.5
+    idx_halfstep = np.sort(np.concatenate([idx_vals, idx_vals_halfstep]))
+    
+    planFrm_halfstep = planFrm.reindex(idx_halfstep)
+    
+    ### use a ground speed interpolation to approximate the ground position at all times
+    ground_itpl = planFrm_halfstep['ground_m'].interpolate(method = 'quadratic')
+    zero_height = - hit_height / const.SCALE * const.FOOT_TO_METER
+    
+    initial_conditions = {}
+    fitted_trajs = {}
+    mean_deviations = {}
+    bounce_deviations = {}
+    itpl_bounce_points = {}
+    for hypothetical_bounce_frame in idx_vals_halfstep[:-1]: ### bounce can not be after the second hit frame
+        curr_idx = np.argmax(idx_halfstep == hypothetical_bounce_frame)
         
-    num_curr_points = len(ptArr_curr_ground)
-    num_next_points = len(ptArr_next_ground)
-    num_flight_frames = len(flight_frames)
-    
-    coordArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
-    paramArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
-    for curr_idx in range(num_curr_points):
-        currptArr = ptArr_curr_ground[curr_idx]
-        currPt = Point3D(tuple(currptArr))
-        for next_idx in range(num_next_points):
-            nextptArr = ptArr_next_ground[next_idx]
-            nextPt = Point3D(tuple(nextptArr))
-    
-            ### make flight plane
-            flightLn = Line3D(currPt, nextPt)
-            flightReg = Region3D.from_line(flightLn, 100, dim = 'z')
-            
-            for frame_idx, frame_num in enumerate(flight_frames):
-                camLn = camlnSF[frame_num]
-                if camLn is not None:
-                    ballPt3D, params = camLn.intersect(flightReg)
-                    
-                    coordArr[curr_idx, next_idx, frame_idx] = ballPt3D.coords
-                    paramArr[curr_idx, next_idx, frame_idx] = params
+        bounce_point_planar = (ground_itpl[hypothetical_bounce_frame], zero_height)
+        bounce_point_3D = ground_itpl[hypothetical_bounce_frame] * planVec + planOrig
+        bounce_point_3D.at['z'] = 0
         
-    ### verify the integrity of the coordinates
-    # first, get the non nan arrays 
-    non_na_idxs = non_na_frmArr[:, 0]
-    coordArr_non_nan = coordArr[:, :, non_na_idxs, :]    
-    paramArr_non_nan = paramArr[:, :, non_na_idxs, :]     
-    
-    num_trajectories = num_curr_points * num_next_points
-    print(f'Out of {num_trajectories} trajectories...')
+        truncFrm = planFrm_halfstep.loc[:hypothetical_bounce_frame].copy()
+        truncFrm.at[hypothetical_bounce_frame] = bounce_point_planar
+        
+        
+        pos_ground_measured_flight, pos_vert_measured_flight = truncFrm.values.T
+        v_ground_idx, v_vert_idx, rpm_idx, dev = get_optimal_trajectory_indices(groundArr, vertArr,
+                                                                                pos_ground_measured_flight, pos_vert_measured_flight, 
+                                                                                return_dev = True, sum_of_squares = False)
+        
+        ### find fitted trajectories 
+        fitted_ground = groundArr[v_ground_idx, v_vert_idx, rpm_idx]
+        fitted_vert = vertArr[v_ground_idx, v_vert_idx, rpm_idx]
+        fitted_traj = np.vstack([fitted_ground, fitted_vert]).T
+        
+        ### find theoretical bounce point of fitted trajectory
+        # -> in the best case, this is consistent with the bounce point hypothesis 
+        fitted_bounce_idx = np.argmax(fitted_traj[:, 1] <= zero_height)
+        fitted_bounce_frame = curr_hit_frame + fitted_bounce_idx // 2
+        bounce_dev = np.abs(hypothetical_bounce_frame - fitted_bounce_frame)
+        
+        ### calculate mean deviation, corrected for 3 degrees of freedom -> v_vert, v_hori, spin
+        corr_denominator = (~np.isnan(dev)).sum() - 3
+        mean_dev = np.nansum(dev) / corr_denominator 
+        
+        fitted_trajs[hypothetical_bounce_frame] = fitted_traj
+        initial_conditions[hypothetical_bounce_frame] = (v_ground_idx, v_vert_idx, rpm_idx)
+        mean_deviations[hypothetical_bounce_frame] = mean_dev
+        bounce_deviations[hypothetical_bounce_frame] = bounce_dev
+        itpl_bounce_points[hypothetical_bounce_frame] = bounce_point_3D
 
-    # a) they can not be negative
-    is_pos = coordArr_non_nan >= 0 ### TODO: maybe have a slightly negative allowed value here.
+    devFrm = pd.concat([pd.Series(mean_deviations, name = 'mean_dev'), pd.Series(bounce_deviations, name = 'bounce_dev')], axis = 1)
+    exp_devFrm = np.exp(-devFrm)
+    prob_devFrm = exp_devFrm / exp_devFrm.sum()
+    # prob_devFrm = prob_devFrm.reindex(idx_halfstep).interpolate(limit_area = 'inside').reindex(idx_vals).dropna()
     
-    pos_coords = is_pos.all(axis = (2, 3))
-    num_pos_coords = pos_coords.sum()    
-    print(f'   ... {num_pos_coords} are always above ground')
+    ### add in the sound information
+    bounceSer = audFrm.loc[curr_hit_frame + 1: next_hit_frame - 1, 'bounce']
+    # bring to half frame index
+    bounceSer = bounceSer.reindex(idx_halfstep).interpolate(limit_area = 'inside').reindex(idx_vals_halfstep).dropna()
     
-    # b) they must have monotonously increasing lambdas along the flight path at ground
-    lambdaArr = paramArr_non_nan[:, :, :, 0] ## get only flight path lambdas along ground
-    delta_lambdaArr = np.diff(lambdaArr, axis = 2) ## first difference these in time
+    probFrm = pd.concat([prob_devFrm, bounceSer], axis = 1)
+    probSer = probFrm.prod(axis = 1) ** (1 / 3)
+
+    bounce_frame = probSer.index[probSer.argmax()]
+    bounce_frames = [int(bounce_frame), int(bounce_frame) + 1]
+    bounce_point = itpl_bounce_points[bounce_frame]
+    bouncePt = Point3D((bounce_point.x, bounce_point.y, bounce_point.z))
     
-    monotonous_lambdas = (delta_lambdaArr > 0).all(axis = 2)
-    num_monotonous_lambdas = monotonous_lambdas.sum()    
-    print(f'   ... {num_monotonous_lambdas} are monotonously increasing')
-    
-    # c) the lambdas must have monotonously decreasing first derivatives
-    ### -> the ball decelerates in flight!
-    # for this, we calculate the lambda divided by the index
-    lambda_per_time = lambdaArr / non_na_idxs[np.newaxis, np.newaxis, :]
-    # this metric (essentially measuring the average ground speed up to each observed point)
-    # ought to be decreasing -> at the beginning, speed is very high, then decreases
-    delta_lambda_per_time = np.diff(lambda_per_time, axis = 2)
-    
-    decelerating_lambdas = (delta_lambda_per_time < 0).all(axis = 2)
-    num_decelerating_lambdas = decelerating_lambdas.sum()    
-    print(f'   ... {num_decelerating_lambdas} are decelerating')
-    
-    # d) start and end points must be 'reasonably close' to 0 and 1
-    
-    # e) ball heigth must be consistent with one or two parabolas
-    
-    # join all the conditions
-    good_trajectory = pos_coords & monotonous_lambdas & decelerating_lambdas
-    num_good_trajectories = good_trajectory.sum()
-    print(f'   ... {num_good_trajectories} are ok!')
+    #### Locate players 
+        # (especially for serve, we need to know from which side the serve happens)
+        # (maybe we could do this in the hit label script...)
+    srvSF = ply3DSF.merge(hitSF, how = 'inner').apply(sa.determine_serve_position)
     
     
+    #### check if bounce occurs inside or outside of court
+    bounce_point
     
-    ###
-    paramArr_reshape = paramArr.reshape((num_curr_points * num_next_points, num_flight_frames, 3))
-    paramArr_reshape_non_nan = paramArr_reshape[:, non_na_idxs, :] 
+    #############
+    ### Create Fitted Trajectory Object ###
+    from ATMANpy.types.Abstract import Trajectory, TrajectoryFitted, PlayerMovement, Shot
     
-    paramArr_filtered = paramArr_reshape_non_nan[good_trajectory.flatten()]
+    # a) flight trajectory
+    obsFrm = trajFrm.loc[(trajFrm.source == 'observed'), ['x', 'y', 'z']]
+    synFrm = trajFrm.loc[(trajFrm.source == 'hit'), ['x', 'y', 'z']]
     
-    plt.plot(paramArr_filtered[0, :, 0], paramArr_filtered[0, :, 1])
+    evtDict = {}
     
-    def plot_trajectory(para)
+    evtDict[curr_hit_frame] = hitSF[curr_hit_frame]
+    
+    for frame in bounce_frames:
+        synFrm.at[frame] = bounce_point
+        evtDict[frame] = 'bounce'
+    
+    evtDict[next_hit_frame] = hitSF[next_hit_frame]
+        
+    synSF = StreamFeatures.from_dataframe(synFrm).apply(sa.coords_to_ball).rename('synBall')
+    obsSF = StreamFeatures.from_dataframe(obsFrm).apply(sa.coords_to_ball).rename('obsBall')
+    evtSF = StreamFeature(evtDict, name = 'event')
+    
+    trajSF = obsSF.merge(synSF, how = 'outer').merge(evtSF, how = 'outer')
+    
+    v_ground_idx, v_vert_idx, rpm_idx = initial_conditions[bounce_frame]
+    v_init_ground = v_init_ground_space[v_ground_idx]
+    v_init_vert = v_init_vert_space[v_vert_idx]
+    spin_rpm = spin_rate_space[rpm_idx]
+    
+    pre_bounce_frames = list(range(curr_hit_frame, bounce_frames[-1] + 1))
+    post_bounce_frames = list(range(bounce_frames[0], next_hit_frame))
+    shot_frames = list(range(curr_hit_frame, next_hit_frame + 1))
+    
+    preSF = trajSF.conform(pre_bounce_frames)
+    postSF = trajSF.conform(post_bounce_frames)
+    
+    shotTraj = TrajectoryFitted(preSF, v_init_ground, v_init_vert, spin_rpm)
+    bounceTraj = Trajectory(postSF)
+    
+    #b) bounce trajectory
+    evtDict = {}
+    
+    for frame in bounce_frames:
+        synFrm.at[frame] = bounce_point
+        evtDict[frame] = 'bounce'
+        
+    #c) player movements
+    topMvmt = PlayerMovement(ply3DSF['topPlayer_3D'].conform(shot_frames))
+    botMvmt = PlayerMovement(ply3DSF['botPlayer_3D'].conform(shot_frames))
+    
+    myShot = Shot(shotTraj, [bounceTraj], topMvmt, botMvmt)
+    
+    #d) visualize
+    topSF = myShot.feat_top_player()
+    botSF = myShot.feat_bot_player()
+    ballSF = myShot.feat_ball().recolor(const.BGR['ball_yellow'])
+    
+    racquetSF = myShot.feat_top_racquet().recolor(const.BGR['minty_green'])
+    racquetSF2 = myShot.feat_bot_racquet().recolor(const.BGR['smokey_grey']).rename('Racquet2')
+    
+    showSFs = topSF.merge(botSF).merge(ballSF).merge(racquetSF).merge(racquetSF2)
+    
+    for frame in showSFs:
+        frntScn = Scene.make_empty()
+        for feat, obj in showSFs[frame].items():
+            frntScn = frntScn.put(obj)
+            
+        frontView = View.make(myCam, frntScn, resolution = FOREGROUND_RES)
+        
+        showFrm = backView.combine(frontView).snap()
+        
+        show_continuous(showFrm.array, ms_between_frames = MS_BETWEEN_FRAMES)
+        
+    cv.destroyAllWindows()
+    
+    
+    check_frame = 265.5
+    traj = fitted_trajs[check_frame]
+        
+    plt.scatter(traj[:, 0], traj[:, 1])
+    plt.scatter(planFrm.loc[:check_frame].ground_m, planFrm.loc[:check_frame].vert_m)
+    
+    v_ground_idx, v_vert_idx, rpm_idx = initial_conditions[274]
+    
+    v_init_ground = v_init_ground_space[v_ground_idx]
+    v_init_vert = v_init_vert_space[v_vert_idx]
+    spin_rpm = spin_rate_space[rpm_idx]
+    
+    Stream.from_SF(mySF, cap).show(ms_between_frames = 500, frame_counter = True)
+    
+    from ATMANpy.types.Abstract import Trajectory
+    # instead of splines, use trajectories directly
+    StreamFeatures.from_dataframe()
+    
+    trajSF = Trajectory.from_features()
+    
+    xyFrm = trajFrm[['l', 'm']]
+    
+    BGRFrame.from_video(cap, 255).show()
+    
+    
+    
+    # recall that splines have to start and end at the bounce point
+    
+    
+
+    from scipy.interpolate import splrep, BSpline
+    
+    
+    # xyFrm = trajFrm[['l', 'm']].sort_values('l') ### for spline construction, lambdas (our xs) have to be sorted. 
+    tck, fp, ier, msg = splrep(xyFrm['l'], xyFrm['m'], full_output = True, s = 100)
+    
+    plt.plot(trajFrm['l'], BSpline(*tck)(trajFrm['l']), '-', label='s=0')
+    
+    ### use splines to simplify the functions
+    
+    
+    audFrm.loc[255: 275]
+    
+    anchor_frames
+    
+    Stream.from_SF(mySF, cap).show(ms_between_frames = 250, frame_counter = True)
+    
+    ### Read in the sound, and check for a correspondence on bounce.
+    audFrm.loc[frm_currhit: frm_nexthit, 'bounce']
+    
+    
+    # def plot_trajectory(para)
     
     
     
