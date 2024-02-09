@@ -367,10 +367,10 @@ def get_inferred_hit_points(hitFlag, topPlayerCnt, botPlayerCnt,
     
     return hitCnt
 
-def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag, 
+def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag, ball_choicePt,
                            reaches_in_feet = [2.5, 3, 3.5, 4, 4.5, 5],
-                           height_in_feet = 5,
-                           resolution = 5):
+                           height_in_feet = 5, quantile_threshold = 0.05,
+                           resolution_general = 1, resolution_observed = 5):
     ### as opposed to the above function get_inferred_hit_points, 
         # we calculate a cloud of potential hit points, not a single hit point
         # the cloud is calculated in 3D.
@@ -421,6 +421,8 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag,
     limit_phi = phi_rad_min * np.pi, phi_rad_max * np.pi
     limit_theta = theta_rad_min * np.pi, theta_rad_max * np.pi
 
+    resolution = resolution_general if ball_choicePt is None else resolution_observed    
+
     pointList = []
     for reach_ft in reaches_in_feet:
         reach_in_axis_units = reach_ft * const.SCALE
@@ -431,6 +433,13 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag,
     pointArr = np.concatenate(pointList)
     x, y, z = pointArr.T
     cldPt3D = Point3D((x, y, z)) ### this is vectorized! Point3D can hold many points.
+    
+    ### filter out points that do not project close to the ball point (if it is observed)
+    if ball_choicePt is not None:
+        pointArr = filter_hit_candidates_with_ball(cldPt3D, ball_choicePt, P, quantile_threshold = quantile_threshold)
+        x, y, z = pointArr.T
+        cldPt3D = Point3D((x, y, z)) ### this is vectorized! Point3D can hold many points.
+        
     return cldPt3D  
     
 def project_hit_point_cloud(cldPt3D, P, unique = True):
@@ -483,13 +492,13 @@ def keep_closest_contour_behind_baseline(myCnts, which = 'Top', courtLines = Non
     
     return bestCnt
 
-def make_camline(ball_choicePt, myCamera = None):
+def make_camline(ball_choicePt, myCamera = None, length_factor = 1000):
     if ball_choicePt is None:
         camLine = None
     else:
         m_w, b_w = myCamera.get_world_ray_params(ball_choicePt)
         camPt, camVec = Point3D(b_w), Point3D(m_w)
-        camLine = Line3D(camPt, camPt - camVec, color = const.BGR['strong_pink'])
+        camLine = Line3D(camPt, camPt - camVec * length_factor, color = const.BGR['strong_pink'])
     return camLine
 
 def merge_contour_into_contours(candCnts, hitCnt):
@@ -501,6 +510,58 @@ def merge_contour_into_contours(candCnts, hitCnt):
     else:
         candplusCnts = candCnts.append(hitCnt)
     return candplusCnts
-    
+
+def filter_hit_candidates_with_ball(hitPts3D, ballPt2D, P, quantile_threshold = 0.05):
+    ptArr = hitPts3D.rasterize()
+    if ballPt2D is None:
+        ptArr_filtered = ptArr
+    else:
+        projArr = project_hit_point_cloud(hitPts3D, P, unique = False)
+        dist = ((projArr - ballPt2D.coords) ** 2).sum(axis = 1) ** 0.5
+        distance_threshold = np.quantile(dist, quantile_threshold) 
+        print(f'Chose the {round(quantile_threshold * 100, 0)}% nearest points, closer than {round(distance_threshold, 1)}px in projection.')
+        ptArr_filtered = ptArr[dist <= distance_threshold]
+    return ptArr_filtered
+
+def coords_to_ball(x, y, z):
+    outBall = Ball3D((x, y, z))
+    return outBall
         
+def determine_serve_position(topPlayer_3D, botPlayer_3D, hitFlag, schemaLines = schemaLines):
+    middle_x = schemaLines.get_half_line().leftPt.x
+    
+    if hitFlag == 'top_srv':
+        groundPt_x = topPlayer_3D.get_ground_point().x
+    
+        if groundPt_x < middle_x:
+            serve_pos = 'STD' ### serve far deuce
+        else:
+            serve_pos = 'STA' ### serve top ad
+    
+    elif hitFlag == 'bot_srv':
+        groundPt_x = botPlayer_3D.get_ground_point().x
+    
+        if groundPt_x > middle_x:
+            serve_pos = 'SBD' ### serve bot deuce
+        else:
+            serve_pos = 'SBA' ### serve bot ad
+    
+    else:
+        serve_pos = None
+    
+    return serve_pos
+    
+# def determine_in_or_out(bouncePt, hit_type, schemaLines = schemaLines):
+    
+#     if hit_type == ''
+    
+    
+    
+    
+    
+
+        
+        
+    
+    
     
