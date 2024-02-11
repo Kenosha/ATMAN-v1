@@ -2104,14 +2104,15 @@ def add_in_hit_point(mySF, height_in_feet = 5, resolution = 5, radius_in_feet = 
     x, y, z = hypothetical_points.T
     cldPt3D = Point3D((x, y, z))
     
-    return StreamFeature({ls_flight_frame: cldPt3D}, name = 'cldPt3D')
+    streamDict = {ls_flight_frame: {'cldPt3D': cldPt3D, 'hitFlag': 'inferred_flight_end'}}
+    
+    return StreamFeatures(streamDict)
     
 def test_trajectories(mySF, matchCamera = None, P = None):
     
     anchorSF = mySF['cldPt3D']
     shapeSF = mySF['ball_choicePt']
     camlnSF = shapeSF.apply(sa.make_camline, myCamera = matchCamera)
-    bncSF = mySF[['bounce_prob_cond1', 'bounce_prob_cond2', 'prior0', 'prior1', 'prior2']]
     
     from ATMANpy.models.BallTrajectory.flight_bounce_model import calculate_planar_ball_flight_vectorised, get_optimal_trajectory_indices_vectorised2
     ### TODO
@@ -2289,7 +2290,8 @@ def filter_trajectories(trajDict, penalty_quantile = 0.05):
 
     return outDict
 
-def fit_trajectories(coordArr, paramArr, planeArr, pointArr):
+def fit_trajectories(coordArr, paramArr, planeArr, pointArr,
+                     groundArr, vertArr, rpmArr):
     from ATMANpy.models.BallTrajectory.flight_bounce_model import get_optimal_trajectory_indices_vectorised
     
     planeArr_metres = planeArr / const.SCALE * const.FOOT_TO_METER
@@ -2305,17 +2307,17 @@ def fit_trajectories(coordArr, paramArr, planeArr, pointArr):
     heightDF = pd.DataFrame(initial_height_indices, columns = ['height'])
     heightDF['count'] = heightDF.groupby('height').cumcount()
     heightDF = heightDF.sort_values(by = ['height', 'count'])
-    height_sort_key = heightDF.index
+    height_sort_key = pd.Series(heightDF.index).sort_values().index
     
     ### TODO: make this tighter by doing all operations one height index at a time
     # -> otherwise, groundArr_brdcst becomes much too large!
     trajArrs = []
-    for height in np.unique(initial_height_indices):
-        groundArr_height = groundArr[:, :, :, height]
-        vertArr_height = vertArr[:, :, :, height]
+    for height_idx in np.unique(initial_height_indices):
+        groundArr_height = groundArr[:, :, :, height_idx]
+        vertArr_height = vertArr[:, :, :, height_idx]
         
-        pos_ground_measured_height = pos_ground_measured[initial_height_indices == height]
-        pos_vert_measured_height = pos_vert_measured[initial_height_indices == height]
+        pos_ground_measured_height = pos_ground_measured[initial_height_indices == height_idx]
+        pos_vert_measured_height = pos_vert_measured[initial_height_indices == height_idx]
         
         trajArr_height = get_optimal_trajectory_indices_vectorised(groundArr_height, vertArr_height, 
                                                                    pos_ground_measured_height,
@@ -2326,7 +2328,6 @@ def fit_trajectories(coordArr, paramArr, planeArr, pointArr):
     trajArr = trajArr[height_sort_key]
     
     trajIdxs = trajArr[:, [0, 1, 2]].astype(int)
-    num_traj = len(trajIdxs)
     
     groundArr_filt = groundArr[trajIdxs[:, 0], trajIdxs[:, 1], trajIdxs[:, 2], initial_height_indices, :num_frames]
     vertArr_filt = vertArr[trajIdxs[:, 0], trajIdxs[:, 1], trajIdxs[:, 2], initial_height_indices, :num_frames]  
@@ -2346,8 +2347,13 @@ def fit_trajectories(coordArr, paramArr, planeArr, pointArr):
     #     ax.scatter(measArr_x, measArr_y)
     #     ax.scatter(theoArr_x, theoArr_y)
         
+    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
+    
+def compare_trajectories_with_audio(vertArr_filt, bounceFrm):
     ######## Integrate bounce audio ##########
-    bounceFrm = bncSF[flight_frames].to_dataframe().iloc[1:] ### first frame can not have bounce (after hit)
+    bounce_frames = bounceFrm.index.tolist()
+    hit_frame = bounce_frames[0] - 1 
+    flight_frames = [hit_frame, *bounce_frames]
     p0, p1, p2 = bounceFrm['prior0'].unique()[0], bounceFrm['prior1'].unique()[0], bounceFrm['prior2'].unique()[0]
     
     ### Gather implied trajectory bounce data ###
@@ -2357,10 +2363,16 @@ def fit_trajectories(coordArr, paramArr, planeArr, pointArr):
     ### Calculate conditional bounce probabilities and priors
     bounce_cond_probs = []
     for bnc, num in zip(frm_bounces, num_bounces):
-        if num > 0:
-            joint_bounce_prob = bounceFrm.loc[bnc, f'bounce_prob_cond{num}'].prod()
+        if hit_frame in bnc:
+            joint_bounce_prob = 0 ### there can be no bounce in the current hit frame, after the hit
         else:
-            joint_bounce_prob = 1
+            if num == 0:
+                joint_bounce_prob = 1
+            elif num < 3:
+                joint_bounce_prob = bounceFrm.loc[bnc, f'bounce_prob_cond{num}'].prod()
+            else: ### since we don't have probabilities for three bounces (which could likely not be heard well anyway)
+                joint_bounce_prob = bounceFrm.loc[bnc, 'bounce_prob_cond2'].prod()
+                
         bounce_cond_probs.append(joint_bounce_prob)
     bounce_cond_probs = np.array(bounce_cond_probs)
     
@@ -2369,45 +2381,70 @@ def fit_trajectories(coordArr, paramArr, planeArr, pointArr):
     
     ### Join Conditional Probabilities and Priors
     bounce_probs = bounce_cond_probs * bounce_priors
-    traj_is_best = bounce_probs == bounce_probs.max()
+    # traj_is_best = bounce_probs == bounce_probs.max()
     
+    return bounce_probs
+    
+def make_trajectory_frame(traj_is_best, 
+                          coordArr, paramArr, planeArr, pointArr, 
+                          groundArr_filt, vertArr_filt, rpmArr_filt,
+                          v_init_ground_space, v_init_vert_space, spin_rate_space,
+                          trajArr,
+                          flight_frames = None):
+    ### traj is best is a boolean array with N entries, one for each trajectory
+    ### all other arrays are N (x T) x ... arrays
+    if flight_frames is None:
+        flight_frames = np.arange(coordArr.shape[1])
+        
     ### Gather optimal coordinates, parameters, hit points
     coordArr_opt = coordArr[traj_is_best].mean(axis = 0)
     paramArr_opt = paramArr[traj_is_best].mean(axis = 0)
+    planeArr_opt = planeArr[traj_is_best].mean(axis = 0)
     pointArr_opt = pointArr[traj_is_best].mean(axis = 0)
-    
+
+    ### calculate optimal flight line
+    flightLn = Line3D(Point3D(pointArr_opt[0]), Point3D(pointArr_opt[1]))
+
     ### Gather optimal trajectories
-    from ATMANpy.models.BallTrajectory.flight_bounce_model import trajectory_to_3D
     groundArr_opt = groundArr_filt[traj_is_best].mean(axis = 0)
     vertArr_opt = vertArr_filt[traj_is_best].mean(axis = 0)
+    rpmArr_opt = rpmArr_filt[traj_is_best].mean(axis = 0)
     
+    ### Calculate optimal trajectories in 3D
+    from ATMANpy.models.BallTrajectory.flight_bounce_model import trajectory_to_3D
     traj_coordArr_opt = trajectory_to_3D(groundArr_opt, vertArr_opt, flightLn)
-    traj_rpmArr_opt = rpmArr_filt[traj_is_best].mean(axis = 0)
     
     ### Gather optimal initial conditions
     traj_paramArr_opt = trajArr[traj_is_best, :3].mean(axis = 0)
     vx0_idx, vy0_idx, rpm0_idx = np.round(traj_paramArr_opt, 0).astype(int)
-    
     vx0, vy0, rpm0 = v_init_ground_space[vx0_idx], v_init_vert_space[vy0_idx], spin_rate_space[rpm0_idx]
     
     ### Collect in dataframes
     coordFrm = pd.DataFrame(coordArr_opt, index = flight_frames, columns = ['x_o', 'y_o', 'z_o'])
     paramFrm = pd.DataFrame(paramArr_opt, index = flight_frames, columns = ['l', 'm', 'n'])
+    planeFrm = pd.DataFrame(planeArr_opt, index = flight_frames, columns = ['px_o', 'pz_o'])
     
     traj_coordFrm = pd.DataFrame(traj_coordArr_opt, index = flight_frames, columns = ['x_t', 'y_t', 'z_t'])
-    traj_coordFrm['rpm'] = traj_rpmArr_opt
+    traj_coordFrm['px_t'] = groundArr_opt * const.SCALE / const.FOOT_TO_METER
+    traj_coordFrm['pz_t'] = vertArr_opt * const.SCALE / const.FOOT_TO_METER
+    traj_coordFrm['rpm_t'] = rpmArr_opt
     traj_coordFrm['vx0'] = vx0
     traj_coordFrm['vy0'] = vy0
     traj_coordFrm['rpm0'] = rpm0
     
-    trajFrm = pd.concat([coordFrm, traj_coordFrm], axis = 1)
+    trajFrm = pd.concat([coordFrm, planeFrm, traj_coordFrm], axis = 1)
     
-    trajFrms.append(trajFrm)
-        
-    return trajFrms
+    return trajFrm.astype(float)
     
     
 def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
+    ### TODO: priors strongly influence the selection of the final trajectory.
+    ### 1) use also the deviation of the trajectory to exclude bogus trajectories
+    ### 2) make priors more informed 
+        # -> player movement, 
+        # -> umpire shouts
+        # -> number of hits after the current hit (point can not be over if there are a bunch more hits after the current one)
+        # ...
     
     def prior_dist(lmb):
         ### given a lambda (the depth of the receiving player over the depth of the court),
@@ -2438,22 +2475,34 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
     prev_hit_frame, prev_hit_flag, prev_shape = None, None, None
     for next_hit_frame, next_hit_flag in mySF['hitFlag'].dropna().items():
         which = next_hit_flag[:3]
-        which_long = 'Top' if which == 'top' else 'Bottom'
-        next_shape = mySF[f'{which}Player_3D'][next_hit_frame]
+        
+        if which == 'top':    
+            which_long = 'Top'
+            next_shape = mySF[f'topPlayer_3D'][next_hit_frame]
+        elif which == 'bot':
+            which_long = 'Bottom'
+            next_shape = mySF[f'botPlayer_3D'][next_hit_frame]
+        else: ### in case of inferred hit point
+            which, which_long = None, None    
+            next_shape = None
             
         if prev_hit_frame is not None:
             frames = range(prev_hit_frame + 1, next_hit_frame + 1) ### assumption being -> can not bounce in hit frame (after hit)
             
-            hit_point = prev_shape.get_ground_point()
-            rec_point = next_shape.get_ground_point()
-            
-            baseLn, netLn = schemaLines[f'{which_long} Baseline'], schemaLines['Net Line']
-            crt_dist = netLn.distance_to(baseLn.center())
-            ply_dist = netLn.distance_to(rec_point)
-            
-            ### calculate priors
-            lmb = ply_dist / crt_dist    
-            p0, p1, p2 = prior_dist(lmb)
+            if which in ['top', 'bot']:
+                hit_point = prev_shape.get_ground_point()
+                rec_point = next_shape.get_ground_point()
+                
+                baseLn, netLn = schemaLines[f'{which_long} Baseline'], schemaLines['Net Line']
+                crt_dist = netLn.distance_to(baseLn.center())
+                ply_dist = netLn.distance_to(rec_point)
+                
+                ### calculate priors
+                lmb = ply_dist / crt_dist    
+                p0, p1, p2 = prior_dist(lmb)
+            else:
+                p0, p1, p2 = 1/3, 1/3, 1/3 ### this happens if the next hit frame is the inferred end of flight frame
+                
             
             ### prep bounce probabilities for one and two bounces
             pArr1 = bncSer.reindex(frames).values
