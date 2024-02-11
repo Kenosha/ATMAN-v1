@@ -199,9 +199,9 @@ class Point3D:
             ptArr = np.vstack(self.coords).T
         return ptArr
         
-    def project(self, P):
+    def project(self, P, resolution = 5):
         ### make a ptArr with shape N x 3
-        ptArr = self.rasterize()
+        ptArr = self.rasterize(resolution = resolution)
         num_points, dims = ptArr.shape
         
         ### Turn coordinates homogenous

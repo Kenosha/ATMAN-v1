@@ -526,6 +526,11 @@ def filter_hit_candidates_with_ball(hitPts3D, ballPt2D, P, quantile_threshold = 
 def coords_to_ball(x, y, z):
     outBall = Ball3D((x, y, z))
     return outBall
+
+def project_ball(ball3D, P):
+    ball2D_array = ball3D.project(P, resolution = 0.1)
+    ball2D = Point2D(ball2D_array.mean(axis = 0))
+    return ball2D
         
 def determine_serve_position(topPlayer_3D, botPlayer_3D, hitFlag, schemaLines = schemaLines):
     middle_x = schemaLines.get_half_line().leftPt.x
