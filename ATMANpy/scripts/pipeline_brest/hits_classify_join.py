@@ -172,7 +172,7 @@ def check(video_hitSer, audio_hitSer, hitSer,
     fig.savefig(os.path.join(saveDir, figname))
     plt.close()
 
-def main(conf, prob_params, weight_params, thresh_params, smooth_params):
+def main(conf, prob_params, weight_params, thresh_params, smooth_params, switch_params):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     nwo, nch = conf['num_workers'], conf['chunksize']
     cap = get_video(vid)
@@ -242,6 +242,8 @@ def main(conf, prob_params, weight_params, thresh_params, smooth_params):
         
         ### understand what is going on at these local maxima
         # for each peak frame, understand whether something is happening bot or top, then select the likeliest event
+        ### Added: enforce alternating top and bottom hits
+        top_prior, bot_prior = 0.5, 0.5
         bot_hit_peak_frames = []
         top_hit_peak_frames = []
         bot_srv_peak_frames = []
@@ -249,7 +251,12 @@ def main(conf, prob_params, weight_params, thresh_params, smooth_params):
         for pf in peak_frames:
             pfSer = conv_videoFrm.loc[pf]
             top_oth, bot_oth = pfSer['top_oth'], pfSer['bot_oth']
-            hi_prefix = 'top' if top_oth < bot_oth else 'bot'
+            if top_prior * (1 - top_oth) > bot_prior * (1 - bot_oth):
+                hi_prefix = 'top'
+                top_prior, bot_prior = 1 - switch_params['prior'], switch_params['prior']
+            else:
+                hi_prefix = 'bot'
+                top_prior, bot_prior = switch_params['prior'], 1 - switch_params['prior']
             
             prefSer = pfSer[[c for c in pfSer.index if hi_prefix in c]]
             prefSer = prefSer.drop(f'{hi_prefix}_oth')
@@ -290,8 +297,10 @@ if __name__ == '__main__':
                      'hit_prob_threshold': 0.2}
     
     smooth_params = {'smoothing_kernel_audio': np.array([0.25, 0.5, 1, 0.5, 0.25]),
-                     'smoothing_kernel_video': np.array([0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25])}
+                     'smoothing_kernel_video': np.array([0.1, 0.25, 0.5, 0.7, 0.8, 0.9, 1, 0.9, 0.8, 0.7, 0.5, 0.25, 0.1])}
        
-    main(conf, prob_params, weight_params, thresh_params, smooth_params)
+    switch_params = {'prior': 0.99}
+    
+    main(conf, prob_params, weight_params, thresh_params, smooth_params, switch_params)
     
         
