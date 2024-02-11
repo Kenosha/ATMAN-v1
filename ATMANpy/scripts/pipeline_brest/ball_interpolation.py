@@ -11,6 +11,7 @@ import time
 import cv2 as cv
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 ### GET VIDEO ###
 from ATMANpy.funcs.util_funcs import get_video
@@ -266,7 +267,7 @@ def main(conf, params):
     ### make point cloud
     hit_player_ball_SF = hitSF.merge(plySF).merge(HPCF['P']).merge(ballSF)
     params = {'reaches_in_feet': [2.5, 3, 3.5, 4, 4.5, 5],
-              'resolution_general': 0.005, 'resolution_observed': 0.5, 
+              'resolution_general': 0.002, 'resolution_observed': 0.2,  ### originally: resolutions = 0.005, 0.5
               'quantile_threshold': 0.01}
     cld3DSF_hits = hit_player_ball_SF.apply(sa.get_3D_hit_point_cloud, **params)
     
@@ -274,11 +275,12 @@ def main(conf, params):
     hit_player_ball_SF = hitSF.merge(plySF).merge(HPCF['P']).merge(ballSF, how = 'outer')
     hit_player_ball_SFs = hit_player_ball_SF.conform(segBF).filter(segBF).split()
     
-    params = {'height_in_feet': 5, 'resolution': 0.02, 'radius_in_feet': 15}
+    params = {'height_in_feet': 5, 'resolution': 0.01, 'radius_in_feet': 15} ### originally: resolution = 0.02
     cld3DSFs_last = hit_player_ball_SFs.apply_whole(sf.add_in_hit_point, **params)
     cld3DSF_last = cld3DSFs_last.concatenate()
     
-    cld3DSF = cld3DSF_hits.extend(cld3DSF_last).sort()
+    cld3DSF = cld3DSF_hits.extend(cld3DSF_last['cldPt3D']).sort()
+    hitSF_ext = hitSF.extend(cld3DSF_last['hitFlag']).sort()
     
     # # ### check point cloud
     # for frame in cld3DSF_last.get_frames()[3:6]:
@@ -290,14 +292,14 @@ def main(conf, params):
     #     BGRFrame.from_video(cap, frame).show()
     
     ### from player positions at hit and bounce audio, calculate the probability of bounce
-    mySFs = hitSF.merge(ply3DSF, how = 'outer').merge(audSF, how = 'outer').conform(segBF).filter(segBF).split()
+    mySFs = hitSF_ext.merge(ply3DSF, how = 'outer').merge(audSF, how = 'outer').conform(segBF).filter(segBF).split()
     bounceSF = mySFs.apply_whole(sf.combine_bounce_priors_and_probs).concatenate()
     
     ### Calculate Trajectories
     mySFs = ballSF.merge(cld3DSF, how = 'outer').merge(bounceSF, how = 'outer').conform(segBF).filter(segBF).split()
     mySF = mySFs[0]
     
-    trajDicts_raw = mySFs[:1].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
+    trajDicts_raw = mySFs[:5].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
     
     params = {'logit_coeff': 10, 'std_in_vx': 3}
     cld3DSFs_resampled = SFList([resampled_point_cloud(trajDict, **params) for trajDict in trajDicts_raw])
@@ -316,35 +318,73 @@ def main(conf, params):
     mySFs = ballSF.merge(cld3DSF_resampled, how = 'outer').merge(bounceSF, how = 'outer').conform(segBF).filter(segBF).split()
     mySF = mySFs[0]
     
-    trajDicts_resampled = mySFs[:1].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
+    trajDicts_resampled = mySFs[:5].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
         
-    trajDict = trajDicts_resampled[0]
+    idx = 2
+    trajDict = trajDicts_resampled[idx]
+    mySF = mySFs[idx]
     
     params = {'logit_coeff': 10, 'sampling_rate': 0.05}
     trajDict_downsampled = {frame: resample(*arrays, **params) for frame, arrays in trajDict.items()}
     
-    coordArr, paramArr, planeArr, pointArr, penalties = trajDict_downsampled[275]
+    observation_threshold = 3
+    trajFrms = []
+    event_frames = list(trajDict.keys())
+    for hit_frame in event_frames[:-1]:
+        rec_frame = event_frames[event_frames.index(hit_frame) + 1]
+        flight_frames = list(range(hit_frame, rec_frame + 1))
     
-    # points, pens = point_pen_pairs[0][319]
-    # points, pens = point_pen_pairs2[0][319]
-    # visualize_penalties(points, pens, resolution = 1)
+        coordArr, paramArr, planeArr, pointArr, penalties = trajDict_downsampled[hit_frame]
+        
+        example_coords_are_nan = np.isnan(coordArr[0])
+        valid_observations = (~example_coords_are_nan).all(axis = 1).sum()
+        if valid_observations >= observation_threshold:
+            ### Fit Trajectories
+            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = sf.fit_trajectories(coordArr, paramArr, planeArr, pointArr, 
+                                                                                     groundArr, vertArr, rpmArr)
+            
+            ### Compare Trajectories with audio
+            bncSF = mySF[['bounce_prob_cond1', 'bounce_prob_cond2', 'prior0', 'prior1', 'prior2']]
+            bounceFrm = bncSF[flight_frames].to_dataframe().iloc[1:] ### first frame can not have bounce (after hit)
+            bounce_probs = sf.compare_trajectories_with_audio(vertArr_filt, bounceFrm)
+            
+            ### Compare Trajectories with observed path
+            traj_probs = 1 / (trajArr[:, 3] + 1)
+            
+            ### Join Probs
+            probs = bounce_probs * traj_probs
+            traj_is_best = probs == probs.max()
+            
+            trajFrm = sf.make_trajectory_frame(traj_is_best, 
+                                               coordArr, paramArr, planeArr, pointArr, 
+                                               groundArr_filt, vertArr_filt, rpmArr_filt,
+                                               v_init_ground_space, v_init_vert_space, spin_rate_space,
+                                               trajArr,
+                                               flight_frames = flight_frames)
+                
+            ### Visualize
+            x, y = trajFrm['px_o'].values, trajFrm['pz_o'].values
+            t_x, t_y = trajFrm['px_t'].values, trajFrm['pz_t'].values
+            plt.scatter(x, y)
+            plt.scatter(t_x, t_y)
+            plt.show()
+        else:
+            trajFrm = pd.DataFrame()
+            
+        trajFrms.append(trajFrm)
     
-    anchorSF = mySF['cldPt3D']
-    shapeSF = mySF['ball_choicePt']
-    camlnSF = shapeSF.apply(sa.make_camline, myCamera = matchCamera)
-    bncSF = mySF[['bounce_prob_cond1', 'bounce_prob_cond2', 'prior0', 'prior1', 'prior2']]
     
-    Stream.from_SF(mySF, cap).show()
+    trajFrm = trajFrms[15]
     
+    ### Visualize on the actual Stream
+    trajFrm = pd.concat([trajFrm.iloc[:-1] for trajFrm in trajFrms])
+    trajFrm = trajFrm[['x_t', 'y_t', 'z_t']]
+    trajFrm.columns = ['x', 'y', 'z']
+    ballSF = StreamFeatures.from_dataframe(trajFrm).apply(sa.coords_to_ball).rename('ball3D')
+    ballSF = ballSF.merge(HPCF['P'])
+    ballSF = ballSF.apply(sa.project_ball)
     
-    trajFrms = mySFs[:5].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
-    
-    
-    
-    import matplotlib.pyplot as plt
-    trajFrm = trajFrms[1]
-    x, y = trajFrm['l'].values, trajFrm['m'].values
-    plt.scatter(x, y)
+    Stream.from_SF(ballSF, cap).show()
     
     ### Attempt to find 'best' bounce points for the function.
     # idea: add a bounce point at different lambdas (with mu = 0, since height = 0)
