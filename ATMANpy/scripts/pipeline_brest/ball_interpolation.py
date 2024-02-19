@@ -176,56 +176,63 @@ def visualize_penalties(points, pens, resolution = 0.5):
     myView = View.make(myCamera, myScn, resolution = resolution)
     myView.snap().show()
         
-def resample(coordArr, paramArr, planeArr, pointArr, penalties,
+def resample(coordArr, paramArr, planeArr, pointArr, netArr, penalties,
              logit_coeff = 1, sampling_rate = None, sampling_number = None):
     # logit_coeff ---> the higher the number, the more we favor low penalty points
     if penalties is None:
-        return None, None, None, None, None
-    
-    if np.isnan(penalties).all(): ### this happens only if there is not a single observation in the flight path.
-        penalties = np.zeros_like(penalties) # in this case, all hit and rec points have the same penalty of 0
-    
-    rng = np.random.default_rng()
-    
-    logit = np.exp(-logit_coeff * penalties)
-    probs = logit / logit.sum()
-    
-    hit_n, rec_n = probs.shape
-    prob_n = hit_n * rec_n
-    
-    if sampling_rate is not None:
-        out_n = int(sampling_rate * prob_n) + 1
-    elif sampling_number is not None:
-        out_n = sampling_number
+        coordArr, paramArr, planeArr, pointArr, netArr, penalties = None, None, None, None, None, None
     else:
-        raise Exception('Specify either a sampling_number or a sampling_rate')
-    
-    probs_flat = probs.flatten()
-    prob_idxs_resampled_flat = rng.choice(prob_n, out_n, p = probs_flat, replace = True)
-    
-    hit_idxs_resampled, rec_idxs_resampled = prob_idxs_resampled_flat // rec_n, prob_idxs_resampled_flat % rec_n
-    
-    coordArr_resampled = coordArr[hit_idxs_resampled, rec_idxs_resampled]
-    paramArr_resampled = paramArr[hit_idxs_resampled, rec_idxs_resampled]
-    planeArr_resampled = planeArr[hit_idxs_resampled, rec_idxs_resampled]
-    pointArr_resampled = pointArr[hit_idxs_resampled, rec_idxs_resampled]
-    penalties_resampled = penalties[hit_idxs_resampled, rec_idxs_resampled]
-    
-    return coordArr_resampled, paramArr_resampled, planeArr_resampled, pointArr_resampled, penalties_resampled
+        if np.isnan(penalties).all(): ### this happens only if there is not a single observation in the flight path.
+            penalties = np.zeros_like(penalties) # in this case, all hit and rec points have the same penalty of 0
+        
+        rng = np.random.default_rng()
+        
+        logit = np.exp(-logit_coeff * penalties)
+        probs = logit / logit.sum()
+        
+        hit_n, rec_n = probs.shape
+        prob_n = hit_n * rec_n
+        
+        if sampling_rate is not None:
+            out_n = int(sampling_rate * prob_n) + 1
+        elif sampling_number is not None:
+            out_n = sampling_number
+        else:
+            raise Exception('Specify either a sampling_number or a sampling_rate')
+        
+        ### SELECT indices 
+        probs_flat = probs.flatten()
+        prob_idxs_resampled_flat = rng.choice(prob_n, out_n, p = probs_flat, replace = True)
+        hit_idxs_resampled, rec_idxs_resampled = prob_idxs_resampled_flat // rec_n, prob_idxs_resampled_flat % rec_n
+        
+        ### RESAMPLE using selected indices
+        coordArr = coordArr[hit_idxs_resampled, rec_idxs_resampled]
+        paramArr = paramArr[hit_idxs_resampled, rec_idxs_resampled]
+        planeArr = planeArr[hit_idxs_resampled, rec_idxs_resampled]
+        pointArr = pointArr[hit_idxs_resampled, rec_idxs_resampled]
+        if netArr is None:
+            netArr = None
+        else:
+            netArr = netArr[hit_idxs_resampled, rec_idxs_resampled]
+        penalties = penalties[hit_idxs_resampled, rec_idxs_resampled]
+        
+    return coordArr, paramArr, planeArr, pointArr, netArr, penalties
 
-def resampled_point_cloud(trajDict, logit_coeff = 10, std_in_vx = 3):
+def resampled_point_cloud(trajSF, logit_coeff = 10, std_in_vx = 3):
     rng = np.random.default_rng()
     
     resampled_point_pen_dict = {}
-    for hit_frame in trajDict:
-        coordArr, paramArr, planeArr, pointArr, penalties = trajDict[hit_frame]
+    for hit_frame in trajSF.get_frames():
+        coordArr, paramArr, planeArr, pointArr, netArr, penalties = trajSF[hit_frame].values()
         if pointArr is None and penalties is None: ### fails on the last frame -> not a hit frame, strictly, but a hypothetical flight frame
             resampled_point_pen_dict[hit_frame] = Point3D(rec_pts_resampled.T)
         else:
             ### Resample
             hit_n = coordArr.shape[0]
-            _, _, _, pointArr_resampled, _ = resample(coordArr, paramArr, planeArr, pointArr, penalties,
-                                                      logit_coeff = logit_coeff, sampling_number = hit_n)
+            arrays_resampled = resample(coordArr, paramArr, planeArr, pointArr, netArr, penalties,
+                               logit_coeff = logit_coeff, sampling_number = hit_n)
+            pointArr_resampled = arrays_resampled[3]
+            
             ### Add Uncertainty
             pointArr_resampled = rng.normal(pointArr_resampled, std_in_vx)
             
@@ -250,6 +257,7 @@ def main(conf, params):
     HPCF, segBF, ballSF, hitSF, plySF, audFrm = load(vid, sto)
     
     courtLines = CourtLines.make()
+    courtLines = courtLines.add_singles_netline()
     courtDims = courtLines.see_dimensions()
     
     audSF = StreamFeatures.from_dataframe(audFrm)
@@ -297,12 +305,12 @@ def main(conf, params):
     
     ### Calculate Trajectories
     mySFs = ballSF.merge(cld3DSF, how = 'outer').merge(bounceSF, how = 'outer').conform(segBF).filter(segBF).split()
-    mySF = mySFs[0]
     
-    trajDicts_raw = mySFs[:5].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
+    net_epsilon = 0.05
+    trajSFs_raw = mySFs[:3].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
     
     params = {'logit_coeff': 10, 'std_in_vx': 3}
-    cld3DSFs_resampled = SFList([resampled_point_cloud(trajDict, **params) for trajDict in trajDicts_raw])
+    cld3DSFs_resampled = trajSFs_raw.apply_whole(resampled_point_cloud, **params)
     cld3DSF_resampled = cld3DSFs_resampled.concatenate()
     
     ### Resampling like this works well when the low penalty hit points at two successive hits are close to each other
@@ -316,51 +324,107 @@ def main(conf, params):
         # by calculating distance. probability of a path decreases with increasing distance (viterbi?)
     
     mySFs = ballSF.merge(cld3DSF_resampled, how = 'outer').merge(bounceSF, how = 'outer').conform(segBF).filter(segBF).split()
-    mySF = mySFs[0]
-    
-    trajDicts_resampled = mySFs[:5].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
+    trajSFs_resampled = mySFs[:3].apply_whole(sf.test_trajectories, matchCamera = matchCamera, P = P)
         
-    idx = 2
-    trajDict = trajDicts_resampled[idx]
+    params = {'logit_coeff': 10, 'sampling_rate': 0.05}
+    trajSFs_downsampled = trajSFs_resampled.apply(resample, **params)
+    
+    idx = 0
+    trajSF = trajSFs_downsampled[idx]
     mySF = mySFs[idx]
     
-    params = {'logit_coeff': 10, 'sampling_rate': 0.05}
-    trajDict_downsampled = {frame: resample(*arrays, **params) for frame, arrays in trajDict.items()}
-    
+    ### TODO: Factorize this function into an sf_apply thing once trajectory path penalties are introduced
     observation_threshold = 3
     trajFrms = []
-    event_frames = list(trajDict.keys())
+    event_frames = trajSF.get_frames()
     for hit_frame in event_frames[:-1]:
         rec_frame = event_frames[event_frames.index(hit_frame) + 1]
         flight_frames = list(range(hit_frame, rec_frame + 1))
     
-        coordArr, paramArr, planeArr, pointArr, penalties = trajDict_downsampled[hit_frame]
+        coordArr, paramArr, planeArr, pointArr, netArr, penalties = trajSF[hit_frame].values()
         
         example_coords_are_nan = np.isnan(coordArr[0])
         valid_observations = (~example_coords_are_nan).all(axis = 1).sum()
         if valid_observations >= observation_threshold:
+            
             ### Fit Trajectories
-            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = sf.fit_trajectories(coordArr, paramArr, planeArr, pointArr, 
+            # a) kill plane observations in net
+            if netArr is not None:
+                planeArr = np.where(~netArr[:, :, np.newaxis], planeArr, np.nan)
+                
+            # b) run fit
+            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = sf.fit_trajectories(planeArr, pointArr,
                                                                                      groundArr, vertArr, rpmArr)
             
+            if not netArr is None:
+                groundArr_filt = np.where(~netArr[:, np.newaxis, :], groundArr_filt, np.nan)
+                vertArr_filt = np.where(~netArr[:, np.newaxis, :], vertArr_filt, np.nan)
+                rpmArr_filt = np.where(~netArr[:, np.newaxis, :], rpmArr_filt, np.nan)
+            
             ### Compare Trajectories with audio
+            # a) gather bounce frame   
             bncSF = mySF[['bounce_prob_cond1', 'bounce_prob_cond2', 'prior0', 'prior1', 'prior2']]
             bounceFrm = bncSF[flight_frames].to_dataframe().iloc[1:] ### first frame can not have bounce (after hit)
-            bounce_probs = sf.compare_trajectories_with_audio(vertArr_filt, bounceFrm)
+            
+            # b) overide priors if ball is likely in net
+            if not netArr is None: ### improve priors if the ball is likely to be in the net
+                p0_fly, p1_fly, p2_fly = bounceFrm['prior0'].unique()[0], bounceFrm['prior1'].unique()[0], bounceFrm['prior2'].unique()[0]
+                
+                planes_in_net = np.max(netArr, axis = 1)
+                prob_in_net = planes_in_net.mean()
+                p0_in_net, p1_in_net, p2_in_net = 0.9, 0.09, 0.01
+                p0 = (1 - prob_in_net) * p0_fly + prob_in_net * p0_in_net
+                p1 = (1 - prob_in_net) * p1_fly + prob_in_net * p1_in_net
+                p2 = (1 - prob_in_net) * p2_fly + prob_in_net * p2_in_net
+                
+                prior_override = p0, p1, p2
+            else:
+                prior_override = None
+                
+            bounce_probs = sf.compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = prior_override)
             
             ### Compare Trajectories with observed path
-            traj_probs = 1 / (trajArr[:, 3] + 1)
+            plane_traj_probs = 1 / (trajArr[:, :, 3] + 1)
             
             ### Join Probs
-            probs = bounce_probs * traj_probs
-            traj_is_best = probs == probs.max()
+            probs = bounce_probs * plane_traj_probs
+            plane_traj_is_best = probs == probs.max()
+            best_plane, best_traj = ut.argmax_multidim(plane_traj_is_best)
             
-            trajFrm = sf.make_trajectory_frame(traj_is_best, 
-                                               coordArr, paramArr, planeArr, pointArr, 
+            ### Make Trajectory Frame
+            trajFrm = sf.make_trajectory_frame(plane_traj_is_best, 
+                                               coordArr, paramArr, planeArr, pointArr,
                                                groundArr_filt, vertArr_filt, rpmArr_filt,
                                                v_init_ground_space, v_init_vert_space, spin_rate_space,
                                                trajArr,
                                                flight_frames = flight_frames)
+            
+            ### Add Events
+            hitFrm = hitSF.conform(flight_frames).dropna().to_series().str.split('_', expand = True)
+            if len(hitFrm.columns) == 2:
+                hitFrm.columns = ['side', 'stroke']
+            elif len(hitFrm.columns) == 3:
+                hitFrm.columns = ['side', 'stroke', 'spin']
+            
+            trajFrm['hit_side'] = hitFrm['side']
+            trajFrm['hit_stroke'] = hitFrm['stroke']
+            
+            assert len(hitFrm['side'].unique()) == 1
+            side = hitFrm['side'].unique()[0]
+            
+            trajFrm['is_net'] = False if netArr is None else netArr[best_plane]
+            trajFrm['is_bounce'] = np.where(trajFrm.z_t == 0, True, False)
+            
+            inReg = courtLines.get_half_region('Bottom' if side == 'top' else 'Top', width = 'Singles')
+            bounce_coords = trajFrm.loc[trajFrm['is_bounce'], ['x_t', 'y_t']]
+            
+            def coords_in_region(coords):
+                return Point2D(coords).within(inReg)
+        
+            trajFrm['is_bounce_in'] = bounce_coords.apply(coords_in_region, axis = 1, raw = True)
+                
+            
+            ### add 
                 
             ### Visualize
             x, y = trajFrm['px_o'].values, trajFrm['pz_o'].values
@@ -372,19 +436,47 @@ def main(conf, params):
             trajFrm = pd.DataFrame()
             
         trajFrms.append(trajFrm)
-    
-    
-    trajFrm = trajFrms[15]
-    
-    ### Visualize on the actual Stream
+
     trajFrm = pd.concat([trajFrm.iloc[:-1] for trajFrm in trajFrms])
-    trajFrm = trajFrm[['x_t', 'y_t', 'z_t']]
-    trajFrm.columns = ['x', 'y', 'z']
-    ballSF = StreamFeatures.from_dataframe(trajFrm).apply(sa.coords_to_ball).rename('ball3D')
+
+    ### Add events 
+
+
+    ### Visualize on the actual Stream
+    showFrm = trajFrm[['x_t', 'y_t', 'z_t']]
+    showFrm['x_t'] = showFrm['x_t'].fillna(trajFrm['x_o']).interpolate() ### filling and interpolating only needed for net observations
+    showFrm['y_t'] = showFrm['y_t'].fillna(trajFrm['y_o']).interpolate()
+    showFrm['z_t'] = showFrm['z_t'].fillna(trajFrm['z_o']).interpolate()
+    
+    showFrm.columns = ['x', 'y', 'z']
+    ballSF = StreamFeatures.from_dataframe(showFrm).apply(sa.coords_to_ball).rename('ball3D')
     ballSF = ballSF.merge(HPCF['P'])
     ballSF = ballSF.apply(sa.project_ball)
     
     Stream.from_SF(ballSF, cap).show()
+    
+    Stream(cap, 2650, 2720).show(ms_between_frames = 500, frame_counter = True)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     ### Attempt to find 'best' bounce points for the function.
     # idea: add a bounce point at different lambdas (with mu = 0, since height = 0)
