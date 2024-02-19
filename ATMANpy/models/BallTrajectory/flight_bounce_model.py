@@ -9,7 +9,7 @@ Created on Fri Apr 14 15:49:29 2023
 import os
 import pandas as pd
 import numpy as np
-from ATMANpy.funcs.util_funcs import get_folder_struct, shift_array, add_in_nan_rows, argmin_multidim
+from ATMANpy.funcs.util_funcs import get_folder_struct, shift_array, add_in_nan_rows, argmin_multidim, detect_local_minima
 
 ### SEARCH SPACE PARAMETERS ###
 GRANULARITY_INITIAL_GROUND = 75 #100 # 325 ### how many different initial conditions in x
@@ -491,27 +491,27 @@ def get_optimal_trajectory_indices(groundArr, vertArr,
     else:
         return v_ground_idx, v_vert_idx, rpm_idx
     
-def get_optimal_trajectory_indices_vectorised(groundArr, vertArr, 
-                                              pos_ground_measured, pos_vert_measured,
+def get_optimal_trajectory_indices_vectorised(groundArr_height, vertArr_height, 
+                                              pos_ground_measured_h, pos_vert_measured_h,
                                               sum_of_squares = True):
-    ### shape groundArr, vertArr: v_ground x v_vert x spin_rpm x time
-    ### shape pos_ground_measured, pos_vert_measured: dim1 x dim2 x ... x t
-    measured_shape = pos_ground_measured.shape
+    ### shape groundArr_height, vertArr_height: v_ground x v_vert x spin_rpm x time
+    ### shape pos_ground_measured_h, pos_vert_measured_h: dim1 x dim2 x ... x t
+    measured_shape = pos_ground_measured_h.shape
     extra_dims, num_frames = measured_shape[:-1], measured_shape[-1]
     
-    pos_ground_theoretical = groundArr[:, :, :, :num_frames]
-    pos_vert_theoretical = vertArr[:, :, :, :num_frames]
+    pos_ground_theoretical_h = groundArr_height[:, :, :, :num_frames]
+    pos_vert_theoretical_h = vertArr_height[:, :, :, :num_frames]
     
     for _ in extra_dims:
-        pos_ground_theoretical = np.expand_dims(pos_ground_theoretical, axis = -2)
-        pos_vert_theoretical = np.expand_dims(pos_vert_theoretical, axis = -2)
+        pos_ground_theoretical_h = np.expand_dims(pos_ground_theoretical_h, axis = -2)
+        pos_vert_theoretical_h = np.expand_dims(pos_vert_theoretical_h, axis = -2)
     
     for _ in range(3): ### initial condition space
-        pos_ground_measured = np.expand_dims(pos_ground_measured, axis = 0)
-        pos_vert_measured = np.expand_dims(pos_vert_measured, axis = 0)
+        pos_ground_measured_h = np.expand_dims(pos_ground_measured_h, axis = 0)
+        pos_vert_measured_h = np.expand_dims(pos_vert_measured_h, axis = 0)
     
-    ground_dev = pos_ground_measured - pos_ground_theoretical
-    vert_dev = pos_vert_measured - pos_vert_theoretical
+    ground_dev = pos_ground_measured_h - pos_ground_theoretical_h
+    vert_dev = pos_vert_measured_h - pos_vert_theoretical_h
     
     if sum_of_squares:
         my_dev = (ground_dev ** 2 + vert_dev ** 2) ** 0.5
@@ -528,6 +528,66 @@ def get_optimal_trajectory_indices_vectorised(groundArr, vertArr,
         traj_conds.append((traj_ground_idx, traj_vert_idx, traj_rpm_idx, traj_best_dev))
     
     return np.array(traj_conds)
+    
+def get_locally_minimal_trajectory_indices_vectorised(groundArr_height, vertArr_height, 
+                                                      pos_ground_measured_h, pos_vert_measured_h,
+                                                      sum_of_squares = True, number_of_local_minima = 15):
+    rng = np.random.default_rng()
+    
+    ### shape groundArr_height, vertArr_height: v_ground x v_vert x spin_rpm x time
+    ### shape pos_ground_measured_h, pos_vert_measured_h: dim1 x dim2 x ... x t
+    measured_shape = pos_ground_measured_h.shape
+    extra_dims, num_frames = measured_shape[:-1], measured_shape[-1]
+    
+    pos_ground_theoretical_h = groundArr_height[:, :, :, :num_frames]
+    pos_vert_theoretical_h = vertArr_height[:, :, :, :num_frames]
+    
+    for _ in extra_dims:
+        pos_ground_theoretical_h = np.expand_dims(pos_ground_theoretical_h, axis = -2)
+        pos_vert_theoretical_h = np.expand_dims(pos_vert_theoretical_h, axis = -2)
+    
+    for _ in range(3): ### initial condition space
+        pos_ground_measured_h = np.expand_dims(pos_ground_measured_h, axis = 0)
+        pos_vert_measured_h = np.expand_dims(pos_vert_measured_h, axis = 0)
+    
+    ground_dev = pos_ground_measured_h - pos_ground_theoretical_h
+    vert_dev = pos_vert_measured_h - pos_vert_theoretical_h
+    
+    if sum_of_squares:
+        my_dev = (ground_dev ** 2 + vert_dev ** 2) ** 0.5
+    else:
+        my_dev = np.abs(ground_dev) + np.abs(vert_dev)
+        
+    sum_dev = np.nansum(my_dev, axis = -1) ### shape: v_ground, v_vert, rpm, traj
+    sum_dev = np.moveaxis(sum_dev, -1, 0) ### shape: traj, v_ground, v_vert, rpm
+    
+    local_minima = [detect_local_minima(traj_sum_dev) for traj_sum_dev in sum_dev] ### shape: trajs, x_idxs, z_idxs, rpm_idxs
+    
+    traj_arrays = []
+    for traj_idx, local_minimum in enumerate(local_minima):
+        ### gather the local minima in initial condition space for a given trajectory
+        x_idxs, z_idxs, rpm_idxs = local_minimum
+        traj_devs = sum_dev[traj_idx, x_idxs, z_idxs, rpm_idxs]
+        
+        ### resample local minima
+        sample_ps = 1 / traj_devs
+        sample_ps_norm = sample_ps / sample_ps.sum()
+        loc_min_idxs = np.arange(len(traj_devs))
+        
+        if len(loc_min_idxs) < number_of_local_minima: ### in this case, get all of the minima and pad the array to fill the required local minima
+            chosen_loc_min_idxs = np.tile(loc_min_idxs, number_of_local_minima)[:number_of_local_minima]
+        else:
+            chosen_loc_min_idxs = rng.choice(loc_min_idxs, size = number_of_local_minima, replace = False, p = sample_ps_norm)
+        
+        traj_ground_idxs = x_idxs[chosen_loc_min_idxs]
+        traj_vert_idxs = z_idxs[chosen_loc_min_idxs]
+        traj_rpm_idxs = rpm_idxs[chosen_loc_min_idxs]
+        traj_devs_chosen = traj_devs[chosen_loc_min_idxs]
+    
+        traj_array = np.stack([traj_ground_idxs, traj_vert_idxs, traj_rpm_idxs, traj_devs_chosen], axis = 1)
+        traj_arrays.append(traj_array)
+        
+    return np.stack(traj_arrays)
     
 
 def get_optimal_trajectory_indices_vectorised2(groundArr_brdcst, vertArr_brdcst, 
