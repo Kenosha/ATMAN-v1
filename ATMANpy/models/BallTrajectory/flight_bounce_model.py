@@ -12,12 +12,12 @@ import numpy as np
 from ATMANpy.funcs.util_funcs import get_folder_struct, shift_array, add_in_nan_rows, argmin_multidim, detect_local_minima
 
 ### SEARCH SPACE PARAMETERS ###
-GRANULARITY_INITIAL_GROUND = 75 #100 # 325 ### how many different initial conditions in x
+GRANULARITY_INITIAL_GROUND = 60 #100 # 325 ### how many different initial conditions in x
 GRANULARITY_INITIAL_VERT = 41 #50 # 200 ### how many different initial conditions in z
-GRANULARITY_SPIN = 51 #301 ### how many different spin rates
-GRANULARITY_HEIGHT = 60 ### how many different initial heights
+GRANULARITY_SPIN = 31 #301 ### how many different spin rates
+GRANULARITY_HEIGHT = 20 ### how many different initial heights
 MIN_SPEED_GROUND = 1 ## lowest possible ground speed of ball, in m/s
-MAX_SPEED_GROUND = 75 ## highest possible ground speed of ball, in m/s
+MAX_SPEED_GROUND = 60 ## highest possible ground speed of ball, in m/s
 MIN_SPEED_VERT = -20
 MAX_SPEED_VERT =  20
 MIN_SPIN_RATE = -5000 ### highest topspin RPM (negative, because topspin causes negative lift)  
@@ -57,7 +57,7 @@ I_cm = alpha * m * R**2 ### moment of inertia
 
 
 ########
-NAME = f'FullTrajectories_tight'
+NAME = f'FullTrajectories_g{GRANULARITY_INITIAL_GROUND}_v{GRANULARITY_INITIAL_VERT}_s{GRANULARITY_SPIN}_h{GRANULARITY_HEIGHT}'
 ########
 
 def RPM_to_omega(RPM):
@@ -377,7 +377,7 @@ def trajectory_to_3D(groundArr_opt, vertArr_opt, flightLn):
 #%%############ SPIN ESTIMATION  ############
 
 import ATMANpy.auxil.constants as const
-import ATMANpy.funcs.HMM.HPost as HPost
+import ATMANpy.models.HMM.HPost as HPost
 
 def calculate_initial_conditions(trajFrm, frames_to_use = 1):
     ### frames to use: how many of the first frames do we use to calculate the initial speeds?    
@@ -589,6 +589,65 @@ def get_locally_minimal_trajectory_indices_vectorised(groundArr_height, vertArr_
         
     return np.stack(traj_arrays)
     
+    
+def get_locally_minimal_trajectory_indices(groundArr, vertArr, 
+                                           pos_ground_measured, pos_vert_measured,
+                                           sum_of_squares = True, number_of_local_minima = 15):
+    rng = np.random.default_rng()
+    
+    ### shape groundArr_height, vertArr_height: v_ground x v_vert x spin_rpm x time
+    ### shape pos_ground_measured_h, pos_vert_measured_h: dim1 x dim2 x ... x t
+    num_trajs, num_frames = pos_ground_measured.shape
+    
+    pos_ground_theoretical = groundArr[:, :, :, :, :num_frames]
+    pos_vert_theoretical = vertArr[:, :, :, :, :num_frames]
+    
+    pos_ground_theoretical_brdcst = pos_ground_theoretical[np.newaxis]
+    pos_vert_theoretical_brdcst = pos_vert_theoretical[np.newaxis]
+    
+    pos_ground_measured_brdcst = pos_ground_measured.copy()
+    pos_vert_measured_brdcst = pos_vert_measured.copy()
+    for _ in range(4):
+        pos_ground_measured_brdcst = pos_ground_measured_brdcst[:, np.newaxis]
+        pos_vert_measured_brdcst = pos_vert_measured_brdcst[:, np.newaxis]
+    
+    ground_dev = pos_ground_measured_brdcst - pos_ground_theoretical_brdcst
+    vert_dev = pos_vert_measured_brdcst - pos_vert_theoretical_brdcst
+    
+    sum_dev = np.nansum((ground_dev ** 2 + vert_dev ** 2) ** 0.5, axis = -1)
+    del ground_dev, vert_dev
+    
+    local_minima = [detect_local_minima(traj_sum_dev) for traj_sum_dev in sum_dev] ### shape: trajs, x_idxs, z_idxs, rpm_idxs, height_idxs
+    
+    traj_arrays = []
+    for traj_dev, local_minimum in zip(sum_dev, local_minima):
+        ### gather the local minima in initial condition space for a given trajectory
+        x_idxs, z_idxs, rpm_idxs, height_idxs = local_minimum
+        min_devs = traj_dev[x_idxs, z_idxs, rpm_idxs, height_idxs]
+        
+        ### resample local minima
+        sample_ps = 1 / min_devs
+        sample_ps_norm = sample_ps / sample_ps.sum()
+        loc_min_idxs = np.arange(len(min_devs))
+        
+        if len(loc_min_idxs) < number_of_local_minima: ### in this case, get all of the minima and pad the array to fill the required local minima
+            chosen_loc_min_idxs = np.tile(loc_min_idxs, number_of_local_minima)[:number_of_local_minima]
+        else:
+            chosen_loc_min_idxs = rng.choice(loc_min_idxs, size = number_of_local_minima, replace = False, p = sample_ps_norm)
+        
+        traj_ground_idxs = x_idxs[chosen_loc_min_idxs]
+        traj_vert_idxs = z_idxs[chosen_loc_min_idxs]
+        traj_rpm_idxs = rpm_idxs[chosen_loc_min_idxs]
+        traj_height_idxs = height_idxs[chosen_loc_min_idxs]
+        traj_devs_chosen = min_devs[chosen_loc_min_idxs]
+    
+        traj_array = np.stack([traj_ground_idxs, traj_vert_idxs, traj_rpm_idxs, traj_height_idxs, traj_devs_chosen], axis = 1)
+        traj_arrays.append(traj_array)
+   
+    return np.stack(traj_arrays)
+    
+
+
 
 def get_optimal_trajectory_indices_vectorised2(groundArr_brdcst, vertArr_brdcst, 
                                               pos_ground_measured, pos_vert_measured,
