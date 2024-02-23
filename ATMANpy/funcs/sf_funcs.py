@@ -23,7 +23,7 @@ from ATMANpy.types.Streams import Stream
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Region
 from ATMANpy.types.Contours import Contours, Contour
-from ATMANpy.types.Shapes3D import Point3D, Line3D, Region3D, Ball3D
+from ATMANpy.types.Shapes3D import Point3D, Line3D, Region3D, Ball3D, Circle3D
 
 import ATMANpy.funcs.util_funcs as ut
 import ATMANpy.funcs.sf_apply_funcs as sa
@@ -2088,18 +2088,15 @@ def add_in_hit_point(mySF, height_in_feet = 5, resolution = 5, radius_in_feet = 
     hingePt3D = basePt3D.up(height_in_axis_units)
     
     if side == 'top':
-        phi_rad_min, phi_rad_max = 0.49, 0.51
         theta_rad_min, theta_rad_max = 0, 1
     elif side == 'bot':
-        phi_rad_min, phi_rad_max = 0.49, 0.51
         theta_rad_min, theta_rad_max = 1, 2
     
-    limit_phi = phi_rad_min * np.pi, phi_rad_max * np.pi
     limit_theta = theta_rad_min * np.pi, theta_rad_max * np.pi
 
     radius_in_vx = radius_in_feet * const.SCALE
-    hypothetical_ball = Ball3D(hingePt3D.coords, radius = radius_in_vx, limit_phi = limit_phi, limit_theta = limit_theta)
-    hypothetical_points = hypothetical_ball.rasterize(resolution = resolution)
+    hypothetical_circle = Circle3D(hingePt3D.coords, radius = radius_in_vx, limit_theta = limit_theta)
+    hypothetical_points = hypothetical_circle.rasterize(resolution = resolution)
     
     x, y, z = hypothetical_points.T
     cldPt3D = Point3D((x, y, z))
@@ -2365,6 +2362,29 @@ def test_trajectories(mySF, matchCamera = None, P = None, net_epsilon = 0.05):
         print(f'   ... {num_tiny_pen} are completely acceptable')
         print(f'   ... {num_small_pen} are reasonably good')
         
+        # #### visualize
+        # save_folder = ut.get_folder_struct('graphs')['trajectories']
+        
+        # dim = 10
+        # len_dim1 = num_curr_points // dim
+        # len_dim2 = num_next_points // dim
+        
+        # for g1 in range(len_dim1):
+        #     g1_fs, g1_ls = g1 * dim, (g1 + 1) * dim
+        #     for g2 in range(len_dim2):
+        #         g2_fs, g2_ls = g2 * dim, (g2 + 1) * dim
+                
+        #         plotArr = planeArr[g1_fs:g1_ls, g2_fs:g2_ls]
+                
+        #         fig, ax = plt.subplots(10, 10, figsize = (50, 50))
+        #         for idx_1, curr_plotArr in enumerate(plotArr):
+        #             for idx_2, curr_next_plotArr in enumerate(curr_plotArr):
+        #                 x, z = curr_next_plotArr[:, 0], curr_next_plotArr[:, 1]
+        #                 ax[idx_1, idx_2].scatter(x, z)
+                        
+        #         fig.savefig(os.path.join(save_folder, f'hit_frame_{frm_currhit}_x{g1}_y{g2}.png'))
+        #         plt.close()
+        
         outDict[frm_currhit] = {'coordArr': coordArr, 
                                 'paramArr': paramArr, 
                                 'planeArr': planeArr, 
@@ -2474,6 +2494,35 @@ def fit_trajectories(planeArr, pointArr,
         
     return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
     
+def fit_trajectories_pointless(planeArr, 
+                               groundArr, vertArr, rpmArr):
+    from ATMANpy.models.BallTrajectory.flight_bounce_model import get_locally_minimal_trajectory_indices
+    
+    planeArr_metres = planeArr / const.SCALE * const.FOOT_TO_METER
+    pos_ground_measured, pos_vert_measured = planeArr_metres.take(0, axis = -1), planeArr_metres.take(1, axis = -1)
+    num_candidates, num_frames = pos_ground_measured.shape
+    
+    trajArr = get_locally_minimal_trajectory_indices(groundArr, vertArr, 
+                                                     pos_ground_measured, pos_vert_measured)
+    
+    
+    vx_idxs = trajArr.take(0, axis = -1).astype(int)
+    vy_idxs = trajArr.take(1, axis = -1).astype(int)
+    rpm_idxs = trajArr.take(2, axis = -1).astype(int)
+    height_idxs = trajArr.take(3, axis = -1).astype(int)
+    
+    groundArr_filt = groundArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
+    vertArr_filt = vertArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
+    rpmArr_filt = rpmArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]  
+    
+    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
+    
+    
+    
+    
+    
+    
+
 def compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = None):
     
     ######## Integrate bounce audio ##########
@@ -2551,7 +2600,7 @@ def make_trajectory_frame(plane_traj_is_best,
     ### Gather optimal initial conditions
     traj_paramArr_opt = trajArr[best_plane, best_traj, :3]
     vx0_idx, vy0_idx, rpm0_idx = np.round(traj_paramArr_opt, 0).astype(int)
-    vx0, vy0, rpm0 = v_init_ground_space[vx0_idx], v_init_vert_space[vy0_idx], spin_rate_space[rpm0_idx]
+    vx0, vz0, rpm0 = v_init_ground_space[vx0_idx], v_init_vert_space[vy0_idx], spin_rate_space[rpm0_idx]
     
     ### Collect in dataframes
     coordFrm = pd.DataFrame(coordArr_opt, index = flight_frames, columns = ['x_o', 'y_o', 'z_o'])
@@ -2563,7 +2612,7 @@ def make_trajectory_frame(plane_traj_is_best,
     traj_coordFrm['pz_t'] = vertArr_opt * const.SCALE / const.FOOT_TO_METER
     traj_coordFrm['rpm_t'] = rpmArr_opt
     traj_coordFrm['vx0'] = vx0
-    traj_coordFrm['vy0'] = vy0
+    traj_coordFrm['vz0'] = vz0
     traj_coordFrm['rpm0'] = rpm0
     
     trajFrm = pd.concat([coordFrm, planeFrm, traj_coordFrm], axis = 1)
