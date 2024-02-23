@@ -368,6 +368,17 @@ class StreamFeature(StreamFeaturesBase):
                 
         return StreamFeatures(applyDict, name = name).squeeze()
     
+    def shift(self, offset = 1):
+        ### to shift forward -> offset > 0 -> maybe_get frames BEFORE (with minus)
+        ### to shift backward -> offset < 0 -> maybe_get frames AFTER (with minus)
+        if offset == 0:
+            return self
+        elif offset < 0:
+            name = self.name + f'_aft{offset}'
+        elif offset > 0:
+            name = self.name + f'_bef{offset}'
+        return self.__class__({frame: self.maybe_get(frame - offset) for frame in self}, name = name)
+            
     def _save_contour(self, videoName, storeName, compression = 24):
         exFunc = ff.extract_contour_values
         outSF = self.apply(exFunc, compression = compression) 
