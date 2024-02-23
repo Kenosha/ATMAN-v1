@@ -216,6 +216,68 @@ class Point3D:
     def recolor(self, new_bgr):
         return self.__class__(self.coords, color = new_bgr)    
     
+@dataclass(frozen = True)
+class Circle3D(Point3D):
+    """
+    A circle: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
+    ### TODO: for the moment, the circle is flat on the ground -> generalize!
+    """
+    _DEFAULT_COLOR = const.BGR['bright_grey']
+    radius: float = 1
+    
+    color: Optional[tuple] = _DEFAULT_COLOR
+    limit_theta: Optional[tuple] = None
+    
+    name: str = 'Ball3D'
+    
+    def __post_init__(self):
+        #### IMMUTABILITY BREAKS ####
+        object.__setattr__(self, 'x', self.coords[0])
+        object.__setattr__(self, 'y', self.coords[1])
+        object.__setattr__(self, 'z', self.coords[2])
+        #############################  
+    
+    ### REINSTANTIATION ###
+    def reposition(self, new_coords):
+        return self.__class__(new_coords, self.radius, name = self.name, color = self.color)    
+    
+    def resize(self, new_radius):
+        return self.__class__(self.coords, new_radius, name = self.name, color = self.color)    
+    
+    def rename(self, new_name):
+        return self.__class__(self.coords, self.radius, name = new_name, color = self.color)    
+    
+    def recolor(self, new_bgr):
+        return self.__class__(self.coords, self.radius, name = self.name, color = new_bgr)    
+    
+    ### METHODS ###
+    def get_point(self):
+        return Point3D(self.coords)
+    
+    def rasterize(self, resolution):
+        ### resolution: number of points on one arc length
+        limit_theta = self.limit_theta
+        
+        circumference = 2 * np.pi * self.radius
+        num_points = int(circumference * resolution) + 1 ### ceiling function
+        
+        zeros = np.zeros(num_points)
+        theta = np.linspace(0, 2 * np.pi, endpoint = False, num = num_points)
+        
+        ### filter out points that are outside the angle limits specified
+        ## -> this is how to create semicircles, circle sections, etc.
+        if limit_theta is not None:
+            lo, hi = limit_theta
+            theta_filter = (lo < theta) & (theta < hi)
+        else:
+            theta_filter = np.ones(num_points, dtype = 'bool')
+        
+        zeros_filtered = zeros[theta_filter]
+        theta_filtered = theta[theta_filter]
+        
+        unit_circle = np.array([np.cos(theta_filtered), np.sin(theta_filtered), zeros_filtered]).T
+        return unit_circle * self.radius + np.array(self.coords)[np.newaxis, :]
+    
 
 @dataclass(frozen = True)
 class Ball3D(Point3D):
@@ -756,6 +818,9 @@ class Regions3D():
     def rasterize(self, resolution):
         return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
     
+    def parametrise(self):
+        return [myReg.parametrise() for myReg in self]
+    
     
     
 if __name__ == '__main__':
@@ -803,8 +868,11 @@ if __name__ == '__main__':
     myScn = myScn.put(intBall)
     View.make(myCam, myScn, resolution = resolution).snap().show()
     
+    ### Testing Circles
+    coords = (300, 500, 0)
+    r = 50
+    myCrc = Circle3D(coords, radius = r, limit_theta = (0, 1 * np.pi))
     
-    
-    
-    
+    myScn = courtScn.put(myCrc)
+    View.make(myCam, myScn, resolution = 1).snap().show()
     
