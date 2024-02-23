@@ -63,6 +63,20 @@ def get_net_corner_points(netLines):
     tm = netLines['Left Net'].right_point()
     return bl, tl, tm, tr, br
 
+def point2D_to_coords(pt):
+    if pt is None:
+        x, y = None, None
+    else:
+        x, y = pt.coords
+    return x, y
+
+def point3D_to_coords(pt):
+    if pt is None:
+        x, y, z = None, None, None
+    else:
+        x, y, z = pt.coords
+    return x, y, z
+
 def points_to_coords(tl, tr, bl, br):
     tl, tr, bl, br = tl.coords, tr.coords, bl.coords, br.coords
     return tl, tr, bl, br
@@ -440,6 +454,59 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag, ball_choicePt
         x, y, z = pointArr.T
         cldPt3D = Point3D((x, y, z)) ### this is vectorized! Point3D can hold many points.
         
+    return cldPt3D  
+
+def get_3D_hit_plane_point(P, topPlayerCnt, botPlayerCnt, hitFlag,
+                           max_sideways_reach_in_feet = 5,
+                           height_in_feet = 5, resolution = 1):
+    ### As opposed to the above function, we calculate a line of points parallel to the baseline.
+    ### if there are two such lines (for the hitter and the receiver), 
+    ### all connections between any two points on the two lines will PARSIMONIOUSLY describe all relevant flight planes.
+    try:
+        side, hit = hitFlag.split('_') ### if we have a serve
+        is_serve = True
+    except:
+        side, stroke, kind = hitFlag.split('_') ### if we have a groundstroke
+        is_serve = False
+        
+    topPt3D, botPt3D = find_player_positions_3D(P, topPlayerCnt, botPlayerCnt)
+    
+    basePt3D = topPt3D if side == 'top' else botPt3D
+    height_in_axis_units = height_in_feet * const.SCALE
+    hingePt3D = basePt3D.up(height_in_axis_units)
+    
+    max_reach_in_axis_units = max_sideways_reach_in_feet * const.SCALE
+    
+    ### TODO: Make depend on HANDEDNESS!
+    #### decide angular limits
+    if side == 'top':
+        if is_serve:
+            ### these go up, but generally close to the player sideways
+            leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units / 2), hingePt3D.right(max_reach_in_axis_units / 2)
+        else:
+            if stroke == 'fh':
+                ### a forehand at the top is struck left from the player
+                leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units), hingePt3D
+            elif stroke == 'bh':
+                ### a backhand at the top is struck right from the player
+                leftPt3D, rightPt3D = hingePt3D, hingePt3D.right(max_reach_in_axis_units)
+    elif side == 'bot':
+        if is_serve:
+            ### these go up, but generally close to the player sideways
+            leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units / 2), hingePt3D.right(max_reach_in_axis_units / 2)
+        else:
+            if stroke == 'fh':
+                ### a forehand at the bot is struck right from the player
+                leftPt3D, rightPt3D = hingePt3D, hingePt3D.right(max_reach_in_axis_units)
+            elif stroke == 'bh':
+                ### a backhand at the bot is struck left from the player
+                leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units), hingePt3D
+        
+    hitLn = Line3D(leftPt3D, rightPt3D)
+    pointArr = hitLn.rasterize(resolution)
+    x, y, z = pointArr.T
+    cldPt3D = Point3D((x, y, z)) ### this is vectorized! Point3D can hold many points.
+    
     return cldPt3D  
     
 def project_hit_point_cloud(cldPt3D, P, unique = True):
