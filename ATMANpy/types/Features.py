@@ -1226,8 +1226,12 @@ class SFList:
         return self.sfList.__iter__()
     
     def __getitem__(self, item):
-        if isinstance(item, int):
+        if isinstance(item, list): ### return SFList of StreamFeatures at list indices
+            return SFList([self.sfList[el] for el in item])
+        elif isinstance(item, int): ### return StreamFeatures at list index
             return self.sfList[item]
+        elif isinstance(item, str): ### return SFList of StreamFeature
+            return SFList([mySF[item] for mySF in self])
         else:
             return SFList(self.sfList[item])
     
