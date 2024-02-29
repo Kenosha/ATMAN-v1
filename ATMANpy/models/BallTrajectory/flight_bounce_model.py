@@ -590,18 +590,13 @@ def get_locally_minimal_trajectory_indices_vectorised(groundArr_height, vertArr_
     return np.stack(traj_arrays)
     
     
-def get_locally_minimal_trajectory_indices(groundArr, vertArr, 
+def get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
                                            pos_ground_measured, pos_vert_measured,
                                            sum_of_squares = True, number_of_local_minima = 15):
     rng = np.random.default_rng()
     
     ### shape groundArr_height, vertArr_height: v_ground x v_vert x spin_rpm x time
     ### shape pos_ground_measured_h, pos_vert_measured_h: dim1 x dim2 x ... x t
-    num_trajs, num_frames = pos_ground_measured.shape
-    
-    pos_ground_theoretical = groundArr[:, :, :, :, :num_frames]
-    pos_vert_theoretical = vertArr[:, :, :, :, :num_frames]
-    
     pos_ground_theoretical_brdcst = pos_ground_theoretical[np.newaxis]
     pos_vert_theoretical_brdcst = pos_vert_theoretical[np.newaxis]
     
@@ -614,7 +609,11 @@ def get_locally_minimal_trajectory_indices(groundArr, vertArr,
     ground_dev = pos_ground_measured_brdcst - pos_ground_theoretical_brdcst
     vert_dev = pos_vert_measured_brdcst - pos_vert_theoretical_brdcst
     
-    sum_dev = np.nansum((ground_dev ** 2 + vert_dev ** 2) ** 0.5, axis = -1)
+    if sum_of_squares:
+        sum_dev = np.nansum((ground_dev ** 2 + vert_dev ** 2) ** 0.5, axis = -1)
+    else:
+        sum_dev = np.nansum(np.abs(ground_dev) + np.abs(vert_dev), axis = -1)
+    
     del ground_dev, vert_dev
     
     local_minima = [detect_local_minima(traj_sum_dev) for traj_sum_dev in sum_dev] ### shape: trajs, x_idxs, z_idxs, rpm_idxs, height_idxs
@@ -682,6 +681,106 @@ def get_optimal_trajectory_indices_vectorised2(groundArr_brdcst, vertArr_brdcst,
         traj_conds.append((traj_ground_idx, traj_vert_idx, traj_rpm_idx, traj_best_dev))
     
     return np.array(traj_conds)
+    
+def fit_trajectories(planeArr, pointArr,
+                     groundArr, vertArr, rpmArr):
+    
+    planeArr_metres = planeArr / const.SCALE * const.FOOT_TO_METER
+    pos_ground_measured, pos_vert_measured = planeArr_metres.take(0, axis = -1), planeArr_metres.take(1, axis = -1)
+    num_candidates, num_frames = pos_ground_measured.shape
+    
+    ### for every measured trajectory, get the corresponding family of trajectories with the same starting height
+    initial_heights_measured = pointArr[:, 0, 2] / const.SCALE * const.FOOT_TO_METER
+    initial_heights_theoretical = vertArr[0, 0, 0, :, 0]
+    initial_height_indices = [np.argmin(np.abs(m_h - initial_heights_theoretical)) for m_h in initial_heights_measured]
+    
+    ### Get the sort key if frames are done by height buckets
+    heightDF = pd.DataFrame(initial_height_indices, columns = ['height'])
+    heightDF['count'] = heightDF.groupby('height').cumcount()
+    heightDF = heightDF.sort_values(by = ['height', 'count'])
+    height_sort_key = pd.Series(heightDF.index).sort_values().index
+    
+    ### TODO: make this tighter by doing all operations one height index at a time
+    # -> otherwise, groundArr_brdcst becomes much too large!
+    trajArrs = []
+    for height_idx in np.unique(initial_height_indices):
+        groundArr_height = groundArr[:, :, :, height_idx]
+        vertArr_height = vertArr[:, :, :, height_idx]
+        
+        pos_ground_measured_height = pos_ground_measured[initial_height_indices == height_idx]
+        pos_vert_measured_height = pos_vert_measured[initial_height_indices == height_idx]
+        
+        groundArr_h, vertArr_h = groundArr_height, vertArr_height
+        pos_ground_measured_h, pos_vert_measured_h = pos_ground_measured_height, pos_vert_measured_height
+        
+        trajArr_height = get_locally_minimal_trajectory_indices_vectorised(groundArr_height, vertArr_height, 
+                                                                           pos_ground_measured_height,
+                                                                           pos_vert_measured_height)
+        trajArrs.append(trajArr_height)
+    
+    trajArr = np.concatenate(trajArrs)
+    trajArr = trajArr[height_sort_key]
+    
+    vx_idxs = trajArr.take(0, axis = -1).astype(int)
+    vy_idxs = trajArr.take(1, axis = -1).astype(int)
+    rpm_idxs = trajArr.take(2, axis = -1).astype(int)
+    
+    # broadcast heights to new shape
+    height_idxs = np.array(initial_height_indices)
+    if len(vx_idxs.shape) == 2:
+        height_idxs = height_idxs[:, np.newaxis]
+    
+    groundArr_filt = groundArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
+    vertArr_filt = vertArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
+    rpmArr_filt = rpmArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]  
+    
+    # ### Visualise
+    # import matplotlib.pyplot as plt
+    
+    # for idx in range(num_traj):
+    #     x_idx, y_idx, rpm_idx = trajIdxs[idx]
+        
+    #     measArr_x, measArr_y = pos_ground_measured[idx], pos_vert_measured[idx]
+        
+    #     theoArr_x, theoArr_y = groundArr_brdcst[x_idx, y_idx, rpm_idx, idx, :num_frames], vertArr_brdcst[x_idx, y_idx, rpm_idx, idx, :num_frames]
+        
+    #     fig, ax = plt.subplots(1, 1)
+    #     ax.scatter(measArr_x, measArr_y)
+    #     ax.scatter(theoArr_x, theoArr_y)
+        
+    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
+    
+def fit_trajectories_pointless(planeArr, 
+                               groundArr, vertArr, rpmArr,
+                               sum_of_squares = True, number_of_local_minima = 15):
+    
+    planeArr_metres = planeArr / const.SCALE * const.FOOT_TO_METER
+    planeArr_metres = planeArr_metres.astype('float32')
+    pos_ground_measured, pos_vert_measured = planeArr_metres.take(0, axis = -1), planeArr_metres.take(1, axis = -1)
+    num_candidates, num_frames = pos_ground_measured.shape
+    
+    ### filter the ground and vertical arrays
+    obs_is_available = ~np.isnan(planeArr_metres).all(axis = (0, 2))
+    pos_ground_measured, pos_vert_measured = pos_ground_measured[:, obs_is_available], pos_vert_measured[:, obs_is_available]
+    
+    pos_ground_theoretical, pos_vert_theoretical = groundArr[:, :, :, :, :num_frames], vertArr[:, :, :, :, :num_frames]
+    pos_ground_theoretical, pos_vert_theoretical = pos_ground_theoretical[:, :, :, :, obs_is_available], pos_vert_theoretical[:, :, :, :, obs_is_available]
+    
+    trajArr = get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
+                                                     pos_ground_measured, pos_vert_measured,
+                                                     sum_of_squares = sum_of_squares, 
+                                                     number_of_local_minima = number_of_local_minima)
+    
+    vx_idxs = trajArr.take(0, axis = -1).astype(int)
+    vy_idxs = trajArr.take(1, axis = -1).astype(int)
+    rpm_idxs = trajArr.take(2, axis = -1).astype(int)
+    height_idxs = trajArr.take(3, axis = -1).astype(int)
+    
+    groundArr_filt = groundArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
+    vertArr_filt = vertArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
+    rpmArr_filt = rpmArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]  
+    
+    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
     
 
 
