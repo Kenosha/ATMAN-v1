@@ -606,29 +606,246 @@ def determine_serve_position(topPlayer_3D, botPlayer_3D, hitFlag, schemaLines = 
         groundPt_x = topPlayer_3D.get_ground_point().x
     
         if groundPt_x < middle_x:
-            serve_pos = 'STD' ### serve far deuce
+            srvFlag = 'STD' ### serve far deuce
         else:
-            serve_pos = 'STA' ### serve top ad
+            srvFlag = 'STA' ### serve top ad
     
     elif hitFlag == 'bot_srv':
         groundPt_x = botPlayer_3D.get_ground_point().x
     
         if groundPt_x > middle_x:
-            serve_pos = 'SBD' ### serve bot deuce
+            srvFlag = 'SBD' ### serve bot deuce
         else:
-            serve_pos = 'SBA' ### serve bot ad
+            srvFlag = 'SBA' ### serve bot ad
     
     else:
-        serve_pos = None
+        srvFlag = None
     
-    return serve_pos
+    return srvFlag
     
-# def determine_in_or_out(bouncePt, hit_type, schemaLines = schemaLines):
+def fit_trajectory(planeArr, netArr, groundArr = None, vertArr = None, rpmArr = None, 
+                   observation_threshold = 3,
+                   sum_of_squares = True, number_of_local_minima = 15):
     
-#     if hit_type == ''
+    from ATMANpy.models.BallTrajectory.flight_bounce_model import fit_trajectories_pointless
+    
+    if planeArr is None:
+        trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
+    else:
+        
+        #kill plane observations in net
+        if netArr is not None:
+            planeArr = np.where(~netArr[:, :, np.newaxis], planeArr, np.nan)
+          
+        coords_are_not_nan = ~np.isnan(planeArr).all(axis = (0, 2))
+        valid_observations = coords_are_not_nan.sum()
+        if valid_observations < observation_threshold:
+            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
+        else:
+            ### Fit Trajectories
+            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = fit_trajectories_pointless(planeArr,
+                                                                                            groundArr, vertArr, rpmArr, 
+                                                                                            sum_of_squares = sum_of_squares,
+                                                                                            number_of_local_minima = number_of_local_minima)
+            
+            if not netArr is None:
+                groundArr_filt = np.where(~netArr[:, np.newaxis, :], groundArr_filt, np.nan)
+                vertArr_filt = np.where(~netArr[:, np.newaxis, :], vertArr_filt, np.nan)
+                rpmArr_filt = np.where(~netArr[:, np.newaxis, :], rpmArr_filt, np.nan)
+    
+    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
+        
+def trajectory_audio_prob(bounceArr, vertArr_filt, netArr):
+    ### bounceArr shape: T x 5 (pcond1, pcond2, prior0, prior1, prior2)
+    ### vertArr_filt shape: plane x traj x T
+    ### netArr shape: None or plane x T
+    if bounceArr is None or vertArr_filt is None: ### occurs if final inferred flight point is taken to be hit point 
+        bounce_probs = None
+    else:
+        ### Prep some variables
+        bounce_cond1 = bounceArr[:, 0]
+        bounce_cond2 = bounceArr[:, 1]
+        plane, traj, time = vertArr_filt.shape # plane (between a hit and a rec point), traj (given by initial conditions), time in frames
+        vertArr_filt_reshaped = vertArr_filt.reshape((plane * traj, time))
+        
+        ### Construct Plane Specific Priors
+        priorArr_in_flight = bounceArr[0, 2:] ### priors are constant across T
+        priorArr_in_net = np.array([0.9, 0.09, 0.01])
+        
+        if netArr is None:
+            priors_by_plane = np.repeat(priorArr_in_flight[np.newaxis, :], repeats = plane, axis = 0)
+        else:
+            plane_in_net = netArr.argmax(axis = 1).astype(bool)
+            priors_by_plane = np.where(plane_in_net[:, np.newaxis], priorArr_in_net[np.newaxis, :], priorArr_in_flight[np.newaxis, :])
+        
+        ### Gather implied trajectory bounce data ###
+        frm_bounces = [np.arange(time)[is_bounce] for is_bounce in vertArr_filt_reshaped == 0]
+        num_bounces = (vertArr_filt_reshaped == 0).sum(axis = 1)
+        
+        ### figure out conditional bounce probabilities
+        bounce_cond_probs = []
+        for bnc, num in zip(frm_bounces, num_bounces):
+            if num == 0:
+                joint_bounce_prob = 1
+            elif num == 1:
+                joint_bounce_prob = bounce_cond1[bnc].prod()
+            elif num == 2:
+                joint_bounce_prob = bounce_cond2[bnc].prod()
+            else: ### since we don't have probabilities for three bounces (which could likely not be heard well anyway)
+                joint_bounce_prob = bounce_cond2[bnc].prod()
+                
+            bounce_cond_probs.append(joint_bounce_prob)
+        bounce_cond_probs = np.array(bounce_cond_probs).reshape(plane, traj)
+        
+        ### figure out priors
+        num_bounces = num_bounces.reshape(plane, traj)
+        
+        choose_prior = lambda plane_bounces, plane_priors: np.where(plane_bounces == 0, plane_priors[0], 
+                                                                    np.where(plane_bounces == 1, plane_priors[1], 
+                                                                             plane_priors[2]))
+        
+        bounce_prior_probs = np.array([choose_prior(plane_bounces, plane_priors) for plane_bounces, plane_priors in zip(num_bounces, priors_by_plane)])
+    
+        ### Combine priors and conditional probabilities
+        bounce_probs = bounce_cond_probs * bounce_prior_probs
+        return bounce_probs
+    
+def trajectory_deviation_prob(trajArr):
+    if trajArr is None:
+        dev_probs = None
+    else:
+        dev_probs = 1 / (1 + trajArr[:, :, -1])
+    return dev_probs
     
     
+def compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = None):
     
+    ######## Integrate bounce audio ##########
+    bounce_frames = bounceFrm.index.tolist()
+    hit_frame = bounce_frames[0] - 1 
+    flight_frames = [hit_frame, *bounce_frames]
+    
+    if prior_override is None:
+        p0, p1, p2 = bounceFrm['prior0'].unique()[0], bounceFrm['prior1'].unique()[0], bounceFrm['prior2'].unique()[0]
+    else:
+        p0, p1, p2 = prior_override
+    
+    plane, traj, time = vertArr_filt.shape # plane (between a hit and a rec point), traj (given by initial conditions), time in frames
+    vertArr_filt_reshaped = vertArr_filt.reshape((plane * traj, time))
+    
+    ### Gather implied trajectory bounce data ###
+    frm_bounces = [np.array(flight_frames)[is_bounce] for is_bounce in vertArr_filt_reshaped == 0]
+    num_bounces = (vertArr_filt_reshaped == 0).sum(axis = 1)
+    
+    ### Calculate conditional bounce probabilities and priors
+    bounce_cond_probs = []
+    for bnc, num in zip(frm_bounces, num_bounces):
+        if hit_frame in bnc:
+            joint_bounce_prob = 0 ### there can be no bounce in the current hit frame, after the hit
+        else:
+            if num == 0:
+                joint_bounce_prob = 1
+            elif num < 3:
+                joint_bounce_prob = bounceFrm.loc[bnc, f'bounce_prob_cond{num}'].prod()
+            else: ### since we don't have probabilities for three bounces (which could likely not be heard well anyway)
+                joint_bounce_prob = bounceFrm.loc[bnc, 'bounce_prob_cond2'].prod()
+                
+        bounce_cond_probs.append(joint_bounce_prob)
+    bounce_cond_probs = np.array(bounce_cond_probs)
+    
+    bounce_priors = np.where(num_bounces == 0, p0, 
+                              np.where(num_bounces == 1, p1, p2))
+    
+    ### Join Conditional Probabilities and Priors
+    bounce_probs = bounce_cond_probs * bounce_priors
+    bounce_probs = bounce_probs.reshape(plane, traj) ### shape back to input shape
+    return bounce_probs
+
+def calculate_trajectory_coordinates(groundArr_filt, vertArr_filt, pointArr):
+    # groundArr_filt.shape, vertArr_filt.shape ### Plane x Traj x T
+    # pointArr.shape ### Plane x 2 (start, end) x 3 (x, y, z)
+    if groundArr_filt is None:
+        coords = None
+    else:
+        ### rescale ground and vert arrays
+        groundArr_resc = groundArr_filt * const.SCALE / const.FOOT_TO_METER
+        vertArr_resc = vertArr_filt * const.SCALE / const.FOOT_TO_METER
+        
+        ### calculate the flight line of the ball for each path, and a length of the plane line
+        flatArr = pointArr[:, :, [0, 1]] ### points projected on the ground
+        fsArr, lsArr = flatArr[:, 0], flatArr[:, 1]
+        vecArr = lsArr - fsArr
+        distArr = (vecArr ** 2).sum(axis = 1) ** 0.5 ### shape: Plane
+    
+        ### for each plane, divide the distance travelled along the plane by the length of the plane line 
+        lmbd = groundArr_resc / distArr[:, np.newaxis, np.newaxis] ### shape: Plane x Traj x T
+        
+        ### calculate the ground coordinates
+        ground_coords = fsArr[:, np.newaxis, np.newaxis] + lmbd[:, :, :, np.newaxis] * vecArr[:, np.newaxis, np.newaxis] ### shape: Plane x Traj x T x 2 (x, y)
+        vert_coords = vertArr_resc[:, :, :, np.newaxis] ### shape: Plane x Traj x T x 1 (z)
+        
+        traj_coordArr = np.concatenate([ground_coords, vert_coords], axis = -1)
+        return traj_coordArr
+        
+
+def make_trajectory_arrays(best_plane, best_traj, 
+                           traj_coordArr, coordArr, planeArr, netArr,
+                           trajArr, groundArr_filt, vertArr_filt, rpmArr_filt,
+                           v_init_ground_space = None, v_init_vert_space = None, spin_rate_space = None, height_space = None):
+    
+    ### traj is best is a boolean array with N entries, one for each trajectory
+    ### all other arrays are N (x T) x ... arrays
+    if trajArr is None:
+        outArr, columns = None, None
+    else:
+        T = traj_coordArr.shape[2]
+        ### 1) Gather optimal coordinates ... 
+        # ... for the observed points ...
+        coordArr_opt = coordArr[best_plane]
+        # ... and the fitted trajectories
+        traj_coordArr_opt = traj_coordArr[best_plane, best_traj]
+    
+        ### 2) Gather optimal planar coordinates ...
+        # ... for the observed points ...
+        planeArr_opt = planeArr[best_plane] 
+        # ... and the fitted trajectories
+        groundArr_opt = groundArr_filt[best_plane, best_traj] * const.SCALE / const.FOOT_TO_METER
+        vertArr_opt = vertArr_filt[best_plane, best_traj] * const.SCALE / const.FOOT_TO_METER
+        rpmArr_opt = rpmArr_filt[best_plane, best_traj]     
+        traj_planeArr_opt = np.stack([groundArr_opt, vertArr_opt, rpmArr_opt], axis = -1)
+        
+        ### 3) Gather optimal initial conditions ...
+        traj_paramArr_opt = trajArr[best_plane, best_traj, :4]
+        vx0_idx, vy0_idx, rpm0_idx, height_idx = traj_paramArr_opt.astype(int)
+        vx0, vz0, rpm0, height0 = v_init_ground_space[vx0_idx], v_init_vert_space[vy0_idx], spin_rate_space[rpm0_idx], height_space[height_idx]
+        condArr_opt = np.ones((T, 4)) * np.array([[vx0, vz0, rpm0, height0]])
+        
+        ### 4) Gather the net data -> when is the ball in the net?
+        if netArr is None:
+            netArr_opt = np.zeros((T, 1), dtype = 'bool')
+        else:
+            netArr_opt = netArr[best_plane][:, np.newaxis]
+        
+        ### 5) Join Arrays
+        outArr = np.concatenate([coordArr_opt,
+                                 traj_coordArr_opt,
+                                 planeArr_opt,
+                                 traj_planeArr_opt,
+                                 condArr_opt,
+                                 netArr_opt],
+                                axis = 1)
+        columns =  [*['x_o', 'y_o', 'z_o'], 
+                    *['x_t', 'y_t', 'z_t'], 
+                    *['px_o', 'pz_o'],
+                    *['px_t', 'pz_t', 'rpm_t'],
+                    *['vx0', 'vz0', 'rpm0', 'height0'],
+                    *['is_net']]
+                        
+        assert outArr.shape[1] == len(columns)
+        
+    return outArr, columns
+
+
     
     
 

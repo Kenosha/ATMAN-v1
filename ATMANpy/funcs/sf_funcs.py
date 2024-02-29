@@ -2283,11 +2283,11 @@ def test_trajectories(mySF, matchCamera = None, P = None, net_epsilon = 0.05):
             
             ### parameters for the ball in flight, for evaluation
             flight_paramArr = np.where(~netArr[:, :, :, np.newaxis], 
-                                       paramArr, np.nan)
+                                        paramArr, np.nan)
             ### overwrite coordarr to take the net coordinates 
             ### where viterbi has determined the ball to be in the net
             coordArr = np.where(~netArr[:, :, :, np.newaxis], 
-                                       coordArr, net_coordArr)
+                                        coordArr, net_coordArr)
             
         else:
             netArr = None
@@ -2424,204 +2424,8 @@ def filter_trajectories(trajDict, penalty_quantile = 0.05):
             outDict[frame] = (coordArr_filt, paramArr_filt, planeArr_filt, pointArr_filt)
 
     return outDict
-
-def fit_trajectories(planeArr, pointArr,
-                     groundArr, vertArr, rpmArr):
-    from ATMANpy.models.BallTrajectory.flight_bounce_model import get_locally_minimal_trajectory_indices_vectorised
-    
-    planeArr_metres = planeArr / const.SCALE * const.FOOT_TO_METER
-    pos_ground_measured, pos_vert_measured = planeArr_metres.take(0, axis = -1), planeArr_metres.take(1, axis = -1)
-    num_candidates, num_frames = pos_ground_measured.shape
-    
-    ### for every measured trajectory, get the corresponding family of trajectories with the same starting height
-    initial_heights_measured = pointArr[:, 0, 2] / const.SCALE * const.FOOT_TO_METER
-    initial_heights_theoretical = vertArr[0, 0, 0, :, 0]
-    initial_height_indices = [np.argmin(np.abs(m_h - initial_heights_theoretical)) for m_h in initial_heights_measured]
-    
-    ### Get the sort key if frames are done by height buckets
-    heightDF = pd.DataFrame(initial_height_indices, columns = ['height'])
-    heightDF['count'] = heightDF.groupby('height').cumcount()
-    heightDF = heightDF.sort_values(by = ['height', 'count'])
-    height_sort_key = pd.Series(heightDF.index).sort_values().index
-    
-    ### TODO: make this tighter by doing all operations one height index at a time
-    # -> otherwise, groundArr_brdcst becomes much too large!
-    trajArrs = []
-    for height_idx in np.unique(initial_height_indices):
-        groundArr_height = groundArr[:, :, :, height_idx]
-        vertArr_height = vertArr[:, :, :, height_idx]
-        
-        pos_ground_measured_height = pos_ground_measured[initial_height_indices == height_idx]
-        pos_vert_measured_height = pos_vert_measured[initial_height_indices == height_idx]
-        
-        groundArr_h, vertArr_h = groundArr_height, vertArr_height
-        pos_ground_measured_h, pos_vert_measured_h = pos_ground_measured_height, pos_vert_measured_height
-        
-        trajArr_height = get_locally_minimal_trajectory_indices_vectorised(groundArr_height, vertArr_height, 
-                                                                           pos_ground_measured_height,
-                                                                           pos_vert_measured_height)
-        trajArrs.append(trajArr_height)
-    
-    trajArr = np.concatenate(trajArrs)
-    trajArr = trajArr[height_sort_key]
-    
-    vx_idxs = trajArr.take(0, axis = -1).astype(int)
-    vy_idxs = trajArr.take(1, axis = -1).astype(int)
-    rpm_idxs = trajArr.take(2, axis = -1).astype(int)
-    
-    # broadcast heights to new shape
-    height_idxs = np.array(initial_height_indices)
-    if len(vx_idxs.shape) == 2:
-        height_idxs = height_idxs[:, np.newaxis]
-    
-    groundArr_filt = groundArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
-    vertArr_filt = vertArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
-    rpmArr_filt = rpmArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]  
-    
-    # ### Visualise
-    # import matplotlib.pyplot as plt
-    
-    # for idx in range(num_traj):
-    #     x_idx, y_idx, rpm_idx = trajIdxs[idx]
-        
-    #     measArr_x, measArr_y = pos_ground_measured[idx], pos_vert_measured[idx]
-        
-    #     theoArr_x, theoArr_y = groundArr_brdcst[x_idx, y_idx, rpm_idx, idx, :num_frames], vertArr_brdcst[x_idx, y_idx, rpm_idx, idx, :num_frames]
-        
-    #     fig, ax = plt.subplots(1, 1)
-    #     ax.scatter(measArr_x, measArr_y)
-    #     ax.scatter(theoArr_x, theoArr_y)
-        
-    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
-    
-def fit_trajectories_pointless(planeArr, 
-                               groundArr, vertArr, rpmArr):
-    from ATMANpy.models.BallTrajectory.flight_bounce_model import get_locally_minimal_trajectory_indices
-    
-    planeArr_metres = planeArr / const.SCALE * const.FOOT_TO_METER
-    pos_ground_measured, pos_vert_measured = planeArr_metres.take(0, axis = -1), planeArr_metres.take(1, axis = -1)
-    num_candidates, num_frames = pos_ground_measured.shape
-    
-    trajArr = get_locally_minimal_trajectory_indices(groundArr, vertArr, 
-                                                     pos_ground_measured, pos_vert_measured)
-    
-    
-    vx_idxs = trajArr.take(0, axis = -1).astype(int)
-    vy_idxs = trajArr.take(1, axis = -1).astype(int)
-    rpm_idxs = trajArr.take(2, axis = -1).astype(int)
-    height_idxs = trajArr.take(3, axis = -1).astype(int)
-    
-    groundArr_filt = groundArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
-    vertArr_filt = vertArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
-    rpmArr_filt = rpmArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]  
-    
-    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
-    
-    
-    
-    
-    
     
 
-def compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = None):
-    
-    ######## Integrate bounce audio ##########
-    bounce_frames = bounceFrm.index.tolist()
-    hit_frame = bounce_frames[0] - 1 
-    flight_frames = [hit_frame, *bounce_frames]
-    
-    if prior_override is None:
-        p0, p1, p2 = bounceFrm['prior0'].unique()[0], bounceFrm['prior1'].unique()[0], bounceFrm['prior2'].unique()[0]
-    else:
-        p0, p1, p2 = prior_override
-    
-    plane, traj, time = vertArr_filt.shape # plane (between a hit and a rec point), traj (given by initial conditions), time in frames
-    vertArr_filt_reshaped = vertArr_filt.reshape((plane * traj, time))
-    
-    ### Gather implied trajectory bounce data ###
-    frm_bounces = [np.array(flight_frames)[is_bounce] for is_bounce in vertArr_filt_reshaped == 0]
-    num_bounces = (vertArr_filt_reshaped == 0).sum(axis = 1)
-    
-    ### Calculate conditional bounce probabilities and priors
-    bounce_cond_probs = []
-    for bnc, num in zip(frm_bounces, num_bounces):
-        if hit_frame in bnc:
-            joint_bounce_prob = 0 ### there can be no bounce in the current hit frame, after the hit
-        else:
-            if num == 0:
-                joint_bounce_prob = 1
-            elif num < 3:
-                joint_bounce_prob = bounceFrm.loc[bnc, f'bounce_prob_cond{num}'].prod()
-            else: ### since we don't have probabilities for three bounces (which could likely not be heard well anyway)
-                joint_bounce_prob = bounceFrm.loc[bnc, 'bounce_prob_cond2'].prod()
-                
-        bounce_cond_probs.append(joint_bounce_prob)
-    bounce_cond_probs = np.array(bounce_cond_probs)
-    
-    bounce_priors = np.where(num_bounces == 0, p0, 
-                              np.where(num_bounces == 1, p1, p2))
-    
-    ### Join Conditional Probabilities and Priors
-    bounce_probs = bounce_cond_probs * bounce_priors
-    bounce_probs = bounce_probs.reshape(plane, traj) ### shape back to input shape
-    return bounce_probs
-    
-def make_trajectory_frame(plane_traj_is_best, 
-                          coordArr, paramArr, planeArr, pointArr,
-                          groundArr_filt, vertArr_filt, rpmArr_filt,
-                          v_init_ground_space, v_init_vert_space, spin_rate_space,
-                          trajArr,
-                          flight_frames = None):
-    ### traj is best is a boolean array with N entries, one for each trajectory
-    ### all other arrays are N (x T) x ... arrays
-    if flight_frames is None:
-        flight_frames = np.arange(coordArr.shape[1])
-        
-    best_plane, best_traj = ut.argmax_multidim(plane_traj_is_best)
-        
-    ### Gather optimal coordinates, parameters, hit points
-    coordArr_opt = coordArr[best_plane]
-    paramArr_opt = paramArr[best_plane]
-    planeArr_opt = planeArr[best_plane]
-    pointArr_opt = pointArr[best_plane]
-
-    ### calculate optimal flight line
-    flightLn = Line3D(Point3D(pointArr_opt[0]), Point3D(pointArr_opt[1]))
-
-    ### Gather optimal trajectories
-    groundArr_opt = groundArr_filt[best_plane, best_traj]
-    vertArr_opt = vertArr_filt[best_plane, best_traj]
-    rpmArr_opt = rpmArr_filt[best_plane, best_traj]
-    
-    ### Calculate optimal trajectories in 3D
-    from ATMANpy.models.BallTrajectory.flight_bounce_model import trajectory_to_3D
-    traj_coordArr_opt = trajectory_to_3D(groundArr_opt, vertArr_opt, flightLn)
-    
-    ### Gather optimal initial conditions
-    traj_paramArr_opt = trajArr[best_plane, best_traj, :3]
-    vx0_idx, vy0_idx, rpm0_idx = np.round(traj_paramArr_opt, 0).astype(int)
-    vx0, vz0, rpm0 = v_init_ground_space[vx0_idx], v_init_vert_space[vy0_idx], spin_rate_space[rpm0_idx]
-    
-    ### Collect in dataframes
-    coordFrm = pd.DataFrame(coordArr_opt, index = flight_frames, columns = ['x_o', 'y_o', 'z_o'])
-    paramFrm = pd.DataFrame(paramArr_opt, index = flight_frames, columns = ['l', 'm', 'n'])
-    planeFrm = pd.DataFrame(planeArr_opt, index = flight_frames, columns = ['px_o', 'pz_o'])
-    
-    traj_coordFrm = pd.DataFrame(traj_coordArr_opt, index = flight_frames, columns = ['x_t', 'y_t', 'z_t'])
-    traj_coordFrm['px_t'] = groundArr_opt * const.SCALE / const.FOOT_TO_METER
-    traj_coordFrm['pz_t'] = vertArr_opt * const.SCALE / const.FOOT_TO_METER
-    traj_coordFrm['rpm_t'] = rpmArr_opt
-    traj_coordFrm['vx0'] = vx0
-    traj_coordFrm['vz0'] = vz0
-    traj_coordFrm['rpm0'] = rpm0
-    
-    trajFrm = pd.concat([coordFrm, planeFrm, traj_coordFrm], axis = 1)
-    
-    return trajFrm.astype(float)
-
-
-    
-    
 def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
     ### TODO: priors strongly influence the selection of the final trajectory.
     ### 1) use also the deviation of the trajectory to exclude bogus trajectories
@@ -2656,7 +2460,7 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
     
     bncSer = mySF['bounce'].to_series()
     
-    outFrms = []
+    outDict = {}
     prev_hit_frame, prev_hit_flag, prev_shape = None, None, None
     for next_hit_frame, next_hit_flag in mySF['hitFlag'].dropna().items():
         which = next_hit_flag[:3]
@@ -2672,7 +2476,7 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
             next_shape = None
             
         if prev_hit_frame is not None:
-            frames = range(prev_hit_frame + 1, next_hit_frame + 1) ### assumption being -> can not bounce in hit frame (after hit)
+            frames = range(prev_hit_frame, next_hit_frame + 1) 
             
             if which in ['top', 'bot']:
                 hit_point = prev_shape.get_ground_point()
@@ -2686,11 +2490,12 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
                 lmb = ply_dist / crt_dist    
                 p0, p1, p2 = prior_dist(lmb)
             else:
-                p0, p1, p2 = 1/3, 1/3, 1/3 ### this happens if the next hit frame is the inferred end of flight frame
+                p0, p1, p2 = 0.1, 0.7, 0.2 ### this happens if the next hit frame is the inferred end of flight frame
                 
             
             ### prep bounce probabilities for one and two bounces
             pArr1 = bncSer.reindex(frames).values
+            pArr1[0] = 0 ### assumption being -> can not bounce in hit frame (after hit)
             pArr2 = pArr1[np.newaxis, :] * pArr1[:, np.newaxis]
             
             ### make it so that two bounces can not occur within offset frames of each other
@@ -2709,19 +2514,184 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
             pFrm['prior1'] = p1
             pFrm['prior2'] = p2
         
-            outFrms.append(pFrm)
-        
-            # ### combine priors and probs
-            # p = p1 * pArr1_norm + p2 * pArr2_norm
+            ### EDIT: Instead of a dense stream feature, we return a sparse stream feature
+            ### with arrays pertaining to the current hit at the hit frame
+            outDict[prev_hit_frame] = pFrm.values
             
         prev_hit_frame, prev_hit_flag, prev_shape = next_hit_frame, next_hit_flag, next_shape
     
-    if len(outFrms) > 0:
-        outFrm = pd.concat(outFrms)
-        return StreamFeatures.from_dataframe(outFrm)
-    else:
-        return StreamFeatures({})
+    return StreamFeature(outDict, name = 'bounceArr')
+  
     
+def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_factor = 1/3):
+    
+    ### figure out where we have gaps in the trajectory finder 
+        # can only apply viterbi between these gaps, so that prev_lsArr and curr_fsArr are well defined
+    frames_with_measurement = prob_coordSF.dropna().get_frames()
+    all_hit_frames = prob_coordSF.get_frames()[:-1]
+    
+    split_hit_frames_with_measurement = []
+    curr_uninterrupted_frames = []
+    for frame in all_hit_frames:
+        if frame in frames_with_measurement:
+            curr_uninterrupted_frames.append(frame)
+        else:
+            split_hit_frames_with_measurement.append(curr_uninterrupted_frames)
+            curr_uninterrupted_frames = []
+    
+    if len(curr_uninterrupted_frames) > 0:
+        split_hit_frames_with_measurement.append(curr_uninterrupted_frames)
+
+    outDicts = []
+    ### apply viterbi to each of these sub-blocks of uninterrupted rallying
+    for hit_frames in split_hit_frames_with_measurement:
+    
+        num_hits = len(hit_frames)
         
+        prev_lsArr = None
         
+        ### FORWARD PASS ###
+        for idx, frame in enumerate(hit_frames):
+            ### get arrays
+            featDict = prob_coordSF[frame]
+            bounceArr = featDict['bounce_probs']
+            devArr = featDict['dev_probs']
+            coordArr = featDict['traj_coordArr']
+            
+            plane, traj = bounceArr.shape
+            
+            if prev_lsArr is None: ### initialize trellis
+            
+                trellis = np.full((num_hits, plane, traj), fill_value = np.nan)
+                pointers = np.full((num_hits, plane, traj, 2), fill_value = np.nan, dtype = int) ### need two coordinates at the end to keep track of the previous plane, traj pair index
+                
+                log_devArr = np.log(devArr)
+                log_bounceArr = np.log(bounceArr)
+                
+                trellis[0] = log_devArr + log_bounceArr
+                # pointers[0] = np.zeros((plane, traj, 2)) 
+            else:
+                curr_fsArr = coordArr[:, :, 0, :]
+                
+                ### calculate the distance between 
+                    # the end point of the previous trajectory
+                    # the start point of the current trajectory
+                distArr = prev_lsArr[:, :, np.newaxis, np.newaxis] - curr_fsArr[np.newaxis, np.newaxis, :, :]    
+                distArr = (distArr ** 2).sum(axis = -1) ** 0.5
+                ### -> shape: plane, traj, plane, traj
+        
+                ### calculate the 'probability of transition' from the distances
+                dist_probArr = 1 / (1 + distArr)
+                
+                log_dist_probArr = np.log(dist_probArr)
+                log_devArr = np.log(devArr)
+                log_bounceArr = np.log(bounceArr)
+                
+                ### combine the distance probabilities with the current bounce audio and deviation probabilities
+                log_bounceArr_brdcst, log_devArr_brdcst = log_devArr[np.newaxis, np.newaxis, :, :], log_bounceArr[np.newaxis, np.newaxis, :, :]
+                # probArr = (dist_probArr ** dst_factor) * (bounceArr_brdcst ** bnc_factor) * (devArr_brdcst ** dev_factor)
+                log_probArr = dst_factor * log_dist_probArr + dev_factor * log_devArr + bnc_factor * log_bounceArr
+                
+                ### combine it with the trellis likelihood: -> what is the likelihood of being in the previous trajectory in the first place
+                trellis_brdcst = trellis[idx - 1, :, :, np.newaxis, np.newaxis]
+                probArr = log_probArr + trellis_brdcst
+        
+                probArr_flat = probArr.reshape((plane * traj, plane, traj))
+                maxima = probArr_flat.max(axis = 0)
+                
+                argmaxs_flat = probArr_flat.argmax(axis = 0)
+                plane_idxs, traj_idxs = np.unravel_index(argmaxs_flat, (plane, traj))
+                maxima_indices = np.stack([plane_idxs, traj_idxs], axis = -1)
+        
+                trellis[idx] = maxima
+                pointers[idx] = maxima_indices
+        
+            prev_lsArr = coordArr[:, :, -1, :]
+        
+        ### BACKWARD PASS ###
+        best_trajectories = np.full((num_hits, 2), fill_value = np.nan, dtype = int)
+        for hit in range(num_hits, 0, -1):
+            if hit == num_hits:
+                best_plane, best_traj = ut.argmax_multidim(trellis[-1])
+            else:
+                best_plane_before, best_traj_before = best_trajectories[hit]
+                best_plane, best_traj = pointers[hit, best_plane_before, best_traj_before]
+            best_trajectories[hit-1] = best_plane, best_traj
+            
+        outDict = {frame: {'best_plane': best_trajectories[idx][0], 
+                           'best_traj': best_trajectories[idx][1]} for idx, frame in enumerate(hit_frames)}
+        outDicts.append(outDict)
+        
+    allDict = {k: v for outDict in outDicts for k, v in outDict.items()}
+    return StreamFeatures(allDict)    
+    
+
+def make_trajectory_frame(traj_evtSF, courtLines = None):
+    ### features: outArr, columns, srvFlag, hitFlag
+    
+    if courtLines is None:
+        courtLines = CourtLines.make().add_singles_netline()
+    
+    hit_frames = traj_evtSF.get_frames()
+    
+    hitDFs = []
+    for idx, frame in enumerate(hit_frames):
+        featDict = traj_evtSF[frame]
+        outArr, columns, srvFlag, hitFlag = featDict['outArr'], featDict['columns'], featDict['srvFlag'], featDict['hitFlag']
+        
+        ### Initialize DataFrame with outArr from sa.make_trajectory_arrays
+        hitDF = pd.DataFrame(outArr, columns = columns, index = range(frame, frame + outArr.shape[0]))
+        
+        ### Initialize net and bounce booleans
+        hitDF['is_net'] = hitDF['is_net'].astype(bool)
+        hitDF['is_bounce'] = np.where(hitDF.z_t == 0, True, False)
+        
+        ### Determine Hit and Serve Side
+        side = hitFlag.split('_')[0]
+        if srvFlag is not None:
+            srv_side = srvFlag[2]
+        else:
+            srv_side = None
+
+        ### Check if bounce was in or out
+        if srv_side is None:
+            inReg = courtLines.get_half_region('Bottom' if side == 'top' else 'Top', width = 'Singles')
+        else:
+            inReg = courtLines.get_service_box('Bottom' if side == 'top' else 'Top', which = 'Deuce' if srv_side == 'D' else 'Ad')
+            
+        bounce_coords = hitDF.loc[hitDF['is_bounce'], ['x_t', 'y_t']]
+        
+        if not bounce_coords.empty:
+            def coords_in_region(coords):
+                return Point2D(coords).within(inReg)
+        
+            hitDF['is_bounce_in'] = bounce_coords.apply(coords_in_region, axis = 1, raw = True)
+        else:
+            hitDF['is_bounce_in'] = np.nan
+                
+        ### Construct Event Column
+        hitDF['event'] = np.where(hitDF.is_bounce, 
+                                    np.where(hitDF.is_bounce_in, 'BI', 'BO'),
+                                    np.where(hitDF.is_net, 'N', 'F'))
+        if srvFlag is not None:
+            hitDF.loc[frame, 'event'] = srvFlag
+        else:
+            hitDF.loc[frame, 'event'] = 'H' + hitFlag[0].capitalize()
+
+        ### drop unnecessary booleans
+        hitDF = hitDF.drop(columns = ['is_net', 'is_bounce', 'is_bounce_in'])
+        
+        ### add a shot index to identify the shot
+        hitDF['shot_idx'] = idx
+        
+        ### kill last shot in index -> it is the next hit frame
+        hitDF = hitDF.iloc[:-1]
+        
+        ### Append to list to be returned
+        hitDFs.append(hitDF)
+        
+    return pd.concat(hitDFs)
+    
+    
+    
     
