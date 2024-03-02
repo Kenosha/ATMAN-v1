@@ -69,11 +69,17 @@ class Net(Regions3D):
         lPt_up, cPt_up, rPt_up = [lPt.up(courtLines.net_height_post), 
                                   cPt.up(courtLines.net_height_middle), 
                                   rPt.up(courtLines.net_height_post)]
-        leftReg = Region3D.from_points(lPt_up, cPt_up, lPt, cPt)
-        rightReg = Region3D.from_points(cPt_up, rPt_up, cPt, rPt)
+        leftReg = Region3D.from_points(lPt_up, cPt_up, lPt, cPt, name = 'Left Net')
+        rightReg = Region3D.from_points(cPt_up, rPt_up, cPt, rPt, name = 'Right Net')
         
         return Net([leftReg, rightReg], name = 'Net', color = color)
         
+    def get_rectangular_net_region(self):
+        ### this is a region approximating the full net -> rectangular, without the dip in the middle.
+        leftLn, rightLn = self['Left Net']['Left'], self['Right Net']['Right']
+        p1, p2, p3, p4 = leftLn.high_point(), rightLn.high_point(), leftLn.low_point(), rightLn.low_point()
+        return Region3D.from_points(p1, p2, p3, p4)
+    
     
 @dataclass(frozen = True)
 class Ball(Ball3D):
