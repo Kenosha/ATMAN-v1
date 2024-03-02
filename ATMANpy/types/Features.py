@@ -54,6 +54,9 @@ def try_getattr(obj, methodStr):
             return obj
         return idFunc
 
+def applicator(mySF, func, **kwargs): ### needed for parallelization
+    return mySF.apply(func, **kwargs) 
+
 def extract_mp_timer(extractMethod):
 
     def timed(*args, **kw):
@@ -65,6 +68,8 @@ def extract_mp_timer(extractMethod):
         timeStr = round(time_after - time_before, 2) 
         selfObj, exFunc, otherArgs = args[0], args[1], args[2:] 
         
+        if len(otherArgs) == 0:
+            paramStr = 'no multiprocess'
         if len(otherArgs) == 1:
             num_workers = otherArgs[0]
             paramStr = f'{num_workers} workers'
@@ -1253,9 +1258,22 @@ class SFList:
         featList = [mySF.to_bool() for mySF in self]
         return SFList(featList)
     
+    @extract_mp_timer
     def apply(self, func, **kwargs):
         return SFList([mySF.apply(func, **kwargs) for mySF in self])
     
+    @extract_mp_timer
+    def apply_mp(self, func, num_workers, **kwargs):
+        from multiprocessing.pool import Pool
+        
+        my_applicator = partial(applicator, func = func, **kwargs)
+        
+        with Pool(num_workers) as p:
+            outList = p.map(my_applicator, self.sfList)
+    
+        return SFList(outList)
+    
+    @extract_mp_timer
     def apply_whole(self, func, *args, **kwargs):
         outList = [func(mySF, *args, **kwargs) for mySF in self] ### these dont necessarily have to be StreamFeatures!
         if isinstance(outList[0], StreamFeaturesBase):
