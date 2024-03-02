@@ -590,63 +590,6 @@ def get_locally_minimal_trajectory_indices_vectorised(groundArr_height, vertArr_
     return np.stack(traj_arrays)
     
     
-def get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
-                                           pos_ground_measured, pos_vert_measured,
-                                           sum_of_squares = True, number_of_local_minima = 15):
-    rng = np.random.default_rng()
-    
-    ### shape groundArr_height, vertArr_height: v_ground x v_vert x spin_rpm x time
-    ### shape pos_ground_measured_h, pos_vert_measured_h: dim1 x dim2 x ... x t
-    pos_ground_theoretical_brdcst = pos_ground_theoretical[np.newaxis]
-    pos_vert_theoretical_brdcst = pos_vert_theoretical[np.newaxis]
-    
-    pos_ground_measured_brdcst = pos_ground_measured.copy()
-    pos_vert_measured_brdcst = pos_vert_measured.copy()
-    for _ in range(4):
-        pos_ground_measured_brdcst = pos_ground_measured_brdcst[:, np.newaxis]
-        pos_vert_measured_brdcst = pos_vert_measured_brdcst[:, np.newaxis]
-    
-    ground_dev = pos_ground_measured_brdcst - pos_ground_theoretical_brdcst
-    vert_dev = pos_vert_measured_brdcst - pos_vert_theoretical_brdcst
-    
-    if sum_of_squares:
-        sum_dev = np.nansum((ground_dev ** 2 + vert_dev ** 2) ** 0.5, axis = -1)
-    else:
-        sum_dev = np.nansum(np.abs(ground_dev) + np.abs(vert_dev), axis = -1)
-    
-    del ground_dev, vert_dev
-    
-    local_minima = [detect_local_minima(traj_sum_dev) for traj_sum_dev in sum_dev] ### shape: trajs, x_idxs, z_idxs, rpm_idxs, height_idxs
-    
-    traj_arrays = []
-    for traj_dev, local_minimum in zip(sum_dev, local_minima):
-        ### gather the local minima in initial condition space for a given trajectory
-        x_idxs, z_idxs, rpm_idxs, height_idxs = local_minimum
-        min_devs = traj_dev[x_idxs, z_idxs, rpm_idxs, height_idxs]
-        
-        ### resample local minima
-        sample_ps = 1 / min_devs
-        sample_ps_norm = sample_ps / sample_ps.sum()
-        loc_min_idxs = np.arange(len(min_devs))
-        
-        if len(loc_min_idxs) < number_of_local_minima: ### in this case, get all of the minima and pad the array to fill the required local minima
-            chosen_loc_min_idxs = np.tile(loc_min_idxs, number_of_local_minima)[:number_of_local_minima]
-        else:
-            chosen_loc_min_idxs = rng.choice(loc_min_idxs, size = number_of_local_minima, replace = False, p = sample_ps_norm)
-        
-        traj_ground_idxs = x_idxs[chosen_loc_min_idxs]
-        traj_vert_idxs = z_idxs[chosen_loc_min_idxs]
-        traj_rpm_idxs = rpm_idxs[chosen_loc_min_idxs]
-        traj_height_idxs = height_idxs[chosen_loc_min_idxs]
-        traj_devs_chosen = min_devs[chosen_loc_min_idxs]
-    
-        traj_array = np.stack([traj_ground_idxs, traj_vert_idxs, traj_rpm_idxs, traj_height_idxs, traj_devs_chosen], axis = 1)
-        traj_arrays.append(traj_array)
-   
-    return np.stack(traj_arrays)
-    
-
-
 
 def get_optimal_trajectory_indices_vectorised2(groundArr_brdcst, vertArr_brdcst, 
                                               pos_ground_measured, pos_vert_measured,
@@ -750,26 +693,103 @@ def fit_trajectories(planeArr, pointArr,
         
     return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
     
+def get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
+                                           pos_ground_measured, pos_vert_measured,
+                                           sum_of_squares = True, number_of_local_minima = 15):
+    rng = np.random.default_rng()
+    
+    ### shape groundArr_height, vertArr_height: v_ground x v_vert x spin_rpm x time
+    ### shape pos_ground_measured_h, pos_vert_measured_h: dim1 x dim2 x ... x t
+    pos_ground_theoretical_brdcst = pos_ground_theoretical[np.newaxis]
+    pos_vert_theoretical_brdcst = pos_vert_theoretical[np.newaxis]
+    
+    pos_ground_measured_brdcst = pos_ground_measured.copy()
+    pos_vert_measured_brdcst = pos_vert_measured.copy()
+    for _ in range(4):
+        pos_ground_measured_brdcst = pos_ground_measured_brdcst[:, np.newaxis]
+        pos_vert_measured_brdcst = pos_vert_measured_brdcst[:, np.newaxis]
+    
+    ground_dev = pos_ground_measured_brdcst - pos_ground_theoretical_brdcst
+    vert_dev = pos_vert_measured_brdcst - pos_vert_theoretical_brdcst
+    
+    if sum_of_squares:
+        sum_dev = np.nansum((ground_dev ** 2 + vert_dev ** 2) ** 0.5, axis = -1)
+    else:
+        sum_dev = np.nansum(np.abs(ground_dev) + np.abs(vert_dev), axis = -1)
+    
+    del ground_dev, vert_dev
+    
+    local_minima = [detect_local_minima(traj_sum_dev) for traj_sum_dev in sum_dev] ### shape: trajs, x_idxs, z_idxs, rpm_idxs, height_idxs
+    
+    traj_arrays = []
+    for traj_dev, local_minimum in zip(sum_dev, local_minima):
+        ### gather the local minima in initial condition space for a given trajectory
+        x_idxs, z_idxs, rpm_idxs, height_idxs = local_minimum
+        min_devs = traj_dev[x_idxs, z_idxs, rpm_idxs, height_idxs]
+        
+        ### resample local minima
+        sample_ps = 1 / min_devs
+        sample_ps_norm = sample_ps / sample_ps.sum()
+        loc_min_idxs = np.arange(len(min_devs))
+        
+        if len(loc_min_idxs) < number_of_local_minima: ### in this case, get all of the minima and pad the array to fill the required local minima
+            chosen_loc_min_idxs = np.tile(loc_min_idxs, number_of_local_minima)[:number_of_local_minima]
+        else:
+            chosen_loc_min_idxs = rng.choice(loc_min_idxs, size = number_of_local_minima, replace = False, p = sample_ps_norm)
+        
+        traj_ground_idxs = x_idxs[chosen_loc_min_idxs]
+        traj_vert_idxs = z_idxs[chosen_loc_min_idxs]
+        traj_rpm_idxs = rpm_idxs[chosen_loc_min_idxs]
+        traj_height_idxs = height_idxs[chosen_loc_min_idxs]
+        traj_devs_chosen = min_devs[chosen_loc_min_idxs]
+    
+        traj_array = np.stack([traj_ground_idxs, traj_vert_idxs, traj_rpm_idxs, traj_height_idxs, traj_devs_chosen], axis = 1)
+        traj_arrays.append(traj_array)
+   
+    return np.stack(traj_arrays)
+    
+
+
 def fit_trajectories_pointless(planeArr, 
                                groundArr, vertArr, rpmArr,
-                               sum_of_squares = True, number_of_local_minima = 15):
+                               sum_of_squares = True, number_of_local_minima = 15,
+                               ram_allowed_in_gb = 32):
     
     planeArr_metres = planeArr / const.SCALE * const.FOOT_TO_METER
     planeArr_metres = planeArr_metres.astype('float32')
     pos_ground_measured, pos_vert_measured = planeArr_metres.take(0, axis = -1), planeArr_metres.take(1, axis = -1)
     num_candidates, num_frames = pos_ground_measured.shape
+    theoretical_max_num_frames = groundArr.shape[-1]
+    num_frames = min(num_frames, theoretical_max_num_frames)
     
     ### filter the ground and vertical arrays
-    obs_is_available = ~np.isnan(planeArr_metres).all(axis = (0, 2))
+    obs_is_available = ~np.isnan(planeArr_metres).all(axis = (0, 2))[:num_frames]
+    pos_ground_measured, pos_vert_measured = pos_ground_measured[:, :num_frames], pos_vert_measured[:, :num_frames]
     pos_ground_measured, pos_vert_measured = pos_ground_measured[:, obs_is_available], pos_vert_measured[:, obs_is_available]
     
     pos_ground_theoretical, pos_vert_theoretical = groundArr[:, :, :, :, :num_frames], vertArr[:, :, :, :, :num_frames]
     pos_ground_theoretical, pos_vert_theoretical = pos_ground_theoretical[:, :, :, :, obs_is_available], pos_vert_theoretical[:, :, :, :, obs_is_available]
     
-    trajArr = get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
-                                                     pos_ground_measured, pos_vert_measured,
-                                                     sum_of_squares = sum_of_squares, 
-                                                     number_of_local_minima = number_of_local_minima)
+    ### loop the locally minimal trajectory getting, so we avoid RAM overflow even when parallelising.
+    num_planes = pos_ground_measured.shape[0]
+    array_elements = np.product(pos_ground_theoretical.shape)
+    array_in_gb = array_elements * 4 / 10 ** 9 ### 4 = 32 / 8 (float32 have 4 bytes)
+    possible_planes = int(max(1, min(num_planes, ram_allowed_in_gb // (2 * array_in_gb)))) ### there are two of these arrays -> ground and vert
+    number_of_iterations = int(np.ceil(num_planes / possible_planes))
+    
+    trajArrs = []
+    for iter_idx in range(number_of_iterations):
+        plane_start = iter_idx * possible_planes
+        plane_stop = plane_start + possible_planes
+        
+        trajArr = get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
+                                                         pos_ground_measured[plane_start:plane_stop], pos_vert_measured[plane_start:plane_stop],
+                                                         sum_of_squares = sum_of_squares, 
+                                                         number_of_local_minima = number_of_local_minima)
+        trajArrs.append(trajArr)
+    
+    
+    trajArr = np.concatenate(trajArrs, axis = 0)
     
     vx_idxs = trajArr.take(0, axis = -1).astype(int)
     vy_idxs = trajArr.take(1, axis = -1).astype(int)
