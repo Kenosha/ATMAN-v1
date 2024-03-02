@@ -451,13 +451,13 @@ class Line3D:
             return self.rightPt
         
     def low_point(self):
-        if self.leftPt.is_below(self.rightPt):
+        if self.leftPt.is_lower(self.rightPt):
             return self.leftPt
         else:
             return self.rightPt
     
     def high_point(self):
-        if self.leftPt.is_above(self.rightPt):
+        if self.leftPt.is_higher(self.rightPt):
             return self.leftPt
         else:
             return self.rightPt
