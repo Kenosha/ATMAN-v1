@@ -2105,85 +2105,21 @@ def add_in_hit_point(mySF, height_in_feet = 5, resolution = 5, radius_in_feet = 
     
     return StreamFeatures(streamDict)
     
-def test_trajectories(mySF, matchCamera = None, P = None, net_epsilon = 0.05):
-    
-    def viterbi_net(is_net_array):
-        p = 0.95
-        q = 0.1
-        e = 0.01
-        A = np.array([[p, 1 - p], [0, 1]])
-        BDict = {
-                -1: np.array([1 - q, e]),  ### ball is not projected on net 
-                 0: np.array([1, 1]),      ### ball is not seen
-                 1: np.array([q, 1 - e])   ### ball is projected onto net
-                 }
-        T = len(is_net_array)
-        
-        trellis = np.full((T, 2), np.nan)
-        pointers = np.full((T, 2), np.nan)
-        
-        ### Forward
-        for idx, obs in enumerate(is_net_array):
-            if idx == 0: ### initialize
-                trellis[idx] = 1, 0
-                pointers[idx] = 0, 0
-            else:
-                ### probability that observation is emitted, given state
-                p_emit = BDict[obs] 
-                ### Probability that a trellis probability transition between periods i and j = i + 1
-                p_trans = np.einsum('i, ij -> ij', trellis[idx - 1], A) ### shape: 
-                ### Probability that the new state emits B
-                p_all = np.einsum('ij, j -> ij', p_trans, p_emit)
-                
-                trellis[idx] = np.max(p_all, axis = 0)
-                pointers[idx] = np.argmax(p_all, axis = 0)
-           
-        ### Backward
-        states = np.full(T, fill_value = np.nan, dtype = int)
-        for t in range(T, 0, -1):
-            if t == T:
-                s_before = np.argmax(trellis[-1]) ### initialization with highest final trellis probability state
-            else:    
-                s_before = pointers[t, states[t]]
-            states[t-1] = s_before
-        
-        return states
-        
-    def potential_net_ball(camLn, myNet, epsilon = 0):
-        def within_0_1(num, epsilon = epsilon):
-            return -epsilon <= num <= 1 + epsilon
-        
-        leftReg, rightReg = myNet.regList
-        left_net_ballPt3D, left_params = camLn.intersect(leftReg)
-        right_net_ballPt3D, right_params = camLn.intersect(rightReg) 
-        l_l, m_l, n_l = left_params
-        l_r, m_r, n_r = right_params
-        if within_0_1(l_l) and within_0_1(m_l) or within_0_1(l_r) and within_0_1(m_r): ### ball could be in net!
-            net_ballPt3D = left_net_ballPt3D
-            # note that left_net_ballPt3D and right_net_ballPt3D are the same 
-            # regardless of where the ball actually hit since leftReg and rightReg are coplanar
-        else:
-            net_ballPt3D = None
-            
-        return net_ballPt3D
+def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
+    from ATMANpy.types.ShapesTennis3D import Net
+    myNet = Net.make_singles()
+    netReg = myNet.get_rectangular_net_region()
     
     anchorSF = mySF['cldPt3D']
     shapeSF = mySF['ball_choicePt']
     camlnSF = shapeSF.apply(sa.make_camline, myCamera = matchCamera)
     
-    from ATMANpy.types.ShapesTennis3D import Net
-    from ATMANpy.models.BallTrajectory.flight_bounce_model import calculate_planar_ball_flight_vectorised, get_optimal_trajectory_indices_vectorised2
-    ### TODO
-    # 1) exclude flight planes using projected trajectories fitted -> flight planes may not imply pathological spin, speeds
-    # 2) start and end points must be 'reasonably close' to 0 and 1
-    # 3) ball heigth must be consistent with one or two parabolas
-    
-    flight_plane_size = 100
+    ### the flight_plane height quantities below are irrelevant to trajectory finding, hence they're not parameters
+    flight_plane_size = 100 
     flight_plane_heigth = flight_plane_size / 2 ### half of it is overground
     
     anchor_frames = anchorSF.dropna().get_frames()
     
-    outList = []
     outDict = {}
     for idx in range(len(anchor_frames) - 1): ### dont do the last one -> the hypothetical flight cloud is not a hit cloud
         hit_idx_is_last = idx == len(anchor_frames) - 2
@@ -2216,11 +2152,14 @@ def test_trajectories(mySF, matchCamera = None, P = None, net_epsilon = 0.05):
         coordArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
         paramArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
         planeArr = np.full((num_curr_points, num_next_points, num_flight_frames, 2), fill_value = np.nan)
-        net_coordArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
         
         if hit_idx_is_last:
-            myNet = Net.make_singles()
-        
+            net_coordArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
+            net_paramArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
+        else:
+            net_coordArr = None
+            net_paramArr = None
+            
         for curr_idx in range(num_curr_points):
             currptArr = ptArr_curr[curr_idx]
             currptArr_ground = ptArr_curr_ground[curr_idx]
@@ -2248,7 +2187,9 @@ def test_trajectories(mySF, matchCamera = None, P = None, net_epsilon = 0.05):
                     if camLn is not None:
                         ### 1) Check if the ball is in the net
                         if hit_idx_is_last: # ... if it is the last hit of the rally
-                            net_ballPt3D = potential_net_ball(camLn, myNet, epsilon = net_epsilon) ### ... and if it is projected strictly onto the net region (with tolerance epsilon)
+                            ### irrelevant which side of the net we choose -> they are orthogonal to the cam line
+                            ### choose the left net, and 'extend' the parameters of that side to 
+                            net_ballPt3D, net_params = camLn.intersect(netReg, rectify_plane = True)
                         else:
                             net_ballPt3D = None 
                             
@@ -2265,141 +2206,26 @@ def test_trajectories(mySF, matchCamera = None, P = None, net_epsilon = 0.05):
                         
                         if net_ballPt3D is not None:
                             x_net, y_net, z_net = net_ballPt3D.coords
+                            l_net, m_net, n_net = net_params
                             net_coordArr[curr_idx, next_idx, frame_idx] = x_net, y_net, z_net
-        
-        ### Check when the ball is likeliest to have entered the net, if at all 
-        # 1) with an envelope 
-            # -> if the ball is projected into the net up until the end, it's likely there
-        # 2) with a check of lateral and vertical speed 
-            # -> if the ball is in the net, it's likely moving laterally slowly, and generally down (except for short bounces up)
-        if hit_idx_is_last:
-            ### construct an array that is -1 if not a net, 0 if no observation, 1 if a net
-            plArr = ~np.isnan(net_coordArr).all(axis = 3)
-            mnArr = (np.isnan(net_coordArr) & ~np.isnan(coordArr)).all(axis = 3)
-            valArr = plArr * 1 + mnArr * -1
-            
-            netArr = np.apply_along_axis(viterbi_net, axis = 2, arr = valArr)
-            netArr = netArr.astype(bool)
-            
-            ### parameters for the ball in flight, for evaluation
-            flight_paramArr = np.where(~netArr[:, :, :, np.newaxis], 
-                                        paramArr, np.nan)
-            ### overwrite coordarr to take the net coordinates 
-            ### where viterbi has determined the ball to be in the net
-            coordArr = np.where(~netArr[:, :, :, np.newaxis], 
-                                        coordArr, net_coordArr)
-            
-        else:
-            netArr = None
-            flight_paramArr = paramArr
-        
-        ### verify the integrity of the coordinates
-        # first, get the non nan arrays 
-        flight_paramArr_non_nan = flight_paramArr[:, :, non_na_idxs, :]     
-        
-        num_trajectories = num_curr_points * num_next_points
-        print(f'Out of {num_trajectories} trajectories...')
-    
-        # a) their height can not be negative
-        muArr = flight_paramArr_non_nan[:, :, :, 1] ## get only flight path lambdas along ground
-        mu_above_ground = muArr >= 0 ### TODO: maybe have a slightly negative allowed value here.
-        
-        traj_above_ground = mu_above_ground.all(axis = 2)
-        num_traj_above_ground = traj_above_ground.sum()    
-        print(f'   ... {num_traj_above_ground} are always above ground')
-        
-        # a2) calculate a penalty
-        traj_below_ground_penalty = - np.clip(muArr, a_min = None, a_max = 0).mean(axis = 2)
-        
-        # b) they must have monotonously increasing lambdas along the flight path at ground
-        lambdaArr = flight_paramArr_non_nan[:, :, :, 0] ## get only flight path lambdas along ground
-        delta_lambdaArr = np.diff(lambdaArr, axis = 2) ## first difference these in time
-        
-        monotonous_lambdas = (delta_lambdaArr > 0).all(axis = 2)
-        num_monotonous_lambdas = monotonous_lambdas.sum()    
-        print(f'   ... {num_monotonous_lambdas} are fully monotonously increasing')
-        
-        # b2) calculate a penalty
-        traj_nonmonotonous_penalty = - np.clip(delta_lambdaArr, a_min = None, a_max = 0).mean(axis = 2)
-        
-        # c) the lambdas must have monotonously decreasing first derivatives
-        ### -> the ball decelerates in flight!
-        # for this, we calculate the lambda divided by the index
-        frame_cutoff = 5 ### calculate the lambda per time only after frame_cutoff frames -> avoid division by zero, avoid instability
-        keep_filt = non_na_idxs >= frame_cutoff
-        lambda_per_time = lambdaArr[:, :, keep_filt] / non_na_idxs[np.newaxis, np.newaxis, keep_filt]
-        
-        # this metric (essentially measuring the average ground speed up to each observed point)
-        # ought to be decreasing -> at the beginning, speed is very high, then decreases
-        delta_lambda_per_time = np.diff(lambda_per_time, axis = 2)
-        
-        decelerating_lambdas = (delta_lambda_per_time < 0).all(axis = 2)
-        num_decelerating_lambdas = decelerating_lambdas.sum()    
-        print(f'   ... {num_decelerating_lambdas} are fully decelerating')
-        
-        traj_nondecelerating_penalty = np.clip(delta_lambda_per_time, a_min = 0, a_max = None).mean(axis = 2)
-    
-        # # d) start and end points must be 'reasonably close' to hypothetical points
-        # fs_dev = coordArr[:, :, 0] - pointArr[:, :, 0]
-        # fs_dist = (fs_dev ** 2).sum(axis = -1) ** 0.5
-        # fs_dist_m = fs_dist / const.SCALE * const.FOOT_TO_METER
-        
-        # ls_dev = coordArr[:, :, -1] - pointArr[:, :, -1]
-        # ls_dist = (ls_dev ** 2).sum(axis = -1) ** 0.5
-        # ls_dist_m = ls_dist / const.SCALE * const.FOOT_TO_METER
-        
-        # join all the conditions
-        flawless_trajectory = traj_above_ground & monotonous_lambdas & decelerating_lambdas
-        num_flawless_trajectories = flawless_trajectory.sum()
-        print(f'   ... {num_flawless_trajectories} are flawless!')
-        
-        # calculate a penalty term
-        penalties = traj_below_ground_penalty + traj_nonmonotonous_penalty + traj_nondecelerating_penalty
-        tiny_pen_thresh, small_pen_thresh = 0.01, 0.1
-        tiny_pen, small_pen = penalties < tiny_pen_thresh, penalties < small_pen_thresh
-        num_tiny_pen = tiny_pen.sum()
-        num_small_pen = small_pen.sum()
-        print(f'   ... {num_tiny_pen} are completely acceptable')
-        print(f'   ... {num_small_pen} are reasonably good')
-        
-        # #### visualize
-        # save_folder = ut.get_folder_struct('graphs')['trajectories']
-        
-        # dim = 10
-        # len_dim1 = num_curr_points // dim
-        # len_dim2 = num_next_points // dim
-        
-        # for g1 in range(len_dim1):
-        #     g1_fs, g1_ls = g1 * dim, (g1 + 1) * dim
-        #     for g2 in range(len_dim2):
-        #         g2_fs, g2_ls = g2 * dim, (g2 + 1) * dim
-                
-        #         plotArr = planeArr[g1_fs:g1_ls, g2_fs:g2_ls]
-                
-        #         fig, ax = plt.subplots(10, 10, figsize = (50, 50))
-        #         for idx_1, curr_plotArr in enumerate(plotArr):
-        #             for idx_2, curr_next_plotArr in enumerate(curr_plotArr):
-        #                 x, z = curr_next_plotArr[:, 0], curr_next_plotArr[:, 1]
-        #                 ax[idx_1, idx_2].scatter(x, z)
-                        
-        #         fig.savefig(os.path.join(save_folder, f'hit_frame_{frm_currhit}_x{g1}_y{g2}.png'))
-        #         plt.close()
+                            net_paramArr[curr_idx, next_idx, frame_idx] = l_net, m_net, n_net
         
         outDict[frm_currhit] = {'coordArr': coordArr, 
                                 'paramArr': paramArr, 
                                 'planeArr': planeArr, 
                                 'pointArr': pointArr, 
-                                'netArr': netArr, 
-                                'penalties': penalties}
+                                'net_coordArr': net_coordArr,
+                                'net_paramArr': net_paramArr}
         
     outDict[frm_nexthit] = {'coordArr': None, 
                             'paramArr': None, 
                             'planeArr': None, 
                             'pointArr': None, 
-                            'netArr': None, 
-                            'penalties': None}
+                            'net_coordArr': None,
+                            'net_paramArr': None}
         
     return StreamFeatures(outDict)
+
         
 def filter_trajectories(trajDict, penalty_quantile = 0.05):
     
@@ -2527,8 +2353,9 @@ def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_f
     
     ### figure out where we have gaps in the trajectory finder 
         # can only apply viterbi between these gaps, so that prev_lsArr and curr_fsArr are well defined
-    frames_with_measurement = prob_coordSF.dropna().get_frames()
     all_hit_frames = prob_coordSF.get_frames()[:-1]
+    frames_with_measurement = prob_coordSF.dropna().get_frames()
+    hit_frames_without_measurement = [f for f in all_hit_frames if f not in frames_with_measurement]
     
     split_hit_frames_with_measurement = []
     curr_uninterrupted_frames = []
@@ -2623,6 +2450,12 @@ def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_f
         outDicts.append(outDict)
         
     allDict = {k: v for outDict in outDicts for k, v in outDict.items()}
+    
+    ### add in None for frames without measurement
+    for f in hit_frames_without_measurement:
+        allDict[f] = {'best_plane': None,
+                      'best_traj': None}
+    
     return StreamFeatures(allDict)    
     
 
@@ -2639,58 +2472,61 @@ def make_trajectory_frame(traj_evtSF, courtLines = None):
         featDict = traj_evtSF[frame]
         outArr, columns, srvFlag, hitFlag = featDict['outArr'], featDict['columns'], featDict['srvFlag'], featDict['hitFlag']
         
-        ### Initialize DataFrame with outArr from sa.make_trajectory_arrays
-        hitDF = pd.DataFrame(outArr, columns = columns, index = range(frame, frame + outArr.shape[0]))
-        
-        ### Initialize net and bounce booleans
-        hitDF['is_net'] = hitDF['is_net'].astype(bool)
-        hitDF['is_bounce'] = np.where(hitDF.z_t == 0, True, False)
-        
-        ### Determine Hit and Serve Side
-        side = hitFlag.split('_')[0]
-        if srvFlag is not None:
-            srv_side = srvFlag[2]
-        else:
-            srv_side = None
-
-        ### Check if bounce was in or out
-        if srv_side is None:
-            inReg = courtLines.get_half_region('Bottom' if side == 'top' else 'Top', width = 'Singles')
-        else:
-            inReg = courtLines.get_service_box('Bottom' if side == 'top' else 'Top', which = 'Deuce' if srv_side == 'D' else 'Ad')
+        if outArr is not None:
+            ### Initialize DataFrame with outArr from sa.make_trajectory_arrays
+            hitDF = pd.DataFrame(outArr, columns = columns, index = range(frame, frame + outArr.shape[0]))
             
-        bounce_coords = hitDF.loc[hitDF['is_bounce'], ['x_t', 'y_t']]
-        
-        if not bounce_coords.empty:
-            def coords_in_region(coords):
-                return Point2D(coords).within(inReg)
-        
-            hitDF['is_bounce_in'] = bounce_coords.apply(coords_in_region, axis = 1, raw = True)
-        else:
-            hitDF['is_bounce_in'] = np.nan
+            ### Initialize net and bounce booleans
+            hitDF['is_net'] = hitDF['is_net'].astype(bool)
+            hitDF['is_bounce'] = np.where(hitDF.z_t == 0, True, False)
+            
+            ### Determine Hit and Serve Side
+            side = hitFlag.split('_')[0]
+            if srvFlag is not None:
+                srv_side = srvFlag[2]
+            else:
+                srv_side = None
+    
+            ### Check if bounce was in or out
+            if srv_side is None:
+                inReg = courtLines.get_half_region('Bottom' if side == 'top' else 'Top', width = 'Singles')
+            else:
+                inReg = courtLines.get_service_box('Bottom' if side == 'top' else 'Top', which = 'Deuce' if srv_side == 'D' else 'Ad')
                 
-        ### Construct Event Column
-        hitDF['event'] = np.where(hitDF.is_bounce, 
-                                    np.where(hitDF.is_bounce_in, 'BI', 'BO'),
-                                    np.where(hitDF.is_net, 'N', 'F'))
-        if srvFlag is not None:
-            hitDF.loc[frame, 'event'] = srvFlag
-        else:
-            hitDF.loc[frame, 'event'] = 'H' + hitFlag[0].capitalize()
-
-        ### drop unnecessary booleans
-        hitDF = hitDF.drop(columns = ['is_net', 'is_bounce', 'is_bounce_in'])
-        
-        ### add a shot index to identify the shot
-        hitDF['shot_idx'] = idx
-        
-        ### kill last shot in index -> it is the next hit frame
-        hitDF = hitDF.iloc[:-1]
-        
-        ### Append to list to be returned
-        hitDFs.append(hitDF)
-        
-    return pd.concat(hitDFs)
+            bounce_coords = hitDF.loc[hitDF['is_bounce'], ['x_t', 'y_t']]
+            
+            if not bounce_coords.empty:
+                def coords_in_region(coords):
+                    return Point2D(coords).within(inReg)
+            
+                hitDF['is_bounce_in'] = bounce_coords.apply(coords_in_region, axis = 1, raw = True)
+            else:
+                hitDF['is_bounce_in'] = np.nan
+                    
+            ### Construct Event Column
+            hitDF['event'] = np.where(hitDF.is_bounce, 
+                                        np.where(hitDF.is_bounce_in, 'BI', 'BO'),
+                                        np.where(hitDF.is_net, 'N', 'F'))
+            if srvFlag is not None:
+                hitDF.loc[frame, 'event'] = srvFlag
+            else:
+                hitDF.loc[frame, 'event'] = 'H' + hitFlag[0].capitalize()
+    
+            ### drop unnecessary booleans
+            hitDF = hitDF.drop(columns = ['is_net', 'is_bounce', 'is_bounce_in'])
+            
+            ### add a shot index to identify the shot
+            hitDF['shot_idx'] = idx
+            
+            ### kill last shot in index -> it is the next hit frame
+            hitDF = hitDF.iloc[:-1]
+            
+            ### Append to list to be returned
+            hitDFs.append(hitDF)
+    
+    if len(hitDFs) > 0:
+        return pd.concat(hitDFs)
+    
     
     
     
