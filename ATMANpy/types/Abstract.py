@@ -25,6 +25,8 @@ import pandas as pd
 
 from dataclasses import dataclass
 
+from ATMANpy.types.Lines import CourtLines
+from ATMANpy.types.Streams import Stream
 from ATMANpy.types.Features import StreamFeature, StreamFeatures, SFList
 from ATMANpy.types.Shapes3D import Point3D, Line3D
 from ATMANpy.types.ShapesTennis3D import Player
@@ -64,6 +66,22 @@ class PlayerMovement:
         x, y, z = self.playerFrm.loc[self.get_hit_frame()]
         return Point3D((x, y, z))
     
+    def flip(self, courtLines = None):
+        if courtLines is None:
+            courtLines = CourtLines.make()
+        
+        newFrm = self.playerFrm
+        centArr = np.array(courtLines.get_center_point().coords)
+        
+        coords = ['x', 'y']
+        distFrm = self.playerFrm[coords] - centArr
+        flipFrm = centArr - distFrm
+        newFrm[coords] = flipFrm
+        
+        flipStr = 'top' if self.name == 'bot' else 'bot'
+        
+        return PlayerMovement(newFrm, name = flipStr)
+    
     def feat_player(self):
         def applicator(x, y, z):
             coords = x, y, z
@@ -73,6 +91,7 @@ class PlayerMovement:
         plSF = StreamFeatures.from_dataframe(self.playerFrm).apply(applicator)
         plSF = plSF.rename(f'{self.name}Player3D')
         return plSF
+    
     
 @dataclass(frozen = True)
 class Trajectory:
@@ -110,6 +129,20 @@ class Trajectory:
     def get_hit_frame(self):
         return self.get_frames()[0]
     
+    def get_hit_player(self):
+        hit_event = self.get_hit_event()
+        if hit_event[1] == 'T':
+            return 'top'
+        elif hit_event[1] == 'B':
+            return 'bot'
+    
+    def get_rec_player(self):
+        hit_event = self.get_hit_event()
+        if hit_event[1] == 'T':
+            return 'bot'
+        elif hit_event[1] == 'B':
+            return 'top'
+            
     def get_bounce_events(self):
         return self['event'][self['event'].str.startswith('B')].values.tolist()
     
@@ -145,6 +178,56 @@ class Trajectory:
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how).z
     
+    def stream(self, cap, P, how = 'trajectory'):
+        if how == 'trajectory':
+            coord_cols = ['x_t', 'y_t', 'z_t']
+        elif how == 'observed':
+            coord_cols = ['x_o', 'y_o', 'z_o']
+        
+        coordArr = self.trajFrm[coord_cols].values
+        oneArr = np.ones(len(self.trajFrm))[:, np.newaxis]
+        homArr = np.concatenate([coordArr, oneArr], axis = 1)
+        
+        homArr_2D = np.einsum('ij, nj -> ni', P, homArr)
+        pixArr = homArr_2D[:, :2] / homArr_2D[:, 2][:, np.newaxis]
+        ballFrm = pd.DataFrame(pixArr, index = self.trajFrm.index, columns = ['x', 'y'])
+        
+        ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball2D)
+        return Stream.from_SF(ballSF, cap)
+        
+    def flip(self, courtLines = None):
+        if courtLines is None:
+            courtLines = CourtLines.make()
+        
+        newFrm = self.trajFrm
+        centArr = np.array(courtLines.get_center_point().coords)
+        
+        flipFrms = []
+        for coords in [['x_t', 'y_t'], ['x_o', 'y_o']]:
+            distFrm = self.trajFrm[coords] - centArr
+            flipFrm = centArr - distFrm
+            newFrm[coords] = flipFrm
+            
+        newFrm['event'] = newFrm['event'].replace({'STD': 'SBD', 'STA': 'SBA', 
+                                                   'SBD': 'STD', 'SBA': 'STA',
+                                                   'HT': 'HB', 'HB': 'HT'})
+            
+        return Trajectory(newFrm)
+    
+    ### TRAJECTORY QUALITY MEASURES
+    def mean_deviation(self, dof_correction = 0):
+        obsFrm = self.trajFrm[['x_o', 'y_o', 'z_o']]
+        obsFrm.columns = ['x', 'y', 'z']
+
+        trjFrm = self.trajFrm[['x_t', 'y_t', 'z_t']]
+        trjFrm.columns = ['x', 'y', 'z']
+        
+        diffFrm = (trjFrm - obsFrm).dropna()
+        distFrm = (diffFrm ** 2).sum(axis = 1) ** 0.5
+        
+        return distFrm.sum() / max(len(distFrm) - dof_correction, 0)
+        
+    
     #### FEATURE GETTERS ######
     def feat_ball(self, how = 'trajectory'):
         ### how: trajectory / observed
@@ -155,17 +238,17 @@ class Trajectory:
            
         ballFrm = self.trajFrm[coord_cols]
         ballFrm.columns = ['x', 'y', 'z']
-        ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball)
+        ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball2D)
         return ballSF
     
     def feat_spline(self, how = 'trajectory'):
         ballSF = self.feat_ball(how = how)
         ballSF_before = ballSF.shift(offset = 1)
-        def make_spline(outBall_bef1, outBall):
-            if outBall_bef1 is None:
+        def make_spline(ball2D_bef1, ball2D):
+            if ball2D_bef1 is None:
                 spLn = None
             else:
-                spLn = Line3D(outBall_bef1, outBall)
+                spLn = Line3D(ball2D_bef1, ball2D)
                 return spLn
         return ballSF_before.merge(ballSF).apply(make_spline)
     
@@ -176,6 +259,22 @@ class Shot:
     hitPlayer: PlayerMovement
     recPlayer: PlayerMovement
     
+    @staticmethod
+    def from_shot_frame_and_player_sfs(shotFrm, topSF, botSF):
+        shotFrm = shotFrm.dropna(how = 'all')
+        shot_frames = shotFrm.index
+        shotTraj = Trajectory(shotFrm)
+        
+        frmDict = {'top': topSF.conform(shot_frames).to_dataframe(),
+                   'bot': botSF.conform(shot_frames).to_dataframe()}
+        hit_player = shotTraj.get_hit_player()
+        rec_player = shotTraj.get_rec_player()
+        
+        hitMvmt = PlayerMovement(frmDict[hit_player], name = hit_player)
+        recMvmt = PlayerMovement(frmDict[rec_player], name = rec_player)
+    
+        return Shot(shotTraj, hitMvmt, recMvmt)
+        
     def __post_init__(self):
         assert self.shotTraj.get_frames() == self.hitPlayer.get_frames() == self.recPlayer.get_frames()
     
@@ -217,10 +316,30 @@ class Shot:
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
     
+    def flip(self, courtLines = None):
+        if courtLines is None:
+            courtLines = CourtLines.make()
+            
+        return Shot(self.shotTraj.flip(courtLines = courtLines),
+                    self.hitPlayer.flip(courtLines = courtLines),
+                    self.recPlayer.flip(courtLines = courtLines))
+    
     ### FILTERS ###
     def is_serve(self):
         return self.get_hit_event()[0] == 'S'
     
+    def is_serve_ad(self):
+        if self.is_serve():
+            return self.get_hit_event()[2] == 'A'
+        else:
+            return False
+        
+    def is_serve_deuce(self):
+        if self.is_serve():
+            return self.get_hit_event()[2] == 'D'
+        else:
+            return False
+            
     def is_hit(self):
         return not self.is_serve()
     
@@ -297,6 +416,11 @@ class Shot:
         # if there is no nextShot, it's fault, otherwise, it's fair.
         return not self.is_fair(nextShot)
     
+    def is_top_to_bot(self):
+        return self.get_hit_event()[1] == 'T'
+    
+    def is_bot_to_top(self):
+        return self.get_hit_event()[1] == 'B'
     
     #### FEATURE GETTERS ######
     def feat_ball(self, how = 'trajectory'):
@@ -328,6 +452,12 @@ class Shots:
     ### a general collection of shots.
     shotList: List[Shot]
     
+    def __repr__(self):
+        fsShot, lsShot = self[0], self[-1]
+        num_shots = len(self)
+        min_frame, max_frame = fsShot.get_frames()[0], lsShot.get_frames()[-1]
+        return f'Shots(N = {num_shots}, between frames {min_frame} and {max_frame})'
+    
     def __iter__(self):
         return iter(self.shotList)
     
@@ -336,13 +466,42 @@ class Shots:
     
     def __len__(self):
         return len(self.shotList)
+    
+    def filter(self, bool_method):
+        return Shots([myShot for myShot in self if getattr(myShot, bool_method)()])
      
+    def flip(self, courtLines = None):
+        if courtLines is None:
+            courtLines = CourtLines.make()
+        return Shots([myShot.flip(courtLines = courtLines) for myShot in self])
+    
+    def 
+    
     # ### FEATURE GETTERS ######
     ### done with make_method below!!!
         
 @dataclass(frozen = True)
 class Point(Shots):
     ### every point is a collection of shots in sequence!
+    
+    @staticmethod
+    def from_shot_frame_and_player_SFs(trajFrm, topSF, botSF):
+        if trajFrm.dropna().empty:
+            return Point([])
+        
+        last_frame = trajFrm.dropna(how = 'all').index[-1]
+        hit_serve_filter = trajFrm['event'].str.startswith('S') | trajFrm['event'].str.startswith('H')
+        hit_serve_frames = hit_serve_filter[hit_serve_filter].index
+        next_frames = [*hit_serve_frames[1:], last_frame]
+        
+        shots = []
+        for hit_frame, next_hit_frame in zip(hit_serve_frames, next_frames):
+            shotFrm = trajFrm.loc[hit_frame: next_hit_frame - 1] 
+            myShot = Shot.from_shot_frame_and_player_sfs(shotFrm, topSF, botSF)    
+            shots.append(myShot)
+            
+        return Point(shots)
+            
     def __repr__(self):
         serveShot = self.shotList[0]
         server, receiver = serveShot.hitPlayer.name, serveShot.recPlayer.name
@@ -350,7 +509,10 @@ class Point(Shots):
         frames = self.get_frames()
         event_string = '->'.join(events)
         min_frame, max_frame = frames[0], frames[-1]
-        return f'Point({event_string}, serving: {server}, receiving: {receiver} from {min_frame} to {max_frame}.)'
+        return f'Point({event_string}, serving: {server}, receiving: {receiver} from {min_frame} to {max_frame})'
+    
+    def __iter__(self):
+        return iter(self.shotList)
     
     def get_events(self):
         return [event for shot in self.shotList for event in shot.get_events()]
@@ -365,7 +527,54 @@ class Point(Shots):
             return lastShot.hitPlayer.get_name()
         else:
             return lastShot.recPlayer.get_name()
-
+        
+    def get_serve(self):
+        if len(self) == 0:
+            return None
+        else:
+            fsShot = self[0]
+            if fsShot.is_serve():
+                return fsShot
+            else:
+                return None
+    
+@dataclass(frozen = True)
+class Points:
+    pointList: List[Point]
+    name: str = 'Points'
+    
+    def from_SFs(trajSFs, topSFs, botSFs):
+        ### these have to be segmented!
+        pointList = []
+        
+        for idx in range(trajSFs.length()):
+            trajSF, topSF, botSF = trajSFs[idx], topSFs[idx], botSFs[idx]
+            trajFrm = trajSF.to_dataframe()
+            
+            myPnt = Point.from_shot_frame_and_player_SFs(trajFrm, topSF, botSF)
+            pointList.append(myPnt)
+            
+        return Points(pointList)
+    
+    def __iter__(self):
+        return iter(self.pointList)
+    
+    def __getitem__(self, item):
+        return self.pointList[item]
+    
+    def __len__(self):
+        return len(self.pointList)
+    
+    def filter(self, bool_method):
+        return Points([myPnt for myPnt in self if getattr(myPnt, bool_method)()])
+    
+    def flatten(self):
+        ### turn into shots
+        return Shots([myShot for myPnt in self for myShot in myPnt])
+    
+  
+    
+    
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
 def __make_method(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
     def method(self):
