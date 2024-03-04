@@ -591,9 +591,14 @@ def filter_hit_candidates_with_ball(hitPts3D, ballPt2D, P, quantile_threshold = 
         ptArr_filtered = ptArr[dist <= distance_threshold]
     return ptArr_filtered
 
-def coords_to_ball(x, y, z):
-    outBall = Ball3D((x, y, z))
-    return outBall
+def coords_to_ball3D(x, y, z):
+    ball3D = Ball3D((x, y, z))
+    return ball3D
+
+def coords_to_ball2D(x, y):
+    ball2D = Point2D((x, y))
+    return ball2D
+
 
 def project_ball(ball3D, P):
     ball2D_array = ball3D.project(P, resolution = 0.1)
