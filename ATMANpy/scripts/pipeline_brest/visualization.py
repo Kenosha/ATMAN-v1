@@ -40,6 +40,8 @@ from ATMANpy.funcs.player_funcs import get_service_ROIs, get_half_court_Lines
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_intersection_points
 
 
+from ATMANpy.types.Abstract import PlayerMovement, Trajectory, Shot, Shots, Point, Points
+
 from ATMANpy.types.Visual3D import Scene, Camera, View
 from ATMANpy.types.ShapesTennis3D import Player
 
@@ -73,6 +75,11 @@ def main():
     width, height = get_width_height(cap)
     
     HPCF, segBF, plySF, trajFrm = load(vid, sto)
+    P = HPCF['P'].feature
+    
+    courtLines = CourtLines.make()
+    
+    
     
     ### find 3D player positions
     mySF = plySF.merge(HPCF['P'])
@@ -86,44 +93,116 @@ def main():
     
     trajSFs = StreamFeatures.from_dataframe(trajFrm).conform(segBF).filter(segBF).split()
     
-    idx = 0
-    trajSF_sub = trajSFs[idx]
-    topSF_sub = topSFs[idx]
-    botSF_sub = botSFs[idx]
+    myPnts = Points.from_SFs(trajSFs, topSFs, botSFs)
     
-    trajFrm = trajSF_sub.to_dataframe()
-
-    last_frame = trajFrm.dropna(how = 'all').index[-1]
+    myShots = myPnts.flatten()
+    goodShots = myShots.filter('mean_deviation', is_below = 20, dof_correction = 3)
+    b2tShots = goodShots.filter('is_bot_to_top')
+    t2bShots = goodShots.filter('is_top_to_bot')
+    t2bShots_flipped = t2bShots.flip()
     
-    hit_serve_filter = trajFrm['event'].str.startswith('S') | trajFrm['event'].str.startswith('H')
-    hit_serve_frames = hit_serve_filter[hit_serve_filter].index
+    unidirShots = Shots([*b2tShots, *t2bShots_flipped])
     
-    next_frames = [*hit_serve_frames[1:], last_frame]
-    
-    from ATMANpy.types.Abstract import PlayerMovement, Trajectory, Shot, Shots, Point
-
-    shots = []
-    for hit_frame, next_hit_frame in zip(hit_serve_frames, next_frames):
-        shotFrm = trajFrm.loc[hit_frame: next_hit_frame - 1]
-        topFrm = topSF_sub.conform(shotFrm.index).to_dataframe()
-        botFrm = botSF_sub.conform(shotFrm.index).to_dataframe()
+    ad_serves = unidirShots.filter('is_serve_ad')
+    deuce_serves = unidirShots.filter('is_serve_deuce')
         
-        shotTraj = Trajectory(shotFrm)
+    
+    ballSF = ad_serves.feat_ball_flat()
+    
+    myCam = Camera.calibrated_AO_behind()
+    emptyScn = Scene.make_empty()
+    courtScn = Scene.make_court()
+    backView = View.make(myCam, courtScn, resolution = 1)
+    
+    for frame in ballSF:
+        ball = ballSF[frame]
         
-        side = shotFrm.loc[hit_frame, 'event'][1]
-        assert side in ['T', 'B']
-        if side == 'T':
-            hitMvmt = PlayerMovement(topFrm, name = 'top')
-            recMvmt = PlayerMovement(botFrm, name = 'bot')
-        elif side == 'B':
-            hitMvmt = PlayerMovement(botFrm, name = 'bot')
-            recMvmt = PlayerMovement(topFrm, name = 'top')
-
+        frontScn = emptyScn.put(ball)
+        frontView = View.make(myCam, frontScn, resolution = 1)
     
-        myShot = Shot(shotTraj, hitMvmt, recMvmt)
-        shots.append(myShot)
+        showFrm = backView.combine(frontView).snap()
+        
+        show_continuous(showFrm.array, ms_between_frames = 20)
     
-    shots[1].hitPlayer.name
+    cv.destroyAllWindows()
+    
+    dof_correction = 3
+    
+    ad_bncPts = []
+    for srv in ad_serves:
+        try:
+            first_bounce = srv.get_bounce_positions()[0]
+        except IndexError:
+            pass
+        else:
+            deviation = srv.shotTraj.mean_deviation(dof_correction = dof_correction) ### the higher, the redder we want the point to be colored!
+            deviation_norm = min(deviation / 100, 1)
+            
+            bgr = (1 - deviation_norm) * np.array([0, 255, 0]) + deviation_norm * np.array([0, 0, 255])
+            bgr = tuple(bgr.astype(int))
+            
+            first_bounce = first_bounce.recolor(bgr)
+            
+            ad_bncPts.append(first_bounce)
+            
+    [myShot.shotTraj.trajFrm.vx0.unique()[0] for myShot in ad_serves]
+            
+   
+           
+    
+    
+    ad_serves.feat_spline()
+    
+    Stream(cap, 66800, 67000).show(ms_between_frames = 100, frame_counter = True)
+    
+    deuce_bncPts = []
+    for srv in deuce_serves:
+        try:
+            first_bounce = srv.get_bounce_positions()[0]
+        except IndexError:
+            pass
+        else:
+            deviation = srv.shotTraj.mean_deviation(dof_correction = dof_correction) ### the higher, the redder we want the point to be colored!
+            deviation_norm = min(deviation / 100, 1)
+            
+            bgr = (1 - deviation_norm) * np.array([0, 255, 0]) + deviation_norm * np.array([0, 0, 255])
+            bgr = tuple(bgr.astype(int))
+            
+            first_bounce = first_bounce.recolor(bgr)
+            
+            deuce_bncPts.append(first_bounce)
+            
+    
+    
+    myCam = Camera.calibrated_AO_behind()
+    courtScn = Scene.make_court()
+    backView = View.make(myCam, courtScn, resolution = 1)
+    
+    ballScn = Scene.make_empty().put(deuce_bncPts)
+    frontView = View.make(myCam, ballScn, resolution = 1)
+    
+    showFrm = backView.combine(frontView).snap()
+    showFrm.show()
+    
+    ballScn = Scene.make_empty().put(ad_bncPts)
+    frontView = View.make(myCam, ballScn, resolution = 1)
+    
+    showFrm = backView.combine(frontView).snap()
+    showFrm.show()
+    
+    ad_bncPts = [srv.get_bounce_positions() for srv in ad_serves]
+    # deuce_bncPts = 
+    
+    
+    deuce_serves[0].flip()
+    
+    
+    
+    ad_serves
+    
+    
+    
+    
     
     srvShot, retShot, lstShot = shots
     
