@@ -163,7 +163,7 @@ class Trajectory:
             coord_cols = ['x_o', 'y_o', 'z_o']
             
         x, y, z = self.get_hit_series()[coord_cols] 
-        return Point3D((x, y, z)) ### return point?
+        return x, y, z
     
     def get_bounce_positions(self):
         coord_cols = ['x_t', 'y_t', 'z_t']
@@ -172,19 +172,23 @@ class Trajectory:
         bounce_points = []
         for frm in bounce_frames:
             x, y, z = self.trajFrm.loc[frm, coord_cols]
-            bounce_points.append(Point3D((x, y, z)))
+            bounce_points.append((x, y, z))
         return bounce_points
     
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how).z
     
-    def stream(self, cap, P, how = 'trajectory'):
+    def get_ball_array(self, how = 'trajectory'):
         if how == 'trajectory':
             coord_cols = ['x_t', 'y_t', 'z_t']
         elif how == 'observed':
             coord_cols = ['x_o', 'y_o', 'z_o']
         
         coordArr = self.trajFrm[coord_cols].values
+        return coordArr
+    
+    def stream(self, cap, P, how = 'trajectory'):
+        coordArr = self.get_ball_array(how = how)
         oneArr = np.ones(len(self.trajFrm))[:, np.newaxis]
         homArr = np.concatenate([coordArr, oneArr], axis = 1)
         
@@ -227,7 +231,14 @@ class Trajectory:
         
         return distFrm.sum() / max(len(distFrm) - dof_correction, 0)
         
+    ### SHAPE GETTERS ######
+    # -> here, we have all functions that return a 2D or 3D Shape
+    def shape_initial_position(self, how = 'trajectory'):
+        return Point3D(self.get_initial_position(how = how))
     
+    def shape_bounce_positions(self, how = 'trajectory'):
+        return [Point3D(pt) for pt in self.get_bounce_positions(how = how)]
+        
     #### FEATURE GETTERS ######
     def feat_ball(self, how = 'trajectory'):
         ### how: trajectory / observed
@@ -422,6 +433,10 @@ class Shot:
     def is_bot_to_top(self):
         return self.get_hit_event()[1] == 'B'
     
+    #### 
+    def mean_deviation(self, dof_correction = 0):
+        return self.shotTraj.mean_deviation(dof_correction = dof_correction)
+    
     #### FEATURE GETTERS ######
     def feat_ball(self, how = 'trajectory'):
         return self.shotTraj.feat_ball(how = how)
@@ -467,15 +482,44 @@ class Shots:
     def __len__(self):
         return len(self.shotList)
     
-    def filter(self, bool_method):
-        return Shots([myShot for myShot in self if getattr(myShot, bool_method)()])
+    def filter(self, bool_method, is_below = None, is_above = None, **filter_kwargs):
+        def filter_func(myShot):
+            val = getattr(myShot, bool_method)(**filter_kwargs)
+            if is_below is None and is_above is None:
+                myBool = val
+            elif is_below is None:
+                myBool = val > is_above
+            elif is_above is None:
+                myBool = val < is_below
+            else:
+                myBool = is_above < val < is_below
+            return myBool
+        
+        return Shots([myShot for myShot in self if filter_func(myShot)])
      
     def flip(self, courtLines = None):
         if courtLines is None:
             courtLines = CourtLines.make()
         return Shots([myShot.flip(courtLines = courtLines) for myShot in self])
     
-    def 
+    def get_bounce_positions(self, how_many = 2):
+        arrList = [np.array(myShot.get_bounce_positions())[:how_many] for myShot in self]
+        [np.pad(arr, ((0, 0), (0, how_many - len(arr)))) for arr in arrList]
+        
+    
+    def feat_ball_flat(self, how = 'trajectory'):
+        ball_arrays = [myShot.shotTraj.get_ball_array(how = how) for myShot in self]
+        longest_array_len = np.max([arr.shape[0] for arr in ball_arrays])
+        
+        padded_ball_arrays = [np.pad(arr, ((0, longest_array_len - arr.shape[0]), (0, 0)), constant_values = np.nan) for arr in ball_arrays]
+        stacked_ball_arrays = np.stack(padded_ball_arrays, axis = 1) ### shape: time, traj, 3
+    
+        outDict = {}
+        for idx, frameArr in enumerate(stacked_ball_arrays):
+            frameArr = frameArr[~np.isnan(frameArr).all(axis = 1)]
+            outDict[idx] = Point3D(frameArr.T)
+    
+        return StreamFeature(outDict, name = 'ball3D')
     
     # ### FEATURE GETTERS ######
     ### done with make_method below!!!
