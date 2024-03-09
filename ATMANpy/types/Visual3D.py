@@ -49,19 +49,47 @@ class Scene:
         else:
             rastArr_all = []
             colArr_all = []
+            alphaArr_all = []
             for shape3D in self.shapes:
                 rastArr = shape3D.rasterize(resolution)
                 
                 colTup = shape3D.color
-                colArr = np.tile(np.array(colTup), (len(rastArr), 1)) ### make same shape as rastArr
+                alpha = shape3D.alpha
+                colArr = np.tile(np.array(colTup), (len(rastArr), 1))
+                alphaArr = np.full((len(rastArr), 1), fill_value = alpha)
                 
                 rastArr_all.append(rastArr)
                 colArr_all.append(colArr)
+                alphaArr_all.append(alphaArr)
                 
             rastArr_all = np.concatenate(rastArr_all)
             colArr_all = np.concatenate(colArr_all)
+            alphaArr_all = np.concatenate(alphaArr_all)
             
-            return rastArr_all, colArr_all
+            return rastArr_all, colArr_all, alphaArr_all
+    
+@dataclass(frozen = True)
+class DummyScene:
+    ### a scene that does not contain shapes, but a rasterized representation of what is to be displayed
+    rastArrs: List ### list of np.arrays, each holding coordinates, with shape N x 3 (xyz)
+    colArrs: List ### list of np.arrays, each holding BGR colors, with shape N x 3 (BGR)
+    alphaArrs: List ### List of np.arrays, each holding alpha opacities, with shape N x 1  
+    
+    @staticmethod
+    def make_empty():
+        return DummyScene([], [])
+    
+    def is_empty(self):
+        return len(self.rastArrs) == 0
+    
+    def put(self, rastArr, colArr):
+        return DummyScene([*self.rastArrs, rastArr], [*self.colArrs, colArr])
+    
+    def rasterize(self, resolution):
+        rastArr_all = np.concatenate(self.rastArrs)
+        colArr_all = np.concatenate(self.colArrs)
+        alphaArr_all = np.concatenate(self.alphaArrs)
+        return rastArr_all, colArr_all, alphaArr_all
     
 
 @dataclass(frozen = True)
@@ -303,6 +331,7 @@ class View:
     
     ptArr: np.array ### points in 3D space
     clArr: np.array ### colors
+    alArr: np.array ### alphas
     pxArr: np.array ### points in 2D space -> 3D points projected onto screen
     dsArr: np.array ### distance of objects to camera
     
@@ -312,51 +341,58 @@ class View:
     def make_empty(sensor_dims = (1920, 1080)):
         return View(np.zeros((0, 3)), 
                     np.zeros((0, 3)), 
+                    np.zeros((0, 1)),
                     np.zeros((0, 2), dtype = int),  ### pixels need to be integer!
                     np.zeros(0),
                     sensor_dims = sensor_dims)
     
     @staticmethod
-    def make(myCamera, myScene, resolution = 10, do_sort = True, do_filter = True,
-             suppress_negative_coordinates = True):
+    def make(myCamera, myScene, resolution = 10):
         
         if myScene.is_empty(): 
             return View.make_empty()
         else:
             ### 1) Collect real world points and their colors
-            ptArr, clArr = myScene.rasterize(resolution)
-            if suppress_negative_coordinates:
-                all_positive_indices = (ptArr >= 0).all(axis = 1)
-                ptArr = ptArr[all_positive_indices]
-                clArr = clArr[all_positive_indices]
+            ptArr, clArr, alArr = myScene.rasterize(resolution)
             
-            ### 2) Project Point Cloud in 3D onto 2D Sensor
+            ### 2) Suppress negative coordinates
+            all_positive_indices = (ptArr >= 0).all(axis = 1)
+            ptArr = ptArr[all_positive_indices]
+            clArr = clArr[all_positive_indices]
+            alArr = alArr[all_positive_indices]
+        
+            ### 3) Project Point Cloud in 3D onto 2D Sensor
             pxArr = myCamera.project_points(ptArr).astype(int)
             px_on_sensor = ((0, 0) <= pxArr) & (pxArr <  myCamera.sensor_dims)
             px_filter = px_on_sensor.all(axis = 1)
             
             ptArr = ptArr[px_filter]
             clArr = clArr[px_filter]
+            alArr = alArr[px_filter]
             pxArr = pxArr[px_filter]
             
-            ### 3) For every point, get distance from Pinhole
+            ### 4) For every point, get distance from Pinhole
             dsArr = ((ptArr - myCamera.get_cw()) ** 2).sum(axis = 1) ** 0.5
-            aView = View(ptArr, clArr, pxArr, dsArr, sensor_dims = myCamera.sensor_dims)
-            
-            if do_sort:
-                ### 4) Sort view by distance from pinhole
-                aView = aView.sort_by_distance()
-            
-            if do_filter:
-                ### 5) Filter out duplicate pixel
-                aView = aView.filter_duplicates()
-            
+            aView = View(ptArr, clArr, alArr, pxArr, dsArr, 
+                         sensor_dims = myCamera.sensor_dims)
+        
             return aView
 
-    def sort_by_distance(self):
+    def sort_by_pixel(self):
+        sort_idxs = np.lexsort((self.pxArr[:, 1], self.pxArr[:, 0]))
+        return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], 
+                    self.alArr[sort_idxs], self.pxArr[sort_idxs], 
+                    self.dsArr[sort_idxs],
+                    sensor_dims = self.sensor_dims)
+    
+    def sort_by_distance(self, near_to_far = True):
         ### 2) For every point, get distance from Pinhole, and sort vectors by it!
         sort_idxs = np.argsort(self.dsArr)
-        return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], self.pxArr[sort_idxs], self.dsArr[sort_idxs],
+        if not near_to_far: ### this is what we need if we want to do alpha blending.
+            sort_idxs = np.flip(sort_idxs)
+        return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], 
+                    self.alArr[sort_idxs], self.pxArr[sort_idxs], 
+                    self.dsArr[sort_idxs],
                     sensor_dims = self.sensor_dims)
         
     def filter_duplicates(self, verbose = False):
@@ -371,20 +407,32 @@ class View:
             keep_pct = round(fs_mask.sum() / len(fs_mask) * 100)
             print(f'Keeping {keep_pct}% of points!')
         
-        return View(self.ptArr[fs_mask], self.clArr[fs_mask], self.pxArr[fs_mask], self.dsArr[fs_mask],
+        return View(self.ptArr[fs_mask], self.clArr[fs_mask], 
+                    self.alArr[fs_mask], self.pxArr[fs_mask], 
+                    self.dsArr[fs_mask],
                     sensor_dims = self.sensor_dims)
 
     def snap(self):
+        ### 1) Sort by distance for painters algorithm: far to near
+        sortView = self.sort_by_distance(near_to_far = False)
+    
         ### 4) Pluck every point onto a frame with the correct value, and show it!
-        rows, cols = self.sensor_dims[1], self.sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
+        rows, cols = sortView.sensor_dims[1], sortView.sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
         snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
 
-        for pixel, color in zip(self.pxArr, self.clArr):
+        pixels = sortView.pxArr
+        alphas = sortView.alArr
+        premul_colors = sortView.clArr * sortView.alArr
+
+        for pixel, alpha, premul_color in zip(pixels, alphas, premul_colors):
             u, v = pixel
+            
             try:
-                snapArr[v, u] = color ### note the switch here: u are columns, v are rows, so indexing inverts! 
+                curr_color = snapArr[v, u] ### note the switch here: u are columns, v are rows, so indexing inverts! 
             except IndexError:
-                pass
+                continue
+            else:
+                snapArr[v, u] = curr_color * (1 - alpha) + premul_color
         
         snapFrm = BGRFrame(snapArr)
         
@@ -393,10 +441,14 @@ class View:
     def combine(self, otherView):
         ptArr = np.concatenate([self.ptArr, otherView.ptArr], axis = 0)
         clArr = np.concatenate([self.clArr, otherView.clArr], axis = 0)
+        alArr = np.concatenate([self.alArr, otherView.alArr], axis = 0) 
         pxArr = np.concatenate([self.pxArr, otherView.pxArr], axis = 0)
         dsArr = np.concatenate([self.dsArr, otherView.dsArr], axis = 0)
         
-        return View(ptArr, clArr, pxArr, dsArr)#.sort_by_distance()#.filter_duplicates()
+        aView = View(ptArr, clArr, alArr, pxArr, dsArr)
+    
+        aView = aView.sort_by_distance(near_to_far = False)
+        return aView
 
     
 # from ATMANpy.types.Shapes3D import Ball3D, Lines3D, Region3D, Regions3D
