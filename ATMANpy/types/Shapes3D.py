@@ -23,7 +23,10 @@ class Point3D:
     coords: tuple ### a tuple of numbers (this is a single point) or vectors (a set of points)
     
     _DEFAULT_COLOR = const.BGR['bright_grey']
+    _DEFAULT_ALPHA = 1
+    
     color: Optional[tuple] = _DEFAULT_COLOR
+    alpha: Optional[float] = _DEFAULT_ALPHA
     
     def __post_init__(self):
         #### IMMUTABILITY BREAKS ####
@@ -223,9 +226,11 @@ class Circle3D(Point3D):
     ### TODO: for the moment, the circle is flat on the ground -> generalize!
     """
     _DEFAULT_COLOR = const.BGR['bright_grey']
-    radius: float = 1
+    _DEFAULT_ALPHA = 1
     
+    radius: float = 1
     color: Optional[tuple] = _DEFAULT_COLOR
+    alpha: Optional[float] = _DEFAULT_ALPHA
     limit_theta: Optional[tuple] = None
     
     name: str = 'Ball3D'
@@ -288,8 +293,11 @@ class Ball3D(Point3D):
     radius: float = 1
     
     color: Optional[tuple] = _DEFAULT_COLOR
+    alpha: Optional[float] = 1
+    
     limit_phi: Optional[tuple] = None
     limit_theta: Optional[tuple] = None
+    
     
     name: str = 'Ball3D'
     
@@ -369,6 +377,7 @@ class Line3D:
     name: str = 'Line3D'
     color: Optional[tuple] = _DEFAULT_COLOR
     thickness: Optional[int] = 0
+    alpha: Optional[float] = 1
 
     @staticmethod
     def from_line(aLn, x = None, y = None, z = None):
@@ -567,11 +576,13 @@ class Lines3D:
     A list of Lines3D
     """ 
     _DEFAULT_COLOR = const.BGR['bright_grey']
+    _DEFAULT_ALPHA = 1
     
     lineList: List[Line3D]
     name: str = 'Lines3D'
     
     color: Optional[tuple] = _DEFAULT_COLOR
+    alpha: Optional[float] = _DEFAULT_ALPHA
     
     def __iter__(self):
         return iter(self.lineList)
@@ -618,13 +629,15 @@ class Region3D():
     A region, i.e. a plane, in three dimensions
     """
     _DEFAULT_COLOR = const.BGR['bright_grey']
+    _DEFAULT_ALPHA = 1
     
     lineList: List[Line3D]
     
     color: Optional[tuple] = _DEFAULT_COLOR
+    alpha: Optional[float] = _DEFAULT_ALPHA
+    
     name: str = 'Region3D'
     
-
     def __post_init__(self):
         object.__setattr__(self, 'p1', self['Top'].leftPt)
         object.__setattr__(self, 'p2', self['Top'].rightPt)
@@ -657,7 +670,7 @@ class Region3D():
     @classmethod
     def from_points(cls, p1: Point3D, p2: Point3D, p3: Point3D, p4: Point3D, 
                     left_right = '+x', top_bottom = '+y',
-                    name = 'Region3D', color = _DEFAULT_COLOR):
+                    name = 'Region3D', color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
         # is_rectangle = p3 is None and p4 is None
         # if is_rectangle:
         #     p3 = Point2D((p1.x, p2.y))
@@ -694,7 +707,7 @@ class Region3D():
     
     @classmethod
     def from_line(cls, aLn, width, dim = 'x', left_right = '+x', top_bottom = '+y',
-                  name = 'Region3D', color = _DEFAULT_COLOR):
+                  name = 'Region3D', color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
         ### basically thicken a line to yield a region!
         ### the width dimension 'dim' is the dimension along which the thickness is introduced!
         if dim == 'x':
@@ -703,21 +716,21 @@ class Region3D():
                                    aLn.rightPt.left(width/2),
                                    aLn.rightPt.right(width/2),
                                    left_right = left_right, top_bottom = top_bottom,
-                                   name = name, color = color)
+                                   name = name, color = color, alpha = alpha)
         if dim == 'y':
             return cls.from_points(aLn.leftPt.front(width/2),
                                    aLn.leftPt.back(width/2),
                                    aLn.rightPt.front(width/2),
                                    aLn.rightPt.back(width/2),
                                    left_right = left_right, top_bottom = top_bottom,
-                                   name = name, color = color)
+                                   name = name, color = color, alpha = alpha)
         if dim == 'z':
             return cls.from_points(aLn.leftPt.up(width/2),
                                    aLn.leftPt.down(width/2),
                                    aLn.rightPt.up(width/2),
                                    aLn.rightPt.down(width/2),
                                    left_right = left_right, top_bottom = top_bottom,
-                                   name = name, color = color)
+                                   name = name, color = color, alpha = alpha)
     
     ### REINSTANTIATION ###
     def rename(self, new_name):
@@ -774,11 +787,13 @@ class Regions3D():
     A list of regions, i.e. a set of planes that make some composite shape.
     """
     _DEFAULT_COLOR = const.BGR['bright_grey']
+    _DEFAULT_ALPHA = 1
     
     regList: List[Region3D]
     
     name: str = 'Regions3D'
     color: Optional[tuple] = _DEFAULT_COLOR
+    alpha: Optional[float] = _DEFAULT_ALPHA
 
     def __iter__(self):
         return iter(self.regList)
@@ -803,9 +818,9 @@ class Regions3D():
         return len(self.regList)
 
     @staticmethod
-    def from_lines(aLns, width, dim = 'x', name = 'Regions3D', color = _DEFAULT_COLOR):
+    def from_lines(aLns, width, dim = 'x', name = 'Regions3D', color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
         return Regions3D([Region3D.from_line(aLn, width, dim = dim) for aLn in aLns], 
-                         name = name, color = color)
+                         name = name, color = color, alpha = alpha)
         
     ### REINSTANTIATION ###
     def rename(self, new_name):

@@ -26,9 +26,10 @@ class Court(Regions3D):
     A list of regions, i.e. a set of planes that make some composite shape.
     """
     _LINE_COLOR = const.BGR['bright_grey']
+    _LINE_ALPHA = 1
     
     @staticmethod
-    def make(color = _LINE_COLOR):
+    def make(color = _LINE_COLOR, alpha = _LINE_ALPHA):
         courtLines = CourtLines.make()
         courtDims = courtLines.see_dimensions()
         
@@ -52,15 +53,16 @@ class Court(Regions3D):
             
             courtRegions3D.append(Region3D.from_line(cLn, width = width, dim = dim, name = cLn.name))
             
-        return Court(courtRegions3D, name = 'Courtlines', color = color)    
+        return Court(courtRegions3D, name = 'Courtlines', color = color, alpha = alpha)    
     
     
 @dataclass(frozen = True)
 class Net(Regions3D):
     _NET_COLOR = const.BGR['bright_blue'] ### a nice aquamarine
+    _NET_ALPHA = 1
     
     @staticmethod
-    def make_singles(color = _NET_COLOR):
+    def make_singles(color = _NET_COLOR, alpha = _NET_ALPHA):
         courtLines = CourtLines.make()
 
         netLn = Line3D.from_line(courtLines.add_singles_netline()['Net Line'], z = 0)
@@ -72,7 +74,7 @@ class Net(Regions3D):
         leftReg = Region3D.from_points(lPt_up, cPt_up, lPt, cPt, name = 'Left Net')
         rightReg = Region3D.from_points(cPt_up, rPt_up, cPt, rPt, name = 'Right Net')
         
-        return Net([leftReg, rightReg], name = 'Net', color = color)
+        return Net([leftReg, rightReg], name = 'Net', color = color, alpha = alpha)
         
     def get_rectangular_net_region(self):
         ### this is a region approximating the full net -> rectangular, without the dip in the middle.
@@ -87,11 +89,13 @@ class Ball(Ball3D):
                               ## should be the tennis ball in the usual coord system of court lines.
                               ## ball radius in feet (2.6 inch diameter -> 1.3 inch radius = 0.108 ft.)
     _BALL_COLOR = const.BGR['ball_yellow'] ### color of tennis ball in BGR
+    _BALL_ALPHA = 1
     
     @staticmethod
-    def make(coords):
+    def make(coords, color = _BALL_COLOR, alpha = _BALL_ALPHA):
         return Ball(coords, Ball._RADIUS_IN_FEET * const.SCALE, 
-                    color = Ball._BALL_COLOR, name = 'Tennis Ball')
+                    color = color, alpha = alpha, 
+                    name = 'Tennis Ball')
     
     def distance_to(self, otherBall):
         return self.get_point().distance_to(otherBall.get_point())
@@ -99,11 +103,13 @@ class Ball(Ball3D):
 @dataclass(frozen = True)
 class Mark(Lines3D):
     _MARK_COLOR = const.BGR['grass_green'] ### green is default
+    _MARK_ALPHA = 1
     _MARK_NAME = 'Mark'
     _SIZE = 0.25 * const.SCALE 
     
     def make(cPt, flat_along_dimension = 'z', size = _SIZE, 
-             color = _MARK_COLOR, name = _MARK_NAME):
+             color = _MARK_COLOR, alpha = _MARK_ALPHA,
+             name = _MARK_NAME):
         r = size / 2
         if flat_along_dimension == 'x':
             x1, x2 =  cPt.back(r).up(r), cPt.front(r).down(r)
@@ -116,7 +122,7 @@ class Mark(Lines3D):
             y1, y2 =  cPt.left(r).front(r), cPt.right(r).back(r)
         aLn, bLn = Line3D(x1, x2), Line3D(y1, y2)
         
-        return Mark([aLn, bLn], color = color, name = name)
+        return Mark([aLn, bLn], color = color, alpha = alpha, name = name)
      
     
 @dataclass(frozen = True)
@@ -124,6 +130,7 @@ class Player(Region3D):
     _DEFAULT_HEIGHT = 6 ### in feet
     _DEFAULT_WIDTH = 1
     _DEFAULT_COLOR = const.BGR['rose_orange'] ### complement of net
+    _DEFAULT_ALPHA = 1
     _DEFAULT_NAME = 'Player'
     
     # coords: Point3D() ### 3D coordinates
@@ -131,7 +138,7 @@ class Player(Region3D):
     
     @staticmethod
     def make(coords, height = _DEFAULT_HEIGHT * const.SCALE, width = _DEFAULT_WIDTH * const.SCALE,
-             color = _DEFAULT_COLOR, name = _DEFAULT_NAME):
+             color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA, name = _DEFAULT_NAME):
         if len(coords) == 2:
             x, y = coords
             z = 0
@@ -144,7 +151,8 @@ class Player(Region3D):
         centerLn = Line3D(loPt, hiPt)
         return Player.from_line(centerLn, width, dim = 'x',
                                 left_right = '+x', top_bottom = '-z',
-                                color = color, name = name)
+                                color = color, alpha = alpha, 
+                                name = name)
     
     def get_foot_point(self):
         return self.lineList['Bottom'].center_point()
@@ -166,10 +174,11 @@ class Racquet(Region3D):
     _DEFAULT_GRIP_WIDTH = 0.125 * const.SCALE
     _DEFAULT_HEAD_WIDTH = 0.85 * const.SCALE
     _DEFAULT_COLOR = const.BGR['strong_pink']
+    _DEFAULT_ALPHA = 1
     _GRIP_TO_SWEET = 3/4 ### distance from grip end to sweet spot, as proportion of entire racquet length. 
     
     @staticmethod
-    def make(gripPt, spotPt, inclination = 0, color = _DEFAULT_COLOR):
+    def make(gripPt, spotPt, inclination = 0, color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
         ### make from two points: bottom of the grip, and sweet spot
         racquetVector = spotPt - gripPt
 
@@ -192,7 +201,7 @@ class Racquet(Region3D):
         ### finalize racquet
         # myRacquet = Racquet.from_points(t1, t2, b1, b2, color = color) ## -> sadly, this returns a region!
         racquetLines = Region3D.from_points(gripPt, framePt_1, topPt, framePt_2)
-        myRacquet = Racquet(racquetLines, color = color, name = 'Racquet')
+        myRacquet = Racquet(racquetLines, color = color, alpha = alpha, name = 'Racquet')
         
         ### immutability breaks...
         # a) Lines and Vectors
@@ -211,7 +220,7 @@ class Racquet(Region3D):
     
     @staticmethod
     def make_at_player(aPlayer, distance_from_player = 0, height = _DEFAULT_GRIP_HEIGHT,
-                       dir_hori = 0, dir_vert = 0, inclination = 0, color = _DEFAULT_COLOR):
+                       dir_hori = 0, dir_vert = 0, inclination = 0, color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
         ### distance from player: the distance at which the player holds the racket from his trunk
         ### height: the height at which the player holds the racket
         ### dir_hori, dir_vert: horizontal and vertical angles, expressed in multiples of pi
@@ -228,12 +237,12 @@ class Racquet(Region3D):
         radius_outer = radius_inner + Racquet._DEFAULT_LENGTH * Racquet._GRIP_TO_SWEET
         spotPt = Point3D(unit_coords) * radius_outer + centerPt
         
-        return Racquet.make(gripPt, spotPt, inclination = inclination, color = color)
+        return Racquet.make(gripPt, spotPt, inclination = inclination, color = color, alpha = alpha)
     
     @staticmethod
     def make_at_contact(aPlayer, aBall, 
                         aBall_before = None, aBall_after = None, ### provide these to make inclination, using law of reflection.
-                        height = _DEFAULT_GRIP_HEIGHT, color = _DEFAULT_COLOR):
+                        height = _DEFAULT_GRIP_HEIGHT, color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
                 
         ###### Prepare uninclined racquet ######
         centerPt = aPlayer['Bottom'].center_point().up(height)
@@ -278,7 +287,7 @@ class Racquet(Region3D):
         incl_rad = np.arccos(M / c) - g
         inclination = incl_rad / np.pi
         
-        return Racquet.make(gripPt, ballPt, inclination = inclination)
+        return Racquet.make(gripPt, ballPt, inclination = inclination, color = color, alpha = alpha)
         
     @staticmethod
     def make_between(befRacquet, aftRacquet, lambda_bef_aft = 0.5):
