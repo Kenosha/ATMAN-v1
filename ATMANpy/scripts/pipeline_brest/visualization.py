@@ -42,7 +42,7 @@ from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_inters
 
 from ATMANpy.types.Abstract import PlayerMovement, Trajectory, Shot, Shots, Point, Points
 
-from ATMANpy.types.Visual3D import Scene, Camera, View
+from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
 from ATMANpy.types.ShapesTennis3D import Player
 
 from ATMANpy.types.Shapes3D import Point3D, Ball3D, Region3D, Line3D
@@ -106,7 +106,6 @@ def main():
     ad_serves = unidirShots.filter('is_serve_ad')
     deuce_serves = unidirShots.filter('is_serve_deuce')
         
-    
     ballSF = ad_serves.feat_ball_flat()
     
     myCam = Camera.calibrated_AO_behind()
@@ -125,6 +124,76 @@ def main():
         show_continuous(showFrm.array, ms_between_frames = 20)
     
     cv.destroyAllWindows()
+    
+    ####### KDE HEATMAP ######
+    bounce_pos = ad_serves.get_first_bounce_position()
+    posArr = np.array(bounce_pos, dtype = 'float32')[:, :2]
+    posArr_nonnan = posArr[~np.isnan(posArr).all(axis = 1)]
+    
+    serveReg = courtLines.add_singles_netline().get_service_box('Top', 'Ad')
+    x1, y1 = serveReg.p1.coords
+    x2, y2 = serveReg.p4.coords
+    xv, yv = np.meshgrid(np.arange(x1, x2), np.arange(y1, y2))
+    serveArr = np.stack([xv, yv], axis = -1)
+    
+    num_x, num_y, _ = serveArr.shape
+    
+    def epanechnikov(posArr_nonnan, bandwidth = 30):
+        
+        diffArr = serveArr[np.newaxis] - posArr_nonnan[:, np.newaxis, np.newaxis]
+        norm_diffArr = diffArr / bandwidth
+        norm_devArr = (norm_diffArr ** 2).sum(axis = -1)
+        
+        kde_values_for_each_kernel = (1 - norm_devArr) * (norm_devArr < 1)
+        kde_values = kde_values_for_each_kernel.mean(axis = 0)
+        
+        kde_values_renorm = kde_values / kde_values.max()
+        
+        bgr = np.array([[0, 0, 0], [0, 0, 255]]) ### bgr for kde = 0 and 1 resp.
+        alpha = np.array([[0], [1]]) ### alpha for kde = 0 and 1 resp.
+        
+        kde_brdcst = kde_values_renorm[:, :, np.newaxis]
+        bgr_brdcst = bgr[:, np.newaxis, np.newaxis, :]
+        alpha_brdcst = alpha[:, np.newaxis, np.newaxis, :]
+        
+        bgrArr = (1 - kde_brdcst) * bgr_brdcst[0] + kde_brdcst * bgr_brdcst[1]
+        alphaArr = (1 - kde_brdcst) * alpha_brdcst[0] + kde_brdcst * alpha_brdcst[1]
+        return bgrArr, alphaArr
+    
+    bgrArr, alphaArr = epanechnikov(posArr_nonnan, bandwidth = 15)
+    bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
+    alphaArr_long = alphaArr.reshape((num_x * num_y, 1))
+
+    serveArr_long = serveArr.reshape((num_x * num_y, 2))
+    zArr = np.zeros((num_x * num_y, 1))
+    serveArr_long = np.concatenate([serveArr_long, zArr], axis = 1)
+    
+    kdeScn = DummyScene([serveArr_long], [bgrArr_long], [alphaArr_long])
+    
+    
+    s_x, s_y = 1920, 1080
+    sensor_dims = s_x, s_y
+    cam_height = 3000
+    o_x = s_x / 2
+    o_y = s_y / 2
+    
+    
+    myCam = Camera.birds_eye(cam_height = cam_height, sensor_dims = sensor_dims, o_x = o_x, o_y = o_y)
+    # myCam = Camera.calibrated_AO_behind()
+    myScene = Scene.make_court()
+    
+    emptyScn = Scene.make_empty()
+    courtScn = Scene.make_court()
+    backView = View.make(myCam, courtScn, resolution = 1)
+    
+    kdeView = View.make(myCam, kdeScn)
+    
+    backView.snap().show()
+    
+    combView = backView.combine(kdeView)
+    combView.snap().show()
+    
+    posArr
     
     dof_correction = 3
     
