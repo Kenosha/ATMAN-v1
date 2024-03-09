@@ -1358,6 +1358,9 @@ class SFList:
     def add(self, key, value):
         return SFList([mySF.add(key, value) for mySF in self])
     
+    def dropna(self):
+        return SFList([mySF.dropna() for mySF in self])
+    
     def merge(self, otherSFList, how = 'left'):
         assert self.length() == otherSFList.length(), 'Lists to be merged have to be of same length!'
         return SFList([aSF.merge(bSF, how = how) for aSF, bSF in zip(self, otherSFList)])
