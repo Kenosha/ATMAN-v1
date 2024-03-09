@@ -175,6 +175,13 @@ class Trajectory:
             bounce_points.append((x, y, z))
         return bounce_points
     
+    def get_first_bounce_position(self):
+        try:
+            x, y, z = self.get_bounce_positions()[0]
+        except IndexError:
+            x, y, z = None, None, None
+        return x, y, z
+
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how).z
     
@@ -323,6 +330,9 @@ class Shot:
     
     def get_bounce_positions(self):
         return self.shotTraj.get_bounce_positions()
+    
+    def get_first_bounce_position(self):
+        return self.shotTraj.get_first_bounce_position()
     
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
@@ -502,9 +512,8 @@ class Shots:
             courtLines = CourtLines.make()
         return Shots([myShot.flip(courtLines = courtLines) for myShot in self])
     
-    def get_bounce_positions(self, how_many = 2):
-        arrList = [np.array(myShot.get_bounce_positions())[:how_many] for myShot in self]
-        [np.pad(arr, ((0, 0), (0, how_many - len(arr)))) for arr in arrList]
+    def get_first_bounce_position(self):
+        return [myShot.get_first_bounce_position() for myShot in self]
         
     
     def feat_ball_flat(self, how = 'trajectory'):
