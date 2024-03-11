@@ -69,7 +69,7 @@ def main(conf, params):
     
     save(medSFs, stdSFs, vid, sto)
     
-
+    
 if __name__ == '__main__':
     
     from ATMANpy.funcs.util_funcs import read_config

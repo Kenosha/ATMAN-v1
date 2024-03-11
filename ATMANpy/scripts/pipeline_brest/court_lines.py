@@ -32,8 +32,15 @@ from ATMANpy.types.Frames import GreyFrame, BGRFrame, HSVFrame
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import CourtLines, Region
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_intersection_points
-schemaLines = CourtLines.make().add_singles_netline()
-schemaFrm = fit_frame_to_lines(schemaLines)
+
+def load(vid, sto):
+    pass
+
+def save(H, P, M_int, M_ext, vid, sto):
+    ConstFeature('H', H).save(vid, sto)
+    ConstFeature('P', P).save(vid, sto)
+    ConstFeature('M_int', M_int).save(vid, sto)
+    ConstFeature('M_ext', M_ext).save(vid, sto)
 
 def main(conf, courtline_params):
     
@@ -79,10 +86,7 @@ def main(conf, courtline_params):
         ### This might be what fucks it up!!!
         ### Update: Not really, sadly. see above.
     else:
-        ConstFeature('H', H).save(vid, sto)
-        ConstFeature('P', P).save(vid, sto)
-        ConstFeature('M_int', M_int).save(vid, sto)
-        ConstFeature('M_ext', M_ext).save(vid, sto)
+        save(H, P, M_int, M_ext, vid, sto)
     
 if __name__ == '__main__':
     

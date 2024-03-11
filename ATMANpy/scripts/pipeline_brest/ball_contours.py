@@ -52,7 +52,7 @@ def load(vid, sto):
     return playBF, playerSF, motiStms
 
 def save(cntSFs, vid, sto):
-    cntSFs.rename('moveCnts').save(vid, sto, compression = conf['compression_ball'])
+    cntSFs.rename('movCnts').save(vid, sto, compression = conf['compression_ball'])
 
 def main(conf, filter_params, contour_params):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...

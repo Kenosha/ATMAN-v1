@@ -22,10 +22,8 @@ def load(vid, sto):
 def check(matchSF):
     matchSF.to_dataframe().plot() ### check this, to see where to set thresholds!!
     
-def save(vid, sto, feats, names):
-    assert len(feats) == len(names)
-    for feat, name in zip(feats, names):
-        feat.rename(name).save(vid, sto) ### need to rename, so we can see what this script creates.
+def save(vid, sto, courtBF_without_short_sequences):
+    courtBF_without_short_sequences.rename('isCourt').save(vid, sto)
     
 def main(conf, court_match_params, threshold_params, filter_params):
     
@@ -56,9 +54,7 @@ def main(conf, court_match_params, threshold_params, filter_params):
     check(matchSF)
     
     ### SAVE ###
-    save(vid, sto, 
-         feats = [courtBF_without_short_sequences],
-         names = ['isCourt'])
+    save(vid, sto, courtBF_without_short_sequences)
     
     
 if __name__ == '__main__':

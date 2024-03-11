@@ -47,8 +47,7 @@ def load(vid, sto):
     return burnStms, courtroiSF
 
 def save(outBF, vid, sto):
-    outBF = outBF.rename('isValidFore')
-    outBF.save(vid, sto)
+    outBF.rename('isValidFore').save(vid, sto)
 
 def main(conf, threshold_params):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...

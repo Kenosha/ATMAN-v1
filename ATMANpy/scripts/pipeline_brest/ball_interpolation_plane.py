@@ -244,9 +244,6 @@ def stream_traj_frame(trajFrm, HPCF, cap, ms_between_frames = 100, frame_counter
     
 #%% MAIN
 
-VISUALIZE = True
-timestamp = ut.make_timestamp() 
-
 def main(conf, 
          plane_point_params, hit_point_params, 
          downsample_params, viterbi_net_params, penalty_params, 
@@ -255,7 +252,10 @@ def main(conf,
     nwo, nch = conf['num_workers'], conf['chunksize']
     cap = get_video(vid)
     width, height = get_width_height(cap)
-    
+            
+    VISUALIZE = True
+    timestamp = ut.make_timestamp() 
+
     #### READ IN ####
     HPCF, segBF, ballSF, hitSF, plySF, audFrm = load(vid, sto)
     

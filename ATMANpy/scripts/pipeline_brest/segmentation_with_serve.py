@@ -70,7 +70,7 @@ def save(playBF_filtered, topSF, botSF, topBF, botBF, vid, sto):
     topBF.rename('topPlayer_srvFlag').save(vid, sto)
     botBF.rename('botPlayer_srvFlag').save(vid, sto)
 
-def main(conf, model_params):
+def main(conf, contour_params, model_params, serve_params):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     cap = get_video(vid)
     
@@ -90,10 +90,14 @@ def main(conf, model_params):
     
     ### Apply Criteria    
     topSF_1 = foreSF.apply(sa.keep_contours_in_roi, ROI = topROI)
-    topSF_2 = topSF_1.apply(sa.keep_closest_contour_behind_baseline, which = 'Top', courtLines = courtLines)
+    topSF_2 = topSF_1.apply(sa.keep_closest_contour_behind_baseline, 
+                            which = 'Top', courtLines = courtLines,
+                            **contour_params)
     
     botSF_1 = foreSF.apply(sa.keep_contours_in_roi,  ROI = botROI)
-    botSF_2 = botSF_1.apply(sa.keep_closest_contour_behind_baseline, which = 'Bottom', courtLines = courtLines)
+    botSF_2 = botSF_1.apply(sa.keep_closest_contour_behind_baseline, 
+                            which = 'Bottom', courtLines = courtLines,
+                            **contour_params)
     
     contours = {'top': topSF_2.dropna(), 'bot': botSF_2.dropna()}
 
@@ -112,7 +116,7 @@ def main(conf, model_params):
         D_SC = params['D_SCALE_SIZE']
         D = params['D_CROP_SIZE']
         T = params['T_CROP_SIZE']
-        stride_t = model.stride_t
+        stride_t = 1 # model.stride_t --> not necessary to use model stride. use 1 for maximum coverage.
         
         ds = PlayerInferenceDataset(cap, vid, sto, courtBF, segBF, candSF,  
                                     stride_t = stride_t, T = T, D = D, D_SC = D_SC) 
@@ -191,7 +195,9 @@ def main(conf, model_params):
     
 
 if __name__ == '__main__':
-        
+    
+    contour_params = {'margin': 5}
+    
     model_params = {'top': 'top_foremotion_T16_S8_randcrop5_dim56_small_fullconv_model_foremotion_20231121_235426',
                     'bot': 'bot_foremotion_T16_S8_randcrop5_dim88_small_fullconv_model_foremotion_20231122_095800'}
     
@@ -202,7 +208,7 @@ if __name__ == '__main__':
     
     conf = ut.read_config('brest', config_name = '_config_pipe2')
     
-    main(conf, model_params, serve_params)
+    main(conf, contour_params, model_params, serve_params)
         
     
     

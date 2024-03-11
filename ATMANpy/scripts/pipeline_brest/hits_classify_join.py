@@ -39,8 +39,6 @@ from ATMANpy.types.Lines import CourtLines, Region
 
 from ATMANpy.funcs.player_funcs import get_service_ROIs, get_half_court_Lines
 from ATMANpy.funcs.line_funcs import fit_frame_to_lines, get_court_schema_intersection_points
-schemaLines = CourtLines.make().add_singles_netline()
-schemaFrm = fit_frame_to_lines(schemaLines)
 
 import torch
 from torch.utils.data import DataLoader
@@ -111,7 +109,6 @@ def load(vid, sto):
     return topFrm, botFrm, audFrm, segBF
 
 def save(outSF, outBF, vid, sto):
-    
     outSF.rename('hitFlag').save(vid, sto) 
     outBF.rename('isRally').save(vid, sto)
 
