@@ -41,7 +41,7 @@ def load(vid, sto):
     return HPCF, segBF, hitSF, plySF
 
 def save(srvSF, vid, sto):
-    srvSF.save(vid, sto)
+    srvSF.rename('srvFlag').save(vid, sto)
 
 def main(conf):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...

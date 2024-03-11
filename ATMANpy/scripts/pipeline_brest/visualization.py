@@ -68,6 +68,9 @@ def load(vid, sto):
     trajFrm = ff.read_feature_frame('trajTable', vid, sto)
     return HPCF, segBF, plySF, trajFrm
 
+def save(vid, sto):
+    pass
+
 def main():
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     nwo, nch = conf['num_workers'], conf['chunksize']

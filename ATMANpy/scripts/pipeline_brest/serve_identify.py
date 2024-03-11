@@ -39,6 +39,9 @@ def load(vid, sto):
     srvSF = StreamFeature.from_store(vid, sto, featname = 'srvFlag')
     return segBF, srvSF
 
+def save(vid, sto):
+    pass
+
 def main(conf):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     nwo, nch = conf['num_workers'], conf['chunksize']
@@ -66,8 +69,8 @@ def main(conf):
 
     srvSFs[3].streamDict
     
-    Stream(cap, 41000, 41950).show(frame_counter = True)
-
+    Stream(cap, 41100, 41200).show(frame_counter = True)
+    
 
 if __name__ == '__main__':
     conf = ut.read_config('brest', config_name = '_config_pipe2')
