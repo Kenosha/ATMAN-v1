@@ -48,7 +48,7 @@ def calibrate_camera(courtLines, netLns,
     return P
     
 def find_intrinsic_extrinsic_M(P, normalize_K = True):
-    from ATMANpy.funcs.HMM.HPost import find_intrinsic_extrinsic_M    
+    from ATMANpy.models.HMM.HPost import find_intrinsic_extrinsic_M    
     
     M_int, M_ext = find_intrinsic_extrinsic_M(P, normalize_K = normalize_K)
     return M_int, M_ext
