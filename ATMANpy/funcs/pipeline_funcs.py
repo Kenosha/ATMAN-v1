@@ -247,7 +247,46 @@ def can_run_has_run(loadDict, saveDict, vid, sto):
     has_run = {script: all([necessary_feature in available_features for necessary_feature in saveDict[script]]) for script in saveDict}
     return can_run, has_run
 
+def copy_general_features(general_features, driver_scope, store_name):
+    import shutil
 
+    ### if a set of feature is the same across all videos within the driver_scope,
+    ### we copy it from one store to all stores within the driver_scope,
+    ### so that we don't have to re-run it senselessly.
+    storeDict = ut.get_folder_struct('features_stored')
+    
+    ### Search for features to be copied
+    foundDict = {f: None for f in general_features}
+    for script in driver_scope:
+        store_path = os.path.join(storeDict[script], store_name)
+        features_still_needed = [f for f in general_features if foundDict[f] is None]
+
+        features_in_store = os.listdir(store_path)
+        available_features_still_needed = [f for f in features_still_needed if f in features_in_store]
+        for f in available_features_still_needed:
+            foundDict[f] = store_path
+    
+    ### Copy over features to all other files
+    for feature, found_where in foundDict.items():
+        if found_where is None:
+            print(f'Could not find {feature} anywhere, did not copy')
+        else:
+            file_path_from = os.path.join(found_where, feature)
+            for script in driver_scope:
+                store_path = os.path.join(storeDict[script], store_name)
+                file_path_to = os.path.join(store_path, feature)
+        
+                try:
+                    shutil.copytree(file_path_from, file_path_to, dirs_exist_ok = False)
+                except FileExistsError:
+                    print(f'Did not copy {feature} to {script}: folder already exists')
+                else:
+                    print(f'Copied {feature} to {script}')
+            
+        
+        
+    
+    
 
 
 
