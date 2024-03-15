@@ -197,6 +197,10 @@ class Frame:
         
         np.save(os.path.join(savePath, saveName), self.array)
     
+    def save_as_png(self, savePath, saveName):
+        filePath = os.path.join(savePath, saveName + '.png')
+        cv.imwrite(filePath, self.array)
+    
     ### SHOW METHODS ###
     def show(self):
         show(self.array, name = self.name)
