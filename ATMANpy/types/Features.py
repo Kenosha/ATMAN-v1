@@ -384,16 +384,16 @@ class StreamFeature(StreamFeaturesBase):
             name = self.name + f'_bef{offset}'
         return self.__class__({frame: self.maybe_get(frame - offset) for frame in self}, name = name)
             
-    def _save_contour(self, videoName, storeName, compression = 24):
+    def _save_contour(self, videoName, storeName, compression = 24, verbose = True):
         exFunc = ff.extract_contour_values
         outSF = self.apply(exFunc, compression = compression) 
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
         featFrm.columns = featLabels
         featFrm.index.name = 'idx0'
-        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
     
-    def _save_contours(self, videoName, storeName, compression = 24):
+    def _save_contours(self, videoName, storeName, compression = 24, verbose = True):
         exFunc = ff.extract_contours_values
         outSF = self.apply(exFunc, compression = compression) 
         
@@ -402,54 +402,54 @@ class StreamFeature(StreamFeaturesBase):
             if not featFrm.empty:
                 featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(compression)])
                 featFrm.columns = featLabels
-                ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+                ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
         
-    def _save_line(self, videoName, storeName):
+    def _save_line(self, videoName, storeName, verbose = True):
         exFunc = ff.extract_line_values
         outSF = self.apply(exFunc)
         featFrm = pd.DataFrame(outSF.streamDict).T
         if not featFrm.empty:
             featLabels = ['x1', 'y1', 'x2', 'y2']
             featFrm.columns = featLabels
-            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
             
-    def _save_lines(self, videoName, storeName):
+    def _save_lines(self, videoName, storeName, verbose = True):
         exFunc = ff.extract_lines_values
         outSF = self.apply(exFunc)
         featFrm = outSF.to_frame()
         if not featFrm.empty:
             featLabels = ['x1', 'y1', 'x2', 'y2']
             featFrm.columns = featLabels
-            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
         
-    def _save_homography(self, videoName, storeName):
+    def _save_homography(self, videoName, storeName, verbose = True):
         exFunc = ff.extract_homography_values
         outSF = self.apply(exFunc)
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = [f'{dim}_{idx}' for dim in ['x', 'y', 'z'] for idx in range(3)][:8]
         featFrm.columns = featLabels
         featFrm.index.name = 'idx0'
-        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
     
-    def _save_projection(self, videoName, storeName):
+    def _save_projection(self, videoName, storeName, verbose = True):
         exFunc = ff.extract_projection_values
         outSF = self.apply(exFunc)
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = [f'{dim}_{idx}' for dim in ['x', 'y', 'z'] for idx in range(4)]
         featFrm.columns = featLabels
         featFrm.index.name = 'idx0'
-        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
     
-    def _save_region(self, videoName, storeName):
+    def _save_region(self, videoName, storeName, verbose = True):
         exFunc = ff.extract_region_values
         outSF = self.apply(exFunc)
         featFrm = pd.DataFrame(outSF.streamDict).T
         featLabels = np.ravel([[f'x_{idx}', f'y_{idx}'] for idx in range(4)]) ### region has four corners.
         featFrm.columns = featLabels
         featFrm.index.name = 'idx0'
-        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
     
-    def _save_point(self, videoName, storeName):
+    def _save_point(self, videoName, storeName, verbose = True):
         exFunc = ff.extract_point_values
         outSF = self.apply(exFunc)
         featFrm = pd.DataFrame(outSF.streamDict).T
@@ -459,17 +459,17 @@ class StreamFeature(StreamFeaturesBase):
             featLabels = ['x', 'y', 'z']
         featFrm.columns = featLabels
         featFrm.index.name = 'idx0'
-        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
     
-    def _save_text(self, videoName, storeName):
+    def _save_text(self, videoName, storeName, verbose = True):
         featFrm = self.to_series()
         featFrm.index.name = 'idx0'
         ff.save_feature_frame(featFrm, self.name, videoName, storeName)
     
-    def _save_table(self, videoName, storeName):
+    def _save_table(self, videoName, storeName, verbose = True):
         featFrm = self.to_frame()
         if not featFrm.empty:
-            ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+            ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
         
     def _save_as_video(self, videoName, storeName,
                        monochrome = True, lossless = True):
@@ -503,7 +503,7 @@ class StreamFeature(StreamFeaturesBase):
         
         writer.close()
         
-    def save(self, videoName, storeName, lossless = False, compression = None):
+    def save(self, videoName, storeName, lossless = False, compression = None, verbose = True):
         ### New principle: -> do not save None values! 
         saveSF = self.dropna()
         
@@ -512,33 +512,33 @@ class StreamFeature(StreamFeaturesBase):
             return None
         
         elif self.name == 'H':
-            saveSF._save_homography(videoName, storeName)
+            saveSF._save_homography(videoName, storeName, verbose = verbose)
         elif self.name == 'P':
-            saveSF._save_projection(videoName, storeName)
+            saveSF._save_projection(videoName, storeName, verbose = verbose)
         elif self.name.endswith('Reg'):
-            saveSF._save_region(videoName, storeName)
+            saveSF._save_region(videoName, storeName, verbose = verbose)
         elif self.name.endswith('Pt'):
-            saveSF._save_point(videoName, storeName)
+            saveSF._save_point(videoName, storeName, verbose = verbose)
         elif self.name.endswith('Ln'):
-            saveSF._save_line(videoName, storeName)
+            saveSF._save_line(videoName, storeName, verbose = verbose)
         elif self.name.endswith('Lns'):
-            saveSF._save_lines(videoName, storeName)
+            saveSF._save_lines(videoName, storeName, verbose = verbose)
         elif self.name.endswith('Cnt'):
-            saveSF._save_contour(videoName, storeName, compression = compression)
+            saveSF._save_contour(videoName, storeName, compression = compression, verbose = verbose)
         elif self.name.endswith('Cnts'):
-            saveSF._save_contours(videoName, storeName, compression = compression)
+            saveSF._save_contours(videoName, storeName, compression = compression, verbose = verbose)
         elif self.name.endswith('3D'):
-            saveSF._save_point(videoName, storeName)
+            saveSF._save_point(videoName, storeName, verbose = verbose)
         elif 'Mask' in self.name:
             saveSF._save_as_video(videoName, storeName, monochrome = True, lossless = lossless)
         elif 'Frm' in self.name:
             saveSF._save_as_video(videoName, storeName, monochrome = False, lossless = lossless)
         elif 'Flag' in self.name: ### all text has to be called Flag!
-            saveSF._save_text(videoName, storeName)
+            saveSF._save_text(videoName, storeName, verbose = verbose)
         elif 'Table' in self.name:
-            saveSF._save_table(videoName, storeName)
+            saveSF._save_table(videoName, storeName, verbose = verbose)
         else:
-            print(f"Did not save {self.name}, don't know how!")
+            print(f"Did not save {self.name}, don't know how!") ### always printed, even when verbose = False
         
     def squeeze(self):
         return self
@@ -797,10 +797,10 @@ class StreamFeatures(StreamFeaturesBase):
         else:
             return self
     
-    def save(self, videoName, storeName, compression = None, lossless = False):
+    def save(self, videoName, storeName, compression = None, lossless = False, verbose = True):
         for feat in self.get_features():
             self[feat].save(videoName, storeName, 
-                            compression = compression, lossless = lossless)
+                            compression = compression, lossless = lossless, verbose = verbose)
     
     def to_bool(self):
         return BoolFeatures(self.streamDict, name = self.name)
@@ -986,8 +986,8 @@ class ConstFeature(ConstFeaturesBase):
     def rename(self, new_name):
         return ConstFeature(new_name, self.feature, self.frameList)
     
-    def save(self, videoName, storeName, extract_func = None):
-        savePath = ff.get_and_make_save_path(self.name, videoName, storeName)
+    def save(self, videoName, storeName, extract_func = None, verbose = True):
+        savePath = ff.get_and_make_save_path(self.name, videoName, storeName, verbose = verbose)
         if self.frameList is None:
             fileName = 'const.npy'
         else:
@@ -1176,10 +1176,10 @@ class BoolFeature(StreamFeature):
     def false(self):
         return self.length() - self.true()
     
-    def save(self, videoName, storeName, compression = None, lossless = None):
+    def save(self, videoName, storeName, compression = None, lossless = None, verbose = True):
         featFrm = self.to_series()
         featFrm.index.name = 'idx0'
-        ff.save_feature_frame(featFrm, self.name, videoName, storeName)
+        ff.save_feature_frame(featFrm, self.name, videoName, storeName, verbose = verbose)
 
     def split(self, min_feature_length = 0):
         sfList = ff.split_joint_features(self.streamDict, min_feature_length = min_feature_length)
@@ -1391,12 +1391,13 @@ class SFList:
             x, xs = self[0], self[1:]
         return StreamFeaturesBase.merge(x, xs.join(), how = 'outer')
     
-    def save(self, videoName, storeName, compression = 24, lossless = False, extract_func = None):
+    def save(self, videoName, storeName, compression = 24, lossless = False, extract_func = None, verbose = False):
+        print(f'Saving {self[0].get_features()} to {videoName}, {storeName}') ### always print, even when verbose = False
         for mySF in self:
             if mySF.__class__.__name__ == 'ConstFeature':
-                mySF.save(videoName, storeName, extract_func = extract_func)
+                mySF.save(videoName, storeName, extract_func = extract_func, verbose = verbose)
             else:
-                mySF.save(videoName, storeName, compression = compression, lossless = lossless)
+                mySF.save(videoName, storeName, compression = compression, lossless = lossless, verbose = verbose)
         
         
 #%% Testing

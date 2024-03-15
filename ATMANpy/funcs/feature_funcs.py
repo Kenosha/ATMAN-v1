@@ -113,7 +113,7 @@ def extract_point_values(point):
         featValues = list(point.coords)
     return featValues
 
-def get_and_make_save_path(featureName, videoName, storeName):
+def get_and_make_save_path(featureName, videoName, storeName, verbose = True):
     featDict = atu.get_folder_struct('features_stored')
     
     ### Maybe make video path
@@ -134,14 +134,14 @@ def get_and_make_save_path(featureName, videoName, storeName):
     savePath = os.path.join(storePath, featureName)
     try:
         os.mkdir(savePath)
-        print(f'    Creating new {featureName} data')
+        if verbose: print(f'    Creating new {featureName} data')
     except FileExistsError:
-        print(f'    Adding to existing {featureName} data')
+        if verbose: print(f'    Adding to existing {featureName} data')
     
     return savePath
     
-def save_feature_frame(featFrm, featureName, videoName, storeName):
-    savePath = get_and_make_save_path(featureName, videoName, storeName)
+def save_feature_frame(featFrm, featureName, videoName, storeName, verbose = True):
+    savePath = get_and_make_save_path(featureName, videoName, storeName, verbose = verbose)
     
     import datetime as dt
     timestamp = dt.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
