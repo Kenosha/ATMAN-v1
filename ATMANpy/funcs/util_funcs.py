@@ -153,7 +153,10 @@ def shift_array(arr, num, axis = 0, fill_value = np.nan):
 
 def argmin_multidim(arr):
     return np.unravel_index(arr.argmin(), arr.shape)
-
+    ### below is how it's done in sf.viterbi_trajectories for a dist probarr of shape: plane, traj, plane, traj
+    # argmins_flat = dist_probArr.reshape((plane * traj, plane, traj)).argmin(axis = 0)
+    # np.unravel_index(argmins_flat, (plane, traj))
+    
 def argmax_multidim(arr):
     return np.unravel_index(arr.argmax(), arr.shape)
 
