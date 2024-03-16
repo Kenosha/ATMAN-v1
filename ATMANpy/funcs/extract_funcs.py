@@ -537,7 +537,7 @@ def find_motion_mask_three_channel(hCache,
         motBool = motBool & motFunc(othFrm_bef) & motFunc(othFrm_aft)
    
     ### Close and Open, optionally.
-    ### Note: In case of multichannel image (which this bool is), each channel is processed indipendently!! Source: Doc for cv.morphologyEx
+    ### Note: In case of multichannel image (which this bool is), each channel is processed independently!! Source: Doc for cv.morphologyEx
     if not close_kernel is None:
         motBool = motBool.close(close_kernel) 
     if not open_kernel is None:
