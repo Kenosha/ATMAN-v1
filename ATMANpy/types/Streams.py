@@ -680,7 +680,7 @@ class Stream:
                     if time_since_last_message > MESSAGE_FREQUENCY:
                         len_queue = len(pending)
                         ram_pct = psutil.virtual_memory().percent
-                        print(f'   ... length of queue: {len(pending)}. Ram utilization: {ram_pct}%')
+                        print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%')
                         time_of_last_message = time.time()
         
         
@@ -1438,6 +1438,15 @@ class DecapStream:
     
     def extract_mp(self, featureFunc, num_workers, **kwargs):
         return Stream.extract_mp(self, featureFunc, num_workers, **kwargs)
+    
+    def apply(self, applyFunc, **kwargs):
+        ### applyFunc is a function that takes a MultiFrame and returns a MultiFrame of equal size.
+        outFrms = applyFunc(self.frames, **kwargs)
+        return DecapStream(outFrms, start_frame = self.start_frame, stop_frame = self.stop_frame)
+        
+    def apply_to_disc(self, applyFunc, savePath, saveName, **kwargs):
+        outFrms = applyFunc(self.frames, **kwargs)
+        outFrms.save(savePath, saveName)
     
     
 @dataclass(frozen = True)
