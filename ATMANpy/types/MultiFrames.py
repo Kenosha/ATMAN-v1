@@ -11,7 +11,7 @@ import cv2 as cv
 import numpy as np
 from dataclasses import dataclass
 
-import ATMANpy.funcs.util_funcs as atu
+from ATMANpy.funcs.util_funcs import shift_array
 from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
 from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame, MaskFrame
 
@@ -107,6 +107,81 @@ class Frames:
         
         return convFrms
     
+    @staticmethod       
+    def dispatch_arithmetic(x, y, func, *args, **kwargs):
+        # try:
+        #     outArr = func(x, y, *args, **kwargs)
+        # except TypeError:
+        #     outArrs = [func(chImg, chVal, *args, **kwargs) for chImg, chVal in zip(cv.split(x), y)] ### if y is a list: we subtract channels one-by-one
+        #     outArr = cv.merge(outArrs)
+        # return outArr
+        outArr = func(x, y, *args, **kwargs)
+        return outArr
+    
+    @staticmethod      
+    def get_operant(op):
+        try: 
+            operant = op.array
+        except:
+            operant = op
+        finally:
+            return operant    
+        
+    def __add__(self, y):
+        InstClass = self.__class__
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.add)
+        return InstClass(outArr)
+    def __sub__(self, y):
+        InstClass = self.__class__
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.absdiff)
+        return InstClass(outArr)
+    def __truediv__(self, y):
+        InstClass = self.__class__
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.divide)
+        return InstClass(outArr)
+    
+    def __mod__(self, y):
+        InstClass = self.__class__
+        outArr = np.mod(self.array, Frames.get_operant(y))
+        return InstClass(outArr)
+    
+    def __mul__(self, y):
+        return Frames(self.array.astype(float) * Frames.get_operant(y))
+    def __pow__(self, y):
+        return Frames(self.array.astype(float) ** y)
+
+    def __lt__(self, y):
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_LT)
+        if not self.has_color():
+            return MaskFrames(outArr)
+        else:
+            return BoolFrames(outArr)
+    def __le__(self, y):
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_LE)
+        if not self.has_color():
+            return MaskFrames(outArr)
+        else:
+            return BoolFrames(outArr)
+    def __gt__(self, y):
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_GT)
+        if not self.has_color():
+            return MaskFrames(outArr)
+        else:
+            return BoolFrames(outArr)
+    def __ge__(self, y):
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_GE)
+        if not self.has_color():
+            return MaskFrames(outArr)
+        else:
+            return BoolFrames(outArr)
+    def __eq__(self, y):
+        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_EQ)
+        if not self.has_color():
+            return MaskFrames(outArr)
+        else:
+            return BoolFrames(outArr)
+       
+    
     def __getitem__(self, item):
         framesType = self.__class__
         frameType = framesType.get_constituent()
@@ -125,6 +200,9 @@ class Frames:
         framesType = self.__class__
         frameType = framesType.get_constituent()
         return FramesIterator(frameType, self.array, self.name)
+    
+    def has_color(self):
+        return self.shape() == 4
     
     def size(self, unit = 'GB'):
         unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
@@ -179,6 +257,46 @@ class Frames:
         frameType = framesType.get_constituent()
         myArr = np.std(self.array, axis = 0).astype('uint8')
         return frameType(myArr)
+    
+    def right_of(self, aLn):
+        outArray = np.zeros((self.rows(), self.cols()), dtype = 'uint8')
+        for y in range(self.rows()):
+            threshold_x = aLn.weak_x(y)
+            first_beyond_threshold = max(int(threshold_x) + 1, 0)
+            outArray[y, first_beyond_threshold:] = 255
+        outArrays = np.tile(outArray, (self.length(), 1, 1))
+        return MaskFrames(outArrays)
+        
+    def left_of(self, aLn):
+        outArray = np.zeros((self.rows(), self.cols()), dtype = 'uint8')
+        for y in range(self.rows()):
+            threshold_x = aLn.weak_x(y)
+            first_beyond_threshold = max(int(threshold_x) + 1, 0)
+            outArray[y, :first_beyond_threshold] = 255
+        outArrays = np.tile(outArray, (self.length(), 1, 1))
+        return MaskFrames(outArrays)
+    
+    def below(self, aLn):
+        outArray = np.zeros((self.rows(), self.cols()), dtype = 'uint8')
+        for x in range(self.cols()):
+            threshold_y = aLn.weak_y(x)
+            first_beyond_threshold = max(int(threshold_y) + 1, 0)
+            outArray[first_beyond_threshold:, x] = 255
+        outArrays = np.tile(outArray, (self.length(), 1, 1))
+        return MaskFrames(outArrays)
+            
+    def above(self, aLn):
+        outArray = np.zeros((self.rows(), self.cols()), dtype = 'uint8')
+        for x in range(self.cols()):
+            threshold_y = aLn.weak_y(x)
+            first_beyond_threshold = max(int(threshold_y) + 1, 0)
+            outArray[:first_beyond_threshold, x] = 255
+        outArrays = np.tile(outArray, (self.length(), 1, 1))
+        return MaskFrames(outArrays)
+          
+    def within_region(self, aReg):
+        l, r, t, b = aReg['Left'], aReg['Right'], aReg['Top'], aReg['Bottom']
+        return self.right_of(l) & self.left_of(r) & self.below(t) & self.above(b)
     
     def mask(self, maskFrms):
         assert isinstance(maskFrms, MaskFrames)
@@ -260,6 +378,39 @@ class Frames:
             return BGRFrames(outArr) > 127
         else:
             return framesType(outArr, name = self.name)
+        
+    def shift(self, shift_by, fill_value = np.nan):
+        framesType = self.__class__
+        
+        ##### we always fill by the first or the last frame, depending on the direction of the shift
+        ##### this is to preserve uint8 type (avoid nans in array).
+        if shift_by < 0:
+            fillArr = self[-1].array
+        elif shift_by > 0:
+            fillArr = self[0].array
+        else:
+            return self
+        
+        shiftedArr = shift_array(self.array, shift_by, axis = 0, fill_value = fillArr)
+        return framesType(shiftedArr)
+        
+    def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
+        framesType = self.__class__
+        self_copy = self.array.copy()
+        
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
+        arrs = [cv.morphologyEx(arr, cv.MORPH_OPEN, kernel) for arr in self_copy]
+        arr = np.stack(arrs, axis = 0)
+        return framesType(arr)
+    
+    def close(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
+        framesType = self.__class__
+        self_copy = self.array.copy()
+        
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
+        arrs = [cv.morphologyEx(arr, cv.MORPH_CLOSE, kernel) for arr in self_copy]
+        arr = np.stack(arrs, axis = 0)
+        return framesType(arr)
         
     def save(self, savePath, saveName, lossless = True):
         if not saveName.endswith('.avi'):
@@ -390,12 +541,27 @@ class BoolFrames(Frames):
     def get_converter(cls):
         return 'to_bool'
     
+    @staticmethod
+    def false(like):
+        if isinstance(like, tuple):
+            shape = like
+        else:
+            shape = like.shape()
+            if len(shape) == 3:
+                shape = tuple([*shape, 3])
+        return BoolFrames(np.zeros(shape, dtype = 'uint8'), name = like.name)
+    
+    @staticmethod
+    def true(like):
+        return ~BoolFrames.false(like)
+    
     def to_grey(self):
         return GreyFrames(self.array, name = self.name)
     
     def to_mask(self):
         return MaskFrames(self.array, name = self.name)
            
+    
 
 @dataclass(frozen = True)
 class MaskFrames(Frames):
@@ -429,15 +595,30 @@ class MaskFrames(Frames):
     @classmethod
     def get_converter(cls):
         return 'to_mask'
+
+    @staticmethod
+    def false(like):
+        if isinstance(like, tuple):
+            shape = like
+        else:   ### assumed to be a frame
+            shape = like.shape()[:3]
+        return MaskFrames(np.zeros(shape, dtype = 'uint8'), name = like.name)
+        
+    @staticmethod
+    def true(like):
+        return ~MaskFrames.false(like)
     
     def to_grey(self):
         return GreyFrames(self.array, name = self.name)
     
+
 if __name__ == '__main__':
         
+    from ATMANpy.funcs.util_funcs import get_video
+    
     ### VIDEO ######
     VIDEO_ID = 'pqxAmUWIoKc'
-    cap = atu.get_video(VIDEO_ID)
+    cap = get_video(VIDEO_ID)
     ################
 
     start, stop = 3000, 3100
