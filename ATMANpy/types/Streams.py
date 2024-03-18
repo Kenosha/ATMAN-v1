@@ -27,6 +27,7 @@ from ATMANpy.types.Caches import Cache
 from ATMANpy.funcs.cv_funcs import get_frame
 from ATMANpy.funcs.draw_funcs import draw
 from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, get_folder_struct
+from ATMANpy.funcs.feature_funcs import get_and_make_save_path
 
 # @dataclass(frozen = True)
 # class StreamBase:
@@ -85,8 +86,8 @@ def extract_mp_timer(extractMethod):
         if len(otherArgs) == 1:
             num_workers = otherArgs[0]
             paramStr = f'{num_workers} workers'
-        if len(otherArgs) == 2:
-            num_workers, chunksize = otherArgs
+        if len(otherArgs) > 1:
+            num_workers, chunksize = otherArgs[:2]
             paramStr = f'{num_workers} workers and chunks of {chunksize}'
         print(f'{extractMethod.__name__} on {selfObj.__class__.__name__} with {exFunc.__name__} using {paramStr}: took {timeStr} seconds')
 
@@ -104,6 +105,86 @@ def get_updated_attribute_dictionary(someObj, updDict):
             return currDict[attr]
     
     return {attr: maybe_update(attr) for attr in currDict if not attr.startswith('_')}
+
+def apply_async(poolCls, gen, num_workers, applyFunc, metaFunc = None,
+                args = None, kwargs = None):
+    
+    if args is None: args = []
+    if kwargs is None: kwargs = {}
+    
+    def ram_is_ok(max_size_of_stream = 4, buffer_needed_gb = 8):
+        ### max size of stream is due to the impossibility of pickling an object larger than 4GB
+        ### check if an stream, which we want to decap, fits into RAM, allowing for a buffer.
+        available_gb = psutil.virtual_memory().available / 1024 ** 3
+        return max_size_of_stream < available_gb - buffer_needed_gb
+    
+    WAIT_SECS = 0.001
+    MESSAGE_FREQUENCY = 10
+    VERBOSE = False
+    if VERBOSE:
+        time_of_last_message = time.time()
+    
+    ### Set up the pool
+    pool = poolCls(processes = num_workers)
+    pending = deque()
+    
+    try:
+        genObj = next(gen) ### prime the generator
+        generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+    except StopIteration:
+        pool.close()
+        generator_is_exhausted = True
+
+    outList = []
+    while True:
+        ram_ok = ram_is_ok() ### have to check it once! 
+                             ### so we dont queue the generator twice without scheduling 
+                             ### or queue the same task twice...
+        
+        if not generator_is_exhausted and len(pending) < num_workers and ram_ok:                
+            ### if there is space in the queue, add a task!
+            # print(f'Queueing {chunkStm}...')
+            # print(kwargs)
+            if metaFunc is None: ### in this case, simply apply featureFunc to the generated object
+                task = pool.apply_async(applyFunc, args, kwargs)
+            elif isinstance(metaFunc, str): ### in this case, metaFunc is an attribute of genObj
+                metaAttr = getattr(genObj, metaFunc)
+                task = pool.apply_async(metaAttr, [applyFunc, *args], kwargs)
+            else: ### in this case, metaFunc is a function!
+                task = pool.apply_async(metaFunc, [applyFunc, *args], kwargs)
+            
+            pending.append(task)
+        else:
+            time.sleep(WAIT_SECS) ### need this to give the leftmost task time to finish!
+        
+        while len(pending) > 0 and pending[0].ready():
+            outVal = pending.popleft().get()
+            outList.append(outVal)
+        
+        if not generator_is_exhausted and len(pending) < num_workers and ram_ok: ### only when there is space in the queue
+            ### iterate the generator.
+            try:
+                genObj = next(gen) ### iterate the generator
+                generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
+            except StopIteration:
+                pool.close() ### pool closed once generator has nothing to yield --> no new elements will be added.
+                generator_is_exhausted = True
+                continue ### stop condition is not here anymore! we have to keep going until pending is empty and all tasks are done
+            
+        ### stop condition
+        if generator_is_exhausted and len(pending) == 0:
+            pool.terminate() ### once pending queue is zero, we can terminate the pool.
+            break
+        else: # not done! communicate status
+            if VERBOSE:
+                time_since_last_message = time.time() - time_of_last_message
+                if time_since_last_message > MESSAGE_FREQUENCY:
+                    len_queue = len(pending)
+                    ram_pct = psutil.virtual_memory().percent
+                    print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%')
+                    time_of_last_message = time.time()
+    
+    return outList
 
 @dataclass(frozen = True)
 class Stream:
@@ -533,72 +614,11 @@ class Stream:
         # when the task for a given frame is dispatched, so that functions that track (needing prior frame information)
         # can not be applied.
                 
-        def ram_is_ok(max_size_of_stream = 4, buffer_needed_gb = 8):
-            ### max size of stream is due to the impossibility of pickling an object larger than 4GB
-            ### check if an stream, which we want to decap, fits into RAM, allowing for a buffer.
-            available_gb = psutil.virtual_memory().available / 1024 ** 3
-            return max_size_of_stream < available_gb - buffer_needed_gb
-        
-        WAIT_SECS = 0.001
-        MESSAGE_FREQUENCY = 10
-        VERBOSE = False
-        if VERBOSE:
-            time_of_last_message = time.time()
-        
-        ### Set up the pool
-        pool = poolCls(processes = num_workers)
-        pending = deque()
-        
         ### Initialize Generator
         gen = self.chunk_generator(chunksize = chunksize)
-        try:
-            chunkStm = next(gen) ### prime the generator
-            generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
-        except StopIteration:
-            pool.close()
-            generator_is_exhausted = True
-    
-        sfList = []
-        while True:
-            ram_ok = ram_is_ok() ### have to check it once! 
-                                 ### so we dont queue the generator twice without scheduling 
-                                 ### or queue the same task twice...
-            
-            if not generator_is_exhausted and len(pending) < num_workers and ram_ok:                
-                ### if there is space in the queue, add a task!
-                # print(f'Queueing {chunkStm}...')
-                # print(kwargs)
-                task = pool.apply_async(chunkStm.extract, [featureFunc], kwargs)
-                pending.append(task)
-            else:
-                time.sleep(WAIT_SECS) ### need this to give the leftmost task time to finish!
-            
-            while len(pending) > 0 and pending[0].ready():
-                mySF = pending.popleft().get()
-                sfList.append(mySF)
-            
-            if not generator_is_exhausted and len(pending) < num_workers and ram_ok: ### only when there is space in the queue
-                ### iterate the generator.
-                try:
-                    chunkStm = next(gen) ### iterate the generator
-                    generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
-                except StopIteration:
-                    pool.close() ### pool closed once generator has nothing to yield --> no new elements will be added.
-                    generator_is_exhausted = True
-                    continue ### stop condition is not here anymore! we have to keep going until pending is empty and all tasks are done
-                
-            ### stop condition
-            if generator_is_exhausted and len(pending) == 0:
-                pool.terminate() ### once pending queue is zero, we can terminate the pool.
-                break
-            else: # not done! communicate status
-                if VERBOSE:
-                    time_since_last_message = time.time() - time_of_last_message
-                    if time_since_last_message > MESSAGE_FREQUENCY:
-                        len_queue = len(pending)
-                        ram_pct = psutil.virtual_memory().percent
-                        print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%')
-                        time_of_last_message = time.time()
+        
+        sfList = apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'extract', 
+                             args = None, kwargs = kwargs)
         
         allSFs = SFList(sfList).concatenate()
             
@@ -617,72 +637,33 @@ class Stream:
         # With pooled parallelism, we can not guarantee that the frame before is already done
         # when the task for a given frame is dispatched, so that functions that track (needing prior frame information)
         # can not be applied.
-                
-        def ram_is_ok(max_size_of_stream = 4, buffer_needed_gb = 8):
-            ### max size of stream is due to the impossibility of pickling an object larger than 4GB
-            ### check if an stream, which we want to decap, fits into RAM, allowing for a buffer.
-            available_gb = psutil.virtual_memory().available / 1024 ** 3
-            return max_size_of_stream < available_gb - buffer_needed_gb
+
+        ### Initialize Generator
+        gen = self.chunk_generator(chunksize = chunksize)
         
-        WAIT_SECS = 0.001
-        MESSAGE_FREQUENCY = 10
-        VERBOSE = False
-        if VERBOSE:
-            time_of_last_message = time.time()
+        apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'extract_to_disc', 
+                    args = [videoName, storeName, savekwargs], kwargs = kwargs)
         
-        ### Set up the pool
-        pool = poolCls(processes = num_workers)
-        pending = deque()
+        
+    def _apply_chunked(self, featureFunc, poolCls, num_workers, chunksize, **kwargs):
         
         ### Initialize Generator
         gen = self.chunk_generator(chunksize = chunksize)
-        try:
-            chunkStm = next(gen) ### prime the generator
-            generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
-        except StopIteration:
-            pool.close()
-            generator_is_exhausted = True
-    
-        while True:
-            ram_ok = ram_is_ok() ### have to check it once! 
-                                 ### so we dont queue the generator twice without scheduling 
-                                 ### or queue the same task twice...
-            
-            if not generator_is_exhausted and len(pending) < num_workers and ram_ok:                
-                ### if there is space in the queue, add a task!
-                # print(f'Queueing {chunkStm}...')
-                # print(kwargs)
-                task = pool.apply_async(chunkStm.extract_to_disc, [featureFunc, videoName, storeName, savekwargs], kwargs)
-                pending.append(task)
-            else:
-                time.sleep(WAIT_SECS) ### need this to give the leftmost task time to finish!
-            
-            while len(pending) > 0 and pending[0].ready():
-                pending.popleft().get()
-                
-            if not generator_is_exhausted and len(pending) < num_workers and ram_ok: ### only when there is space in the queue
-                ### iterate the generator.
-                try:
-                    chunkStm = next(gen) ### iterate the generator
-                    generator_is_exhausted = False ### since the break condition is not StopIteration exception, we need this boolean.
-                except StopIteration:
-                    pool.close() ### pool closed once generator has nothing to yield --> no new elements will be added.
-                    generator_is_exhausted = True
-                    continue ### stop condition is not here anymore! we have to keep going until pending is empty and all tasks are done
-                
-            ### stop condition
-            if generator_is_exhausted and len(pending) == 0:
-                pool.terminate() ### once pending queue is zero, we can terminate the pool.
-                break
-            else: # not done! communicate status
-                if VERBOSE:
-                    time_since_last_message = time.time() - time_of_last_message
-                    if time_since_last_message > MESSAGE_FREQUENCY:
-                        len_queue = len(pending)
-                        ram_pct = psutil.virtual_memory().percent
-                        print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%')
-                        time_of_last_message = time.time()
         
+        streamList = apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'apply', 
+                                 args = None, kwargs = kwargs)
+        
+        allStms = StreamList(streamList)
+        return allStms
+    
+    def _apply_chunked_to_disc(self, featureFunc, poolCls, num_workers, chunksize, videoName, storeName, 
+                               savekwargs, **kwargs):
+        
+        ### Initialize Generator
+        gen = self.chunk_generator(chunksize = chunksize)
+        
+        apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'apply_to_disc', 
+                    args = [videoName, storeName, savekwargs], kwargs = kwargs)
         
     @extract_mp_timer
     def extract_threaded(self, featureFunc, num_workers, **kwargs):
@@ -712,6 +693,10 @@ class Stream:
         return Stream._extract_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize, 
                                                videoName, storeName, savekwargs, **kwargs)
         
+    @extract_mp_timer
+    def apply_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._apply_chunked(self, featureFunc, Pool, num_workers, chunksize, **kwargs)
+    
        
 @dataclass(frozen = True)
 class StillStream:
@@ -851,20 +836,23 @@ class StillStream:
     def attach(self, mySF: StreamFeatures):
         return Stream.attach(self, mySF)
     
-    def decap(self):
-        framesType = framesTypeMap[self.stillFrm.__class__.get_color()]
+    def decap(self): ### a StillStream is already decapped!
+        return self
+    
+    # def decap(self):
+    #     framesType = framesTypeMap[self.stillFrm.__class__.get_color()]
         
-        ### get length
-        num_elems = self.stop_frame - self.start_frame + 1
+    #     ### get length
+    #     num_elems = self.stop_frame - self.start_frame + 1
         
-        ### get array
-        stillArr = self.stillFrm.array
-        ### expand array by repeating
-        expArr = np.array([stillArr for i in range(num_elems)])
-        ### turn into proper MultiFrame type
-        expFrms = framesType(expArr, name = self.name)
+    #     ### get array
+    #     stillArr = self.stillFrm.array
+    #     ### expand array by repeating
+    #     expArr = np.array([stillArr for i in range(num_elems)])
+    #     ### turn into proper MultiFrame type
+    #     expFrms = framesType(expArr, name = self.name)
         
-        return DecapStream(expFrms, self.start_frame, self.stop_frame, self.features)
+    #     return DecapStream(expFrms, self.start_frame, self.stop_frame, self.features)
     
     def generator(self, ms_between_frames = 25, frame_counter = False):
         
@@ -1120,7 +1108,26 @@ class MulStream:
                                    videoName, storeName, savekwargs, **kwargs):
         return Stream._extract_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize,  
                                                videoName, storeName, savekwargs, **kwargs)
+    
+    def apply(self, applyFunc, **kwargs):
+        ### applyFunc is a function that takes a MultiFrame and returns a MultiFrame of equal size.
+        apply_args = []
+        for myDtm in self.decap():
+            try:
+                apply_args.append(myDtm.frames)
+            except AttributeError: ### in this case, we have a StillStream
+                apply_args.append(myDtm.stillFrm)
         
+        outFrms = applyFunc(*apply_args, **kwargs)
+        return DecapStream(outFrms, 
+                           start_frame = self.start_frame, 
+                           stop_frame = self.stop_frame, 
+                           name = outFrms.name)
+        
+    def apply_to_disc(self, applyFunc, videoName, storeName, savekwargs, **kwargs):
+        self.apply(applyFunc, **kwargs).save_to_store(videoName, storeName)
+    
+    
     
 @dataclass(frozen = True)
 class StreamList:
@@ -1333,6 +1340,20 @@ class StreamList:
         return Stream._extract_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize,  
                                                videoName, storeName, savekwargs, **kwargs)
         
+    @extract_mp_timer
+    def apply_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._apply_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, **kwargs)
+        
+    @extract_mp_timer
+    def apply_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
+        return Stream._apply_chunked(self, featureFunc, Pool, num_workers, chunksize, **kwargs)
+        
+    @extract_mp_timer
+    def apply_chunked_mp_to_disc(self, featureFunc, num_workers, chunksize, 
+                                   videoName, storeName, savekwargs, **kwargs):
+        return Stream._apply_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize,  
+                                             videoName, storeName, savekwargs, **kwargs)
+        
         
 @dataclass(frozen = True)
 class DecapStream:
@@ -1442,12 +1463,21 @@ class DecapStream:
     def apply(self, applyFunc, **kwargs):
         ### applyFunc is a function that takes a MultiFrame and returns a MultiFrame of equal size.
         outFrms = applyFunc(self.frames, **kwargs)
-        return DecapStream(outFrms, start_frame = self.start_frame, stop_frame = self.stop_frame)
+        return DecapStream(outFrms, 
+                           start_frame = self.start_frame, 
+                           stop_frame = self.stop_frame, 
+                           name = outFrms.name)
         
-    def apply_to_disc(self, applyFunc, savePath, saveName, **kwargs):
-        outFrms = applyFunc(self.frames, **kwargs)
-        outFrms.save(savePath, saveName)
+    def apply_to_disc(self, applyFunc, videoName, storeName, savekwargs, **kwargs):
+        self.apply(applyFunc, **kwargs).save_to_store(videoName, storeName)
     
+    def save_to_store(self, videoName, storeName, **savekwargs):
+        savePath = get_and_make_save_path(self.name, videoName, storeName, verbose = False)
+        
+        fs, ls = self.start_frame, self.stop_frame
+        saveName = f'from_{fs}_to_{ls}.avi'
+        
+        self.frames.save(savePath, saveName, **savekwargs)
     
 @dataclass(frozen = True)
 class NCDecapStream:
