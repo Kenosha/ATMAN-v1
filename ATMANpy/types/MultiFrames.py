@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from ATMANpy.funcs.util_funcs import shift_array
 from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
-from ATMANpy.types.Contours import Contours
+from ATMANpy.types.Contours import Contour, Contours
 from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame, MaskFrame
 
 from skvideo.io import FFmpegWriter
@@ -469,8 +469,9 @@ class Frames:
         ### retrieval: cv.RETR_TREE
         ### approx: cv.CHAIN_APPROX_SIMPLE
         resList = [cv.findContours(arr, contour_retrieval_mode, contour_approx_mode) for arr in self.array]
-        cts, hierarchy = [Contours(res[0]) for res in resList], [res[1] for res in resList]
-        return cts, hierarchy
+        list_of_contour_arrays, list_of_hierarchies = [res[0] for res in resList], [res[1] for res in resList]
+        list_of_typed_cts = [Contours([Contour(cnt) for cnt in cnts]) for cnts in list_of_contour_arrays]
+        return list_of_typed_cts, list_of_hierarchies
     
     def save(self, savePath, saveName, lossless = True):
         if not saveName.endswith('.avi'):
