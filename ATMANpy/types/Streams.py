@@ -20,8 +20,8 @@ from random import randrange, sample
 from typing import List, Union
 
 from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame
-from ATMANpy.types.MultiFrames import GreyFrames, BGRFrames, HSVFrames, BoolFrames, MaskFrames
-from ATMANpy.types.Features import StreamFeatures, StreamFeature, SFList, ConstFeatures, ConstFeature
+from ATMANpy.types.MultiFrames import Frames, GreyFrames, BGRFrames, HSVFrames, BoolFrames, MaskFrames
+from ATMANpy.types.Features import StreamFeaturesBase, StreamFeatures, StreamFeature, SFList, ConstFeatures, ConstFeature
 from ATMANpy.types.Caches import Cache
 
 from ATMANpy.funcs.cv_funcs import get_frame
@@ -650,11 +650,15 @@ class Stream:
         ### Initialize Generator
         gen = self.chunk_generator(chunksize = chunksize)
         
-        streamList = apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'apply', 
+        outList = apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'apply', 
                                  args = None, kwargs = kwargs)
         
-        allStms = StreamList(streamList)
-        return allStms
+        if isinstance(outList[0], StreamFeaturesBase):
+            outList = SFList(outList)
+        else:
+            outList = StreamList(outList)
+            
+        return outList
     
     def _apply_chunked_to_disc(self, featureFunc, poolCls, num_workers, chunksize, videoName, storeName, 
                                savekwargs, **kwargs):
@@ -956,6 +960,9 @@ class MulStream:
             except AttributeError:
                 pass
         
+    def get_framelist(self):
+        return Stream.get_framelist(self)
+        
     def length(self):
         return self.stop_frame - self.start_frame + 1
         
@@ -1111,6 +1118,12 @@ class MulStream:
     
     def apply(self, applyFunc, **kwargs):
         ### applyFunc is a function that takes a MultiFrame and returns a MultiFrame of equal size.
+        funcArgs = get_positional_arguments(applyFunc)
+        funcVals = get_return_names(applyFunc)
+        
+        assert len(funcVals) == 1, 'Unhandled case with .apply and multiple return values, implement as needed'
+        funcVal = funcVals[0]
+        
         apply_args = []
         for myDtm in self.decap():
             try:
@@ -1118,12 +1131,17 @@ class MulStream:
             except AttributeError: ### in this case, we have a StillStream
                 apply_args.append(myDtm.stillFrm)
         
-        outFrms = applyFunc(*apply_args, **kwargs)
-        return DecapStream(outFrms, 
-                           start_frame = self.start_frame, 
-                           stop_frame = self.stop_frame, 
-                           name = outFrms.name)
-        
+        outObj = applyFunc(*apply_args, **kwargs)
+         
+        if isinstance(outObj, Frames):
+            return DecapStream(outObj, 
+                               start_frame = self.start_frame, 
+                               stop_frame = self.stop_frame, 
+                               name = funcVal)
+        else: ### in this case, the result of apply will be a list of features, without frame keys
+            outDict = dict(zip(self.get_framelist(), outObj))
+            return StreamFeature(outDict, name = funcVal)
+            
     def apply_to_disc(self, applyFunc, videoName, storeName, savekwargs, **kwargs):
         self.apply(applyFunc, **kwargs).save_to_store(videoName, storeName)
     
@@ -1403,6 +1421,9 @@ class DecapStream:
     def argstrings_to_args(funcArgs, myFrm, myDict):
         return Stream.argstrings_to_args(funcArgs, myFrm, myDict)
     
+    def get_framelist(self):
+        return Stream.get_framelist(self)
+    
     def length(self):
         return self.stop_frame - self.start_frame + 1
     
@@ -1461,12 +1482,23 @@ class DecapStream:
         return Stream.extract_mp(self, featureFunc, num_workers, **kwargs)
     
     def apply(self, applyFunc, **kwargs):
-        ### applyFunc is a function that takes a MultiFrame and returns a MultiFrame of equal size.
-        outFrms = applyFunc(self.frames, **kwargs)
-        return DecapStream(outFrms, 
-                           start_frame = self.start_frame, 
-                           stop_frame = self.stop_frame, 
-                           name = outFrms.name)
+        ### applyFunc is a function that takes a MultiFrame and returns a MultiFrame or StreamFeature of equal size.
+        funcArgs = get_positional_arguments(applyFunc)
+        funcVals = get_return_names(applyFunc)
+        
+        assert len(funcVals) == 1, 'Unhandled case with .apply and multiple return values, implement as needed'
+        funcVal = funcVals[0]
+        
+        outObj = applyFunc(self.frames, **kwargs)
+        
+        if isinstance(outObj, Frames):
+            return DecapStream(outObj, 
+                               start_frame = self.start_frame, 
+                               stop_frame = self.stop_frame, 
+                               name = funcVal)
+        else: ### in this case, the result of apply will be a list of features, without frame keys
+            outDict = dict(zip(self.get_framelist(), outObj))
+            return StreamFeature(outDict, name = funcVal)
         
     def apply_to_disc(self, applyFunc, videoName, storeName, savekwargs, **kwargs):
         self.apply(applyFunc, **kwargs).save_to_store(videoName, storeName)
