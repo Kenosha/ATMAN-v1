@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from ATMANpy.funcs.util_funcs import shift_array
 from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
+from ATMANpy.types.Contours import Contours
 from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame, MaskFrame
 
 from skvideo.io import FFmpegWriter
@@ -107,16 +108,16 @@ class Frames:
         
         return convFrms
     
-    @staticmethod       
-    def dispatch_arithmetic(x, y, func, *args, **kwargs):
+    # @staticmethod       
+    # def dispatch_arithmetic(x, y, func, *args, **kwargs):
         # try:
         #     outArr = func(x, y, *args, **kwargs)
         # except TypeError:
         #     outArrs = [func(chImg, chVal, *args, **kwargs) for chImg, chVal in zip(cv.split(x), y)] ### if y is a list: we subtract channels one-by-one
         #     outArr = cv.merge(outArrs)
         # return outArr
-        outArr = func(x, y, *args, **kwargs)
-        return outArr
+        # outArr = func(x, y, *args, **kwargs)
+        # return outArr
     
     @staticmethod      
     def get_operant(op):
@@ -129,15 +130,33 @@ class Frames:
         
     def __add__(self, y):
         InstClass = self.__class__
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.add)
+        try: ### first, try with the fast, but capricious cv functions (they can not do broadcasting, for example!)
+            outArr = cv.add(self.array, Frames.get_operant(y))
+        except:
+            fall_back_function = np.add
+            outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), fall_back_function)
         return InstClass(outArr)
+    
     def __sub__(self, y):
         InstClass = self.__class__
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.absdiff)
+        try:
+            outArr = cv.absdiff(self.array, Frames.get_operant(y))
+        except:
+            def fall_back_function(x, y):
+                a = x-y
+                b = y-x
+                c = x>y
+                return a*c + b*(~c)
+            outArr = fall_back_function(self.array, Frames.get_operant(y))
         return InstClass(outArr)
+    
     def __truediv__(self, y):
         InstClass = self.__class__
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.divide)
+        try:
+            outArr = cv.divide(self.array, Frames.get_operant(y))
+        except:
+            fall_back_function = np.divide
+            outArr = fall_back_function(self.array, Frames.get_operant(y))
         return InstClass(outArr)
     
     def __mod__(self, y):
@@ -147,35 +166,60 @@ class Frames:
     
     def __mul__(self, y):
         return Frames(self.array.astype(float) * Frames.get_operant(y))
+    
     def __pow__(self, y):
         return Frames(self.array.astype(float) ** y)
 
     def __lt__(self, y):
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_LT)
+        try:
+            outArr = cv.compare(self.array, Frames.get_operant(y), cv.CMP_LT)
+        except:
+            outArr = self.array < Frames.get_operant(y)
+            
         if not self.has_color():
             return MaskFrames(outArr)
         else:
             return BoolFrames(outArr)
+        
     def __le__(self, y):
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_LE)
+        try:
+            outArr = cv.compare(self.array, Frames.get_operant(y), cv.CMP_LE)
+        except:
+            outArr = self.array <= Frames.get_operant(y)
+            
         if not self.has_color():
             return MaskFrames(outArr)
         else:
             return BoolFrames(outArr)
+        
     def __gt__(self, y):
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_GT)
+        try:
+            outArr = cv.compare(self.array, Frames.get_operant(y), cv.CMP_GT)
+        except:
+            outArr = self.array > Frames.get_operant(y)
+            
         if not self.has_color():
             return MaskFrames(outArr)
         else:
             return BoolFrames(outArr)
+        
     def __ge__(self, y):
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_GE)
+        try:
+            outArr = cv.compare(self.array, Frames.get_operant(y), cv.CMP_GE)
+        except:
+            outArr = self.array >= Frames.get_operant(y)
+            
         if not self.has_color():
             return MaskFrames(outArr)
         else:
             return BoolFrames(outArr)
+        
     def __eq__(self, y):
-        outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), cv.compare, cv.CMP_EQ)
+        try:
+            outArr = cv.compare(self.array, Frames.get_operant(y), cv.CMP_EQ)
+        except:
+            outArr = self.array == Frames.get_operant(y)
+            
         if not self.has_color():
             return MaskFrames(outArr)
         else:
@@ -306,6 +350,11 @@ class Frames:
         outArr = np.array([cv.bitwise_and(imgArr, imgArr, mask = maskArr) for imgArr, maskArr in zip(self.array, maskFrms.array)])
         return framesType(outArr, name = self.name)
         
+    def gaussian_blur(self, kernelSize):
+        framesType = self.__class__
+        
+        resArr = np.array([cv.GaussianBlur(imgArr, kernelSize, 0) for imgArr in self.array])
+        return framesType(resArr)
     
     def rescale(self, scale_factor):
         framesType = self.__class__
@@ -316,6 +365,10 @@ class Frames:
         resArr = np.array([cv.resize(imgArr, dim, interpolation = cv.INTER_AREA) for imgArr in self.array])
         return framesType(resArr, name = self.name)
         
+    def rename(self, new_name):
+        framesType = self.__class__
+        return framesType(self.array, name = new_name)
+    
     def pad(self, to_height = None, to_width = None):
         framesType = self.__class__
         
@@ -412,6 +465,13 @@ class Frames:
         arr = np.stack(arrs, axis = 0)
         return framesType(arr)
         
+    def find_contours(self, contour_retrieval_mode, contour_approx_mode):
+        ### retrieval: cv.RETR_TREE
+        ### approx: cv.CHAIN_APPROX_SIMPLE
+        resList = [cv.findContours(arr, contour_retrieval_mode, contour_approx_mode) for arr in self.array]
+        cts, hierarchy = [Contours(res[0]) for res in resList], [res[1] for res in resList]
+        return cts, hierarchy
+    
     def save(self, savePath, saveName, lossless = True):
         if not saveName.endswith('.avi'):
             saveName = saveName + '.avi'
@@ -430,8 +490,12 @@ class Frames:
             
         writer = FFmpegWriter(fullPath, outputdict = outputdict)
         
-        rgbArr = np.flip(self.array, 3) ### self.array.shape = T, H, W, C --> need to flip the channels to get RGB.
-        for myArr in rgbArr:
+        if self.__class__.get_color() == 'bgr':
+            saveArr = np.flip(self.array, 3) ### self.array.shape = T, H, W, C --> need to flip the channels to get RGB.
+        else:
+            saveArr = self.array
+            
+        for myArr in saveArr:
             writer.writeFrame(myArr)
         
         writer.close()
@@ -463,6 +527,18 @@ class BGRFrames(Frames):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2HSV) for imgArr in self.array])
         return HSVFrames(convArr, name = self.name)
     
+    def B(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 0], name = 'b_channels')
+    
+    def G(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 1], name = 'g_channels')
+    
+    def R(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 2], name = 'r_channels')
+    
 @dataclass(frozen = True)
 class HSVFrames(Frames):
     name: str = 'hsv_frames'
@@ -489,6 +565,18 @@ class HSVFrames(Frames):
     def to_BGR(self):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_HSV2BGR) for imgArr in self.array])
         return BGRFrames(convArr, name = self.name)
+     
+    def H(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 0], name = 'h_channels')
+    
+    def S(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 1], name = 's_channels')
+    
+    def V(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 2], name = 'v_channels')
      
 @dataclass(frozen = True)
 class GreyFrames(Frames):
