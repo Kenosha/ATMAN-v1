@@ -107,7 +107,7 @@ def get_updated_attribute_dictionary(someObj, updDict):
     return {attr: maybe_update(attr) for attr in currDict if not attr.startswith('_')}
 
 def apply_async(poolCls, gen, num_workers, applyFunc, metaFunc = None,
-                args = None, kwargs = None):
+                args = None, kwargs = None, verbose = False):
     
     if args is None: args = []
     if kwargs is None: kwargs = {}
@@ -120,8 +120,7 @@ def apply_async(poolCls, gen, num_workers, applyFunc, metaFunc = None,
     
     WAIT_SECS = 0.001
     MESSAGE_FREQUENCY = 10
-    VERBOSE = False
-    if VERBOSE:
+    if verbose:
         time_of_last_message = time.time()
     
     ### Set up the pool
@@ -176,12 +175,13 @@ def apply_async(poolCls, gen, num_workers, applyFunc, metaFunc = None,
             pool.terminate() ### once pending queue is zero, we can terminate the pool.
             break
         else: # not done! communicate status
-            if VERBOSE:
+            if verbose:
                 time_since_last_message = time.time() - time_of_last_message
                 if time_since_last_message > MESSAGE_FREQUENCY:
                     len_queue = len(pending)
+                    len_done = len(outList)
                     ram_pct = psutil.virtual_memory().percent
-                    print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%')
+                    print(f'   ... length of queue: {len_queue}. Ram utilization: {ram_pct}%. Outputs gathered: {len_done}')
                     time_of_last_message = time.time()
     
     return outList
@@ -385,12 +385,17 @@ class Stream:
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
 
-    def sample(self, number_of_frames):
-        frmNums = list(range(self.start_frame, self.stop_frame))
-        ncStm = NCStream(cap = self.cap, frmNums = frmNums, truncation_anchor = self.truncation_anchor,
-                         cap_color_space = self.cap_color_space, target_color_space = self.target_color_space,
-                         scale_factor = self.scale_factor, name = self.name, features = self.features)
-        return ncStm.sample(number_of_frames)
+    def sample(self, number_of_frames = 1):
+        if number_of_frames == 1:
+            import random
+            random_frame = random.randint(self.start_frame, self.stop_frame)
+            return self.get(random_frame)
+        else:
+            frmNums = list(range(self.start_frame, self.stop_frame))
+            ncStm = NCStream(cap = self.cap, frmNums = frmNums, truncation_anchor = self.truncation_anchor,
+                             cap_color_space = self.cap_color_space, target_color_space = self.target_color_space,
+                             scale_factor = self.scale_factor, name = self.name, features = self.features)
+            return ncStm.sample(number_of_frames)
 
     def decap(self):
         framesType = framesTypeMap[self.target_color_space]
@@ -528,7 +533,7 @@ class Stream:
     
     def extract_to_disc(self, featureFunc, videoName, storeName, savekwargs, **kwargs):
         outSF = self.extract(featureFunc, **kwargs)
-        outSF.save(videoName, storeName, **savekwargs)
+        outSF.save(videoName, storeName, **savekwargs, verbose = False)
     
     def _extract_pool(self, featureFunc, poolCls, num_workers, **kwargs):
         """
@@ -604,7 +609,7 @@ class Stream:
         outSF = self._extract_pool(self, featureFunc, poolCls, num_workers, **kwargs)
         outSF.save(videoName, storeName, **savekwargs)
     
-    def _extract_chunked(self, featureFunc, poolCls, num_workers, chunksize, _split = False, **kwargs):
+    def _extract_chunked(self, featureFunc, poolCls, num_workers, chunksize, _split = False, verbose = False, **kwargs):
         ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
         # create a pool of chunks: 
         # chunk the Stream and let each chunk be worked by one worker.
@@ -618,7 +623,7 @@ class Stream:
         gen = self.chunk_generator(chunksize = chunksize)
         
         sfList = apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'extract', 
-                             args = None, kwargs = kwargs)
+                             args = None, kwargs = kwargs, verbose = verbose)
         
         allSFs = SFList(sfList).concatenate()
             
@@ -628,7 +633,7 @@ class Stream:
             return allSFs
     
     def _extract_chunked_to_disc(self, featureFunc, poolCls, num_workers, chunksize, videoName, storeName, 
-                                 savekwargs, **kwargs):
+                                 savekwargs, verbose = False, **kwargs):
         ### IDEA: Instead of create a pool of jobs that workers get to in parallel, 
         # create a pool of chunks: 
         # chunk the Stream and let each chunk be worked by one worker.
@@ -642,16 +647,16 @@ class Stream:
         gen = self.chunk_generator(chunksize = chunksize)
         
         apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'extract_to_disc', 
-                    args = [videoName, storeName, savekwargs], kwargs = kwargs)
+                    args = [videoName, storeName, savekwargs], kwargs = kwargs, verbose = verbose)
         
         
-    def _apply_chunked(self, featureFunc, poolCls, num_workers, chunksize, **kwargs):
+    def _apply_chunked(self, featureFunc, poolCls, num_workers, chunksize, verbose = False, **kwargs):
         
         ### Initialize Generator
         gen = self.chunk_generator(chunksize = chunksize)
         
         outList = apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'apply', 
-                                 args = None, kwargs = kwargs)
+                              args = None, kwargs = kwargs, verbose = verbose)
         
         if isinstance(outList[0], StreamFeaturesBase):
             outList = SFList(outList)
@@ -661,13 +666,13 @@ class Stream:
         return outList
     
     def _apply_chunked_to_disc(self, featureFunc, poolCls, num_workers, chunksize, videoName, storeName, 
-                               savekwargs, **kwargs):
+                               savekwargs, verbose = False, **kwargs):
         
         ### Initialize Generator
         gen = self.chunk_generator(chunksize = chunksize)
         
         apply_async(poolCls, gen, num_workers, featureFunc, metaFunc = 'apply_to_disc', 
-                    args = [videoName, storeName, savekwargs], kwargs = kwargs)
+                    args = [videoName, storeName, savekwargs], kwargs = kwargs, verbose = verbose)
         
     @extract_mp_timer
     def extract_threaded(self, featureFunc, num_workers, **kwargs):
@@ -678,28 +683,30 @@ class Stream:
         return Stream._extract_pool(self, featureFunc, Pool, num_workers, **kwargs)
     
     @extract_mp_timer
-    def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, **kwargs):
-        return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, _split = False, **kwargs)
+    def extract_chunked_threaded(self, featureFunc, num_workers, chunksize, verbose = False, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, ThreadPool, num_workers, chunksize, 
+                                       _split = False, verbose = verbose, **kwargs)
             
     @extract_mp_timer
-    def extract_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
-        return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, _split = False, **kwargs)
+    def extract_chunked_mp(self, featureFunc, num_workers, chunksize, verbose = False, **kwargs):
+        return Stream._extract_chunked(self, featureFunc, Pool, num_workers, chunksize, 
+                                       _split = False, verbose = verbose, **kwargs)
        
     @extract_mp_timer
     def extract_chunked_threaded_to_disc(self, featureFunc, num_workers, chunksize, 
-                                         videoName, storeName, savekwargs, **kwargs):
+                                         videoName, storeName, savekwargs, verbose = False, **kwargs):
         return Stream._extract_chunked_to_disc(self, featureFunc, ThreadPool, num_workers, chunksize, 
-                                               videoName, storeName, savekwargs, **kwargs)
+                                               videoName, storeName, savekwargs, verbose = verbose, **kwargs)
     
     @extract_mp_timer
     def extract_chunked_mp_to_disc(self, featureFunc, num_workers, chunksize, 
-                                   videoName, storeName, savekwargs, **kwargs):
+                                   videoName, storeName, savekwargs, verbose = False, **kwargs):
         return Stream._extract_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize, 
-                                               videoName, storeName, savekwargs, **kwargs)
+                                               videoName, storeName, savekwargs, verbose = verbose, **kwargs)
         
     @extract_mp_timer
-    def apply_chunked_mp(self, featureFunc, num_workers, chunksize, **kwargs):
-        return Stream._apply_chunked(self, featureFunc, Pool, num_workers, chunksize, **kwargs)
+    def apply_chunked_mp(self, featureFunc, num_workers, chunksize, verbose = False, **kwargs):
+        return Stream._apply_chunked(self, featureFunc, Pool, num_workers, chunksize, **kwargs, verbose = verbose)
     
        
 @dataclass(frozen = True)
@@ -1118,7 +1125,7 @@ class MulStream:
     
     def apply(self, applyFunc, **kwargs):
         ### applyFunc is a function that takes a MultiFrame and returns a MultiFrame of equal size.
-        funcArgs = get_positional_arguments(applyFunc)
+        # funcArgs = get_positional_arguments(applyFunc)
         funcVals = get_return_names(applyFunc)
         
         assert len(funcVals) == 1, 'Unhandled case with .apply and multiple return values, implement as needed'
