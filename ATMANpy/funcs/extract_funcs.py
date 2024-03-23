@@ -547,32 +547,32 @@ def find_motion_mask_three_channel(hCache,
         
     return HMask, SMask, VMask 
 
-def filter_player_movement(motMask, topPlayerCnt, botPlayerCnt,
+def filter_player_movement(fine_motMask, topPlayerCnt, botPlayerCnt,
                            top_player_dil_kernel = (12, 7),
                            bot_player_dil_kernel = (20, 12),
                            verbose = False):
     
     if not topPlayerCnt is None:
-        topMask = motMask.within_contour(topPlayerCnt).dilate(top_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
+        topMask = fine_motMask.within_contour(topPlayerCnt).dilate(top_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
-        topMask = MaskFrame.false(motMask)
+        topMask = MaskFrame.false(fine_motMask)
         
     if not botPlayerCnt is None:
-        botMask = motMask.within_contour(botPlayerCnt).dilate(bot_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
+        botMask = fine_motMask.within_contour(botPlayerCnt).dilate(bot_player_dil_kernel, kernelType = cv.MORPH_ELLIPSE)
     else:
-        botMask = MaskFrame.false(motMask)
+        botMask = MaskFrame.false(fine_motMask)
     
     playerMask = topMask | botMask
     
     if verbose:
         ### to show contours...
         plCnts, _ = playerMask.find_contours(cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-        motMask.to_grey().to_BGR().put(plCnts).show()
+        fine_motMask.to_grey().to_BGR().put(plCnts).show()
     
     ### Player and Motion Mask
-    intMask = ~playerMask & motMask
+    fine_motMask_filt = ~playerMask & fine_motMask
     
-    return intMask
+    return fine_motMask_filt
 
 def get_contours_from_mask(intMask, 
                            ROI = None,
