@@ -46,6 +46,8 @@ class Contour:
         myPoints = myPoints.astype(int)
         return Contour(myPoints)
     
+    def __repr__(self):
+        return f'Contour(center = {self.center().coords}, area = {self.area()}, resolution = {self.num_points()})'
 
     def __getitem__(self, item):
         item_mod = item % self.num_points()
