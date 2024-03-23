@@ -243,7 +243,7 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
         #     print(f'   ... Could not cast to integer!')
     
         if not featFrm.index.duplicated().any():
-            print(f'   ... Feature merger for successful.')
+            print(f'   ... Feature merger for {featureName} successful.')
         else:
             featFrm = featFrm[~featFrm.index.duplicated(keep = keep_which)]
             print(f'   ... Feature merger for {featureName} unsuccessful due to duplicated frames with ambiguous values. Kept the {keep_which} occurence, arbitrarily.')
