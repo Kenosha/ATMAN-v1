@@ -586,7 +586,11 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     ### get the candidates
     cntSF = candSF['player_candidates']
     ### get the top and bot points at serve/return
-    topSF, botSF = candSF['topPt'], candSF['botPt']
+    try:
+        topSF, botSF = candSF['topPt'], candSF['botPt']
+    except KeyError:
+        topSF, botSF = StreamFeature({}), StreamFeature({})
+        
     
     ### some auxiliary functions
     def beta(x, optimum, strictness):
@@ -639,7 +643,7 @@ def evaluate_player_candidates(candSF, splitDF, ### this needs to be passed to a
     FDCD_LUT = {}
     for frame in all_frames:
         frameCnts = cntSF[frame]
-        top_srvPt, bot_srvPt = topSF[frame], botSF[frame] ### points at serve and return frames
+        top_srvPt, bot_srvPt = topSF.maybe_get(frame), botSF.maybe_get(frame) ### points at serve and return frames
         
         top_dist_norms = []
         bot_dist_norms = []
@@ -869,9 +873,8 @@ def interpolate_players(playerSF, frame_offset = 5, which = 'top',
         leftCnt = plSF[left_frame]
         
         right_frame = left_frame + frame_offset
-        try:
-            rightCnt = plSF[right_frame]
-        except KeyError: ### in this case, there is no right player, so we don't interpolate.
+        rightCnt = plSF.maybe_get(right_frame)
+        if rightCnt is None: ### in this case, there is no right player, so we don't interpolate.
             continue
         
         for itpl_frame in range(1, frame_offset): ### itpl points: 1, 2, ..., FRAME_OFFSET - 1  
@@ -899,6 +902,9 @@ def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
                          probability_threshold = None):
     ballTable = contSF['ballTable'].to_frame()
     
+    if len(ballTable) == 0:
+        return StreamFeature({}, name = 'candCnts') 
+
     ### get the SVM and the features used
     svm = svmDict['svm']
     features = svmDict['features']
@@ -940,6 +946,59 @@ def find_ball_candidates(contSF, svmDict = None, use_training_moments = False,
                 trueDict[frmNum] = Contours(true_contours)
 
     return StreamFeature(trueDict, name = 'candCnts')
+
+def find_ball_candidates_tiered(contSF, svmDict = None, use_training_moments = False,
+                                threshold_low = 0.025, threshold_mid = 0.1, threshold_hi = None):
+    ballTable = contSF['ballTable'].to_frame()
+    
+    if len(ballTable) == 0:
+        return StreamFeatures({})
+
+    ### get the SVM and the features used
+    svm = svmDict['svm']
+    features = svmDict['features']
+    
+    ### figure out normalising moments
+    if use_training_moments:
+        mean = svmDict['mean']
+        std = svmDict['std']
+    else:
+        mean = ballTable.mean()
+        std = ballTable.std()
+        
+    normTable = (ballTable - mean) / std
+    
+    ### Using the SVM estimated, predict whether a contour is a ball.
+    normTable['isBall_proba'] = svm.predict_proba(normTable[features].values)[:,1]
+
+    trueDict = {frame: {} for frame in contSF.get_frames()}
+    for tier_idx, probability_threshold in enumerate([threshold_low, threshold_mid, threshold_hi]):
+
+        if probability_threshold is None:
+            normTable['isBall'] = svm.predict(normTable[features].values)
+        else:
+            normTable['isBall'] = (normTable['isBall_proba'] > probability_threshold).astype(int)
+        
+        ### get all True predictions
+        trueTable = normTable[normTable.isBall == 1]
+        
+        for frmNum, cnts in contSF['movCnts'].items():
+            try:
+                myTable = trueTable.loc[frmNum]
+            except KeyError:
+                trueDict[frmNum][f'cand{tier_idx}Cnts'] = None
+            else:
+                true_contours = []
+                for true_idx in myTable.index:
+                    true_contours.append(cnts[true_idx])
+                    
+                if true_contours == []:
+                    trueDict[frmNum][f'cand{tier_idx}Cnts'] = None
+                else:
+                    trueDict[frmNum][f'cand{tier_idx}Cnts'] = Contours(true_contours)
+
+    return StreamFeatures(trueDict)
+
 
 def find_particles(mySF, 
                    dims = (1920, 1080), pixel_in_meter = (200, 100), N = 1000, fps = 25,
