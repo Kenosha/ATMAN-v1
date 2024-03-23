@@ -14,11 +14,10 @@ import os
 import numpy as np
 import cv2 as cv
 
-
 if __name__ == '__main__':
 
-    FORCE_REDO = None    
-    ONLY_DO = 'court_background'
+    FORCE_REDO = 'ball_inference_hit_candidates'    
+    ONLY_DO = None
 
     prm_mod = ppl.parameter_files.default
     cnf_mod = ppl.config_files.default    
@@ -50,7 +49,7 @@ if __name__ == '__main__':
     ###### MAKE GENERAL PARAMETERS ##########
     # ppl_fs.copy_general_features(general_features, driver_scope, sto)
     
-    ###### DETERMINE WHAT SHOULD BE RUN #####
+    ###### RUN A SCRIPT FOR EACH VIDEO IN SCOPE #####
     for vid in driver_scope:
         print('________')
         print(vid)
@@ -60,24 +59,26 @@ if __name__ == '__main__':
         can_run, has_run = ppl_fs.can_run_has_run(loadDict, saveDict, vid, sto)
         should_run = [s for s in can_run if can_run[s] and not has_run[s]]
         
-        if len(should_run) == 0:
-            print('NO SCRIPT CAN BE RUN!')
-        else:        
-            print('SCRIPTS TO RUN:')
-            for s in should_run:
-                print(f'   - {s}')
+        #### FIGURE OUT WHAT TO RUN
+        if FORCE_REDO is None:
+            if len(should_run) == 0:
+                print('NO SCRIPT CAN BE RUN!')
+                script_to_run = None
+            else:        
+                print('SCRIPTS TO RUN:')
+                for s in should_run:
+                    print(f'   - {s}')
+
+                if ONLY_DO is not None:
+                    script_to_run = ONLY_DO if ONLY_DO in should_run else None
+                else:
+                    script_to_run = should_run[0]
+
+        else:
+            script_to_run = FORCE_REDO
             
-            ###### RUN #############
-            
-            if FORCE_REDO is None:
-                script_to_run = should_run[0]
-            else:
-                script_to_run = FORCE_REDO
-            
-            if ONLY_DO is not None:
-                if script_to_run != ONLY_DO:
-                    print(f'Should be doing {script_to_run}, but only doing {ONLY_DO}')
-                    continue
+        ###### RUN #############
+        if script_to_run is not None:
                     
             print(f'RUNNING {script_to_run}:')
             
