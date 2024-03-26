@@ -329,7 +329,7 @@ def get_locations_at_serve(topPlayer_srvReg, botPlayer_srvReg, courtLines = None
 def get_inferred_hit_points(hitFlag, topPlayerCnt, botPlayerCnt,
                             stroke_px_r_top = 10, stroke_px_r_bot = 10,  ### move to the right, in pixels
                             stroke_px_u_top = -2, stroke_px_u_bot = 10,
-                            serve_px_u_top = 20, serve_px_u_bot = 20,    ### move up, in pixels
+                            serve_px_u_top = 20, serve_px_u_bot = 40,    ### move up, in pixels
                             do_top = True, do_bot = True,
                             hand_top = 'right', hand_bot = 'right',
                             resolution = 6):
@@ -365,7 +365,10 @@ def get_inferred_hit_points(hitFlag, topPlayerCnt, botPlayerCnt,
         stroke_px_r = stroke_px_r_bot
         
         side_sign = 1
-        hand_sign = 1 if hand_top == 'right' else -1
+        hand_sign = 1 if hand_bot == 'right' else -1
+    
+    if myCnt is None:
+        return None
     
     cPt = myCnt.center()
         
