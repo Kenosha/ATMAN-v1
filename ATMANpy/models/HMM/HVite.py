@@ -8,7 +8,7 @@ Created on Mon Jul 25 02:29:18 2022
 import pandas as pd
 import numpy as np
 
-from ATMANpy.funcs.HMM.utils import calculate_emission_densities
+from ATMANpy.models.HMM.utils import calculate_emission_densities
 
 def token_pass_single_word(hmmDict, word, density_floor = 10 ** -100):
     

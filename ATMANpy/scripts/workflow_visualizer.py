@@ -6,7 +6,7 @@ Created on Sun Mar 10 20:20:19 2024
 """
 
 
-import ATMANpy.scripts.pipeline_brest as ppl
+import ATMANpy.scripts.pipeline_brest_tightseg as ppl
 import ATMANpy.funcs.pipeline_funcs as ppl_fs
 
 from ATMANpy.funcs.util_funcs import get_return_names

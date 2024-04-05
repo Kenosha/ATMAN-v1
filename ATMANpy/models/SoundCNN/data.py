@@ -136,7 +136,8 @@ def point_sound_generator(vid, sto, segmenter = 'isRally',
     mono_waveform = np.mean(stereo_waveform, axis = 0)
     # samples = len(mono_waveform)
     
-    ### get segmenter
+    ### get segmenter 
+    ### TODO: Why do we read this again, and not pass it in?
     segBF = BoolFeature.from_store(vid, sto, featname = segmenter)
     segBFs = segBF.filter(segBF).split()
     

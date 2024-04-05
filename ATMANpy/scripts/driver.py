@@ -16,8 +16,8 @@ import cv2 as cv
 
 if __name__ == '__main__':
 
-    FORCE_REDO = 'ball_inference_hit_candidates'    
     ONLY_DO = None
+    FORCE_REDO = None
 
     prm_mod = ppl.parameter_files.default
     cnf_mod = ppl.config_files.default    
