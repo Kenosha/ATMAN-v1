@@ -44,7 +44,7 @@ def rhs_parser(rhs):
 def read_load_arguments(someFunc):
     src, num_lines = inspect.getsourcelines(someFunc)
     src = [ln.strip(' ').rstrip('\n') for ln in src] ### strip whitespace and linebreaks
-    src = [ln.split('#')[0] for ln in src] ### strip comments
+    src = [ln.split('#')[0] for ln in src if not ln.split('#')[0] == ''] ### strip comments
     
     ret = [ln for ln in src if ln.startswith('return ')]
     if len(ret) == 0:
@@ -63,7 +63,6 @@ def read_load_arguments(someFunc):
         def_line = def_line.replace(' ', '')
     
         rhs = def_line.split('=', 1)[1]
-        
         arg_names = rhs_parser(rhs)
         out_names.extend(arg_names)
         
