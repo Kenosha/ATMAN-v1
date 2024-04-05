@@ -2212,13 +2212,28 @@ def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
         paramArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
         planeArr = np.full((num_curr_points, num_next_points, num_flight_frames, 2), fill_value = np.nan)
         
+        ###### DEAL WITH NET COORDINATES, IF APPLICABLE #######
         if hit_idx_is_last:
-            net_coordArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
-            net_paramArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
+            net_coordArr = np.full((num_flight_frames, 3), fill_value = np.nan)
+            net_paramArr = np.full((num_flight_frames, 3), fill_value = np.nan)
+
+            for frame_idx, frame_num in enumerate(flight_frames):
+                camLn = camlnSF[frame_num]
+                if camLn is not None:
+                    net_ballPt3D, net_params = camLn.intersect(netReg, rectify_plane = True)
+                else:
+                    net_ballPt3D = None 
+
+                if net_ballPt3D is not None:
+                    x_net, y_net, z_net = net_ballPt3D.coords
+                    l_net, m_net, n_net = net_params
+                    net_coordArr[frame_idx] = x_net, y_net, z_net
+                    net_paramArr[frame_idx] = l_net, m_net, n_net
         else:
             net_coordArr = None
             net_paramArr = None
             
+        ###### DEAL WITH FLIGHT COORDINATES #######
         for curr_idx in range(num_curr_points):
             currptArr = ptArr_curr[curr_idx]
             currptArr_ground = ptArr_curr_ground[curr_idx]
@@ -2243,19 +2258,11 @@ def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
                 
                 for frame_idx, frame_num in enumerate(flight_frames):
                     camLn = camlnSF[frame_num]
-                    if camLn is not None:
-                        ### 1) Check if the ball is in the net
-                        if hit_idx_is_last: # ... if it is the last hit of the rally
-                            ### irrelevant which side of the net we choose -> they are orthogonal to the cam line
-                            ### choose the left net, and 'extend' the parameters of that side to 
-                            net_ballPt3D, net_params = camLn.intersect(netReg, rectify_plane = True)
-                        else:
-                            net_ballPt3D = None 
-                            
-                        ### 2) Get the intersection of camera line and flight region
+                    if camLn is not None:     
+                        ### 1) Get the intersection of camera line and flight region
                         ballPt3D, params = camLn.intersect(flightReg, rectify_plane = True)
                         
-                        ### 3) Build arrays
+                        ### 2) Build arrays
                         x, y, z = ballPt3D.coords
                         l, m, n = params
                         
@@ -2263,11 +2270,6 @@ def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
                         paramArr[curr_idx, next_idx, frame_idx] = l, m, n
                         planeArr[curr_idx, next_idx, frame_idx] = flightLen * l, z
                         
-                        if net_ballPt3D is not None:
-                            x_net, y_net, z_net = net_ballPt3D.coords
-                            l_net, m_net, n_net = net_params
-                            net_coordArr[curr_idx, next_idx, frame_idx] = x_net, y_net, z_net
-                            net_paramArr[curr_idx, next_idx, frame_idx] = l_net, m_net, n_net
         
         outDict[frm_currhit] = {'coordArr': coordArr, 
                                 'paramArr': paramArr, 
@@ -2585,8 +2587,352 @@ def make_trajectory_frame(traj_evtSF, courtLines = None):
     
     if len(hitDFs) > 0:
         return pd.concat(hitDFs)
+
+def create_propagation_models(hitSF, courtLines = None):
     
+    def calculate_speeds_and_acceleration(cnt1, cnt2, cnt3, frm1, frm2, frm3):
+        ### given three subsequent contours, calculate their speed and acceleration per frame
+        try:
+            speed1 = (cnt2.center() - cnt1.center()) / (frm2 - frm1)
+        except:
+            speed1 = None
+        
+        try:
+            speed2 = (cnt3.center() - cnt2.center()) / (frm3 - frm2)
+        except:
+            speed2 = None
+        
+        try:
+            accel = speed2 - speed1
+        except:
+            accel = None
+            
+        return speed1, speed2, accel
     
+    topPt = courtLines['Top Baseline'].center()
+    botPt = courtLines['Bottom Baseline'].center()
+    topCnt = Contour.from_point(topPt)
+    botCnt = Contour.from_point(botPt)
+
+    mySF = hitSF.dropna()
+    cntSF = mySF['hitCnt']
+    flagSF = mySF['hitFlag']
+
+    bDict = {}
+    hit_frames = mySF.get_frames()
+    prev_hit_frame, prev_hit_cnt, prev_hit_flag = None, None, None
+    curr_hit_frame, curr_hit_cnt, curr_hit_flag = None, None, None
+    for next_hit_frame in hit_frames:
+        ### Initialize Next Hit Variables
+        next_hit_cnt = cntSF[next_hit_frame]
+        next_hit_flag = flagSF[next_hit_frame]
+        
+        ### if the next hit contour is not available, replace it with the default hit position:
+        ###    -> the middle of the baseline on the other side.
+        next_hit_side = next_hit_flag.split('_')[0]
+        if next_hit_cnt is None:
+            next_hit_cnt = topCnt if next_hit_side == 'top' else botCnt
+
+        ### Calculate the Propagation Matrices
+        if curr_hit_frame is not None:
+            v1, v2, a = calculate_speeds_and_acceleration(prev_hit_cnt, curr_hit_cnt, next_hit_cnt, 
+                                                            prev_hit_frame, curr_hit_frame, next_hit_frame)
+
+            ### Edit: numerically unsafe to work with v1 -> can be zero in a dimension (esp x), and then we divide by zero
+            ### -> therefore, do all matrices A like the serve matrix, independent of v1 and dependent instead on hit point
+            ### Edit 2: Instead of passing in As, which suffer in general numerical issues of multiplication, we adjust the
+            ### particle filter so that it allows taking As and Bs like so: S1 = A * S0 + B.
+            ### In this way, at model change points, we feed in Bs, and As are all zero!
+            ### At flight points, we feed in As as usual, and Bs are zero
+            B = np.array([0, 0, v2.x, v2.y])
+            bDict[curr_hit_frame] = B
+
+        prev_hit_frame, prev_hit_cnt, prev_hit_flag = curr_hit_frame, curr_hit_cnt, curr_hit_flag
+        curr_hit_frame, curr_hit_cnt, curr_hit_flag = next_hit_frame, next_hit_cnt, next_hit_flag
+        del next_hit_frame, next_hit_cnt, next_hit_flag ### not strictly necessary, but cleaner
+
+    ### Deal with Last Shot in Rally
+        # -> no next hit!
+    next_hit_frame = curr_hit_frame + 25
+    curr_hit_side = curr_hit_flag.split('_')[0]
+    next_hit_cnt = topCnt if curr_hit_side == 'bot' else botCnt
+
+    v1, v2, a = calculate_speeds_and_acceleration(prev_hit_cnt, curr_hit_cnt, next_hit_cnt, 
+                                                    prev_hit_frame, curr_hit_frame, next_hit_frame)
+    B = np.array([0, 0, v2.x, v2.y])
+    bDict[curr_hit_frame] = B
+
+    return StreamFeature(bDict, name = 'B')
+
+def widen_propagation_models(bSF, share_kernel = [0.05, 0.1, 0.2, 0.3, 0.2, 0.1, 0.05]):
+    ### The model switch may not just occur at the exact hit frame, it may also occur some frames around it.
+    ### Therefore, we widen the scope of the switch propagation matrices A and B to the frames around it. 
+    ### We also have to make sure that the widened frames don't overlap 
+        # -> for the sake of the particle filter, there has to be at least one normal flying motion frame between potential model switches.
+    hit_frames = bSF.get_frames()
     
+
+    A_still = np.zeros((4, 4))
+    A_still[0, 0] = 1
+    A_still[1, 1] = 1
+
+    len_k = len(share_kernel)
+    central_idx = len_k // 2
+
+
+    wideDict = {}
+    for hit_index, hit_frame in enumerate(hit_frames):
+        kernel_array = np.array(share_kernel)
+        
+        ### Check Distances to Previous and Next Hit, and de-overlap the kernels if necessary!
+        ### Note that this way, each kernel is de-overlapped twice, symmetrically 
+            # -> once from before to current, and once from current to next.
+        if hit_index != 0:
+            hit_bef = hit_frames[hit_index - 1]
+
+            distance_between_kernels = hit_frame - hit_bef - len_k
+            if distance_between_kernels > 0:
+                pass
+            elif distance_between_kernels in [0, -1]: 
+                ### for a kernel of length 7, this happens when consecutive hits are 7 or 6 frames apart respectively.
+                ### in this case, it suffices to shift the leftmost kernel value inward.
+                kernel_array = kernel_array[1:] + kernel_array[0] / (len_k - 1)
+            elif distance_between_kernels in [-2, -3]:
+                ### for a kernel of length 7, this happens when consecutive hits are 5 or 4 frames apart respectively.
+                ### in this case, we shift the two leftmost kernel values inward
+                kernel_array = kernel_array[2:] + kernel_array[:2].sum() / (len_k - 2)
+            else:
+                raise Exception(f'Hit Frames {hit_bef} and {hit_frame} to close to each other!')
+                
+        if hit_index != len(hit_frames) - 1:
+            hit_aft = hit_frames[hit_index + 1]
+
+            distance_between_kernels = hit_aft - hit_frame - len_k
+            if distance_between_kernels > 0:
+                pass
+            elif distance_between_kernels in [0, -1]: 
+                ### for a kernel of length 7, this happens when consecutive hits are 7 or 6 frames apart respectively.
+                ### in this case, it suffices to shift the rightmost kernel value inward.
+                kernel_array = kernel_array[:-1] + kernel_array[-1] / (len_k - 1)
+            elif distance_between_kernels in [-2, -3]:
+                ### for a kernel of length 7, this happens when consecutive hits are 5 or 4 frames apart respectively.
+                ### in this case, we shift the two rightmost kernel values inward
+                kernel_array = kernel_array[:-2] + kernel_array[-2:].sum() / (len_k - 2)
+            else:
+                raise Exception(f'Hit Frames {hit_frame} and {hit_aft} to close to each other!')
+        
+        B = bSF[hit_frame]
+        for idx, val in enumerate(kernel_array):
+            curr_frame = hit_frame - central_idx + idx
+            wideDict[curr_frame] = {'A': A_still, 'B': B, 'weight': val} 
+
+    return StreamFeatures(wideDict)
+
+
+def viterbi_hit_events(conv_hitSF, 
+                        initial_state_probabilities = [0.9], hit_state_probabilities = [0, 0, 0],
+                        flight_state_probabilities = [0.9], exit_state_probabilities = [1],
+                        initial_emission_exponents = [1], flight_emission_exponents = [1], exit_emission_exponents = [1],
+                        high_hit_emission_exponents = [1, 1, 1], low_hit_emission_exponents = [1, 1, 1]):
+    np.seterr(divide = 'ignore')
+
+    def get_A(initial_state_probabilities, hit_state_probabilities, flight_state_probabilities, exit_state_probabilities):
+        ### for each event class in init, hit, flight, state, we supply a list containing probabilities.
+        ### these probabilities denote the probability of remaining in a state associated with an event class, as opposed to moving to the next
+        ### a list of [0.9, 0.25, 0] denotes a three state system where 
+            # a process will remain in the first state with p = 0.9, or move to the second state with p = 0.1, upon which
+            # the process will remain in the second state with p = 0.25, or move to the third state with p = 0.75, upon which
+            # the process will move from the third state automatically out.
+        ### this function builds the transition matrix A resulting from these lists automatically.
+        ### as far as I can see, if the emission probabilities for init, hit, flight and exit are the same across the constituent states,
+        ###     having more than one state is useful only to add buffer states that are traversed quickly (even with p = 0),
+        ###     to basically enforce a minimum number of frames that a state has to linger somewhere.
+        ###     in this sense, having different emission probabilities for different states within an event class might be useful!
+        num_init = len(initial_state_probabilities)
+        num_hit = len(hit_state_probabilities)
+        num_flight = len(flight_state_probabilities)
+        num_exit = len(exit_state_probabilities) 
+
+        ### ordering of event classes: init, hit_top, hit_bot, flight_up, flight_down, exit
+        num_states = num_init + num_hit * 2 + num_flight * 2 + num_exit 
+        A = np.zeros((num_states, num_states))
+
+        def transitions_within_event_class(subA, state_probabilities, col_offset):
+            ps, ps_c = state_probabilities, [1 - p for p in state_probabilities]
+            rows, cols = subA.shape
+            idxs = np.arange(rows)
+            subA[idxs, idxs + col_offset] = ps ### probabilities to remain in state
+            subA[idxs[:-1], idxs[:-1] + col_offset + 1] = ps_c[:-1] ### transition probabilities within event classes 
+            return subA
+
+        
+        col_offset = 0
+        ### INIT ###
+        # a) make partial matrix
+        A_init = np.zeros((num_init, num_states))
+        A_init = transitions_within_event_class(A_init, initial_state_probabilities, col_offset)
+        A_init[-1, [num_init, num_init + num_hit]] = (1 - initial_state_probabilities[-1]) / 2 ### into hit_bot or hit_top
+        # b) make statedict
+        init_dict = {i + col_offset: f'init_{i}' for i in range(len(initial_state_probabilities))}
+        # c) increment row offset
+        col_offset += num_init
+        
+        ### HIT TOP ###
+        # a) make partial matrix
+        A_hit_top = np.zeros((num_hit, num_states))
+        A_hit_top = transitions_within_event_class(A_hit_top, hit_state_probabilities, col_offset)
+        A_hit_top[-1, num_init + 2 * num_hit + num_flight] = (1 - hit_state_probabilities[-1]) ### into initial state of flight down
+        # b) make statedict
+        hit_top_dict = {i + col_offset: f'hittop_{i}' for i in range(len(hit_state_probabilities))}
+        # c) increment row offset
+        col_offset += num_hit
+
+        ### HIT BOT ###
+        # a) make partial matrix
+        A_hit_bot = np.zeros((num_hit, num_states))
+        A_hit_bot = transitions_within_event_class(A_hit_bot, hit_state_probabilities, col_offset)
+        A_hit_bot[-1, num_init + 2 * num_hit] = (1 - hit_state_probabilities[-1]) ### into initial state of flight down
+        # b) make statedict
+        hit_bot_dict = {i + col_offset: f'hitbot_{i}' for i in range(len(hit_state_probabilities))}
+        # c) increment row offset
+        col_offset += num_hit
+
+        ### FLIGHT UP ###
+        # a) make partial matrix
+        A_flight_up = np.zeros((num_flight, num_states))
+        A_flight_up = transitions_within_event_class(A_flight_up, flight_state_probabilities, col_offset)
+        A_flight_up[-1, num_init] = (1 - flight_state_probabilities[-1])
+        # b) make statedict
+        flight_up_dict = {i + col_offset: f'flightup_{i}' for i in range(len(flight_state_probabilities))}
+        # c) increment row offset
+        col_offset += num_flight
+
+        ### FLIGHT DOWN ###
+        # a) make partial matrix
+        A_flight_down = np.zeros((num_flight, num_states))
+        A_flight_down = transitions_within_event_class(A_flight_down, flight_state_probabilities, col_offset)
+        A_flight_down[-1, num_init + num_hit] = (1 - flight_state_probabilities[-1])
+        # b) make statedict
+        flight_down_dict = {i + col_offset: f'flightdown_{i}' for i in range(len(flight_state_probabilities))}
+        # c) increment row offset
+        col_offset += num_flight
+
+        ### EXIT
+        # a) make partial matrix
+        A_exit = np.zeros((num_exit, num_states))
+        A_exit = transitions_within_event_class(A_exit, exit_state_probabilities, col_offset)
+        # b) make statedict
+        exit_dict = {i + col_offset: f'exit_{i}' for i in range(len(exit_state_probabilities))}
+
+        ### JOIN
+        A = np.vstack((A_init, A_hit_top, A_hit_bot, A_flight_up, A_flight_down, A_exit))
+
+        ### STATEDICT
+        stateDict = {**init_dict, **hit_top_dict, **hit_bot_dict, **flight_up_dict, **flight_down_dict, **exit_dict}
+        
+        return A, stateDict
+
+    def get_emission_probabilities(q_top, q_bot, 
+                                   initial_emission_exponents, flight_emission_exponents, exit_emission_exponents,
+                                   high_hit_emission_exponents, low_hit_emission_exponents):
+        
+        q_nohit = (1 - q_top) * (1 - q_bot)
+
+        ### HITS ###
+        if q_top > q_bot:
+            top_es = [1 - (1 - q_top) ** exp for exp in high_hit_emission_exponents]
+            bot_es = [1 - (1 - q_bot) ** exp for exp in low_hit_emission_exponents]
+        else:
+            top_es = [1 - (1 - q_top) ** exp for exp in low_hit_emission_exponents]
+            bot_es = [1 - (1 - q_bot) ** exp for exp in high_hit_emission_exponents]
+
+        ### INIT ###       
+        init_es = [q_nohit ** exp for exp in initial_emission_exponents]
+
+        ### FLIGHT ###
+        flight_es = [q_nohit ** exp for exp in flight_emission_exponents]
+
+        ### EXIT ###
+        exit_es = [q_nohit ** exp for exp in exit_emission_exponents]
+
+        return [*init_es, *top_es, *bot_es, *flight_es, *flight_es, *exit_es]
+
+    conv_hitFrm = conv_hitSF.to_dataframe()
+    frames = conv_hitFrm.index.to_list()
+
+    A, stateDict = get_A(initial_state_probabilities, hit_state_probabilities, flight_state_probabilities, exit_state_probabilities)
+    logA = np.log(A)        
     
-    
+    T, S = len(frames), len(A)
+
+    ### FORWARD PASS ###
+    trellis = np.full((T, S), fill_value = np.nan)
+    pointers = np.full((T, S), fill_value = np.nan)
+    for frame_idx, frame in enumerate(frames):
+
+        pSer = conv_hitFrm.loc[frame]
+
+        if frame_idx == 0: ### initialize
+            initial_probability_distribution = np.zeros(S)
+            initial_probability_distribution[0] = 1
+            trellis[frame_idx] = np.log(initial_probability_distribution)
+            pointers[frame_idx] = np.zeros(S)
+        else:
+            q_top, q_bot = pSer['top_hit_p'], pSer['bot_hit_p']
+            p_emit = get_emission_probabilities(q_top, q_bot, 
+                                                initial_emission_exponents, flight_emission_exponents, exit_emission_exponents,
+                                                high_hit_emission_exponents, low_hit_emission_exponents)
+            log_p_emit = np.log(p_emit)
+
+            ### Get the Log Probabilities of Transition and Emission
+            log_p_trans = trellis[frame_idx - 1][:, np.newaxis] + logA
+            log_p_all = log_p_trans + log_p_emit[np.newaxis, :]
+
+            # ### Probability that a trellis probability transition between periods i and j = i + 1
+            # p_trans = np.einsum('i, ij -> ij', trellis[frame_idx - 1], A) ### shape: 
+            # ### Probability that the new state emits B
+            # p_all = np.einsum('ij, j -> ij', p_trans, p_emit)
+
+            trellis[frame_idx] = np.max(log_p_all, axis = 0)
+            pointers[frame_idx] = np.argmax(log_p_all, axis = 0)
+
+    ### BACKWARD PASS ###
+    states = np.full(T, fill_value = 999, dtype = int)
+    for t in range(T, 0, -1):
+        if t == T:
+            s_before = np.argmax(trellis[-1]) ### initialization with highest final trellis probability state
+        else:    
+            s_before = pointers[t, states[t]]
+        states[t-1] = s_before
+
+    states_mapped = {frames[i]: stateDict[s] for i, s in enumerate(states)}
+    stateSer = pd.Series(states_mapped)
+    stateSer = stateSer[stateSer.str.split('_', expand = True)[0].isin(['hittop', 'hitbot'])].rename('hitFlag')
+
+    np.seterr(divide = 'warn') 
+
+    outSF = StreamFeature.from_series(stateSer)
+    return outSF
+
+def specify_hit_events(mySF):
+    myFrm = mySF.to_dataframe()
+    myFrms = ut.split(myFrm)
+
+    outDict = {}
+    for frm in myFrms:
+        unspecific_events = frm['hitFlag'].str.split('_', expand = True)[0].unique()
+        assert len(unspecific_events) == 1
+        unspecific_event = unspecific_events[0]
+        side = unspecific_event[3:]
+        side_columns = [c for c in frm if side in c and not 'oth' in c]
+        average_event_probabilities = frm[side_columns].mean() ### average event probabilities over the duration of the hit
+        likeliest_event = average_event_probabilities.index[average_event_probabilities.argmax()]
+        if len(outDict) == 0: ### need a serve!
+            if likeliest_event.split('_')[1] == 'srv':
+                outDict.update({frame: likeliest_event for frame in frm.index})
+            else:
+                print(f'{mySF} -> did not see serve at beginning!')
+        else:
+            outDict.update({frame: likeliest_event for frame in frm.index})
+
+    return StreamFeature(outDict, name = 'hitFlag')
