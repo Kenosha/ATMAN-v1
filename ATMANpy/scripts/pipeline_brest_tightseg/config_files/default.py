@@ -19,7 +19,7 @@ def get_conf(vid):
     natural_scale = width / 1920
     
     if STOP_FRAME is None:
-        STOP_FRAME = cap.get(cv.CAP_PROP_FRAME_COUNT) - 5
+        STOP_FRAME = int(cap.get(cv.CAP_PROP_FRAME_COUNT) - 5)
     
     conf = {'start_frame': START_FRAME,
             'stop_frame': STOP_FRAME,
@@ -28,6 +28,8 @@ def get_conf(vid):
             'num_workers': NWO,
             'chunksize': NCH,
             'add_scale': ADD_SCALE,
+            'width': width,
+            'heigth': height,
             'lossless': 'True',
             'compression_ball': 32,
             'compression_players': 48,
