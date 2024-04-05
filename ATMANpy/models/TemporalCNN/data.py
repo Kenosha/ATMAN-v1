@@ -466,7 +466,14 @@ def player_centered_clip_generator(cap, vid, sto,
                         plCnt = playerSF[f]
                     except KeyError:
                         continue
-                    plCnts.append(plCnt)
+                    
+                    if len(plCnts) > 0:
+                        if plCnts[-1].overlap_factor(plCnt, relative_to = 'self') > 0:  
+                            ### only append a contour if it is overlapping the previous
+                            ### -> avoid drastic jumps between contours if a player contour is filtered out by moving over the baseline.                                    
+                            plCnts.append(plCnt)
+                    else:
+                        plCnts.append(plCnt)
                 
                 plCnts = Contours(plCnts)
                 if plCnts.length() == 0:
@@ -506,4 +513,71 @@ class PlayerInferenceDataset(IterableDataset):
                                                      stride_t = self.stride_t, T = self.T, D = self.D, D_SC = self.D_SC)
             return inf_gen
 
+def uncapped_player_centered_clip_generator(decapStms, playerSF,
+                                            stride_t = 4, T = 16, D = 112, D_SC = 56):
+    """
+    This generator contains a StreamList of DecapStream directly 
+        -> it does not require a VideoCapture. VideoCaptures are unpicklable, hence impossible to parallelize with num_workers > 0.
+    If the input StreamList does not blow up the RAM, use this.
+    The input StreamList has to contain DecapStreams containing MultiFrames as created by get_masked_video_frames, above.
+        -> BGRFrames, masked by the UNION (|) of foregroundMask and fine_motMask
+    """
+    for masked_vidStm in decapStms:
 
+        pnt_fs, pnt_ls = masked_vidStm.start_frame, masked_vidStm.stop_frame
+    
+        left_frames = range(pnt_fs, pnt_ls - T, stride_t) 
+    
+        for left_frame in left_frames:                    
+            right_frame = left_frame + T 
+            choice_frames = list(range(left_frame, right_frame))
+            
+            conf_masked_vidStm = masked_vidStm.conform(left_frame, right_frame - 1) ### last frame is included, so we kill it.
+            myFrms = conf_masked_vidStm.frames
+                        
+            ####### CROP ONTO PLAYER ############
+            plCnts = []
+            for f in choice_frames:
+                try:
+                    plCnt = playerSF[f]
+                except KeyError:
+                    continue
+                
+                if len(plCnts) > 0:
+                    if plCnts[-1].overlap_factor(plCnt, relative_to = 'self') > 0:  
+                        ### only append a contour if it is overlapping the previous
+                        ### -> avoid drastic jumps between contours if a player contour is filtered out by moving over the baseline.                                    
+                        plCnts.append(plCnt)
+                else:
+                    plCnts.append(plCnt)
+            
+            plCnts = Contours(plCnts)
+            if plCnts.length() == 0:
+                continue ### in this case, we have an ok point for the player side (chkBF above), but no player contour in this moment.
+                
+            plReg = plCnts.enclosing_regions().cover()
+            plReg_shrunk = plReg.resize(to_height = D, to_width = D, how = 'any') ### shrink excess height or width --> the rest we do with padding! 
+            cropFrms = myFrms.crop(plReg_shrunk)
+            
+            vidArr = preprocess_cropped_frames(cropFrms, D, D_SC)
+            
+            yield torch.Tensor(vidArr), torch.Tensor(choice_frames)
+
+class UncappedPlayerInferenceDataset(IterableDataset):
+    def __init__(self, decapStms, playerSF,
+                 stride_t = 4, T = 16, D = 112, D_SC = 56):
+        super(UncappedPlayerInferenceDataset).__init__()
+        self.decapStms = decapStms
+        self.playerSF = playerSF
+        
+        self.stride_t = stride_t
+        self.T = T
+        self.D = D
+        self.D_SC = D_SC
+        
+    def __iter__(self):
+        worker_info = get_worker_info()
+        if worker_info is None: ### Single Process Data Loading TODO: parallelize  (see todo_cnn)
+            inf_gen = uncapped_player_centered_clip_generator(self.decapStms, self.playerSF,
+                                                            stride_t = self.stride_t, T = self.T, D = self.D, D_SC = self.D_SC)
+            return inf_gen
