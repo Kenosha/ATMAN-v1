@@ -70,7 +70,8 @@ class ParticleFilter:
                  observation_standard_deviation = 10, ### in pixels -> one dimensional
                  spatial_lambda = 10 ** -7,  ### spatial poisson density of clutter... whatever that is. See isard & blake (1998)
                  p_no_ball = 0.25, ### probability that ball is not among tracked objects
-                 p_prime = 0.3 ### probability of switching model if close to player (from A to A_prime or A_primeprime)
+                 p_prime = 0.3, ### probability of switching model if close to player (from A to A_prime or A_primeprime)
+                 verbose = False,
                  ):
         
         ### Write initial parameters to self
@@ -103,20 +104,29 @@ class ParticleFilter:
         self.likelihood_denominator = 2 * np.pi * np.linalg.det(self.R) ** 0.5 ### not quite correct! 
                                                                                 # pi must be raised to the power of number of dimensions, 
                                                                                 # and then also be square-rooted. 
+        self.verbose = verbose
 
     @staticmethod
     def initialize_particles(N = 1000,
+                             initialization_point = None,
+                             initialization_distance = None,
                              frame_width = 1920, 
                              frame_height = 1080, 
                              pixel_per_meter_horizontal = 200,
                              pixel_per_meter_vertical = 100,
-                             fps = 25):
+                             fps = 25,
+                             verbose = False):
         #### particles are four dimensional vectors, 
         #### representing location and speed in x and y coords resp.
         #### x and y are used in the traditional sense: x is horizontal, y is vertical
-        min_loc_x, min_loc_y = 0, 0
-        max_loc_x, max_loc_y = frame_width, frame_height
-        
+        if initialization_point is None:
+            min_loc_x, min_loc_y = 0, 0
+            max_loc_x, max_loc_y = frame_width, frame_height
+        else:
+            x, y = initialization_point.coords
+            min_loc_x, min_loc_y = max(0, x - initialization_distance), max(0, y - initialization_distance)
+            max_loc_x, max_loc_y = min(x + initialization_distance, frame_width), min(y + initialization_distance, frame_height)
+
         max_meter_per_frame = 70 / fps ### 260 km/h -> 70 m/s
         min_speed_x, min_speed_y = 0, 0
         max_speed_x, max_speed_y = pixel_per_meter_horizontal * max_meter_per_frame, pixel_per_meter_vertical * max_meter_per_frame
@@ -126,10 +136,13 @@ class ParticleFilter:
         
         initial_particles = np.random.uniform(min_vec, max_vec, (N, 4))
         
+        if verbose: print(f'Initialized {N} particles.')
+
         return initial_particles
     
+    
     @staticmethod
-    def compare_histories(closeArr, modelArr):
+    def compare_histories(closeArr, modelArr, verbose = False):
         """
         If the particle was always close, 
             if it has never been moved with A'
@@ -171,6 +184,9 @@ class ParticleFilter:
         propagation_rules = np.where(always_normal_model, True, # CASE 1 and CASE 3
                                      np.where(always_close, False,  # CASE 2
                                               possible_model_switch)) # CASE 4
+        
+        if verbose: print(f'{propagation_rules.sum()} out of {len(propagation_rules)} particles eligible for switch!')
+
         return propagation_rules
         
     def get_motion_model_with_contours(self, S, chamferCnts, closeHistories = None, modelHistories = None):
@@ -228,9 +244,72 @@ class ParticleFilter:
             modelBools = np.append(modelBools, model_is_prime)
 
         As = np.array(As)
-        return As, closeBools, modelBools
+        Bs = np.tile(np.zeros(4), (len(S), 1)) ### no add ons necessary in chamfered mode
+        return As, Bs, closeBools, modelBools
     
-    def get_means_and_weights(self, S, As, ballContours,
+    def get_motion_model_precalculated(self, S, A, B, weight, closeHistories = None, modelHistories = None,
+                                       verbose = False):
+        ### weight is None iff the particle propagation here is always linear -> we are NOT at or around the hit frame
+        ### weight > 0 iff the particle propagation here is potentially precalculated -> we are at or around hit frame
+        ### the interpretation of close histories here is: has the particle been in a situation where the weight is greater than zero?
+        ### This occurs if we are at frames around which a hit has been detected!
+        N = len(S)
+        linear_As = np.tile(self.A, (N, 1, 1))
+        linear_Bs = np.tile(np.zeros(4), (N, 1))
+        linear_modelBools = np.zeros(N, dtype = 'bool')
+        linear_closeBools = np.zeros(N, dtype = 'bool')
+
+        ### Check the histories for the particle, to see if it would qualify for a model switch
+        if closeHistories is None and modelHistories is None:
+            propagation_rules = np.ones(N, dtype = 'bool') ### if we have no history,
+                                                                ### every particle can potentially 
+                                                                ### be moved with A or A' (if it's close)
+        else:
+            propagation_rules = ParticleFilter.compare_histories(closeHistories, modelHistories)
+
+        if weight is None: ### linear propagation!
+            return linear_As, linear_Bs, linear_modelBools, linear_closeBools
+        
+        else:
+            assert weight > 0
+            
+            rng = np.random.default_rng()
+            eligible_to_switch_indices = np.where(propagation_rules)[0]
+            switch_indices = rng.choice(eligible_to_switch_indices, size = int(weight * len(eligible_to_switch_indices)), shuffle = False, replace = False)
+
+            if verbose:
+                len_done = len(switch_indices)
+                len_elig = len(eligible_to_switch_indices)
+                if len_elig == 0:
+                    pctStr = ''
+                else:
+                    pct = round(len_done / len_elig * 100, 1)
+                    pctStr = f'({pct}%)'
+                print(f'Switching {len_done} out of {len_elig} eligible particles {pctStr}!')
+
+            As = linear_As
+            Bs = linear_Bs
+            As[switch_indices] = A
+
+            ### sample some multipliers for B, so we have a broader range of particle switches
+            ### this ought to make model switching more reactive to fast shots and broad, 
+            ### since the additive error doesn't do well with fast flying balls.
+            b_multipliers = rng.chisquare(1, size = len(switch_indices) * 4).reshape((len(switch_indices), 4))
+            ### median at k = degrees of freedom is roughly: k * (1 - 2 / (9k)) ** 3. 
+            ### for k = 1, this is roughly equal to 0.47. 
+            ### Therefore, adding 0.55 to the whole thing causes particles never to slow down completely, 
+            ### and pushes the median to around 1. 
+            b_multipliers = b_multipliers + 0.55
+
+            Bs[switch_indices] = B * b_multipliers
+
+            modelBools = linear_modelBools
+            modelBools[switch_indices] = True
+
+            closeBools = np.ones(N, dtype = 'bool')
+            return As, Bs, closeBools, modelBools
+
+    def get_means_and_weights(self, S, As, Bs, ballContours,
                               frame_width = 1920, 
                               frame_height = 1080,
                               rectify = True):
@@ -239,7 +318,7 @@ class ParticleFilter:
         
         ### the m0 vector -> particles updated with appropriate A_star model.
         matVecMulStr = 'nij,nj -> ni'
-        m0 = np.einsum(matVecMulStr, As, S)
+        m0 = np.einsum(matVecMulStr, As, S) + Bs
         
         ### the upper two elements of the m0 vector -> location of updated particles.
         m0_loc = m0[:, :2]
@@ -390,34 +469,61 @@ class ParticleFilter:
                        pixel_per_meter_horizontal = 200,
                        pixel_per_meter_vertical = 100,
                        fps = 25,
-                       rectify = True):
+                       initialization_distance = 30,
+                       rectify = True,
+                       verbose = False):
         
+        chamfered_mode = 'chamferCnts' in mySF.get_features()
+        tight_init_mode = 'hitCnt' in mySF.get_features()
+
         indexHistories = None
         closeHistories = None
         modelHistories = None
+
+        if tight_init_mode:
+            srv_frame, srv_cnt = mySF['hitCnt'].dropna().first()
+            srv_point = srv_cnt.center()
+            initialization_point = srv_point
+        else:
+            initialization_point = None
+
         particles = ParticleFilter.initialize_particles(N = N,
+                                                        initialization_point = initialization_point,
+                                                        initialization_distance = initialization_distance,
                                                         frame_width = frame_width, 
                                                         frame_height = frame_height, 
                                                         pixel_per_meter_horizontal = pixel_per_meter_horizontal,
                                                         pixel_per_meter_vertical = pixel_per_meter_vertical,
-                                                        fps = fps)
+                                                        fps = fps,
+                                                        verbose = verbose)
         
         partDict = {} ### we need particles, first and foremost
         histDict = {} ### but we also need the final index histories, for smoothing
         for frame, featDict in mySF.items():
+            if verbose: print(f'Frame: {frame}')
+
             ### write to frame!
             partDict[frame - 1] = particles.astype(int) ### for memory reasons, save as integer
                                                         ### EDIT: particles belong to previous period!
+
+            ###### DETERMINE PARTICLE PROPAGATION RULES ########
+            if chamfered_mode:    
+                chamferCnts = featDict['chamferCnts']
+                As, Bs, closeBools, modelBools = self.get_motion_model_with_contours(particles, chamferCnts,
+                                                                                closeHistories = closeHistories,
+                                                                                modelHistories = modelHistories)    
+            else:
+                A, B, weight = featDict['A'], featDict['B'], featDict['weight']
+                As, Bs, closeBools, modelBools = self.get_motion_model_precalculated(particles, A, B, weight, 
+                                                                                     closeHistories = closeHistories, 
+                                                                                     modelHistories = modelHistories,
+                                                                                     verbose = verbose)
+
             
-            chamferCnts = featDict['chamferCnts']
-            ballContours = featDict['candCnts']
-            
-            propagation_models, closeBools, modelBools = self.get_motion_model_with_contours(particles, chamferCnts,
-                                                                                             closeHistories = closeHistories,
-                                                                                             modelHistories = modelHistories)    
             ########### UPDATE PARTICLES #########
             ### means_and_weights updates last periods particles, ...
-            m, w = self.get_means_and_weights(particles, propagation_models, ballContours,
+            ballContours = featDict['candCnts']
+            m, w = self.get_means_and_weights(particles, As, Bs, ballContours,
                                               frame_width = frame_width, frame_height = frame_height,
                                               rectify = rectify) 
             ### ... and resample compares to evidence in this period!
@@ -434,5 +540,3 @@ class ParticleFilter:
         partSF = StreamFeature(partDict, name = 'particles')
         histSF = StreamFeature(histDict, name = 'idxHistories')
         return partSF.merge(histSF)
-    
-
