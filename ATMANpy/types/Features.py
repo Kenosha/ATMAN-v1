@@ -232,6 +232,17 @@ class StreamFeaturesBase:
             boolDict = {frame: frame in chosen for frame in frames}
             return BoolFeature(boolDict, name = f'random_{self.name}')
     
+    def get_central_singleton(self):
+        assert self.is_contiguous()
+        fs = self.get_frames()
+        central_frame = fs[len(fs) // 2]
+        return central_frame, self[central_frame]
+
+    def thin(self):
+        sfList = self.split()
+        streamDict = dict([sf.get_central_singleton() for sf in sfList])
+        return self.__class__(streamDict, name = self.name) 
+
     def to_dict(self):
         return self.streamDict
     
@@ -1258,6 +1269,10 @@ class SFList:
         featList = [mySF.to_bool() for mySF in self]
         return SFList(featList)
     
+    def thin(self):
+        featList = [mySF.thin() for mySF in self]
+        return SFList(featList)
+    
     @extract_mp_timer
     def apply(self, func, **kwargs):
         return SFList([mySF.apply(func, **kwargs) for mySF in self])
@@ -1353,8 +1368,7 @@ class SFList:
     
         outList.append(prevSF)
         return SFList(outList)
-    
-    
+
     def add(self, key, value):
         return SFList([mySF.add(key, value) for mySF in self])
     
