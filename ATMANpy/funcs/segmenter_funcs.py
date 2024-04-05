@@ -30,18 +30,21 @@ def get_rally_probabilities(hitSer, next_hit_should_come_soon = 20, next_hit_sho
     
     return pd.Series(rally_probabilities, index = hitSer.index, name = 'rally_p')
     
-def make_smoothing_function(kernel):
+def make_smoothing_function(kernel, mode = 'same'):
     norm_kernel = kernel / kernel.sum()
-    return partial(np.convolve, v = norm_kernel, mode = 'same')
+    return partial(np.convolve, v = norm_kernel, mode = mode)
 
-def make_video_hit_series(videoFrm, name = 'video_hit_p'):
+def make_video_hit_frame(videoFrm):
     ### get video
     tophitSer = 1 - videoFrm['top_oth']
     bothitSer = 1 - videoFrm['bot_oth']
     tophitSer.name = 'top_hit_p'
     bothitSer.name = 'bot_hit_p'
+    return pd.concat([tophitSer, bothitSer], axis = 1)
 
-    vidhitSer = pd.concat([tophitSer, bothitSer], axis = 1).max(axis = 1)
+def make_video_hit_series(videoFrm, name = 'video_hit_p'):
+    vidhitFrm = make_video_hit_frame(videoFrm)
+    vidhitSer = vidhitFrm.max(axis = 1)
     vidhitSer.name = name
     
     return vidhitSer
@@ -53,6 +56,6 @@ def make_audio_hit_series(audioSer, name = 'audio_hit_p'):
     return audiohitSer
         
 def weight_cobb_douglas(leftSer, rightSer, left_lambda, name = 'joint_hit_p'):
-    outSer = leftSer ** left_lambda * rightSer ** (1 - left_lambda)
+    outSer = (leftSer ** left_lambda).mul(rightSer ** (1 - left_lambda), axis = 'index')
     outSer.name = name
     return outSer
