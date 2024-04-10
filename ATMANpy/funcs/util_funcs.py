@@ -249,6 +249,18 @@ def split_into_contiguous(inList, offset = 1):
     
     return outList
     
+def split_like(someList, splitList):
+    splitList_flat = [el for subList in splitList for el in subList]
+    assert len(someList) == len(splitList_flat)
+
+    reservoir_list = [el for el in someList]
+    someList_split = []
+    for subList in splitList:
+        take_list, reservoir_list = reservoir_list[:len(subList)], reservoir_list[len(subList):]
+        someList_split.append(take_list)
+    return someList_split
+
+
 def widen_list(inList, by = 1):
     by = int(by)
     assert by >= 0
