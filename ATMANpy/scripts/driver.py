@@ -84,8 +84,12 @@ if __name__ == '__main__':
             
             script_module = getattr(ppl, script_to_run)
             
-            parameters_object = getattr(prm_mod, script_to_run)
-            parameters_dictionary = parameters_object.get_parameter_dictionary()
+            try:
+                parameters_object = getattr(prm_mod, script_to_run)
+            except AttributeError:
+                parameters_dictionary = {}
+            else:
+                parameters_dictionary = parameters_object.get_parameter_dictionary()
             
             for parName, parDict in parameters_dictionary.items():
                 print(f'  with {parName}: ')
