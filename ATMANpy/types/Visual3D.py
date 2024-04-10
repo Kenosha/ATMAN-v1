@@ -24,8 +24,8 @@ class Scene:
         return Scene([])
     
     @staticmethod
-    def make_court():
-        courtRegions3D = Court.make()
+    def make_court(courtLines = None):
+        courtRegions3D = Court.make(courtLines = courtLines)
         net3D = Net.make_singles()
 
         return Scene.make_empty().put(courtRegions3D).put(net3D)
@@ -150,7 +150,12 @@ class Camera:
     
     @staticmethod
     def birds_eye(cam_height = 100, sensor_dims = (1920, 1080),
-                  f = 3650, o_x = 812, o_y = -190):
+                  f = 3650, o_x = None, o_y = None):
+        if o_x is None:
+            o_x = sensor_dims[0] / 2
+        if o_y is None:
+            o_y = sensor_dims[1] / 2
+
         ctPt = CourtLines.make().get_center_point()
         x, y = ctPt.coords
         
