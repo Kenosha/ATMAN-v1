@@ -168,7 +168,7 @@ class Point3D:
         orthVec = Point3D((v3, v3, -v1-v2))
         orthLen = orthVec.length()
         if orthLen == 0:
-            orthVec = Point3D(v3, v3, -v1-v2)
+            orthVec = Point3D((-v2-v3, v1, v1))
         return orthVec
     
     def find_orientation_hori_vert(self):
@@ -287,7 +287,16 @@ class Circle3D(Point3D):
         theta_filtered = theta[theta_filter]
         
         unit_circle = np.array([np.cos(theta_filtered), np.sin(theta_filtered), zeros_filtered]).T
-        return unit_circle * self.radius + np.array(self.coords)[np.newaxis, :]
+        coordArr = np.array(self.coords)
+
+        if len(coordArr.shape) == 1: ### in this case, we have a simple point -> self.coords is a tuple
+            outArr = unit_circle * self.radius + coordArr[np.newaxis, :]
+        elif len(coordArr.shape) == 2: ### in this case, self.coords is already an array, holding a vectorized set of circle centers
+            outArr = unit_circle[:, :, np.newaxis] * self.radius + coordArr[np.newaxis, :, :]
+            outArr = outArr.swapaxes(1, 2) ### now, the array is: resolution_points x vector_points x dimensions (=3) 
+            n_res, n_vec, n_dims = outArr.shape
+            outArr = outArr.reshape((n_res * n_vec, n_dims))
+        return outArr
     
 
 @dataclass(frozen = True)
@@ -372,9 +381,17 @@ class Ball3D(Point3D):
         theta_filtered = theta[angle_filter]
         
         unit_circle = np.array([np.cos(theta_filtered) * np.sin(phi_filtered), np.sin(theta_filtered) * np.sin(phi_filtered), np.cos(phi_filtered)]).T
-        
-        return unit_circle * self.radius + np.array(self.coords)[np.newaxis, :]
+        coordArr = np.array(self.coords)
 
+        if len(coordArr.shape) == 1: ### in this case, we have a simple point -> self.coords is a tuple
+            outArr = unit_circle * self.radius + coordArr[np.newaxis, :]
+        elif len(coordArr.shape) == 2: ### in this case, self.coords is already an array, holding a vectorized set of circle centers
+            outArr = unit_circle[:, :, np.newaxis] * self.radius + coordArr[np.newaxis, :, :]
+            outArr = outArr.swapaxes(1, 2) ### now, the array is: resolution_points x vector_points x dimensions (=3) 
+            n_res, n_vec, n_dims = outArr.shape
+            outArr = outArr.reshape((n_res * n_vec, n_dims))
+        return outArr
+        
 @dataclass(frozen = True)
 class Line3D:
     """
@@ -510,10 +527,20 @@ class Line3D:
         return self.to_vector().find_orientation_hori_vert()
         
     def rasterize(self, resolution):
-        lineArr = self.subdivide(elements = int(resolution * self.length()) + 1, return_coords = True)
+        line_len = self.length()
+        if not isinstance(line_len, int): ### in this case, our Line3D object is a vectorized representation of multiple lines
+            line_len = np.max(line_len)
+
+        lineArr = self.subdivide(elements = int(resolution * line_len) + 1, return_coords = True)
         if self.thickness == 0:
-            return lineArr
+            if len(lineArr.shape) == 2: ### in this case, we have an unvectorized line -> res_points x dims (=3)
+                return lineArr
+            elif len(lineArr.shape) == 3: ### in this case, we have an unvectorized line -> res_points x dims (=3) x vec_points
+                lineArr = lineArr.swapaxes(1, 2) ### now, the array is: resolution_points x vector_points x dimensions (=3) 
+                n_res, n_vec, n_dims = lineArr.shape
+                return lineArr.reshape((n_res * n_vec, n_dims))
         else:
+            ### TODO: vectorized case not implemented for line with positive thickness.
             radius = self.thickness / 2
             ### 6 points around a circle, scaled up with resolution and the thickness
             # -> the thicker the line, the farther out the points, so we need more.
@@ -783,7 +810,7 @@ class Container3D:
         return self.__class__(self.shapeList, name = self.name, color = new_bgr)    
     
     def rasterize(self, resolution):
-        return np.concatenate([aLn.rasterize(resolution) for aLn in self.shapeList], axis = 0)
+        return np.concatenate([el.rasterize(resolution) for el in self.shapeList], axis = 0)
         
 
 @dataclass(frozen = True)
@@ -799,6 +826,11 @@ class Points3D(Container3D):
         return Points3D([Point3D.from_point2D(aPnt, x = x, y = y, z = z) for aPnt in aPnts], 
                       name = name)
 
+    def vectorize(self):
+        ### go from Points3D to a Point3D object with a vector of coordinates within
+        coordArr = np.array([myPt.coords for myPt in self])
+        return Point3D(coordArr.T, color = self.color, alpha = self.alpha)
+
 
 @dataclass(frozen = True)
 class Circles3D(Container3D):
@@ -812,6 +844,14 @@ class Circles3D(Container3D):
     def from_points3D(aPnts, radius = 1, limit_theta = None, name = 'Circles3D'):
         return Circles3D([Circle3D.from_point3D(aPnt, radius = radius, limit_theta = limit_theta) for aPnt in aPnts], 
                       name = name)
+    
+    def vectorize(self):
+        ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...
+        canonical_radius, canonical_limit_theta = self[0].radius, self[0].limit_theta
+
+        coordArr = np.array([myCrc.coords for myCrc in self])
+        return Circle3D(coordArr.T, color = self.color, alpha = self.alpha, 
+                        radius = canonical_radius, limit_theta = canonical_limit_theta)
 
 @dataclass(frozen = True)
 class Balls3D(Container3D):
@@ -825,6 +865,14 @@ class Balls3D(Container3D):
     def from_points3D(aPnts, radius = 1, limit_theta = None, limit_phi = None, name = 'Balls3D'):
         return Balls3D([Ball3D.from_point3D(aPnt, radius = radius, limit_theta = limit_theta, limit_phi = limit_phi) for aPnt in aPnts], 
                       name = name)
+    
+    def vectorize(self):
+        ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...
+        canonical_radius, canonical_limit_theta, canonical_limit_phi = self[0].radius, self[0].limit_theta, self[0].limit_phi
+
+        coordArr = np.array([myBall.coords for myBall in self])
+        return Ball3D(coordArr.T, color = self.color, alpha = self.alpha, 
+                      radius = canonical_radius, limit_theta = canonical_limit_theta, limit_phi = canonical_limit_phi)
 
 @dataclass(frozen = True)
 class Lines3D(Container3D):
@@ -838,6 +886,16 @@ class Lines3D(Container3D):
     def from_lines2D(aLns, x = None, y = None, z = None, name = 'Lines3D'):
         return Lines3D([Line3D.from_line2D(aLn, x = x, y = y, z = z) for aLn in aLns], 
                       name = name)
+    
+    def vectorize(self):
+        ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...
+        canonical_thickness = self[0].thickness
+
+        left_coordArr = np.array([myLn.leftPt.coords for myLn in self])
+        right_coordArr = np.array([myLn.rightPt.coords for myLn in self])
+        leftPt, rightPt = Point3D(left_coordArr.T), Point3D(right_coordArr.T)
+        return Line3D(leftPt, rightPt, name = self.name, color = self.color, 
+                      thickness = canonical_thickness)
 
 @dataclass(frozen = True)
 class Regions3D(Container3D):
@@ -855,7 +913,17 @@ class Regions3D(Container3D):
     def parametrise(self):
         return [myReg.parametrise() for myReg in self]
         
-    
+    ### TODO: NOT IMPLEMENTED!
+    # def vectorize(self):
+    #     l1s = Lines3D([myReg.lineList[0] for myReg in self])
+    #     l2s = Lines3D([myReg.lineList[1] for myReg in self])
+    #     l3s = Lines3D([myReg.lineList[2] for myReg in self])
+    #     l4s = Lines3D([myReg.lineList[3] for myReg in self])
+
+    #     l1, l2, l3, l4 = l1s.vectorize(), l2s.vectorize(), l3s.vectorize(), l4s.vectorize()
+    #     return Region3D([l1, l2, l3, l4], color = self.color, alpha = self.alpha)
+
+
 if __name__ == '__main__':
     
     from ATMANpy.types.Visual3D import Scene, Camera, View
@@ -920,16 +988,78 @@ if __name__ == '__main__':
     myScn = courtScn.put(regLn).put(myLn) ### see note above
     View.make(myCam, myScn, resolution = resolution).snap().show()
 
+    ## 1) Points
+    print('Testing Points as Container3D object and vectorized')
     a, b, c, d = Point3D((250, 340, 0)), Point3D((100, 600, 0)), Point3D((600, 20, 100)), Point3D((40, 140, 20))
     myPnts = Points3D([a, b, c, d], color = const.BGR['sign_orange'])
-
+    
+    # 1a) Points as Container
     myScn = courtScn.put(myPnts)
     View.make(myCam, myScn, resolution = resolution).snap().show()
 
+    # 1b) Points vectorized
+    myScn = courtScn.put(myPnts.vectorize())
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    ## 2) Circles 
+    print('Testing Circles as Container3D object and vectorized')
     myCrcs = Circles3D.from_points3D(myPnts, radius = 5)
+    
+    # 2a) Circles as Container
     myScn = courtScn.put(myCrcs)
     View.make(myCam, myScn, resolution = resolution).snap().show()
 
+    # 2b) Circles vectorized
+    myScn = courtScn.put(myCrcs.vectorize())
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    ## 3) Balls
+    print('Testing Balls as Container3D object and vectorized')
     myBlls = Balls3D.from_points3D(myPnts, radius = 5)
+    
+    # 3a) Balls as Container
     myScn = courtScn.put(myBlls)
     View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    # 3b) Balls vectorized
+    myScn = courtScn.put(myBlls.vectorize())
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    ## 4) Lines
+    print('Testing Lines as Container3D object and vectorized')
+    l1, l2 = Line3D(a, b), Line3D(c, d)
+    myLns = Lines3D([l1, l2])
+
+    # 4a) Lines as Container
+    myScn = courtScn.put(myLns)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    # 4b) Lines vectorized
+    myScn = courtScn.put(myLns.vectorize())
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    ### BELOW TODO: Not implemented yet if thickness > 0
+    # # 4c) Lines with thickness as Container
+    # l1, l2 = Line3D(a, b, thickness = 2), Line3D(c, d, thickness = 2)
+    # myLns = Lines3D([l1, l2])
+    # print('Testing thick Lines as Container3D object and vectorized')
+    # myScn = courtScn.put(myLns)
+    # View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    # # 4d) Lines with thickness vectorized
+    # myScn = courtScn.put(myLns.vectorize())
+    # View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    ### BELOW TODO: Not implemented yet if Regions
+    # ## 5) Regions
+    # print('Testing Regions as Container3D object and vectorized')
+    # r1, r2 = Region3D.from_line3D(l1, width = 10), Region3D.from_line3D(l2, width = 10)
+    # myRegs = Regions3D([r1, r2])
+    
+    # # 5a) Regions as Container
+    # myScn = courtScn.put(myRegs)
+    # View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    # # 5b) Regions vectorized
+    # myScn = courtScn.put(myRegs.vectorize())
+    # View.make(myCam, myScn, resolution = resolution).snap().show()
