@@ -243,6 +243,11 @@ class StreamFeaturesBase:
         streamDict = dict([sf.get_central_singleton() for sf in sfList])
         return self.__class__(streamDict, name = self.name) 
 
+    def start_at_zero(self):
+        fs, ls = self.fs_ls()
+        zeroDict = {f - fs: self[f] for f in self}
+        return self.__class__(zeroDict, name = self.name)
+
     def to_dict(self):
         return self.streamDict
     
@@ -1375,6 +1380,9 @@ class SFList:
     def dropna(self):
         return SFList([mySF.dropna() for mySF in self])
     
+    def start_at_zero(self):
+        return SFList([mySF.start_at_zero() for mySF in self])
+
     def merge(self, otherSFList, how = 'left'):
         assert self.length() == otherSFList.length(), 'Lists to be merged have to be of same length!'
         return SFList([aSF.merge(bSF, how = how) for aSF, bSF in zip(self, otherSFList)])
