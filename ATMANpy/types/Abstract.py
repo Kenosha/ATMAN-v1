@@ -264,7 +264,7 @@ class Trajectory:
            
         ballFrm = self.trajFrm[coord_cols]
         ballFrm.columns = ['x', 'y', 'z']
-        ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball2D)
+        ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball3D)
         return ballSF
     
     def feat_spline(self, how = 'trajectory'):
