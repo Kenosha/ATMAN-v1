@@ -2130,7 +2130,14 @@ def add_in_hit_point(mySF, height_in_feet = 5, resolution = 5, radius_in_feet = 
     flight_probs = ball_pct * is_flight_prior
     flight_probs_enveloped = np.array([np.max([flight_probs[i:]]) for i in range(len(flight_probs))])
     
-    last_flight_index = np.argmin(flight_probs_enveloped > threshold) - 1
+    in_flight = flight_probs_enveloped > threshold
+    if in_flight.all():
+        last_flight_index = -1
+    else:
+        ### first value at which the ball is not in flight anymore, bounded by 
+            # a minimum flight length = 10, 
+            # and the length of possible flight frames
+        last_flight_index = min(max(10, np.argmin(in_flight)), len(last_flight_frames) - 1)
     ls_flight_frame = last_flight_frames[last_flight_index]
     
     try:
@@ -2932,7 +2939,11 @@ def specify_hit_events(mySF):
                 outDict.update({frame: likeliest_event for frame in frm.index})
             else:
                 print(f'{mySF} -> did not see serve at beginning!')
-        else:
-            outDict.update({frame: likeliest_event for frame in frm.index})
+        else: ### anything that looks like a serve is an overhead!
+            if likeliest_event.split('_')[1] == 'srv':
+                write_event = likeliest_event.replace('srv', 'ovh')
+            else:
+                write_event = likeliest_event
+            outDict.update({frame: write_event for frame in frm.index})
 
     return StreamFeature(outDict, name = 'hitFlag')
