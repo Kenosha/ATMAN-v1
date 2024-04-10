@@ -66,17 +66,20 @@ class PlayerMovement:
         x, y, z = self.playerFrm.loc[self.get_hit_frame()]
         return Point3D((x, y, z))
     
-    def flip(self, courtLines = None):
+    def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
             courtLines = CourtLines.make()
         
-        newFrm = self.playerFrm
-        centArr = np.array(courtLines.get_center_point().coords)
-        
-        coords = ['x', 'y']
-        distFrm = self.playerFrm[coords] - centArr
-        flipFrm = centArr - distFrm
-        newFrm[coords] = flipFrm
+        newFrm = self.playerFrm.copy()
+        centre_x, centre_y = courtLines.get_center_point().coords
+
+        coords = []
+        if across_middle:
+            signed_distance_to_center = newFrm['x'] - centre_x
+            newFrm['x'] = centre_x - signed_distance_to_center
+        if across_net:
+            signed_distance_to_center = newFrm['y'] - centre_y
+            newFrm['y'] = centre_y - signed_distance_to_center
         
         flipStr = 'top' if self.name == 'bot' else 'bot'
         
@@ -129,6 +132,9 @@ class Trajectory:
     def get_hit_frame(self):
         return self.get_frames()[0]
     
+    def get_hit_event_info(self):
+        return self['event_info'].iloc[0]
+
     def get_hit_player(self):
         hit_event = self.get_hit_event()
         if hit_event[1] == 'T':
@@ -206,19 +212,21 @@ class Trajectory:
         ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball2D)
         return Stream.from_SF(ballSF, cap)
         
-    def flip(self, courtLines = None):
+    def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
             courtLines = CourtLines.make()
         
-        newFrm = self.trajFrm
-        centArr = np.array(courtLines.get_center_point().coords)
+        newFrm = self.trajFrm.copy()
+        center_x, center_y = courtLines.get_center_point().coords
         
-        flipFrms = []
-        for coords in [['x_t', 'y_t'], ['x_o', 'y_o']]:
-            distFrm = self.trajFrm[coords] - centArr
-            flipFrm = centArr - distFrm
-            newFrm[coords] = flipFrm
-            
+        if across_middle:
+            signed_distance_to_center = self.trajFrm[['x_t', 'x_o']] - center_x
+            newFrm[['x_t', 'x_o']] = center_x - signed_distance_to_center
+
+        if across_net:
+            signed_distance_to_center = self.trajFrm[['y_t', 'y_o']] - center_y
+            newFrm[['y_t', 'y_o']] = center_y - signed_distance_to_center
+
         newFrm['event'] = newFrm['event'].replace({'STD': 'SBD', 'STA': 'SBA', 
                                                    'SBD': 'STD', 'SBA': 'STA',
                                                    'HT': 'HB', 'HB': 'HT'})
@@ -316,6 +324,9 @@ class Shot:
     def get_hit_event(self):
         return self.shotTraj.get_hit_event()
     
+    def get_hit_event_info(self):
+        return self.shotTraj.get_hit_event_info()
+    
     def get_player_hit_position(self):
         return self.hitPlayer.get_initial_position()
     
@@ -337,13 +348,13 @@ class Shot:
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
     
-    def flip(self, courtLines = None):
+    def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
             courtLines = CourtLines.make()
             
-        return Shot(self.shotTraj.flip(courtLines = courtLines),
-                    self.hitPlayer.flip(courtLines = courtLines),
-                    self.recPlayer.flip(courtLines = courtLines))
+        return Shot(self.shotTraj.flip(courtLines = courtLines, across_net = across_net, across_middle = across_middle),
+                    self.hitPlayer.flip(courtLines = courtLines, across_net = across_net, across_middle = across_middle),
+                    self.recPlayer.flip(courtLines = courtLines, across_net = across_net, across_middle = across_middle))
     
     ### FILTERS ###
     def is_serve(self):
@@ -361,6 +372,24 @@ class Shot:
         else:
             return False
             
+    def is_let(self):
+        if self.is_serve():
+            return self.get_hit_event_info() == 'let'
+        else:
+            return False
+    
+    def is_first_serve(self):
+        if self.is_serve():
+            return self.get_hit_event_info() == 'first_serve'
+        else:
+            return False
+    
+    def is_second_serve(self):
+        if self.is_serve():
+            return self.get_hit_event_info() == 'second_serve'
+        else:
+            return False
+
     def is_hit(self):
         return not self.is_serve()
     
@@ -411,6 +440,8 @@ class Shot:
     #     return not self.is_cross()
     
     def is_overhead(self):
+        ### TODO: replace this with: recognition of a shot as serve even though the shot_idx != 0
+        ### (hitFlag == 'top_ovh' or 'bot_ovh')
         OVERHEAD_THRESHOLD = 2.25 * const.METER_TO_FOOT * const.SCALE ### 2.25 meter 
         return self.is_hit() and self.get_ball_hit_height() > OVERHEAD_THRESHOLD
         
@@ -507,15 +538,14 @@ class Shots:
         
         return Shots([myShot for myShot in self if filter_func(myShot)])
      
-    def flip(self, courtLines = None):
+    def flip(self, courtLines = None, across_middle = True, across_net = True):
         if courtLines is None:
             courtLines = CourtLines.make()
-        return Shots([myShot.flip(courtLines = courtLines) for myShot in self])
+        return Shots([myShot.flip(courtLines = courtLines, across_middle = across_middle, across_net = across_net) for myShot in self])
     
     def get_first_bounce_position(self):
         return [myShot.get_first_bounce_position() for myShot in self]
         
-    
     def feat_ball_flat(self, how = 'trajectory'):
         ball_arrays = [myShot.shotTraj.get_ball_array(how = how) for myShot in self]
         longest_array_len = np.max([arr.shape[0] for arr in ball_arrays])
