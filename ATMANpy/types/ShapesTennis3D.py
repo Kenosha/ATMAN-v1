@@ -29,11 +29,12 @@ class Court(Regions3D):
     _LINE_ALPHA = 1
     
     @staticmethod
-    def make(color = _LINE_COLOR, alpha = _LINE_ALPHA):
-        courtLines = CourtLines.make()
+    def make(courtLines = None, color = _LINE_COLOR, alpha = _LINE_ALPHA):
+        if courtLines is None:
+            courtLines = CourtLines.make()
         courtDims = courtLines.see_dimensions()
         
-        courtLines3D = Lines3D.from_lines(courtLines, z = 0, name = 'CourtLines3D')
+        courtLines3D = Lines3D.from_lines2D(courtLines, z = 0, name = 'CourtLines3D')
         
         courtRegions3D = []
         for cLn in courtLines3D:
@@ -51,7 +52,7 @@ class Court(Regions3D):
             else:
                 width = courtDims['otherline_width']
             
-            courtRegions3D.append(Region3D.from_line(cLn, width = width, dim = dim, name = cLn.name))
+            courtRegions3D.append(Region3D.from_line3D(cLn, width = width, dim = dim, name = cLn.name))
             
         return Court(courtRegions3D, name = 'Courtlines', color = color, alpha = alpha)    
     
@@ -65,14 +66,14 @@ class Net(Regions3D):
     def make_singles(color = _NET_COLOR, alpha = _NET_ALPHA):
         courtLines = CourtLines.make()
 
-        netLn = Line3D.from_line(courtLines.add_singles_netline()['Net Line'], z = 0)
+        netLn = Line3D.from_line2D(courtLines.add_singles_netline()['Net Line'], z = 0)
         lPt, cPt, rPt = netLn.subdivide(3)
         
         lPt_up, cPt_up, rPt_up = [lPt.up(courtLines.net_height_post), 
                                   cPt.up(courtLines.net_height_middle), 
                                   rPt.up(courtLines.net_height_post)]
-        leftReg = Region3D.from_points(lPt_up, cPt_up, lPt, cPt, name = 'Left Net')
-        rightReg = Region3D.from_points(cPt_up, rPt_up, cPt, rPt, name = 'Right Net')
+        leftReg = Region3D.from_points3D(lPt_up, cPt_up, lPt, cPt, name = 'Left Net')
+        rightReg = Region3D.from_points3D(cPt_up, rPt_up, cPt, rPt, name = 'Right Net')
         
         return Net([leftReg, rightReg], name = 'Net', color = color, alpha = alpha)
         
@@ -80,7 +81,7 @@ class Net(Regions3D):
         ### this is a region approximating the full net -> rectangular, without the dip in the middle.
         leftLn, rightLn = self['Left Net']['Left'], self['Right Net']['Right']
         p1, p2, p3, p4 = leftLn.high_point(), rightLn.high_point(), leftLn.low_point(), rightLn.low_point()
-        return Region3D.from_points(p1, p2, p3, p4)
+        return Region3D.from_points3D(p1, p2, p3, p4)
     
     
 @dataclass(frozen = True)
@@ -149,7 +150,7 @@ class Player(Region3D):
         hiPt = loPt.up(height)
         
         centerLn = Line3D(loPt, hiPt)
-        return Player.from_line(centerLn, width, dim = 'x',
+        return Player.from_line3D(centerLn, width, dim = 'x',
                                 left_right = '+x', top_bottom = '-z',
                                 color = color, alpha = alpha, 
                                 name = name)
@@ -200,7 +201,7 @@ class Racquet(Region3D):
         
         ### finalize racquet
         # myRacquet = Racquet.from_points(t1, t2, b1, b2, color = color) ## -> sadly, this returns a region!
-        racquetLines = Region3D.from_points(gripPt, framePt_1, topPt, framePt_2)
+        racquetLines = Region3D.from_points3D(gripPt, framePt_1, topPt, framePt_2)
         myRacquet = Racquet(racquetLines, color = color, alpha = alpha, name = 'Racquet')
         
         ### immutability breaks...

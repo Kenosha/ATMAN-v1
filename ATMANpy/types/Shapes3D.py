@@ -36,7 +36,7 @@ class Point3D:
         #############################
 
     @staticmethod
-    def from_point(aPt, x = None, y = None, z = None):
+    def from_point2D(aPt, x = None, y = None, z = None):
         if x is not None:
             return Point3D((x, aPt.x, aPt.y))
         elif y is not None:
@@ -218,7 +218,7 @@ class Point3D:
     
     def recolor(self, new_bgr):
         return self.__class__(self.coords, color = new_bgr)    
-    
+
 @dataclass(frozen = True)
 class Circle3D(Point3D):
     """
@@ -233,7 +233,7 @@ class Circle3D(Point3D):
     alpha: Optional[float] = _DEFAULT_ALPHA
     limit_theta: Optional[tuple] = None
     
-    name: str = 'Ball3D'
+    name: str = 'Circle3D'
     
     def __post_init__(self):
         #### IMMUTABILITY BREAKS ####
@@ -242,6 +242,12 @@ class Circle3D(Point3D):
         object.__setattr__(self, 'z', self.coords[2])
         #############################  
     
+    @staticmethod
+    def from_point3D(myPnt, radius = 1, limit_theta = None, name = 'Circle3D'):
+        return Circle3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
+                        radius = radius, limit_theta = limit_theta, 
+                        name = name)
+
     ### REINSTANTIATION ###
     def reposition(self, new_coords):
         return self.__class__(new_coords, self.radius, name = self.name, color = self.color)    
@@ -298,7 +304,6 @@ class Ball3D(Point3D):
     limit_phi: Optional[tuple] = None
     limit_theta: Optional[tuple] = None
     
-    
     name: str = 'Ball3D'
     
     def __post_init__(self):
@@ -307,6 +312,12 @@ class Ball3D(Point3D):
         object.__setattr__(self, 'y', self.coords[1])
         object.__setattr__(self, 'z', self.coords[2])
         #############################  
+
+    @staticmethod
+    def from_point3D(myPnt, radius = 1, limit_phi = None, limit_theta = None, name = 'Ball3D'):
+        return Ball3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha, 
+                      radius = radius, limit_phi = limit_phi, limit_theta = limit_theta,
+                      name = name)
 
     ### REINSTANTIATION ###
     def reposition(self, new_coords):
@@ -380,9 +391,9 @@ class Line3D:
     alpha: Optional[float] = 1
 
     @staticmethod
-    def from_line(aLn, x = None, y = None, z = None):
-        leftPt = Point3D.from_point(aLn.leftPt, x = x, y = y, z = z)
-        rightPt = Point3D.from_point(aLn.rightPt, x = x, y = y, z = z)
+    def from_line2D(aLn, x = None, y = None, z = None):
+        leftPt = Point3D.from_point2D(aLn.leftPt, x = x, y = y, z = z)
+        rightPt = Point3D.from_point2D(aLn.rightPt, x = x, y = y, z = z)
         return Line3D(leftPt, rightPt, name = aLn.name)
     
     ### REINSTANTIATION ###
@@ -569,60 +580,7 @@ class Line3D:
         outPt = line_orig + line_vec * n
         
         return outPt, (l, m, n)
-    
-@dataclass(frozen = True)
-class Lines3D:
-    """
-    A list of Lines3D
-    """ 
-    _DEFAULT_COLOR = const.BGR['bright_grey']
-    _DEFAULT_ALPHA = 1
-    
-    lineList: List[Line3D]
-    name: str = 'Lines3D'
-    
-    color: Optional[tuple] = _DEFAULT_COLOR
-    alpha: Optional[float] = _DEFAULT_ALPHA
-    
-    def __iter__(self):
-        return iter(self.lineList)
-    
-    def __getitem__(self, item):
-        if isinstance(item, str):
-            ### get line by name
-            matchLines = Lines([l for l in self.lineList if l.name == item], name = item)
-            if len(matchLines) == 1:
-                return matchLines[0]
-            elif len(matchLines) > 1:
-                return matchLines
-        else:
-            ### get line(s) by position in list.
-            elements = self.lineList[item]
-            if isinstance(elements, List):
-                return Lines3D(elements)
-            else:
-                return elements ### a single line
-
-    def __len__(self):
-        return len(self.lineList)
-    
-    @staticmethod
-    def from_lines(aLns, x = None, y = None, z = None, name = 'Lines3D'):
-        return Lines3D([Line3D.from_line(aLn, x = x, y = y, z = z) for aLn in aLns], 
-                      name = name)
-    
-    ### REINSTANTIATION ###
-    def rename(self, new_name):
-        return self.__class__(self.lineList, name = new_name, color = self.color)   
-        
-    def recolor(self, new_bgr):
-        return self.__class__(self.lineList, name = self.name, color = new_bgr)    
-    
-    def rasterize(self, resolution):
-        return np.concatenate([aLn.rasterize(resolution) for aLn in self.lineList], axis = 0)
-        
-        
-    
+      
 @dataclass(frozen = True)
 class Region3D():
     """
@@ -668,7 +626,7 @@ class Region3D():
         return len(self.lineList)
     
     @classmethod
-    def from_points(cls, p1: Point3D, p2: Point3D, p3: Point3D, p4: Point3D, 
+    def from_points3D(cls, p1: Point3D, p2: Point3D, p3: Point3D, p4: Point3D, 
                     left_right = '+x', top_bottom = '+y',
                     name = 'Region3D', color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
         # is_rectangle = p3 is None and p4 is None
@@ -706,26 +664,26 @@ class Region3D():
         return cls(regLines, name = name, color = color)
     
     @classmethod
-    def from_line(cls, aLn, width, dim = 'x', left_right = '+x', top_bottom = '+y',
+    def from_line3D(cls, aLn, width, dim = 'x', left_right = '+x', top_bottom = '+y',
                   name = 'Region3D', color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
         ### basically thicken a line to yield a region!
         ### the width dimension 'dim' is the dimension along which the thickness is introduced!
         if dim == 'x':
-            return cls.from_points(aLn.leftPt.left(width/2),
+            return cls.from_points3D(aLn.leftPt.left(width/2),
                                    aLn.leftPt.right(width/2),
                                    aLn.rightPt.left(width/2),
                                    aLn.rightPt.right(width/2),
                                    left_right = left_right, top_bottom = top_bottom,
                                    name = name, color = color, alpha = alpha)
         if dim == 'y':
-            return cls.from_points(aLn.leftPt.front(width/2),
+            return cls.from_points3D(aLn.leftPt.front(width/2),
                                    aLn.leftPt.back(width/2),
                                    aLn.rightPt.front(width/2),
                                    aLn.rightPt.back(width/2),
                                    left_right = left_right, top_bottom = top_bottom,
                                    name = name, color = color, alpha = alpha)
         if dim == 'z':
-            return cls.from_points(aLn.leftPt.up(width/2),
+            return cls.from_points3D(aLn.leftPt.up(width/2),
                                    aLn.leftPt.down(width/2),
                                    aLn.rightPt.up(width/2),
                                    aLn.rightPt.down(width/2),
@@ -782,61 +740,121 @@ class Region3D():
 
 
 @dataclass(frozen = True)
-class Regions3D():
+class Container3D:
     """
-    A list of regions, i.e. a set of planes that make some composite shape.
-    """
+    A list of some Shape3D
+    """ 
     _DEFAULT_COLOR = const.BGR['bright_grey']
     _DEFAULT_ALPHA = 1
     
-    regList: List[Region3D]
+    shapeList: List
+    name: str = 'Shapes3D'
     
-    name: str = 'Regions3D'
     color: Optional[tuple] = _DEFAULT_COLOR
     alpha: Optional[float] = _DEFAULT_ALPHA
-
+    
     def __iter__(self):
-        return iter(self.regList)
+        return iter(self.shapeList)
     
     def __getitem__(self, item):
         if isinstance(item, str):
             ### get line by name
-            matchLines = Lines([l for l in self.regList if l.name == item], name = item)
-            if len(matchLines) == 1:
-                return matchLines[0]
-            elif len(matchLines) > 1:
-                return matchLines
+            matchShapes = self.__class__([l for l in self.shapeList if l.name == item], name = item)
+            if len(matchShapes) == 1:
+                return matchShapes[0]
+            elif len(matchShapes) > 1:
+                return matchShapes
         else:
             ### get line(s) by position in list.
-            elements = self.regList[item]
+            elements = self.shapeList[item]
             if isinstance(elements, List):
-                return Regions3D(elements)
+                return self.__class__(elements)
             else:
                 return elements ### a single line
 
     def __len__(self):
-        return len(self.regList)
-
-    @staticmethod
-    def from_lines(aLns, width, dim = 'x', name = 'Regions3D', color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
-        return Regions3D([Region3D.from_line(aLn, width, dim = dim) for aLn in aLns], 
-                         name = name, color = color, alpha = alpha)
-        
+        return len(self.shapeList)
+    
     ### REINSTANTIATION ###
     def rename(self, new_name):
-        return self.__class__(self.regList, name = new_name, color = self.color)   
-    
+        return self.__class__(self.shapeList, name = new_name, color = self.color)   
+        
     def recolor(self, new_bgr):
-        return self.__class__(self.regList, name = self.name, color = new_bgr)    
+        return self.__class__(self.shapeList, name = self.name, color = new_bgr)    
     
-    ### METHODS ###
     def rasterize(self, resolution):
-        return np.concatenate([aReg.rasterize(resolution) for aReg in self.regList], axis = 0)
+        return np.concatenate([aLn.rasterize(resolution) for aLn in self.shapeList], axis = 0)
+        
+
+@dataclass(frozen = True)
+class Points3D(Container3D):
+    """
+    A list of Point3D
+    """
+
+    name: str = 'Points3D'
+
+    @staticmethod
+    def from_points2D(aPnts, x = None, y = None, z = None, name = 'Points3D'):
+        return Points3D([Point3D.from_point2D(aPnt, x = x, y = y, z = z) for aPnt in aPnts], 
+                      name = name)
+
+
+@dataclass(frozen = True)
+class Circles3D(Container3D):
+    """
+    A list of Circle3D
+    """
+
+    name: str = 'Circles3D'
+
+    @staticmethod
+    def from_points3D(aPnts, radius = 1, limit_theta = None, name = 'Circles3D'):
+        return Circles3D([Circle3D.from_point3D(aPnt, radius = radius, limit_theta = limit_theta) for aPnt in aPnts], 
+                      name = name)
+
+@dataclass(frozen = True)
+class Balls3D(Container3D):
+    """
+    A list of Ball3D
+    """
+
+    name: str = 'Balls3D'
+
+    @staticmethod
+    def from_points3D(aPnts, radius = 1, limit_theta = None, limit_phi = None, name = 'Balls3D'):
+        return Balls3D([Ball3D.from_point3D(aPnt, radius = radius, limit_theta = limit_theta, limit_phi = limit_phi) for aPnt in aPnts], 
+                      name = name)
+
+@dataclass(frozen = True)
+class Lines3D(Container3D):
+    """
+    A list of Line3D
+    """
+
+    name: str = 'Lines3D'
+
+    @staticmethod
+    def from_lines2D(aLns, x = None, y = None, z = None, name = 'Lines3D'):
+        return Lines3D([Line3D.from_line2D(aLn, x = x, y = y, z = z) for aLn in aLns], 
+                      name = name)
+
+@dataclass(frozen = True)
+class Regions3D(Container3D):
+    """
+    A list of Region3D
+    """
+
+    name: str = 'Regions3D'
+
+    @staticmethod
+    def from_lines3D(aLns, width, dim = 'x', name = 'Regions3D'):
+        return Regions3D([Region3D.from_line3D(aLn, width, dim = dim) for aLn in aLns], 
+                         name = name)
     
     def parametrise(self):
         return [myReg.parametrise() for myReg in self]
-    
-    
+        
     
 if __name__ == '__main__':
     
@@ -868,9 +886,8 @@ if __name__ == '__main__':
     # View.make(myCam, myScn, resolution = resolution).snap().show()
     
     ### Testing intersection of Line and Ball
-    
     regLn = Line3D(Point3D((270, 340, 0)), Point3D((340, 990, 0)))
-    myReg = Region3D.from_line(regLn, width = 150, dim = 'z', color = const.BGR['leafy_green'])
+    myReg = Region3D.from_line3D(regLn, width = 150, dim = 'z', color = const.BGR['leafy_green'])
     
     myLn = Line3D(Point3D((200, 1000, 50)), Point3D((400, 200, 50)), color = const.BGR['sign_orange'])
     
@@ -891,3 +908,28 @@ if __name__ == '__main__':
     myScn = courtScn.put(myCrc)
     View.make(myCam, myScn, resolution = 1).snap().show()
     
+
+    ### Testing Containers
+    regLn = Line3D(Point3D((270, 340, 0)), Point3D((340, 990, 0)))
+    myLn = Line3D(Point3D((200, 1000, 50)), Point3D((400, 200, 50)), color = const.BGR['sign_orange'])
+    someLns = Lines3D([regLn, myLn]) 
+
+    myScn = courtScn.put(someLns) ### note that any one shape has the same color, so that color = 'sign_orange' above is overwritten!
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    myScn = courtScn.put(regLn).put(myLn) ### see note above
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    a, b, c, d = Point3D((250, 340, 0)), Point3D((100, 600, 0)), Point3D((600, 20, 100)), Point3D((40, 140, 20))
+    myPnts = Points3D([a, b, c, d], color = const.BGR['sign_orange'])
+
+    myScn = courtScn.put(myPnts)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    myCrcs = Circles3D.from_points3D(myPnts, radius = 5)
+    myScn = courtScn.put(myCrcs)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    myBlls = Balls3D.from_points3D(myPnts, radius = 5)
+    myScn = courtScn.put(myBlls)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
