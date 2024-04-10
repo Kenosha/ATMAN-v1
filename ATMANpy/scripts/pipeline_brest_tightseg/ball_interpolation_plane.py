@@ -300,7 +300,7 @@ def main(conf,
                                 height_space = height_space)
     
     # b) add in hit and serve info to construct events
-    evtSFs = srvSF.merge(hitSF, how = 'outer').conform(segBF).filter(segBF).split()
+    evtSFs = srvSF.merge(hitSF, how = 'outer').conform(plyBF).filter(plyBF).split()
     
     # c) collect frames 
     traj_evtSFs = trajSFs.merge(evtSFs)
