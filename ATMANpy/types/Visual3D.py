@@ -104,7 +104,7 @@ class DummyScene:
     def put(self, rastArr, colArr):
         return DummyScene([*self.rastArrs, rastArr], [*self.colArrs, colArr])
 
-    def rasterize(self, resolution, alpha_thresholds = 0.05):
+    def rasterize(self, resolution, alpha_threshold = 0.05):
         ### TODO: implement pruning with alpha thresholding (see above) 
         rastArr_all = np.concatenate(self.rastArrs)
         colArr_all = np.concatenate(self.colArrs)
