@@ -15,6 +15,8 @@ from ATMANpy.types.Lines import Line, Lines, CourtLines
 
 import ATMANpy.auxil.constants as const
 
+from ATMANpy.funcs.util_funcs import get_updated_attribute_dictionary
+
 @dataclass(frozen = True)
 class Point3D:
     """
@@ -27,6 +29,8 @@ class Point3D:
     
     color: Optional[tuple] = _DEFAULT_COLOR
     alpha: Optional[float] = _DEFAULT_ALPHA
+
+    name: str = 'Point3D'
     
     def __post_init__(self):
         #### IMMUTABILITY BREAKS ####
@@ -86,6 +90,54 @@ class Point3D:
     def __round__(self, ndigits = None):
         outCoords = round(self.x, ndigits = ndigits), round(self.y, ndigits = ndigits), round(self.z, ndigits = ndigits)
         return Point3D(outCoords)
+    
+    ### REINSTANTIATION ###
+    def reposition(self, new_coords):
+        updDict = {'coords': new_coords}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def rename(self, new_name):
+        updDict = {'name': new_name}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def recolor(self, new_color):
+        updDict = {'color': new_color}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def realpha(self, new_alpha):
+        updDict = {'alpha': new_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def resize(self, new_radius): ### point does not have radius, but subclasses may!
+        updDict = {'radius': new_radius}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def rephi(self, new_limit_phi):
+        updDict = {'limit_phi': new_limit_phi}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def retheta(self, new_limit_theta):
+        updDict = {'limit_theta': new_limit_theta}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def dim(self, dim_factor):
+        dimmed_color = tuple([c * dim_factor for c in self.color]) ### at dim_factor = 1, nothing changes
+        updDict = {'color': dimmed_color} 
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+        
+    def transparify(self, transparence_factor):
+        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        updDict = {'alpha': transparent_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
     ### METHODS ###
     def left(self, units):
@@ -220,9 +272,7 @@ class Point3D:
         
         return pixArr
     
-    def recolor(self, new_bgr):
-        return self.__class__(self.coords, color = new_bgr)    
-    
+
 @dataclass(frozen = True)
 class Circle3D(Point3D):
     """
@@ -256,19 +306,6 @@ class Circle3D(Point3D):
     def get_container(cls):
         return Circles3D
 
-    ### REINSTANTIATION ###
-    def reposition(self, new_coords):
-        return self.__class__(new_coords, self.radius, name = self.name, color = self.color)    
-    
-    def resize(self, new_radius):
-        return self.__class__(self.coords, new_radius, name = self.name, color = self.color)    
-    
-    def rename(self, new_name):
-        return self.__class__(self.coords, self.radius, name = new_name, color = self.color)    
-    
-    def recolor(self, new_bgr):
-        return self.__class__(self.coords, self.radius, name = self.name, color = new_bgr)    
-    
     ### METHODS ###
     def get_point(self):
         return Point3D(self.coords)
@@ -339,19 +376,6 @@ class Ball3D(Point3D):
     @classmethod
     def get_container(cls):
         return Balls3D
-
-    ### REINSTANTIATION ###
-    def reposition(self, new_coords):
-        return self.__class__(new_coords, self.radius, name = self.name, color = self.color)    
-
-    def resize(self, new_radius):
-        return self.__class__(self.coords, new_radius, name = self.name, color = self.color)    
-
-    def rename(self, new_name):
-        return self.__class__(self.coords, self.radius, name = new_name, color = self.color)    
-
-    def recolor(self, new_bgr):
-        return self.__class__(self.coords, self.radius, name = self.name, color = new_bgr)    
 
     ### METHODS ###
     def get_point(self):
@@ -431,14 +455,37 @@ class Line3D:
     
     ### REINSTANTIATION ###
     def rename(self, new_name):
-        return self.__class__(self.leftPt, self.rightPt, name = new_name, color = self.name, thickness = self.thickness)
-        
-    def recolor(self, new_bgr):
-        return self.__class__(self.leftPt, self.rightPt, name = self.name, color = new_bgr, thickness = self.thickness)
+        updDict = {'name': new_name}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def recolor(self, new_color):
+        updDict = {'color': new_color}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
+    def realpha(self, new_alpha):
+        updDict = {'alpha': new_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
     def resize(self, new_thickness):
-        return self.__class__(self.leftPt, self.rightPt, name = self.name, color = self.color, thickness = new_thickness)    
+        updDict = {'thickness': new_thickness}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
+    def dim(self, dim_factor):
+        dimmed_color = tuple([c * dim_factor for c in self.color]) ### at dim_factor = 1, nothing changes
+        updDict = {'color': dimmed_color} 
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+        
+    def transparify(self, transparence_factor):
+        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        updDict = {'alpha': transparent_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
     ### METHODS ###
     def left(self, units):
         return Line3D(self.leftPt.left(units), self.rightPt.left(units), name = self.name)
@@ -739,11 +786,20 @@ class Region3D():
 
     ### REINSTANTIATION ###
     def rename(self, new_name):
-        return self.__class__(self.lineList, name = new_name, color = self.color)    
+        updDict = {'name': new_name}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def recolor(self, new_color):
+        updDict = {'color': new_color}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
-    def recolor(self, new_bgr):
-        return self.__class__(self.lineList, name = self.name, color = new_bgr)    
-    
+    def realpha(self, new_alpha):
+        updDict = {'alpha': new_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
     ### METHODS ###
     def rasterize(self, resolution):
         ### resolution -> points in a area of 1 sq. unit size 
@@ -824,22 +880,40 @@ class Container3D:
     
     ### REINSTANTIATION ###
     def rename(self, new_name):
-        return self.__class__(self.shapeList, name = new_name, color = self.color)   
-        
-    def recolor(self, new_bgr):
-        return self.__class__(self.shapeList, name = self.name, color = new_bgr)    
+        updDict = {'name': new_name}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def recolor(self, new_color):
+        updDict = {'color': new_color}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
+    def realpha(self, new_alpha):
+        updDict = {'alpha': new_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def dim(self, dim_factor):
+        dimmed_color = tuple([c * dim_factor for c in self.color]) ### at dim_factor = 1, nothing changes
+        updDict = {'color': dimmed_color} 
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+        
+    def transparify(self, transparence_factor):
+        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        updDict = {'alpha': transparent_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    ### METHODS ###
     def rasterize(self, resolution):
         return np.concatenate([el.rasterize(resolution) for el in self.shapeList], axis = 0)
-
-    ### METHODS ###
 
     def join(self, otherContainer):
         assert self.__class__ == otherContainer.__class__
         return self.__class__([*self.shapeList, *otherContainer.shapeList], 
                               color = self.color, alpha = self.alpha, name = self.name)
-
-
 
 
 @dataclass(frozen = True)
@@ -1003,6 +1077,8 @@ if __name__ == '__main__':
     # myScn = courtScn.put(myBall)
     # View.make(myCam, myScn, resolution = resolution).snap().show()
     
+    ### Testing recoloring, renameing, realpha, dimming, transparifying
+
     ### Testing intersection of Line and Ball
     regLn = Line3D(Point3D((270, 340, 0)), Point3D((340, 990, 0)))
     myReg = Region3D.from_line3D(regLn, width = 150, dim = 'z', color = const.BGR['leafy_green'])
