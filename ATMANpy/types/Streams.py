@@ -27,6 +27,7 @@ from ATMANpy.types.Caches import Cache
 from ATMANpy.funcs.cv_funcs import get_frame
 from ATMANpy.funcs.draw_funcs import draw
 from ATMANpy.funcs.util_funcs import get_positional_arguments, get_return_names, get_folder_struct
+from ATMANpy.funcs.util_funcs import get_updated_attribute_dictionary
 from ATMANpy.funcs.feature_funcs import get_and_make_save_path
 
 # @dataclass(frozen = True)
@@ -94,17 +95,6 @@ def extract_mp_timer(extractMethod):
         return result
 
     return timed
-
-def get_updated_attribute_dictionary(someObj, updDict):
-    currDict = someObj.__dict__
-    
-    def maybe_update(attr):
-        try:
-            return updDict[attr]
-        except KeyError:
-            return currDict[attr]
-    
-    return {attr: maybe_update(attr) for attr in currDict if not attr.startswith('_')}
 
 def apply_async(poolCls, gen, num_workers, applyFunc, metaFunc = None,
                 args = None, kwargs = None, verbose = False):

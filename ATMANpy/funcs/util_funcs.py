@@ -389,5 +389,17 @@ def split(df):
     consecidx = np.arange(len(df))
     return [d for _, d in df.groupby(nonconsecIdx - consecidx)]
     
+### CLASS CREATION UTILS ###
 
+def get_updated_attribute_dictionary(someObj, updDict):
+    currDict = someObj.__dict__
     
+    def maybe_update(attr):
+        try:
+            return updDict[attr]
+        except KeyError:
+            return currDict[attr]
+    
+    return {attr: maybe_update(attr) for attr in currDict if not attr.startswith('_')}
+
+
