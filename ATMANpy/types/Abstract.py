@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from ATMANpy.types.Lines import CourtLines
 from ATMANpy.types.Streams import Stream
 from ATMANpy.types.Features import StreamFeature, StreamFeatures, SFList
-from ATMANpy.types.Shapes3D import Point3D, Line3D
+from ATMANpy.types.Shapes3D import Point3D, Circle3D, Ball3D, Line3D, Points3D, Circles3D, Balls3D, Lines3D
 from ATMANpy.types.ShapesTennis3D import Player
 
 import ATMANpy.auxil.constants as const
@@ -268,13 +268,13 @@ class Trajectory:
         return ballSF
     
     def feat_spline(self, how = 'trajectory'):
-        ballSF = self.feat_ball(how = how)
-        ballSF_before = ballSF.shift(offset = 1)
-        def make_spline(ball2D_bef1, ball2D):
-            if ball2D_bef1 is None:
+        ballSF = self.feat_ball(how = how).rename('ball_curr')
+        ballSF_before = ballSF.shift(offset = 1).rename('ball_bef')
+        def make_spline(ball_bef, ball_curr):
+            if ball_bef is None:
                 spLn = None
             else:
-                spLn = Line3D(ball2D_bef1, ball2D)
+                spLn = Line3D(ball_bef.get_point(), ball_curr.get_point())
                 return spLn
         return ballSF_before.merge(ballSF).apply(make_spline)
     
@@ -546,20 +546,6 @@ class Shots:
     def get_first_bounce_position(self):
         return [myShot.get_first_bounce_position() for myShot in self]
         
-    def feat_ball_flat(self, how = 'trajectory'):
-        ball_arrays = [myShot.shotTraj.get_ball_array(how = how) for myShot in self]
-        longest_array_len = np.max([arr.shape[0] for arr in ball_arrays])
-        
-        padded_ball_arrays = [np.pad(arr, ((0, longest_array_len - arr.shape[0]), (0, 0)), constant_values = np.nan) for arr in ball_arrays]
-        stacked_ball_arrays = np.stack(padded_ball_arrays, axis = 1) ### shape: time, traj, 3
-    
-        outDict = {}
-        for idx, frameArr in enumerate(stacked_ball_arrays):
-            frameArr = frameArr[~np.isnan(frameArr).all(axis = 1)]
-            outDict[idx] = Point3D(frameArr.T)
-    
-        return StreamFeature(outDict, name = 'ball3D')
-    
     # ### FEATURE GETTERS ######
     ### done with make_method below!!!
         
@@ -660,17 +646,54 @@ class Points:
     
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
 def __make_method(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
-    def method(self):
+    def method(self, color = None, alpha = None):
+        if color is None:
+            color = const.BGR['bright_grey']
+        if alpha is None:
+            alpha = 1
+
         SFs = SFList([getattr(myShot, shotMethodStr)() for myShot in self])
         return SFs.concatenate()
     method.__name__ = shotMethodStr
     setattr(myClass, shotMethodStr, method)
     
+def __make_method_simul(myClass, shotMethodStr):
+    def method(self, color = None, alpha = None):
+        if color is None:
+            color = const.BGR['bright_grey']
+        if alpha is None:
+            alpha = 1
+
+        SFs = SFList([getattr(myShot, shotMethodStr)() for myShot in self])
+        SFs = SFs.start_at_zero()
+        name = SFs[0].name
+        SFs = SFList([sf.rename(f'{name}_{idx}') for idx, sf in enumerate(SFs)])
+        jntSF = SFs.join()
+        vecDict = {}    
+        for frame in jntSF.get_frames():
+            featDict = jntSF[frame]
+            shapes = [shape for shape in featDict.values() if shape is not None]
+            if len(shapes) == 0:
+                vecDict[frame] = None
+            else:
+                containerClass = shapes[0].__class__.get_container()
+                vecDict[frame] = containerClass(shapes, color = color, alpha = alpha)
+        return StreamFeature(vecDict, name = name)
+                             
+    method.__name__ = shotMethodStr + '_simul'
+    setattr(myClass, shotMethodStr + '_simul', method)
+
 for methodStr in dir(Shot):
     if methodStr.startswith('feat_'):
+        ### feat getters
         if not methodStr in dir(Shots): ### do not overwrite
             __make_method(Shots, methodStr)
         if not methodStr in dir(Point): ### do not overwrite
             __make_method(Point, methodStr)
-    
+
+        ### simul feat getters
+        if not methodStr + '_simul' in dir(Shots):
+            __make_method_simul(Shots, methodStr)
+        if not methodStr + '_simul' in dir(Point): ### do not overwrite
+            __make_method_simul(Point, methodStr)
         
