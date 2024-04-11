@@ -41,16 +41,35 @@ class Scene:
         else:
             return Scene([*self.shapes, someShape])
     
-    def rasterize(self, resolution):
+    ### REINSTANTIATION ###
+    def recolor(self, new_color):
+        return Scene([s.recolor(new_color) for s in self.shapes])
+    
+    def realpha(self, new_alpha):
+        return Scene([s.realpha(new_alpha) for s in self.shapes])
+    
+    def dim(self, dim_factor):
+        return Scene([s.dim(dim_factor) for s in self.shapes])
+    
+    def transparify(self, transparence_factor):
+        return Scene([s.transparify(transparence_factor) for s in self.shapes])
+
+    def prune_transparents(self, alpha_threshold = 0.05):
+        return Scene([s for s in self.shapes if s.alpha > alpha_threshold])
+
+    ### METHODS ###
+    def rasterize(self, resolution, alpha_threshold = 0.05):
         ### yields a point-cloud representation of the objects in the scene, 
         # with points stored in rastArr_all and their colors stored in colArr_all
-        if self.is_empty():
+        pruned_self = self.prune_transparents(alpha_threshold = alpha_threshold)
+
+        if pruned_self.is_empty():
             return None, None
         else:
             rastArr_all = []
             colArr_all = []
             alphaArr_all = []
-            for shape3D in self.shapes:
+            for shape3D in pruned_self.shapes:
                 rastArr = shape3D.rasterize(resolution)
                 
                 colTup = shape3D.color
@@ -84,8 +103,9 @@ class DummyScene:
     
     def put(self, rastArr, colArr):
         return DummyScene([*self.rastArrs, rastArr], [*self.colArrs, colArr])
-    
-    def rasterize(self, resolution):
+
+    def rasterize(self, resolution, alpha_thresholds = 0.05):
+        ### TODO: implement pruning with alpha thresholding (see above) 
         rastArr_all = np.concatenate(self.rastArrs)
         colArr_all = np.concatenate(self.colArrs)
         alphaArr_all = np.concatenate(self.alphaArrs)
@@ -352,13 +372,13 @@ class View:
                     sensor_dims = sensor_dims)
     
     @staticmethod
-    def make(myCamera, myScene, resolution = 10):
+    def make(myCamera, myScene, resolution = 10, alpha_threshold = 0.05):
         
         if myScene.is_empty(): 
             return View.make_empty()
         else:
             ### 1) Collect real world points and their colors
-            ptArr, clArr, alArr = myScene.rasterize(resolution)
+            ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold)
             
             ### 2) Suppress negative coordinates
             all_positive_indices = (ptArr >= 0).all(axis = 1)
