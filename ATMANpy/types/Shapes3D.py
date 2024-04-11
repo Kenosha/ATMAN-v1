@@ -56,6 +56,10 @@ class Point3D:
         finally:
             return op_x, op_y, op_z    
     
+    @classmethod
+    def get_container(cls):
+        return Points3D
+    
     def __add__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.x + op_x, self.y + op_y, self.z + op_z
@@ -218,7 +222,7 @@ class Point3D:
     
     def recolor(self, new_bgr):
         return self.__class__(self.coords, color = new_bgr)    
-
+    
 @dataclass(frozen = True)
 class Circle3D(Point3D):
     """
@@ -247,6 +251,10 @@ class Circle3D(Point3D):
         return Circle3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
                         radius = radius, limit_theta = limit_theta, 
                         name = name)
+
+    @classmethod
+    def get_container(cls):
+        return Circles3D
 
     ### REINSTANTIATION ###
     def reposition(self, new_coords):
@@ -327,6 +335,10 @@ class Ball3D(Point3D):
         return Ball3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha, 
                       radius = radius, limit_phi = limit_phi, limit_theta = limit_theta,
                       name = name)
+
+    @classmethod
+    def get_container(cls):
+        return Balls3D
 
     ### REINSTANTIATION ###
     def reposition(self, new_coords):
@@ -412,6 +424,10 @@ class Line3D:
         leftPt = Point3D.from_point2D(aLn.leftPt, x = x, y = y, z = z)
         rightPt = Point3D.from_point2D(aLn.rightPt, x = x, y = y, z = z)
         return Line3D(leftPt, rightPt, name = aLn.name)
+    
+    @classmethod
+    def get_container(cls):
+        return Lines3D
     
     ### REINSTANTIATION ###
     def rename(self, new_name):
@@ -717,6 +733,10 @@ class Region3D():
                                    left_right = left_right, top_bottom = top_bottom,
                                    name = name, color = color, alpha = alpha)
     
+    @classmethod
+    def get_container(cls):
+        return Regions3D
+
     ### REINSTANTIATION ###
     def rename(self, new_name):
         return self.__class__(self.lineList, name = new_name, color = self.color)    
@@ -811,7 +831,16 @@ class Container3D:
     
     def rasterize(self, resolution):
         return np.concatenate([el.rasterize(resolution) for el in self.shapeList], axis = 0)
-        
+
+    ### METHODS ###
+
+    def join(self, otherContainer):
+        assert self.__class__ == otherContainer.__class__
+        return self.__class__([*self.shapeList, *otherContainer.shapeList], 
+                              color = self.color, alpha = self.alpha, name = self.name)
+
+
+
 
 @dataclass(frozen = True)
 class Points3D(Container3D):
@@ -826,6 +855,10 @@ class Points3D(Container3D):
         return Points3D([Point3D.from_point2D(aPnt, x = x, y = y, z = z) for aPnt in aPnts], 
                       name = name)
 
+    @classmethod
+    def get_constituent(cls):
+        return Point3D
+    
     def vectorize(self):
         ### go from Points3D to a Point3D object with a vector of coordinates within
         coordArr = np.array([myPt.coords for myPt in self])
@@ -845,6 +878,10 @@ class Circles3D(Container3D):
         return Circles3D([Circle3D.from_point3D(aPnt, radius = radius, limit_theta = limit_theta) for aPnt in aPnts], 
                       name = name)
     
+    @classmethod
+    def get_constituent(cls):
+        return Circle3D
+    
     def vectorize(self):
         ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...
         canonical_radius, canonical_limit_theta = self[0].radius, self[0].limit_theta
@@ -852,6 +889,7 @@ class Circles3D(Container3D):
         coordArr = np.array([myCrc.coords for myCrc in self])
         return Circle3D(coordArr.T, color = self.color, alpha = self.alpha, 
                         radius = canonical_radius, limit_theta = canonical_limit_theta)
+    
 
 @dataclass(frozen = True)
 class Balls3D(Container3D):
@@ -865,7 +903,11 @@ class Balls3D(Container3D):
     def from_points3D(aPnts, radius = 1, limit_theta = None, limit_phi = None, name = 'Balls3D'):
         return Balls3D([Ball3D.from_point3D(aPnt, radius = radius, limit_theta = limit_theta, limit_phi = limit_phi) for aPnt in aPnts], 
                       name = name)
-    
+
+    @classmethod
+    def get_constituent(cls):
+        return Ball3D
+        
     def vectorize(self):
         ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...
         canonical_radius, canonical_limit_theta, canonical_limit_phi = self[0].radius, self[0].limit_theta, self[0].limit_phi
@@ -887,6 +929,10 @@ class Lines3D(Container3D):
         return Lines3D([Line3D.from_line2D(aLn, x = x, y = y, z = z) for aLn in aLns], 
                       name = name)
     
+    @classmethod
+    def get_constituent(cls):
+        return Line3D
+
     def vectorize(self):
         ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...
         canonical_thickness = self[0].thickness
@@ -909,6 +955,10 @@ class Regions3D(Container3D):
     def from_lines3D(aLns, width, dim = 'x', name = 'Regions3D'):
         return Regions3D([Region3D.from_line3D(aLn, width, dim = dim) for aLn in aLns], 
                          name = name)
+    
+    @classmethod
+    def get_constituent(cls):
+        return Region3D
     
     def parametrise(self):
         return [myReg.parametrise() for myReg in self]
