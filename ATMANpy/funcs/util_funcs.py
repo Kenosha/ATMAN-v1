@@ -392,8 +392,10 @@ def split(df):
 ### CLASS CREATION UTILS ###
 
 def get_updated_attribute_dictionary(someObj, updDict):
-    currDict = someObj.__dict__
-    
+    import inspect
+    init_args_kwargs = inspect.getfullargspec(someObj.__class__).args ### avoid attributes set in post_init
+    currDict = {k: v for k, v in someObj.__dict__.items() if k in init_args_kwargs}
+
     def maybe_update(attr):
         try:
             return updDict[attr]
