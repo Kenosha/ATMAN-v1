@@ -118,6 +118,11 @@ class Camera:
     M_ext: np.array
     sensor_dims: tuple
     
+    def __repr__(self):
+        f_x, o_x, f_y, o_y = self.M_int[0, 0], self.M_int[0, 2], self.M_int[1, 1], self.M_int[1, 2]
+        pos = self.get_cw()
+        return f'Camera(f = ({f_x}, {f_y}), c_w = {pos})'
+
     @staticmethod
     def pinhole_origin_aligned(f_x, f_y, o_x, o_y, s_x, s_y):
         M_int = np.array([[f_x, 0, o_x, 0],
@@ -156,9 +161,15 @@ class Camera:
         return Camera(M_int, M_ext, sensor_dims) 
     
     @staticmethod
-    def low_angled_behind():
+    def low_angled_behind_ad():
         baseCam = Camera.calibrated_AO_behind()
         myCam = baseCam.left(20).into(14).pan(-0.06).down(4)
+        return myCam
+    
+    @staticmethod
+    def low_angled_behind_deuce():
+        baseCam = Camera.calibrated_AO_behind()
+        myCam = baseCam.right(20).into(14).pan(0.06).down(4)
         return myCam
 
     @staticmethod
@@ -170,14 +181,15 @@ class Camera:
     
     @staticmethod
     def birds_eye(cam_height = 100, sensor_dims = (1920, 1080),
-                  f = 3650, o_x = None, o_y = None):
+                  f = 3650, o_x = None, o_y = None, centerPt = None):
         if o_x is None:
             o_x = sensor_dims[0] / 2
         if o_y is None:
             o_y = sensor_dims[1] / 2
 
-        ctPt = CourtLines.make().get_center_point()
-        x, y = ctPt.coords
+        if centerPt is None:
+            centerPt = CourtLines.make().get_center_point()
+        x, y = centerPt.coords
         
         coords_cam = np.array([x, y, cam_height])
         
@@ -195,6 +207,44 @@ class Camera:
         
         return Camera(M_int, M_ext, sensor_dims) 
         
+    @staticmethod
+    def from_to(origin_point, towards_point, f = 1000, sensor_dims = (1920, 1080)):
+        # towards_point, origin_point: Point3D
+
+        ##### EXTERIOR CAMERA PARAMETERS #####
+        ### 1) the camera axis (z_c) is described by origin_point -> towards_point
+        cam_vector = towards_point - origin_point
+        z_c = - cam_vector.normalize()
+        z_axis = np.array(z_c.coords)
+
+        ### 2) the x-axis (x_c) can not be tilted at initialization
+        # -> it is orthogonal to z_w (and thus co-planar with the world ground)
+        # -> it is orthogonal to z_c by virtue of being an axis
+        x_axis = np.cross(z_axis, np.array([0, 0, 1]))
+        x_axis = x_axis / (x_axis ** 2).sum() ** 0.5
+        x_axis = - x_axis ### invert the direction of x axis (generally correct?)
+
+        ### 3) the y-axis is orthogonal to x and z
+        y_axis = np.cross(x_axis, z_axis)
+        y_axis = y_axis / (y_axis ** 2).sum() ** 0.5 ### technically, since x and z are themselves orthogonal, no need to normalize
+        y_axis = - y_axis ### invert the direction of x axis (generally correct?)
+
+        ### 4) rotation matrix is just the new coordinate system's axes as collated as column vectors
+        R = np.vstack([x_axis, y_axis, z_axis])
+        t = - R @ np.array(origin_point.coords)
+
+        R_t = np.hstack([R, t[:, np.newaxis]])
+        M_ext = np.vstack([R_t, np.array([0, 0, 0, 1])])
+            
+        ##### INTERIOR CAMERA PARAMETERS ####
+        ## very simple pinhole
+        o_x, o_y = sensor_dims[0] / 2, sensor_dims[1] / 2
+        M_int = np.array([  [ f, 0, o_x, 0],
+                            [ 0, f, o_y, 0],
+                            [ 0, 0,   1, 0]])
+        
+        return Camera(M_int, M_ext, sensor_dims)
+
     def get_K(self):
         return self.M_int[:3, :3]
     def get_R(self):
@@ -475,25 +525,44 @@ class View:
         aView = aView.sort_by_distance(near_to_far = False)
         return aView
 
+if __name__ == '__main__':
+    from ATMANpy.types.Shapes3D import Point3D, Ball3D, Lines3D, Region3D, Regions3D
     
-# from ATMANpy.types.Shapes3D import Ball3D, Lines3D, Region3D, Regions3D
+    courtLines = CourtLines.make()
 
-# emptyScn = Scene.empty() 
-# courtRegions3D = Regions3D.make_court()
-# myBall = Ball3D((30, 30, 30))
-# myNet = Regions3D.make_singles_net()
+    c_w_2D = courtLines['Bottom Baseline'].center().left(100)
+    d_w_2D = courtLines.get_center_point()
+ 
+    c_w = Point3D.from_point2D(c_w_2D, z = 100)
+    d_w = Point3D.from_point2D(d_w_2D, z = 0)
+        
+    botReg = courtLines.add_singles_netline().get_half_region(side = 'Bottom', width = 'Singles')
+    bot_adReg = courtLines.add_singles_netline().get_service_box(side = 'Bottom', which = 'Deuce')
+    botReg3D = Region3D.from_region2D(botReg, z = 0).recolor(const.BGR['grass_green'])
+    ad_botReg3D = Region3D.from_region2D(bot_adReg, z = 1).recolor(const.BGR['strong_pink'])
+    courtScn = Scene.make_court(courtLines).put(botReg3D).put(ad_botReg3D)
+    
+    myCam = Camera.from_to(c_w, d_w)
 
-# backScn = emptyScn.put(courtRegions3D).put(myNet)
-# ballScn = emptyScn.put(myBall)
+    View.make(myCam, courtScn).snap().show()
 
-# myCam = Camera.calibrated_AO_behind()
 
-# backView = View.make(myCam, backScn)
-# frntView = View.make(myCam, ballScn)
+    # emptyScn = Scene.empty() 
+    # courtRegions3D = Regions3D.make_court()
+    # myBall = Ball3D((30, 30, 30))
+    # myNet = Regions3D.make_singles_net()
 
-# backView.snap().show()
-# frntView.snap().show()
+    # backScn = emptyScn.put(courtRegions3D).put(myNet)
+    # ballScn = emptyScn.put(myBall)
 
-# bothView = backView.combine(frntView)
-# bothView.show()
+    # myCam = Camera.calibrated_AO_behind()
+
+    # backView = View.make(myCam, backScn)
+    # frntView = View.make(myCam, ballScn)
+
+    # backView.snap().show()
+    # frntView.snap().show()
+
+    # bothView = backView.combine(frntView)
+    # bothView.show()
 
