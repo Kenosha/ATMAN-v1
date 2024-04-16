@@ -90,7 +90,10 @@ class Point3D:
     def __round__(self, ndigits = None):
         outCoords = round(self.x, ndigits = ndigits), round(self.y, ndigits = ndigits), round(self.z, ndigits = ndigits)
         return Point3D(outCoords)
-    
+    def __neg__(self):
+        outCoords = -self.x, -self.y, -self.z
+        return Point3D(outCoords)
+
     ### REINSTANTIATION ###
     def reposition(self, new_coords):
         updDict = {'coords': new_coords}
@@ -286,6 +289,7 @@ class Circle3D(Point3D):
     color: Optional[tuple] = _DEFAULT_COLOR
     alpha: Optional[float] = _DEFAULT_ALPHA
     limit_theta: Optional[tuple] = None
+    fixed_dimension: str = 'z' ### this is the dimension along which the circle is flat
     
     name: str = 'Circle3D'
     
@@ -297,9 +301,9 @@ class Circle3D(Point3D):
         #############################  
     
     @staticmethod
-    def from_point3D(myPnt, radius = 1, limit_theta = None, name = 'Circle3D'):
+    def from_point3D(myPnt, radius = 1, limit_theta = None, fixed_dimension = 'z', name = 'Circle3D'):
         return Circle3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
-                        radius = radius, limit_theta = limit_theta, 
+                        radius = radius, limit_theta = limit_theta, fixed_dimension = fixed_dimension,
                         name = name)
 
     @classmethod
@@ -331,7 +335,13 @@ class Circle3D(Point3D):
         zeros_filtered = zeros[theta_filter]
         theta_filtered = theta[theta_filter]
         
-        unit_circle = np.array([np.cos(theta_filtered), np.sin(theta_filtered), zeros_filtered]).T
+        if self.fixed_dimension == 'x':
+            unit_circle = np.array([zeros_filtered, np.cos(theta_filtered), np.sin(theta_filtered)]).T
+        if self.fixed_dimension == 'y':
+            unit_circle = np.array([np.cos(theta_filtered), zeros_filtered, np.sin(theta_filtered)]).T
+        if self.fixed_dimension == 'z':
+            unit_circle = np.array([np.cos(theta_filtered), np.sin(theta_filtered), zeros_filtered]).T
+
         coordArr = np.array(self.coords)
 
         if len(coordArr.shape) == 1: ### in this case, we have a simple point -> self.coords is a tuple
@@ -716,6 +726,10 @@ class Region3D():
         return len(self.lineList)
     
     @classmethod
+    def from_region2D(cls, myReg, x = None, y = None, z = None):
+        return Region3D([Line3D.from_line2D(myLn, x = x, y = y, z = z) for myLn in myReg.lineList])
+
+    @classmethod
     def from_points3D(cls, p1: Point3D, p2: Point3D, p3: Point3D, p4: Point3D, 
                     left_right = '+x', top_bottom = '+y',
                     name = 'Region3D', color = _DEFAULT_COLOR, alpha = _DEFAULT_ALPHA):
@@ -797,6 +811,12 @@ class Region3D():
     
     def realpha(self, new_alpha):
         updDict = {'alpha': new_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def transparify(self, transparence_factor):
+        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        updDict = {'alpha': transparent_alpha}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
 
