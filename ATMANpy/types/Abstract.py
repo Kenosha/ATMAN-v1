@@ -109,6 +109,13 @@ class Trajectory:
         - event during frame.
     """
     
+    def __repr__(self):
+        v = self.get_initial_speed()
+        rpm = self.get_initial_spin()
+        evt = self.get_hit_event()
+
+        return f'Trajectory({evt}: {v:.0f}km/h, {rpm:.0f} rpm)'
+
     def __getitem__(self, item):
         if isinstance(item, list):
             check_item = item[0]
@@ -191,6 +198,25 @@ class Trajectory:
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how).z
     
+    def get_initial_horizontal_speed(self, unit = 'km/h'):
+        assert unit in ['m/s', 'km/h']
+        speed_ms = self['vx0'].iloc[0]
+        if unit == 'km/h':
+            return speed_ms * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+        
+    def get_initial_vertical_speed(self, unit = 'km/h'):
+        assert unit in ['m/s', 'km/h']
+        speed_ms = self['vz0'].iloc[0]
+        if unit == 'km/h':
+            return speed_ms * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+
+    def get_initial_speed(self, unit = 'km/h'):
+        vx, vz = self.get_initial_horizontal_speed(unit = unit), self.get_initial_vertical_speed(unit = unit) 
+        return (vx ** 2 + vz ** 2) ** 0.5
+    
+    def get_initial_spin(self):
+        return self['rpm0'].iloc[0]
+
     def get_ball_array(self, how = 'trajectory'):
         if how == 'trajectory':
             coord_cols = ['x_t', 'y_t', 'z_t']
@@ -222,14 +248,15 @@ class Trajectory:
         if across_middle:
             signed_distance_to_center = self.trajFrm[['x_t', 'x_o']] - center_x
             newFrm[['x_t', 'x_o']] = center_x - signed_distance_to_center
+            newFrm['event'] = newFrm['event'].replace({'STD': 'STA', 'STA': 'STD',
+                                                       'SBD': 'SBA', 'SBA': 'SBD'})
 
         if across_net:
             signed_distance_to_center = self.trajFrm[['y_t', 'y_o']] - center_y
             newFrm[['y_t', 'y_o']] = center_y - signed_distance_to_center
-
-        newFrm['event'] = newFrm['event'].replace({'STD': 'SBD', 'STA': 'SBA', 
-                                                   'SBD': 'STD', 'SBA': 'STA',
-                                                   'HT': 'HB', 'HB': 'HT'})
+            newFrm['event'] = newFrm['event'].replace({'STD': 'SBA', 'STA': 'SBD', 
+                                                        'SBD': 'STA', 'SBA': 'STD',
+                                                        'HT': 'HB', 'HB': 'HT'})
             
         return Trajectory(newFrm)
     
@@ -284,7 +311,7 @@ class Shot:
     shotTraj: Trajectory
     hitPlayer: PlayerMovement
     recPlayer: PlayerMovement
-    
+
     @staticmethod
     def from_shot_frame_and_player_sfs(shotFrm, topSF, botSF):
         shotFrm = shotFrm.dropna(how = 'all')
@@ -319,13 +346,16 @@ class Shot:
         return self.shotTraj.get_events()
     
     def get_hit_frame(self):
-        return self.shotTraj.get_frames()
+        return self.shotTraj.get_hit_frame()
     
     def get_hit_event(self):
         return self.shotTraj.get_hit_event()
     
     def get_hit_event_info(self):
         return self.shotTraj.get_hit_event_info()
+    
+    def get_hit_series(self):
+        return self.shotTraj.get_hit_series()
     
     def get_player_hit_position(self):
         return self.hitPlayer.get_initial_position()
@@ -335,6 +365,18 @@ class Shot:
     
     def get_ball_hit_height(self):
         return self.shotTraj.get_initial_height()
+    
+    def get_initial_horizontal_speed(self, unit = 'km/h'):
+        return self.shotTraj.get_initial_horizontal_speed(unit = unit)
+        
+    def get_initial_vertical_speed(self, unit = 'km/h'):
+        return self.shotTraj.get_initial_vertical_speed(unit = unit)
+
+    def get_initial_speed(self, unit = 'km/h'):
+        return self.shotTraj.get_initial_speed(unit = unit)
+    
+    def get_initial_spin(self):
+        return self.shotTraj.get_initial_spin()
     
     def get_bounce_events(self):
         return self.shotTraj.get_bounce_events()
@@ -507,13 +549,18 @@ class Shot:
 class Shots:
     ### a general collection of shots.
     shotList: List[Shot]
-    
+
+    # def __repr__(self):
+    #     fsShot, lsShot = self[0], self[-1]
+    #     num_shots = len(self)
+    #     min_frame, max_frame = fsShot.get_frames()[0], lsShot.get_frames()[-1]
+    #     return f'Shots(N = {num_shots}, between frames {min_frame} and {max_frame})'
+
     def __repr__(self):
-        fsShot, lsShot = self[0], self[-1]
-        num_shots = len(self)
-        min_frame, max_frame = fsShot.get_frames()[0], lsShot.get_frames()[-1]
-        return f'Shots(N = {num_shots}, between frames {min_frame} and {max_frame})'
-    
+        shotStrs = [f'  {i}: {s},' for i, s in enumerate(self)]
+        innerStr = '\n'.join(shotStrs)
+        return f'Shots([\n{innerStr}\n])'
+
     def __iter__(self):
         return iter(self.shotList)
     
@@ -541,13 +588,21 @@ class Shots:
     def flip(self, courtLines = None, across_middle = True, across_net = True):
         if courtLines is None:
             courtLines = CourtLines.make()
-        return Shots([myShot.flip(courtLines = courtLines, across_middle = across_middle, across_net = across_net) for myShot in self])
+        return self.__class__([myShot.flip(courtLines = courtLines, across_middle = across_middle, across_net = across_net) for myShot in self])
     
-    def get_first_bounce_position(self):
-        return [myShot.get_first_bounce_position() for myShot in self]
+    def join(self, otherShots):
+        return Shots([*self, *otherShots])
+
+    def sort(self):
+        keyFunc = lambda el: el.get_hit_frame()
+        return Shots(sorted(self.shotList, key = keyFunc))
+    
+
+    ### STAT GETTERS ###
+    # -> .get methods of Shot, done with make_method below
         
-    # ### FEATURE GETTERS ######
-    ### done with make_method below!!!
+    ### FEATURE GETTERS ######
+    # -> .feat methods of Shot, done with make_method below!!!
         
 @dataclass(frozen = True)
 class Point(Shots):
@@ -572,13 +627,16 @@ class Point(Shots):
         return Point(shots)
             
     def __repr__(self):
-        serveShot = self.shotList[0]
-        server, receiver = serveShot.hitPlayer.name, serveShot.recPlayer.name
-        events = self.get_events()
-        frames = self.get_frames()
-        event_string = '->'.join(events)
-        min_frame, max_frame = frames[0], frames[-1]
-        return f'Point({event_string}, serving: {server}, receiving: {receiver} from {min_frame} to {max_frame})'
+        if len(self.shotList) == 0:
+            return 'Point()'
+        else:
+            serveShot = self.shotList[0]
+            server, receiver = serveShot.hitPlayer.name, serveShot.recPlayer.name
+            events = self.get_events()
+            frames = self.get_frames()
+            event_string = '->'.join(events)
+            min_frame, max_frame = frames[0], frames[-1]
+            return f'Point({event_string}, serving: {server}, receiving: {receiver} from {min_frame} to {max_frame})'
     
     def __iter__(self):
         return iter(self.shotList)
@@ -606,12 +664,73 @@ class Point(Shots):
                 return fsShot
             else:
                 return None
+            
+    def get_return(self):
+        if len(self) <= 1:
+            return None
+        elif not self.is_serve():
+            return None
+        else:
+            return self[1]
+
+    def is_serve(self):
+        return self.get_serve() is not None
+    
+    def is_serve_fair(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.is_fair(nextShot = None)
+        else:
+            return False
+
+    def is_serve_ad(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.is_serve_ad()
+        else:
+            return False
+
+    def is_serve_deuce(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.is_serve_deuce()
+        else:
+            return False
+           
+    def is_first_serve(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.is_first_serve()
+        else:
+            return False
+    
+    def is_second_serve(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.is_second_serve()
+        else:
+            return False
+
+    def is_top_to_bot(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.is_top_to_bot()
+        else:
+            return False
+    
+    def is_bot_to_top(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.is_bot_to_top()
+        else:
+            return False
     
 @dataclass(frozen = True)
 class Points:
     pointList: List[Point]
     name: str = 'Points'
-    
+
+    @staticmethod
     def from_SFs(trajSFs, topSFs, botSFs):
         ### these have to be segmented!
         pointList = []
@@ -625,6 +744,11 @@ class Points:
             
         return Points(pointList)
     
+    def __repr__(self):
+        pointStrs = [f'  {i}: {p},' for i, p in enumerate(self)]
+        innerStr = '\n'.join(pointStrs)
+        return f'Points([\n{innerStr}\n])'
+
     def __iter__(self):
         return iter(self.pointList)
     
@@ -641,11 +765,39 @@ class Points:
         ### turn into shots
         return Shots([myShot for myPnt in self for myShot in myPnt])
     
-  
+    def flip(self, courtLines = None, across_middle = True, across_net = True):
+        if courtLines is None:
+            courtLines = CourtLines.make()
+        return Points([myPnt.flip(courtLines = courtLines, across_middle = across_middle, across_net = across_net) for myPnt in self])
     
+    def join(self, otherPnts):
+        return Points([*self, *otherPnts])
     
+    def sort(self):
+        keyFunc = lambda el: el.get_serve().get_hit_frame()
+        return Points(sorted(self.pointList, key = keyFunc))
+    
+    def enforce_direction(self, from_where):
+        ### TODO: ADD SORT!
+        assert from_where in ['Top', 'Bot']
+        t2bPnts = self.filter('is_top_to_bot')
+        b2tPnts = self.filter('is_bot_to_top')
+
+        if from_where == 'Top':
+            return t2bPnts.join(b2tPnts.flip())
+        elif from_where == 'Bot':
+            return b2tPnts.join(t2bPnts.flip())
+        
+    def get_serves(self):
+        pntList = [myPnt.get_serve() for myPnt in self]
+        return Shots([p for p in pntList if p is not None])
+
+    def get_returns(self):
+        pntList = [myPnt.get_return() for myPnt in self]
+        return Shots([p for p in pntList if p is not None])
+
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
-def __make_method(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
+def __make_method_feat(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
     def method(self, color = None, alpha = None):
         if color is None:
             color = const.BGR['bright_grey']
@@ -657,7 +809,7 @@ def __make_method(myClass, shotMethodStr): ### helper to automatically make all 
     method.__name__ = shotMethodStr
     setattr(myClass, shotMethodStr, method)
     
-def __make_method_simul(myClass, shotMethodStr):
+def __make_method_feat_simul(myClass, shotMethodStr):
     def method(self, color = None, alpha = None):
         if color is None:
             color = const.BGR['bright_grey']
@@ -683,17 +835,34 @@ def __make_method_simul(myClass, shotMethodStr):
     method.__name__ = shotMethodStr + '_simul'
     setattr(myClass, shotMethodStr + '_simul', method)
 
+def __make_method_get(myClass, shotMethodStr):
+    def method(self, **kwargs):
+        outList = [getattr(myShot, shotMethodStr)() for myShot in self]
+        try:
+            return np.array(outList)
+        except: ### sometimes, outList is a list of lists of unequal size
+            return outList
+
+    method.__name__ = shotMethodStr
+    setattr(myClass, shotMethodStr, method)
+
 for methodStr in dir(Shot):
     if methodStr.startswith('feat_'):
         ### feat getters
         if not methodStr in dir(Shots): ### do not overwrite
-            __make_method(Shots, methodStr)
+            __make_method_feat(Shots, methodStr)
         if not methodStr in dir(Point): ### do not overwrite
-            __make_method(Point, methodStr)
+            __make_method_feat(Point, methodStr)
 
         ### simul feat getters
-        if not methodStr + '_simul' in dir(Shots):
-            __make_method_simul(Shots, methodStr)
+        if not methodStr + '_simul' in dir(Shots): ### do not overwrite
+            __make_method_feat_simul(Shots, methodStr)
         if not methodStr + '_simul' in dir(Point): ### do not overwrite
-            __make_method_simul(Point, methodStr)
-        
+            __make_method_feat_simul(Point, methodStr)
+    
+    if methodStr.startswith('get_'):
+        ### normal getters
+        if not methodStr in dir(Shots): ### do not overwrite
+            __make_method_get(Shots, methodStr)
+        if not methodStr in dir(Point): ### do not overwrite
+            __make_method_get(Point, methodStr)
