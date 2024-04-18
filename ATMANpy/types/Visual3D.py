@@ -57,6 +57,9 @@ class Scene:
     def prune_transparents(self, alpha_threshold = 0.05):
         return Scene([s for s in self.shapes if s.alpha > alpha_threshold])
 
+    def combine(self, otherScn):
+        return Scene([*self.shapes, *otherScn.shapes])
+
     ### METHODS ###
     def rasterize(self, resolution, alpha_threshold = 0.05):
         ### yields a point-cloud representation of the objects in the scene, 
@@ -104,11 +107,46 @@ class DummyScene:
     def put(self, rastArr, colArr):
         return DummyScene([*self.rastArrs, rastArr], [*self.colArrs, colArr])
 
+    def recolor(self, new_color):
+        new_colArrs = [np.full(colArr.shape, fill_value = new_color) for colArr in self.colArrs]
+        return DummyScene(self.rastArrs, new_colArrs, self.alphaArrs)
+    
+    def realpha(self, new_alpha):
+        new_alphaArrs = [np.full(alphaArr.shape, fill_value = new_alpha) for alphaArr in self.alphaArrs]
+        return DummyScene(self.rastArrs, self.colArrs, new_alphaArrs)
+
+    def dim(self, dim_factor):
+        dim_colArrs = [colArr * dim_factor for colArr in self.colArrs]
+        return DummyScene(self.rastArrs, dim_colArrs, self.alphaArrs)
+    
+    def transparify(self, transparence_factor):
+        trans_alphaArrs = [alphaArr * transparence_factor for alphaArr in self.alphaArrs]
+        return DummyScene(self.rastArrs, self.colArrs, trans_alphaArrs)
+
+    def prune_transparents(self, alpha_threshold = 0.05):
+        new_rastArrs, new_colArrs, new_alphaArrs = [], [], []
+        for rastArr, colArr, alphaArr in zip(self.rastArrs, self.colArrs, self.alphaArrs):
+            is_above = (alphaArr > alpha_threshold).squeeze()
+
+            new_rastArrs.append(rastArr[is_above])
+            new_colArrs.append(colArr[is_above])
+            new_alphaArrs.append(alphaArr[is_above])
+        return DummyScene(new_rastArrs, new_colArrs, new_alphaArrs)
+
+    def combine(self, otherDummyScn):
+        comb_rastArrs = [*self.rastArrs, *otherDummyScn.rastArrs]
+        comb_colArrs = [*self.colArrs, *otherDummyScn.colArrs]
+        comb_alphaArrs = [*self.alphaArrs, *otherDummyScn.alphaArrs]
+        return DummyScene(comb_rastArrs, comb_colArrs, comb_alphaArrs)
+
+
     def rasterize(self, resolution, alpha_threshold = 0.05):
         ### TODO: implement pruning with alpha thresholding (see above) 
-        rastArr_all = np.concatenate(self.rastArrs)
-        colArr_all = np.concatenate(self.colArrs)
-        alphaArr_all = np.concatenate(self.alphaArrs)
+        pruned_self = self.prune_transparents()
+
+        rastArr_all = np.concatenate(pruned_self.rastArrs)
+        colArr_all = np.concatenate(pruned_self.colArrs)
+        alphaArr_all = np.concatenate(pruned_self.alphaArrs)
         return rastArr_all, colArr_all, alphaArr_all
     
 
@@ -122,6 +160,15 @@ class Camera:
         f_x, o_x, f_y, o_y = self.M_int[0, 0], self.M_int[0, 2], self.M_int[1, 1], self.M_int[1, 2]
         pos = self.get_cw()
         return f'Camera(f = ({f_x}, {f_y}), c_w = {pos})'
+
+    def __eq__(self, otherCam):
+        int_comp = self.M_int == otherCam.M_int
+        ext_comp = self.M_ext == otherCam.M_ext
+        sns_comp = self.sensor_dims == otherCam.sensor_dims
+        return int_comp.all() and ext_comp.all() and sns_comp
+    
+    def __neq__(self, otherCam):
+        return not self == otherCam
 
     @staticmethod
     def pinhole_origin_aligned(f_x, f_y, o_x, o_y, s_x, s_y):
