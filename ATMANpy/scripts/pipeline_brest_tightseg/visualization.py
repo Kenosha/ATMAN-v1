@@ -113,11 +113,6 @@ def main(conf, name = None):
     srvShots = fairPnts.get_serves()
     retShots = fairPnts.get_returns()
 
-    # circles = []
-    # for x, y, z in srvShots.get_first_bounce_position():
-    #     crc = Circle3D.from_point3D(Point3D((x, y, z), color = const.BGR['strong_pink']))
-    #     circles.append(crc)
-    # crcs = Circles3D(circles)
 
     ### PREPARE CAMERAS ###
     courtScn = Scene.make_court()
@@ -151,21 +146,29 @@ def main(conf, name = None):
 
     ### PARAMETERS ### 
     DESCRIPTOR = 'Second Serves'
-
+    SAVE_FOLDER = 'testing'
+    savePath = ut.get_folder_struct('result_video')[SAVE_FOLDER]
+    
     QUANTILES =  [1/3, 1/2, 2/3]
     FREEZE_FRAMES = 200
     SHOW_COLOR = const.BGR['strong_pink']
     TEXT_COLOR = const.BGR['grass_green']
     TEXT_SIZE = 1.5
-    RESOLUTION_BACKGROUND = 0.5
-    RESOLUTION_OBJECTS = 0.5
-    RESOLUTION_KDE = 0.5
+    TEXT_WHERE = (50, 200)
+    TEXT_OFFSET = 50
+    RESOLUTION_MODIFIER = 0.1
+    RESOLUTION_BACKGROUND = 0.5 * RESOLUTION_MODIFIER
+    RESOLUTION_OBJECTS = 0.5 * RESOLUTION_MODIFIER
+    RESOLUTION_KDE = 0.5 * RESOLUTION_MODIFIER
     BANDWIDTH_KDE = 30
     SCENE_FADE = 0.9
 
-    CUTOFF_FLIGHT_FRAMES = 6
-    EXPANSION_FACTOR = 4
-    
+    CUTOFF_FLIGHT_FRAMES_1 = 6
+    CUTOFF_FLIGHT_FRAMES_2 = 14
+    EXPANSION_FACTOR = 8
+    C1 = CUTOFF_FLIGHT_FRAMES_1 * EXPANSION_FACTOR
+    C2 = CUTOFF_FLIGHT_FRAMES_2 * EXPANSION_FACTOR
+
     backScn = Scene.make_court()
     header_text = f'{DESCRIPTOR}: '
     permanent_animation_params = {'background_resolution': RESOLUTION_BACKGROUND,
@@ -174,8 +177,8 @@ def main(conf, name = None):
                                    'background_scene': backScn,
                                    'text_size': TEXT_SIZE,
                                    'text_color': TEXT_COLOR,
-                                   'text_where': (50, 50),
-                                   'text_offset': 50}
+                                   'text_where': TEXT_WHERE,
+                                   'text_offset': TEXT_OFFSET}
 
     ### BALL SHAPES ###
     ballSF = srvShots.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = 'smooth')
@@ -193,8 +196,17 @@ def main(conf, name = None):
         out_lines.append(itpl_lines)
 
     shapes_vectorized_expanded = [l for lineList in out_lines for l in lineList]
-    first_half_flight_expanded = shapes_vectorized_expanded[:CUTOFF_FLIGHT_FRAMES * EXPANSION_FACTOR]
-    second_half_flight_expanded = shapes_vectorized_expanded[CUTOFF_FLIGHT_FRAMES * EXPANSION_FACTOR:]
+    first_half_flight_expanded = shapes_vectorized_expanded[:C1]
+    second_half_flight_expanded = shapes_vectorized_expanded[C1:C2]
+    third_half_flight_expanded = shapes_vectorized_expanded[C2:]
+
+    circles = []
+    for x, y, z in srvShots.get_first_bounce_position():
+        crc = Circle3D.from_point3D(Point3D((x, y, z), color = SHOW_COLOR))
+        circles.append(crc)
+    crcs = Circles3D(circles, color = SHOW_COLOR)
+
+    land_text = 'Balls land centrally in service box.'
 
     ### RETURN POSITION ###
     retArr = retShots.get_ball_hit_position()
@@ -225,89 +237,136 @@ def main(conf, name = None):
     x, y, z = r_md
     x_hi, y_hi, z_hi = r_hi
     
-    return_text = 'Ball typically hit at the baseline.'
+    return_text = 'Ball typically returned from the baseline.'
     
     z_lo_metres = z_lo / const.SCALE * const.FOOT_TO_METER
     z_hi_metres = z_hi / const.SCALE * const.FOOT_TO_METER
-    height_text = f'Ball typically hit at height of between {z_lo_metres:.1f} and {z_hi_metres:.1f} metres'
+    height_text = f'Return typically hit at height of between {z_lo_metres:.1f} and {z_hi_metres:.1f} metres'
 
-    ### ANIMATION ###
+    ### ANIMATION ###    
+    my_frames = []
+    fore_scenes = []
+
     print('Animating ...')
     print(' ... 1) first half of ball flight')
-    myFrms1, fore_scene1 = vs.animate(shapes = first_half_flight_expanded,
-                                        start_cam = backCam, stop_cam = sideCam, 
+    myFrms, fore_scene = vs.animate(shapes = first_half_flight_expanded,
+                                        start_cam = backCam, stop_cam = backCam, 
                                         cumulative_foreground_transparence = SCENE_FADE,
+                                        text_lines = [DESCRIPTOR],
                                         **permanent_animation_params
                                         )
-    # DecapStream(myFrms1, 0, myFrms1.length()).show(ms_between_frames = 25)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
+    
+    ### Turn Camera
+    myFrms, fore_scene = vs.animate(start_cam = backCam, stop_cam = sideCam,
+                                    previous_foreground_scene = fore_scenes[-1],
+                                        **permanent_animation_params, num_frames = 25,
+                                        text_lines = [DESCRIPTOR],
+                                        )
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
 
     print(' ... 2) speed and spin text')
-    text_lines = [header_text, speed_text, spin_text]
-    myFrms2, fore_scene2 = vs.animate_static(previous_foreground_scene = fore_scene1,
+    myFrms, fore_scene = vs.animate_static(previous_foreground_scene = fore_scenes[-1],
                                             static_cam = sideCam,
-                                            text_lines = text_lines, 
+                                            text_lines = [header_text, speed_text, spin_text], 
                                             num_frames = FREEZE_FRAMES,
                                             **permanent_animation_params)
-    # DecapStream(myFrms2, 0, myFrms2.length()).show(ms_between_frames = 25)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
+
+    myFrms, fore_scene = vs.animate(shapes = second_half_flight_expanded,
+                                    previous_foreground_scene = fore_scenes[-1],
+                                        start_cam = sideCam, stop_cam = sideCam, 
+                                        cumulative_foreground_transparence = SCENE_FADE,
+                                        text_lines = [DESCRIPTOR],
+                                        **permanent_animation_params
+                                        )
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
+
+    myFrms, fore_scene = vs.animate_static(shape = crcs, previous_foreground_scene = fore_scenes[-1],
+                                            static_cam = sideCam,
+                                            text_lines = [header_text, land_text], 
+                                            num_frames = FREEZE_FRAMES,
+                                            **permanent_animation_params)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
+
 
     print(' ... 3) show rest of flight')
-    myFrms3, fore_scene3 = vs.animate(shapes = second_half_flight_expanded, 
-                                        previous_foreground_scene = fore_scene2,
+    myFrms, fore_scene = vs.animate(shapes = third_half_flight_expanded, 
+                                        previous_foreground_scene = fore_scenes[-1],
                                         start_cam = sideCam, stop_cam = siderevCam, 
                                         cumulative_foreground_transparence = SCENE_FADE,
+                                        text_lines = [DESCRIPTOR],
                                         **permanent_animation_params)
-    # DecapStream(myFrms3, 0, myFrms3.length()).show(ms_between_frames = 25)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
 
     print(' ... 4) Fade out ball flight slightly')
-    myFrms4, fore_scene4 = vs.animate(previous_foreground_scene = fore_scene3,
+    myFrms, fore_scene = vs.animate(previous_foreground_scene = fore_scenes[-1],
                                      start_cam = siderevCam, stop_cam = siderevCam, num_frames = 10,
                                      cumulative_foreground_transparence = 0.95,
+                                     text_lines = [DESCRIPTOR],
                                      **permanent_animation_params)
-    # DecapStream(myFrms4, 0, myFrms4.length()).show(ms_between_frames = 200)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
 
     print(' ... 5) Return Positions rel. to baseline')
-    text_lines = [return_text]
-
-    myFrms5, fore_scene5 = vs.animate(shapes = heightLn_vectorized_list, 
+    myFrms, fore_scene = vs.animate(shapes = heightLn_vectorized_list, 
                                     start_cam = siderevCam, stop_cam = siderevCam,
-                                    previous_foreground_scene = fore_scene4, 
-                                    text_lines = text_lines,
+                                    previous_foreground_scene = fore_scenes[-1], 
+                                    text_lines = [header_text, return_text],
                                     **permanent_animation_params)
-    # DecapStream(myFrms5, 0, myFrms5.length()).show(ms_between_frames = 200)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
 
     print(' ... 6) Return KDE')
-    myFrms6, fore_scene6 = vs.animate_static(static_cam = siderevCam, num_frames = FREEZE_FRAMES, 
-                                          previous_foreground_scene = fore_scene5,
+    myFrms, fore_scene = vs.animate_static(static_cam = siderevCam, num_frames = FREEZE_FRAMES, 
+                                          previous_foreground_scene = fore_scenes[-1],
                                           dummy_scene = kdeScn, 
-                                          text_lines = text_lines,
+                                          text_lines = [header_text, return_text],
                                           **permanent_animation_params)
-    # DecapStream(myFrms6, 0, myFrms6.length()).show(ms_between_frames = 25)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
 
     print(' ... 7) Camera Turn for Ball Heights')
-    myFrms7, fore_scene7 = vs.animate(num_frames = 40,
+    myFrms, fore_scene = vs.animate(num_frames = 40,
                                    start_cam = siderevCam, stop_cam = revCam,
-                                    previous_foreground_scene = fore_scene6,
+                                    previous_foreground_scene = fore_scenes[-1],
                                     dummy_scene = kdeScn,
-                                    text_lines = text_lines,
+                                    text_lines = [header_text, return_text],
                                     **permanent_animation_params)
-    # DecapStream(myFrms7, 0, myFrms7.length()).show(ms_between_frames = 100)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
 
     print(' ... 8) Ball Height Information')
-    text_lines = [return_text, height_text]
-
-    myFrms8, fore_scene8 = vs.animate_static(static_cam = revCam, num_frames = FREEZE_FRAMES, 
-                                          previous_foreground_scene = fore_scene7,
+    myFrms, fore_scene = vs.animate_static(static_cam = revCam, num_frames = FREEZE_FRAMES, 
+                                          previous_foreground_scene = fore_scenes[-1],
                                           dummy_scene = kdeScn, 
-                                          text_lines = text_lines,
+                                          text_lines = [header_text, return_text, height_text],
                                           **permanent_animation_params)
-    # DecapStream(myFrms8, 0, myFrms8.length()).show(ms_between_frames = 25)
+    my_frames.append(myFrms)
+    fore_scenes.append(fore_scene)
+    # DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 25)
 
 
-    jntFrms = BGRFrames.from_frames([myFrms1, myFrms2, myFrms3, myFrms4,
-                                     myFrms5, myFrms6, myFrms7, myFrms8])
+    jntFrms = BGRFrames.from_frames(my_frames)
     DecapStream(jntFrms, 0, jntFrms.length()).show(ms_between_frames = 25)
 
-
+    jntFrms.save(savePath, DESCRIPTOR)
 
 if __name__ == '__main__':
     
