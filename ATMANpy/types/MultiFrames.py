@@ -47,6 +47,13 @@ class Frames:
             dimStr = f'{self.cols()} x {self.rows()}'
         return f'{framesType}(name = {self.name}, length = {self.length()}, size = {self.size(unit = "MB")} MB, dims = {dimStr})'
     
+    @classmethod 
+    def from_frames(cls, list_of_multiframes, name = None):
+        if name is None:
+            name = list_of_multiframes[0].name
+        jntArr = np.concatenate([frm.array for frm in list_of_multiframes], axis = 0)
+        return cls(jntArr, name = name)
+
     @classmethod
     def from_video(cls, cap, start_frame, stop_frame, 
                    cap_color_space = 'bgr', 
