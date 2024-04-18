@@ -106,38 +106,43 @@ def animate_static(shape = None, num_frames = 100,
                     text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
     if static_cam is None:
         static_cam = Camera.calibrated_AO_behind()
+
+    ### CREATE BACKGROUND VIEW    
     base_scene = Scene.make_empty()
     if background_scene is not None:
         base_scene = base_scene.combine(background_scene)
-    if previous_foreground_scene is not None:
-        base_scene = base_scene.combine(previous_foreground_scene)
-
     base_view = View.make(static_cam, base_scene, resolution = background_resolution)
 
+    ### CREATE FOREGROUND SCENE
     if shape is None:
         front_scene = Scene.make_empty()
     else:
         front_scene = Scene.make_empty().put(shape)
-    
+    if previous_foreground_scene is not None:
+        front_scene = front_scene.combine(previous_foreground_scene)
     front_view = View.make(static_cam, front_scene, resolution = foreground_resolution)
 
-    static_view = front_view.combine(base_view)
-
+    ### CREATE DUMMY VIEW
     if dummy_scene is not None:
         dummy_view = View.make(static_cam, dummy_scene, resolution = dummy_resolution)
-        static_view = static_view.combine(dummy_view) ### can not combine Scene and DummyScene directly! need to combine views
+    else:
+        dummy_view = View.make_empty()
 
+    ### JOIN VIEWS AND SNAP
+    static_view = front_view.combine(base_view).combine(dummy_view) ### can not combine Scene and DummyScene directly! need to combine views
     static_frame = static_view.snap()
 
+    ### MANAGE TEXT
     if text_lines is not None:
         pos_x, pos_y = text_where
         for textStr in text_lines:
             static_frame = static_frame.put(textStr, where = (pos_x, pos_y), color = text_color, size = text_size)
             pos_y += text_offset
 
+    ### COLLATE STATIC FRAMES 
     frameList = [static_frame for _ in range(num_frames)]
     myFrms = BGRFrames(np.array([f.array for f in frameList]))
-
+    
     return myFrms, front_scene
 
 def divide_line(someLn, num_divisions, reverse_direction = False):
