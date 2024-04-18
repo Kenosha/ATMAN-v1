@@ -35,9 +35,13 @@ from ATMANpy.types.Abstract import PlayerMovement, Trajectory, Shot, Shots, Poin
 
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
 from ATMANpy.types.ShapesTennis3D import Player
-from ATMANpy.types.Shapes3D import Point3D, Ball3D, Region3D, Line3D, Circle3D, Circles3D
+from ATMANpy.types.Shapes3D import Point3D, Ball3D, Region3D, Line3D, Circle3D, Circles3D, Lines3D
 
 from ATMANpy.funcs.cv_funcs import show_video, get_frame, show, show_continuous
+
+
+from ATMANpy.types.MultiFrames import BGRFrames
+from ATMANpy.types.Streams import DecapStream
 
 """
 ### Events
@@ -93,6 +97,7 @@ def main(conf, name = None):
     
     trajSFs = trajSF.conform(segBF).filter(segBF).split()
     
+    ### PREPARE RELEVANT POINTS ###
     myPnts = Points.from_SFs(trajSFs, topSFs, botSFs)
 
     intPnts = myPnts.filter('is_second_serve')
@@ -108,13 +113,13 @@ def main(conf, name = None):
     srvShots = fairPnts.get_serves()
     retShots = fairPnts.get_returns()
 
-    circles = []
-    for x, y, z in srvShots.get_first_bounce_position():
-        crc = Circle3D.from_point3D(Point3D((x, y, z), color = const.BGR['strong_pink']))
-        circles.append(crc)
-    crcs = Circles3D(circles)
+    # circles = []
+    # for x, y, z in srvShots.get_first_bounce_position():
+    #     crc = Circle3D.from_point3D(Point3D((x, y, z), color = const.BGR['strong_pink']))
+    #     circles.append(crc)
+    # crcs = Circles3D(circles)
 
-    ### ANIMATION ###
+    ### PREPARE CAMERAS ###
     courtScn = Scene.make_court()
     courtLines = courtLines
     courtLines.names()
@@ -128,198 +133,181 @@ def main(conf, name = None):
     c_w = Point3D.from_point2D(bot_2D, z = 100).back(250).left(50)
     d_w = Point3D.from_point2D(cnt_2D, z = 0)
     backCam = Camera.from_to(c_w, d_w, f = 1700)
-    
     # backView = View.make(backCam, courtScn, resolution = 1)
     # backView.snap().show()
 
     c_w = Point3D.from_point2D(lft_2D, z = 100).left(200)
     sideCam = Camera.from_to(c_w, d_w, f = 600)
-
-    View.make(sideCam, courtScn, resolution = 1).snap().show()
+    # View.make(sideCam, courtScn, resolution = 1).snap().show()
     
     c_w = Point3D.from_point2D(lft_2D, z = 50).left(150).front(200)
     e_w = Point3D.from_point2D(srv_2D, z = 50)
-
     siderevCam = Camera.from_to(c_w, e_w, f = 600)
-    
-    View.make(siderevCam, courtScn, resolution = 1).snap().show()
+    # View.make(siderevCam, courtScn, resolution = 1).snap().show()
     
     c_w = Point3D.from_point2D(rev_2D, z = 100).front(250).left(50)
     revCam = Camera.from_to(c_w, d_w, f = 1700)
+    # View.make(revCam, courtScn, resolution = 1).snap().show()
 
-    View.make(revCam, courtScn, resolution = 1).snap().show()
-    
-    crcScn = Scene.make_court().put(crcs)
-    View.make(revCam, crcScn).snap().show()
+    ### PARAMETERS ### 
+    DESCRIPTOR = 'Second Serves'
 
-    ### ANIMATION 
-    descriptor = 'Second Serves'
-    ballSF = srvShots.feat_spline_simul(color = const.BGR['ball_yellow'])
-    
-    ### STATISTICS ###
-    qs =  [0.25, 0.5, 0.75]
-    spds = srvShots.get_initial_speed()
-    rpms = srvShots.get_initial_spin()
-
-    spd_low, spd_mid, spd_hi = np.quantile(spds, qs)
-    rpm_low, rpm_mid, rpm_hi = np.quantile(rpms, qs)
-
-    def interpolate(startCam, endCam, start_frame, stop_frame):
-        assert startCam.sensor_dims == endCam.sensor_dims
-        frames = range(start_frame, stop_frame)
-        num_frames = len(frames)
-
-        itpl_factors = np.linspace(0, 1, num_frames, endpoint = True)
-        itpl_factors_brdcst = itpl_factors[:, np.newaxis, np.newaxis]
-        M_ints = startCam.M_int[np.newaxis] * (1 - itpl_factors_brdcst) + endCam.M_int[np.newaxis] * itpl_factors_brdcst
-        M_exts = startCam.M_ext[np.newaxis] * (1 - itpl_factors_brdcst) + endCam.M_ext[np.newaxis] * itpl_factors_brdcst
-
-        itplCams = [Camera(M_int, M_ext, startCam.sensor_dims) for (M_int, M_ext) in zip(M_ints, M_exts)]
-        camDict = dict(zip(frames, itplCams))
-        return camDict
-    
-
-    ###### ANIMATION ######
-    FREEZE_FRAMES = 50
-    SHOW_COLOR = const.BGR['grass_green']
+    QUANTILES =  [1/3, 1/2, 2/3]
+    FREEZE_FRAMES = 200
+    SHOW_COLOR = const.BGR['strong_pink']
     TEXT_COLOR = const.BGR['grass_green']
     TEXT_SIZE = 1.5
     RESOLUTION_BACKGROUND = 0.5
     RESOLUTION_OBJECTS = 0.5
+    RESOLUTION_KDE = 0.5
     BANDWIDTH_KDE = 30
+    SCENE_FADE = 0.9
 
-    frontScn = Scene.make_empty()
-
-    frameList = []
-    cams = interpolate(backCam, sideCam, 0, 9)
-    for frame in cams:
-        ball = ballSF[frame]
-        
-        frontScn = frontScn.transparify(0.8)
-        frontScn = frontScn.put(ball)
-
-        myCam = cams[frame]
-        backView = View.make(myCam, courtScn, resolution = RESOLUTION_BACKGROUND)
-        frontView = View.make(myCam, frontScn, resolution = RESOLUTION_OBJECTS)
-
-        showView = backView.combine(frontView)
-        showFrm = showView.snap()
-        
-        frameList.append(showFrm)
-
-        _ = show_continuous(showFrm.array, ms_between_frames = 20)
+    CUTOFF_FLIGHT_FRAMES = 6
+    EXPANSION_FACTOR = 4
     
-    text = f'{descriptor}: '
-    speed_text = f'Typical Speed: {spd_mid:.0f}km/h +- {(spd_hi - spd_low) / 2:.0f}km/h'
-    spin_text = f'Typical RPM: {rpm_mid:.0f}rpm +- {(rpm_hi - rpm_low) / 2:.0f}rpm'
-    showFrm_with_text = showFrm
-    showFrm_with_text = showFrm_with_text.put(text, where = (50, 50), color = TEXT_COLOR, size = TEXT_SIZE)
-    showFrm_with_text = showFrm_with_text.put(speed_text, where = (50, 100), color = TEXT_COLOR, size = TEXT_SIZE)
-    showFrm_with_text = showFrm_with_text.put(spin_text, where = (50, 150), color = TEXT_COLOR, size = TEXT_SIZE)
+    backScn = Scene.make_court()
+    header_text = f'{DESCRIPTOR}: '
+    permanent_animation_params = {'background_resolution': RESOLUTION_BACKGROUND,
+                                   'foreground_resolution': RESOLUTION_OBJECTS,
+                                   'dummy_resolution': RESOLUTION_KDE,
+                                   'background_scene': backScn,
+                                   'text_size': TEXT_SIZE,
+                                   'text_color': TEXT_COLOR,
+                                   'text_where': (50, 50),
+                                   'text_offset': 50}
 
-    for frame in range(FREEZE_FRAMES):
-        frameList.append(showFrm_with_text)
-        _ = show_continuous(showFrm_with_text.array, ms_between_frames = 20)
+    ### BALL SHAPES ###
+    ballSF = srvShots.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = 'smooth')
+    shapes = list(ballSF.values())
+    shapes_vectorized = [f.vectorize() for f in shapes if f is not None]
 
+    ### Expand ball flight points
+    out_lines = []
+    for flightLn in shapes_vectorized:
+        if flightLn is None:
+            itpl_lines = [None] * EXPANSION_FACTOR
+        else:
+            itpl_lines = vs.divide_line(flightLn, EXPANSION_FACTOR)
+                   
+        out_lines.append(itpl_lines)
 
-    cams = interpolate(sideCam, siderevCam, 9, 23)
-    for frame in cams:
-        ball = ballSF[frame]
-        
-        frontScn = frontScn.transparify(0.8)
-        frontScn = frontScn.put(ball)
+    shapes_vectorized_expanded = [l for lineList in out_lines for l in lineList]
+    first_half_flight_expanded = shapes_vectorized_expanded[:CUTOFF_FLIGHT_FRAMES * EXPANSION_FACTOR]
+    second_half_flight_expanded = shapes_vectorized_expanded[CUTOFF_FLIGHT_FRAMES * EXPANSION_FACTOR:]
 
-        myCam = cams[frame]
-        backView = View.make(myCam, courtScn, resolution = RESOLUTION_BACKGROUND)
-        frontView = View.make(myCam, frontScn, resolution = RESOLUTION_OBJECTS)
-
-        showView = backView.combine(frontView)
-        showFrm = showView.snap()
-        
-        frameList.append(showFrm)
-
-        _ = show_continuous(showFrm.array, ms_between_frames = 20)
-
-    ### ADD IN RETURN DATA
+    ### RETURN POSITION ###
     retArr = retShots.get_ball_hit_position()
     retArr_ground = np.concatenate([retArr[:, :2], np.zeros((len(retArr), 1))], axis = 1)
-    r_lo, r_md, r_hi = np.quantile(retArr, qs, axis = 0)
-    diff = r_hi - r_lo
 
+    heightLn_vectorized = Line3D(Point3D(retArr_ground.T), Point3D(retArr.T), color = SHOW_COLOR)
+    heightLn_vectorized_list = vs.divide_line(heightLn_vectorized, 10, reverse_direction = True)
+    
+    large_courtReg = courtLines.get_court_region().scale(1.25)
+    kdeScn = vs.kde_heatmap(retShots, position_func = 'get_ball_hit_position',
+                             bandwidth = BANDWIDTH_KDE,
+                             showReg = large_courtReg)
+    
+    ### STATISTICS ###
+    spds = srvShots.get_initial_speed()
+    rpms = srvShots.get_initial_spin()
+
+    spd_low, spd_mid, spd_hi = np.quantile(spds, QUANTILES)
+    rpm_low, rpm_mid, rpm_hi = np.quantile(rpms, QUANTILES)
+
+    speed_text = f'Typical Speed: {spd_mid:.0f}km/h +- {(spd_hi - spd_low) / 2:.0f}km/h'
+    spin_text = f'Typical RPM: {rpm_mid:.0f}rpm +- {(rpm_hi - rpm_low) / 2:.0f}rpm'
+
+    r_lo, r_md, r_hi = np.quantile(retArr, QUANTILES, axis = 0)
+    diff = r_hi - r_lo
+    
     x_lo, y_lo, z_lo = r_lo
     x, y, z = r_md
     x_hi, y_hi, z_hi = r_hi
-
-    retReg = Region3D.from_region2D(Region.from_points(Point2D((x_lo, y_lo)), Point2D((x_hi, y_hi))), z = 0)
-    retReg = retReg.recolor(SHOW_COLOR)
-
-    pos_radius = (diff[:2] ** 2).sum() ** 0.5 / 2
-    height_radius = diff[2] / 2
-
-    posCircle = Circle3D.from_point3D(Point3D((x, y, 0)), radius = pos_radius)
-    heightCircle = Circle3D.from_point3D(Point3D((x, y, z)), radius = height_radius, fixed_dimension = 'x')
     
-    heightLn_base = Line3D(Point3D((x, y, 0)), Point3D((x, y, z_lo)), thickness = 2, color = const.BGR['smokey_grey'])
-    heightLn = Line3D(Point3D((x, y, z_lo)), Point3D((x, y, z_hi)), thickness = 2, color = SHOW_COLOR)
-
-    from ATMANpy.types.Shapes3D import Lines3D
-    heightLn_vectorized = Line3D(Point3D(retArr_ground), Point3D(retArr), color = SHOW_COLOR)
-
-    kdeView = vs.kde_heatmap(retShots, myCam = siderevCam, position_func = 'get_ball_hit_position',
-                             resolution = RESOLUTION_OBJECTS, bandwidth = BANDWIDTH_KDE)
-
-    # return position
-    crcScn = Scene.make_empty().put(retReg)
-    crcView = View.make(siderevCam, crcScn)
-    showView = backView.combine(frontView).combine(kdeView)
-    showFrm = showView.snap()
+    return_text = 'Ball typically hit at the baseline.'
     
-    text = 'Ball typically hit at the baseline.'
-    showFrm_with_text = showFrm.put(text, color = TEXT_COLOR, size = TEXT_SIZE)
-
-    for frame in range(FREEZE_FRAMES):    
-        frameList.append(showFrm_with_text)
-        _ = show_continuous(showFrm_with_text.array, ms_between_frames = 20)
-        
-    cams = interpolate(siderevCam, revCam, 0, 10)
-    for frame in cams:
-        myCam = cams[frame]
-        backView = View.make(myCam, courtScn, resolution = RESOLUTION_BACKGROUND)
-        frontView = View.make(myCam, frontScn, resolution = RESOLUTION_OBJECTS)
-
-        # crcScn = crcScn.transparify(0.8)
-        # crcView = View.make(myCam, crcScn)
-        
-        kdeView = vs.kde_heatmap(retShots, myCam = myCam, position_func = 'get_ball_hit_position')
-
-        showView = backView.combine(frontView).combine(kdeView)
-        showFrm = showView.snap()
-        
-        frameList.append(showFrm)
-
-        _ = show_continuous(showFrm.array, ms_between_frames = 20)
-
-    # lnScn = Scene.make_empty().put(heightLn_base).put(heightLn)
-    lnScn = Scene.make_empty().put(heightLn_vectorized)
-    lnView = View.make(myCam, lnScn)
-    showView = showView.combine(lnView)
-    showFrm = showView.snap()
-
     z_lo_metres = z_lo / const.SCALE * const.FOOT_TO_METER
     z_hi_metres = z_hi / const.SCALE * const.FOOT_TO_METER
-    text = f'Ball typically hit at height of between {z_lo_metres:.1f} and {z_hi_metres:.1f} metres'
-    showFrm_with_text = showFrm.put(text, color = TEXT_COLOR, size = TEXT_SIZE)
+    height_text = f'Ball typically hit at height of between {z_lo_metres:.1f} and {z_hi_metres:.1f} metres'
 
-    for frame in range(FREEZE_FRAMES):    
-        frameList.append(showFrm_with_text)
-        _ = show_continuous(showFrm_with_text.array, ms_between_frames = 20)
+    ### ANIMATION ###
+    print('Animating ...')
+    print(' ... 1) first half of ball flight')
+    myFrms1, fore_scene1 = vs.animate(shapes = first_half_flight_expanded,
+                                        start_cam = backCam, stop_cam = sideCam, 
+                                        cumulative_foreground_transparence = SCENE_FADE,
+                                        **permanent_animation_params
+                                        )
+    # DecapStream(myFrms1, 0, myFrms1.length()).show(ms_between_frames = 25)
 
-    cv.destroyAllWindows()
+    print(' ... 2) speed and spin text')
+    text_lines = [header_text, speed_text, spin_text]
+    myFrms2, fore_scene2 = vs.animate_static(previous_foreground_scene = fore_scene1,
+                                            static_cam = sideCam,
+                                            text_lines = text_lines, 
+                                            num_frames = FREEZE_FRAMES,
+                                            **permanent_animation_params)
+    # DecapStream(myFrms2, 0, myFrms2.length()).show(ms_between_frames = 25)
 
-    from ATMANpy.types.MultiFrames import BGRFrames
-    from ATMANpy.types.Streams import DecapStream
-    myFrms = BGRFrames(np.array([f.array for f in frameList]))
-    DecapStream(myFrms, 0, myFrms.length()).show(ms_between_frames = 50)
+    print(' ... 3) show rest of flight')
+    myFrms3, fore_scene3 = vs.animate(shapes = second_half_flight_expanded, 
+                                        previous_foreground_scene = fore_scene2,
+                                        start_cam = sideCam, stop_cam = siderevCam, 
+                                        cumulative_foreground_transparence = SCENE_FADE,
+                                        **permanent_animation_params)
+    # DecapStream(myFrms3, 0, myFrms3.length()).show(ms_between_frames = 25)
+
+    print(' ... 4) Fade out ball flight slightly')
+    myFrms4, fore_scene4 = vs.animate(previous_foreground_scene = fore_scene3,
+                                     start_cam = siderevCam, stop_cam = siderevCam, num_frames = 10,
+                                     cumulative_foreground_transparence = 0.95,
+                                     **permanent_animation_params)
+    # DecapStream(myFrms4, 0, myFrms4.length()).show(ms_between_frames = 200)
+
+    print(' ... 5) Return Positions rel. to baseline')
+    text_lines = [return_text]
+
+    myFrms5, fore_scene5 = vs.animate(shapes = heightLn_vectorized_list, 
+                                    start_cam = siderevCam, stop_cam = siderevCam,
+                                    previous_foreground_scene = fore_scene4, 
+                                    text_lines = text_lines,
+                                    **permanent_animation_params)
+    # DecapStream(myFrms5, 0, myFrms5.length()).show(ms_between_frames = 200)
+
+    print(' ... 6) Return KDE')
+    myFrms6, fore_scene6 = vs.animate_static(static_cam = siderevCam, num_frames = FREEZE_FRAMES, 
+                                          previous_foreground_scene = fore_scene5,
+                                          dummy_scene = kdeScn, 
+                                          text_lines = text_lines,
+                                          **permanent_animation_params)
+    # DecapStream(myFrms6, 0, myFrms6.length()).show(ms_between_frames = 25)
+
+    print(' ... 7) Camera Turn for Ball Heights')
+    myFrms7, fore_scene7 = vs.animate(num_frames = 40,
+                                   start_cam = siderevCam, stop_cam = revCam,
+                                    previous_foreground_scene = fore_scene6,
+                                    dummy_scene = kdeScn,
+                                    text_lines = text_lines,
+                                    **permanent_animation_params)
+    # DecapStream(myFrms7, 0, myFrms7.length()).show(ms_between_frames = 100)
+
+    print(' ... 8) Ball Height Information')
+    text_lines = [return_text, height_text]
+
+    myFrms8, fore_scene8 = vs.animate_static(static_cam = revCam, num_frames = FREEZE_FRAMES, 
+                                          previous_foreground_scene = fore_scene7,
+                                          dummy_scene = kdeScn, 
+                                          text_lines = text_lines,
+                                          **permanent_animation_params)
+    # DecapStream(myFrms8, 0, myFrms8.length()).show(ms_between_frames = 25)
+
+
+    jntFrms = BGRFrames.from_frames([myFrms1, myFrms2, myFrms3, myFrms4,
+                                     myFrms5, myFrms6, myFrms7, myFrms8])
+    DecapStream(jntFrms, 0, jntFrms.length()).show(ms_between_frames = 25)
+
+
 
 if __name__ == '__main__':
     
