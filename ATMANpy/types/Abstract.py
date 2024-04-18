@@ -226,6 +226,23 @@ class Trajectory:
         coordArr = self.trajFrm[coord_cols].values
         return coordArr
     
+    def get_extrapolated_next_hit_position(self):
+        coord_cols = ['x_t', 'y_t', 'z_t']
+        tFrm = self.trajFrm[coord_cols]
+        ser0, ser1, ser2 = tFrm.iloc[-4], tFrm.iloc[-3], tFrm.iloc[-2] ### note that -1 is the next hit
+        
+        speed2 = ser2 - ser1
+        speed1 = ser1 - ser0
+        accel = speed2 - speed1
+
+        outSer = ser2 + speed2 + accel
+        return outSer.values
+    
+    def get_actual_next_hit_position(self):
+        coord_cols = ['x_t', 'y_t', 'z_t']
+        tFrm = self.trajFrm[coord_cols]
+        return tFrm.iloc[-1].values
+
     def stream(self, cap, P, how = 'trajectory'):
         coordArr = self.get_ball_array(how = how)
         oneArr = np.ones(len(self.trajFrm))[:, np.newaxis]
@@ -280,22 +297,55 @@ class Trajectory:
     
     def shape_bounce_positions(self, how = 'trajectory'):
         return [Point3D(pt) for pt in self.get_bounce_positions(how = how)]
-        
+
     #### FEATURE GETTERS ######
-    def feat_ball(self, how = 'trajectory'):
+    def feat_ball(self, how = 'trajectory', which_endpoint = 'smooth'):
         ### how: trajectory / observed
+        ### which_endpoint: 'extrapolated' or 'actual' or 'smooth'
+            # 1: extrapolated -> extend ball flight trajectory by one frame
+            # 2: actual -> use actual last entry in trajFrm, which is hit position of next hit (discontinuous with rest of trajectory!) 
+            # 3: smooth -> interpolate between extrapolated point and actual point smoothly, so that you arrive at next hit point without great discontinuity.
         if how == 'trajectory':
             coord_cols = ['x_t', 'y_t', 'z_t']
         elif how == 'observed':
             coord_cols = ['x_o', 'y_o', 'z_o']
            
-        ballFrm = self.trajFrm[coord_cols]
+        if which_endpoint == 'actual':
+            ballFrm = self.trajFrm[coord_cols]
+
+        if which_endpoint == 'extrapolated':
+            ballFrm = self.trajFrm[coord_cols]
+            ballFrm.iloc[-1] = self.get_extrapolated_next_hit_position()
+
+        if which_endpoint == 'smooth':
+            ballFrm = self.trajFrm[coord_cols]
+            ballFrm.iloc[-1] = self.get_extrapolated_next_hit_position()
+
+            ### distance between where we want to get to smoothly (actual) and where we would get to if we didn't do anything (extrapolated)
+            d = self.get_actual_next_hit_position() - self.get_extrapolated_next_hit_position()
+
+            ### Calculate beginning and end of interpolation. We use either the first bounce or (if not there), the hit.
+            ### note that the zero_frame and one_frame are interpolated with 
+            ### lambda = 0 and 1 respectively (trivial solutions), 
+            ### but we still include them here.
+            try:
+                zero_frame = self.get_bounce_frames()[0]
+            except IndexError:
+                zero_frame = self.get_hit_frame()
+
+            one_frame = self.get_frames()[-1]
+        
+            itpl_lambda = np.linspace(0, 1, endpoint = True, num = one_frame - zero_frame + 1)
+            itpl_lambda_full = np.concatenate([np.zeros(len(ballFrm) - len(itpl_lambda)), itpl_lambda])
+            
+            ballFrm = ballFrm + itpl_lambda_full[:, np.newaxis] * d[np.newaxis, :]
+
         ballFrm.columns = ['x', 'y', 'z']
         ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball3D)
         return ballSF
     
-    def feat_spline(self, how = 'trajectory'):
-        ballSF = self.feat_ball(how = how).rename('ball_curr')
+    def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth'):
+        ballSF = self.feat_ball(how = how, which_endpoint = which_endpoint).rename('ball_curr')
         ballSF_before = ballSF.shift(offset = 1).rename('ball_bef')
         def make_spline(ball_bef, ball_curr):
             if ball_bef is None:
@@ -542,8 +592,8 @@ class Shot:
         else:
             return self.recPlayer.feat_player()
         
-    def feat_spline(self, how = 'trajectory'):
-        return self.shotTraj.feat_spline(how = how)
+    def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth'):
+        return self.shotTraj.feat_spline(how = how, which_endpoint = which_endpoint)
         
 @dataclass(frozen = True)
 class Shots:
@@ -620,7 +670,7 @@ class Point(Shots):
         
         shots = []
         for hit_frame, next_hit_frame in zip(hit_serve_frames, next_frames):
-            shotFrm = trajFrm.loc[hit_frame: next_hit_frame - 1] 
+            shotFrm = trajFrm.loc[hit_frame: next_hit_frame] 
             myShot = Shot.from_shot_frame_and_player_sfs(shotFrm, topSF, botSF)    
             shots.append(myShot)
             
@@ -798,25 +848,25 @@ class Points:
 
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
 def __make_method_feat(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
-    def method(self, color = None, alpha = None):
+    def method(self, color = None, alpha = None, **kwargs):
         if color is None:
             color = const.BGR['bright_grey']
         if alpha is None:
             alpha = 1
 
-        SFs = SFList([getattr(myShot, shotMethodStr)() for myShot in self])
+        SFs = SFList([getattr(myShot, shotMethodStr)(**kwargs) for myShot in self])
         return SFs.concatenate()
     method.__name__ = shotMethodStr
     setattr(myClass, shotMethodStr, method)
     
 def __make_method_feat_simul(myClass, shotMethodStr):
-    def method(self, color = None, alpha = None):
+    def method(self, color = None, alpha = None, **kwargs):
         if color is None:
             color = const.BGR['bright_grey']
         if alpha is None:
             alpha = 1
 
-        SFs = SFList([getattr(myShot, shotMethodStr)() for myShot in self])
+        SFs = SFList([getattr(myShot, shotMethodStr)(**kwargs) for myShot in self])
         SFs = SFs.start_at_zero()
         name = SFs[0].name
         SFs = SFList([sf.rename(f'{name}_{idx}') for idx, sf in enumerate(SFs)])
@@ -837,7 +887,7 @@ def __make_method_feat_simul(myClass, shotMethodStr):
 
 def __make_method_get(myClass, shotMethodStr):
     def method(self, **kwargs):
-        outList = [getattr(myShot, shotMethodStr)() for myShot in self]
+        outList = [getattr(myShot, shotMethodStr)(**kwargs) for myShot in self]
         try:
             return np.array(outList)
         except: ### sometimes, outList is a list of lists of unequal size
