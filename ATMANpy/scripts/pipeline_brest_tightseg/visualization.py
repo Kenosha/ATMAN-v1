@@ -147,7 +147,7 @@ def main(conf, name = None):
     ### PARAMETERS ### 
     DESCRIPTOR = 'Second Serves'
     SAVE_FOLDER = 'testing'
-    savePath = ut.get_folder_struct('result_video')[SAVE_FOLDER]
+    savePath = ut.get_folder_struct('results_video')[SAVE_FOLDER]
     
     QUANTILES =  [1/3, 1/2, 2/3]
     FREEZE_FRAMES = 200

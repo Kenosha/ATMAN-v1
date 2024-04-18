@@ -11,6 +11,7 @@ Tracktor/
 cnn_player/
 cnn_ball/
 cnn_sound/
+results_video/
 *.ods
 *.csv
 *.stats
