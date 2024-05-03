@@ -256,12 +256,15 @@ ball_inference_hit_candidates.params = {'stroke_px_r_top': 10,
 ##### BALL INTERPOLATION PLANE #######
 
 ball_interpolation_plane = Parameters()
-ball_interpolation_plane.trajectory_params = {'traj_name': 'FullTrajectories_g60_v41_s31_h20', 
-                                              'observation_threshold': 3, 'sum_of_squares': True, 'number_of_local_minima': 30}
+ball_interpolation_plane.trajectory_params = {'traj_name': 'ShorterTrajectories_g60_v41_s41_h46', 
+                                              'observation_threshold': 3, 'sum_of_squares': True, 'number_of_local_minima': 30,
+                                              'groundstrokes_are_below': 2.5, 'serves_and_overheads_are_above': 2}
 ball_interpolation_plane.plane_point_params = {'max_sideways_reach_in_feet': 5, 'resolution': 1}
 ball_interpolation_plane.hit_point_params = {'height_in_feet': 5, 'resolution': 0.5, 'radius_in_feet': 15}
 ball_interpolation_plane.downsample_params = {'logit_coeff': 10, 'sampling_number': 25}
 ball_interpolation_plane.viterbi_net_params = {'p': 0.95, 'epsilon': 0.01, 'q': 0.1, 
                                                'stretch_factor': 0.25, 'net_bottom_adjustment_in_pixels': 5}
 ball_interpolation_plane.penalty_params = {'frame_cutoff': 5}
-ball_interpolation_plane.viterbi_traj_params = {'dst_factor': 0.2, 'dev_factor': 0.4, 'bnc_factor': 0.4}    
+ball_interpolation_plane.viterbi_traj_params = {'dst_factor': 0.15, 'dev_factor': 0.2, 
+                                                'bnc_factor': 0.2, 'net_factor': 0.15, 
+                                                'fair_factor': 0.15, 'spin_factor': 0.15}    
