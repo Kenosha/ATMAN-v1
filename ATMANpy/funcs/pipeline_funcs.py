@@ -28,7 +28,7 @@ def rhs_parser(rhs):
         argStr = in_brackets.split(',')[0]
     
     elif 'Features' in obj_class:
-        argStr = in_brackets.split(',')[2].replace('featnameList=','')
+        argStr = in_brackets.split(',', 2)[2].replace('featnameList=','')
         argStr = argStr.replace('[', '').replace(']', '')
         
     elif 'Feature' in obj_class:
@@ -57,7 +57,7 @@ def read_load_arguments(someFunc):
     out_names = []
     ret_strings = ret.replace('return', '').replace(' ', '').split(',')
     for ret_str in ret_strings:
-        def_line = [l for l in src if l.startswith(ret_str)]
+        def_line = [l for l in src if l.replace(' ', '').startswith(ret_str + '=')]
         assert len(def_line) == 1
         def_line = def_line[0]
         def_line = def_line.replace(' ', '')
@@ -94,7 +94,6 @@ def read_save_arguments(someFunc):
             
         nameStr = nameStr.replace('\'', '')
         out_names.append(nameStr)
-        
         
     return out_names
 
@@ -195,6 +194,8 @@ def make_digraph(depDict, posDict, saveName = None):
                  'player': 'salmon',
                  'segmentation': 'cornflowerblue',
                  'hits': 'violet',
+                 'manual': 'crimson',
+                 'visualization': 'turquoise',
                  'default': 'grey'}
     
     saveDir = ut.get_folder_struct('graphs')['pipeline_dependencies']
