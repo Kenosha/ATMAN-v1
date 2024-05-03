@@ -137,7 +137,7 @@ class Point3D:
         return self.__class__(**newDict)
         
     def transparify(self, transparence_factor):
-        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
         updDict = {'alpha': transparent_alpha}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
@@ -491,7 +491,7 @@ class Line3D:
         return self.__class__(**newDict)
         
     def transparify(self, transparence_factor):
-        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
         updDict = {'alpha': transparent_alpha}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
@@ -815,7 +815,7 @@ class Region3D():
         return self.__class__(**newDict)
 
     def transparify(self, transparence_factor):
-        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
         updDict = {'alpha': transparent_alpha}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
@@ -921,7 +921,7 @@ class Container3D:
         return self.__class__(**newDict)
         
     def transparify(self, transparence_factor):
-        transparent_alpha = self.alpha * transparence_factor ### at transparence_factor = 1, nothing changes
+        transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
         updDict = {'alpha': transparent_alpha}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)

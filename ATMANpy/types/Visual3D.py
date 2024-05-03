@@ -120,7 +120,7 @@ class DummyScene:
         return DummyScene(self.rastArrs, dim_colArrs, self.alphaArrs)
     
     def transparify(self, transparence_factor):
-        trans_alphaArrs = [alphaArr * transparence_factor for alphaArr in self.alphaArrs]
+        trans_alphaArrs = [np.clip(alphaArr * transparence_factor, 0, 1) for alphaArr in self.alphaArrs]
         return DummyScene(self.rastArrs, self.colArrs, trans_alphaArrs)
 
     def prune_transparents(self, alpha_threshold = 0.05):
