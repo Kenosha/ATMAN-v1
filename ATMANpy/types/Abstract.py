@@ -48,7 +48,6 @@ class PlayerMovement:
         chosen_feature = player_features[trunc_features.index(which)]
         
         playerFrm = ply3DSF[chosen_feature].apply(sa.point3D_to_coords).to_dataframe()
-        playerFrm.index.name = 'frame_num'
         return PlayerMovement(playerFrm)
     
     def __getitem__(self, item):
@@ -58,24 +57,17 @@ class PlayerMovement:
             return self.playerFrm.loc[item] ### TODO: maybe as point?
         
     def get_frames(self):
-        return self.playerFrm.index.get_level_values('frame_num').to_list()
-    
-    def get_hit_frame(self):
-        return self.get_frames()[0]
+        return self.playerFrm.frame_num.to_list()
     
     def get_initial_position(self):
-        x, y = self.playerFrm.loc[self.get_hit_frame(), ['x', 'y']]
+        x, y = self.playerFrm.loc[0, ['x', 'y']]
         return Point3D((x, y, 0))
     
     def get_name(self):
-        names = self.playerFrm.name.unique()
-        assert len(names) == 1
-        return names[0]
-    
+        return self.playerFrm.loc[0, 'name']
+       
     def get_side(self):
-        sides = self.playerFrm.side.unique()
-        assert len(sides) == 1
-        return sides[0]
+        return self.playerFrm.loc[0, 'side']
 
     def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
@@ -136,7 +128,7 @@ class Trajectory:
             return self.trajFrm.loc[item]
     
     def get_frames(self):
-        return self.trajFrm.index.get_level_values('frame_num').to_list()
+        return self.trajFrm.frame_num.to_list()
     
     def get_hit_series(self):
         return self.trajFrm.iloc[0]
@@ -144,9 +136,6 @@ class Trajectory:
     def get_hit_event(self):
         return self['event'].iloc[0]
         
-    def get_hit_frame(self):
-        return self.get_frames()[0]
-    
     def get_hit_event_info(self):
         return self['event_info'].iloc[0]
 
@@ -170,8 +159,8 @@ class Trajectory:
     def get_bounce_events(self):
         return self['event'][self['event'].str.startswith('B')].values.tolist()
     
-    def get_bounce_frames(self):
-        return self['event'][self['event'].str.startswith('B')].index.get_level_values('frame_num').tolist()
+    def get_bounce_indices(self):
+        return self['event'][self['event'].str.startswith('B')].index.tolist()
     
     def get_num_bounces(self):
         return len(self.get_bounce_events())
@@ -191,11 +180,11 @@ class Trajectory:
     
     def get_bounce_positions(self):
         coord_cols = ['x_t', 'y_t', 'z_t']
-        bounce_frames = self.get_bounce_frames()
+        bounce_indices = self.get_bounce_indices()
         
         bounce_points = []
-        for frm in bounce_frames:
-            x, y, z = self.trajFrm.loc[frm, coord_cols]
+        for idx in bounce_indices:
+            x, y, z = self.trajFrm.loc[idx, coord_cols]
             bounce_points.append((x, y, z))
         return bounce_points
     
@@ -237,6 +226,16 @@ class Trajectory:
         coordArr = self.trajFrm[coord_cols].values
         return coordArr
     
+    def get_last_hit_position(self):
+        coord_cols = ['x_t', 'y_t', 'z_t']
+        tFrm = self.trajFrm[coord_cols]
+        return tFrm.iloc[-2].values
+
+    def get_actual_next_hit_position(self):
+        coord_cols = ['x_t', 'y_t', 'z_t']
+        tFrm = self.trajFrm[coord_cols]
+        return tFrm.iloc[-1].values
+    
     def get_extrapolated_next_hit_position(self):
         coord_cols = ['x_t', 'y_t', 'z_t']
         tFrm = self.trajFrm[coord_cols]
@@ -248,11 +247,6 @@ class Trajectory:
 
         outSer = ser2 + speed2 + accel
         return outSer.values
-    
-    def get_actual_next_hit_position(self):
-        coord_cols = ['x_t', 'y_t', 'z_t']
-        tFrm = self.trajFrm[coord_cols]
-        return tFrm.iloc[-1].values
 
     def stream(self, cap, P, how = 'trajectory'):
         coordArr = self.get_ball_array(how = how)
@@ -340,18 +334,20 @@ class Trajectory:
             ### lambda = 0 and 1 respectively (trivial solutions), 
             ### but we still include them here.
             try:
-                zero_frame = self.get_bounce_frames()[0]
+                zero_idx = self.get_bounce_indices()[0]
             except IndexError:
-                zero_frame = self.get_hit_frame()
+                zero_idx = 0
 
-            one_frame = self.get_frames()[-1]
+            one_idx = self.trajFrm.index[-1]
         
-            itpl_lambda = np.linspace(0, 1, endpoint = True, num = one_frame - zero_frame + 1)
+            itpl_lambda = np.linspace(0, 1, endpoint = True, num = one_idx - zero_idx + 1)
             itpl_lambda_full = np.concatenate([np.zeros(len(ballFrm) - len(itpl_lambda)), itpl_lambda])
             
             ballFrm = ballFrm + itpl_lambda_full[:, np.newaxis] * d[np.newaxis, :]
 
         ballFrm.columns = ['x', 'y', 'z']
+        ballFrm.index = self.trajFrm.frame_num
+
         ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball3D)
         return ballSF
     
@@ -391,10 +387,21 @@ class Shot:
     
     @staticmethod
     def from_shot_table(shotFrm):
-        hitFrm = shotFrm[[c for c in shotFrm if 'hit_' in c]]
-        recFrm = shotFrm[[c for c in shotFrm if 'rec_' in c]]
+        ### reindex, to have a clean index that starts at zero! But keep the index in the frame, so we can play back the real thing.
+        if len(shotFrm.index.names) == 1:
+            id_indices = ['frame_num']
+        elif len(shotFrm.index.names) == 2:
+            id_indices = ['match_num', 'frame_num']
+        else:
+            raise NotImplementedError('More than two levels in shot Index!!')
 
-        trajFrm = shotFrm[[c for c in shotFrm if c not in hitFrm.columns and c not in recFrm.columns]]
+        shotFrm.index.names = id_indices
+        shotFrm = shotFrm.reset_index()    
+
+        hitFrm = shotFrm[[*id_indices, *[c for c in shotFrm if 'hit_' in c]]]
+        recFrm = shotFrm[[*id_indices, *[c for c in shotFrm if 'rec_' in c]]]
+
+        trajFrm = shotFrm[[*id_indices, *[c for c in shotFrm if c not in hitFrm.columns and c not in recFrm.columns]]]
         shotTraj = Trajectory(trajFrm)
         
         hitFrm.columns = hitFrm.columns.str.replace('hit_', '')
@@ -409,11 +416,10 @@ class Shot:
     
     def __repr__(self):
         frames = self.get_frames()
-        min_frame, max_frame = frames[0], frames[-1]
         events = self.get_events()
         event_strings = '->'.join(events)
         hitStr, recStr = self.hitPlayer.get_name(), self.recPlayer.get_name()
-        return f'Shot({event_strings}, hitting: {hitStr}, receiving: {recStr}, frames: {min_frame}...{max_frame})'
+        return f'Shot({event_strings}, hitting: {hitStr}, receiving: {recStr}. Duration: {len(frames)} frames)'
         
     def get_frames(self):
         return self.shotTraj.get_frames()
@@ -441,6 +447,12 @@ class Shot:
     
     def get_ball_hit_position(self):
         return self.shotTraj.get_initial_position()
+    
+    def get_ball_last_position(self):
+        return self.shotTraj.get_last_hit_position()
+    
+    def get_ball_next_position(self):
+        return self.shotTraj.get_actual_next_hit_position()
     
     def get_ball_hit_height(self):
         return self.shotTraj.get_initial_height()
@@ -700,7 +712,16 @@ class Point(Shots):
     
     @staticmethod
     def from_point_table(pointFrm):
-        shotList = [Shot.from_shot_table(shotFrm) for _, shotFrm in pointFrm.groupby('shot_idx')]
+        shotFrms = []
+        currFrm = None
+        for _, nextFrm in pointFrm.groupby('shot_idx'):
+            if currFrm is not None:
+                shotFrm = pd.concat([currFrm, nextFrm.iloc[[0]]]) ### to ensure that the beginning of the next hit is included!
+                shotFrms.append(shotFrm)
+            currFrm = nextFrm
+            
+        shotFrms.append(currFrm) ### last shot does not have a next hit
+        shotList = [Shot.from_shot_table(shotFrm) for shotFrm in shotFrms]
         return Point(shotList)
 
     def __repr__(self):
@@ -805,10 +826,9 @@ class Point(Shots):
 @dataclass(frozen = True)
 class Points:
     pointList: List[Point]
-    name: str = 'Points'
 
-    @staticmethod
-    def from_SFs(trajSFs, topSFs, botSFs):
+    @classmethod
+    def from_SFs(cls, trajSFs, topSFs, botSFs):
         ### these have to be segmented!
         pointList = []
         
@@ -819,15 +839,23 @@ class Points:
             myPnt = Point.from_shot_frame_and_player_SFs(trajFrm, topSF, botSF)
             pointList.append(myPnt)
             
-        return Points(pointList)
+        return cls(pointList)
     
-    @staticmethod
-    def from_datatable(tableFrm):
-        pointList = [Point.from_point_table(pointFrm) for pointFrm in ut.split(tableFrm)]
-        return Points(pointList)
+    @classmethod
+    def from_datatable(cls, tableFrm):
+        pointList = [Point.from_point_table(pointFrm) for pointFrm in ut.split(tableFrm, index_level = -1)]
+        return cls(pointList)
 
     def __repr__(self):
-        pointStrs = [f'  {i}: {p},' for i, p in enumerate(self)]
+        SHOW_THRESHOLD = 50
+        if len(self) > SHOW_THRESHOLD:
+            firstPnts, lastPnts = self[:SHOW_THRESHOLD // 2], self[-SHOW_THRESHOLD // 2:] 
+            firstIdxs, lastIdxs = range(len(self))[:SHOW_THRESHOLD // 2], range(len(self))[-SHOW_THRESHOLD // 2:] 
+            firstStrs, lastStrs = [f'  {i}: {p},' for i, p in zip(firstIdxs, firstPnts)], [f'  {i}: {p},' for i, p in zip(lastIdxs, lastPnts)]
+            pointStrs = [*firstStrs, '...', *lastStrs]
+        else:   
+            pointStrs = [f'  {i}: {p},' for i, p in enumerate(self)]
+            
         innerStr = '\n'.join(pointStrs)
         return f'Points([\n{innerStr}\n])'
 
@@ -877,6 +905,7 @@ class Points:
     def get_returns(self):
         pntList = [myPnt.get_return() for myPnt in self]
         return Shots([p for p in pntList if p is not None])
+
 
 #### CREATE FEATURE GETTERS FOR POINT, SHOTS
 def __make_method_feat(myClass, shotMethodStr): ### helper to automatically make all "feat_" methods that exist in Shot for Shots also.
@@ -953,6 +982,8 @@ if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
     import ATMANpy.scripts.pipeline_brest_tightseg as ppl
     import ATMANpy.funcs.feature_funcs as ff
+    import ATMANpy.funcs.util_funcs as ut
+    
 
     cnf_mod = ppl.config_files.default
        
@@ -962,6 +993,13 @@ if __name__ == '__main__':
     sto = conf['store_name']
 
     tableFrm = ff.read_feature_frame('dataTable', vid, sto)
+
+    tables = ut.split(tableFrm, index_level = -1)
+    
+    pointFrm = tables[0]
+    Point.from_point_table(pointFrm)
+
+    print(tableFrm.x_t)
 
     print(Points.from_datatable(tableFrm))
 
