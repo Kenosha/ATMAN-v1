@@ -276,19 +276,30 @@ def load_cnn(model_name, model_type, device = 'cuda'):
     return model, params
 
 def label_map(label):
+    sideMap = {'forehand': 'fh',
+               'backhand': 'bh'}
+    spinMap = {'topspin': 'ts',
+               'slice_or_flat': 'sf'}
+    handMap = {'left': 'lf',
+               'right': 'rt'}
+    shotMap = {'groundstroke': 'gs',
+               'overhead': 'ov',
+               'volley': 'vl'}
+
     ### TODO: what to do if one player is left handed?
     if label[0] == 'other':
         return 'oth'
     elif label[0] == 'any':
-        return 'srv'
+        lab_hand = label[1]
+        lab_hand_mapped = handMap[lab_hand]
+        return 'srv' + '_' + lab_hand_mapped
     else:
         lab_side, lab_hand, lab_spin, lab_shot = label
-        if lab_hand == 'left':
-            lab_side = 'fh' if lab_side == 'backhand' else 'bh' ### invert for left handed strokes
-        else:
-            lab_side = 'fh' if lab_side == 'forehand' else 'bh'
-        lab_spin = 'ts' if lab_spin == 'topspin' else 'sf'
-        return lab_side + '_' + lab_spin
+        lab_side_mapped = sideMap[lab_side]
+        lab_hand_mapped = handMap[lab_hand]
+        lab_spin_mapped = spinMap[lab_spin]
+        lab_shot_mapped = shotMap[lab_shot]
+        return lab_side_mapped + '_' + lab_hand_mapped + '_' + lab_spin_mapped + '_' + lab_shot_mapped 
 
 def sum_over_distinct_labels(prbArr, labels):
     unique_labels = sorted(set(labels))
