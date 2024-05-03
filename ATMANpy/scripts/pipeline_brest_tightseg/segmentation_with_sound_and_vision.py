@@ -55,7 +55,9 @@ def load(vid, sto):
     botFrm = ff.read_feature_frame('bot_hitTable', vid, sto)
     audFrm = ff.read_feature_frame('sound_hitTable', vid, sto)
     segBF = BoolFeature.from_store(vid, sto, featname = 'isRally_sound')
-    return topFrm, botFrm, audFrm, segBF
+    infoSF = StreamFeatures.from_store(vid, sto, featnameList = ['top_name_Flag', 'top_hand_Flag', 'bot_name_Flag', 'bot_hand_Flag'])
+    infoSF_tb = StreamFeatures.from_store(vid, sto, featnameList = ['top_name_tb_Flag', 'top_hand_tb_Flag', 'bot_name_tb_Flag', 'bot_hand_tb_Flag'])
+    return topFrm, botFrm, audFrm, segBF, infoSF, infoSF_tb
 
 def save(outSF, outBF, vid, sto):
     outSF.rename('hitFlag').save(vid, sto) 
@@ -65,7 +67,7 @@ def plot_hit_probs(conv_video_hitFrm, conv_audio_hitSer, conv_hitFrm,
                    hitSF, rallyBF,
                    idx, save_folder_name):
     ### charts save where
-    mainDir = ut.get_folder_struct('graphs')['hit_probabilities_video_and_audio_viterbi']
+    mainDir = ut.get_folder_struct('graphs')['hit_probabilities_video_and_audio_viterbi_with_overhead']
     saveDir = ut.maybe_make_folder(mainDir, save_folder_name)
     
     top_srv_viterbi_frames = [f for f, evt in hitSF.streamDict.items() if evt == 'top_srv']
@@ -119,7 +121,7 @@ def main(conf, weight_params, smooth_params, viterbi_params, widen_params, name 
     smooth_func_audio = make_smoothing_function(smooth_params['smoothing_kernel_audio'], mode = 'same')
     smooth_func_video = make_smoothing_function(smooth_params['smoothing_kernel_video'], mode = 'same')
     
-    topFrm, botFrm, audFrm, segBF = load(vid, sto)
+    topFrm, botFrm, audFrm, segBF, infoSF, infoSF_tb = load(vid, sto)
     
     topSF = StreamFeatures.from_dataframe(topFrm)
     botSF = StreamFeatures.from_dataframe(botFrm)
@@ -128,9 +130,15 @@ def main(conf, weight_params, smooth_params, viterbi_params, widen_params, name 
     allSF = topSF.merge(botSF, how = 'outer').merge(audSF, how = 'outer').conform(segBF.filter(segBF))
     allSFs = allSF.split()
     
-    # frame_event_dict = {} ### this is the dictionary that will get populated with frame keys and identified hit events, to then save as SF
-    # frame_rally_dict = {frame: False for frame in range(fs, ls + 1)} ### this is the dictionary that will get populated with frame keys and the isRally boolean, to then save as SF
-    
+    ### FIX NAMES AND HANDEDNESS IN TIEBREAKS    
+    if infoSF_tb.is_empty():
+        infoSF_fix = infoSF
+    else:
+        replSF = infoSF_tb
+        for feature_name in replSF.get_features():
+            replSF = replSF.rename_feature(feature_name, feature_name.replace('_tb', ''))
+        infoSF_fix = infoSF.replace(replSF)
+
     hitSFs = []
     rallyBFs = []
     for idx, mySF in enumerate(allSFs):
@@ -167,7 +175,7 @@ def main(conf, weight_params, smooth_params, viterbi_params, widen_params, name 
         
         ### Transform unspecific hit_top and hit_bot events into specific events 
         vidSF = StreamFeatures.from_dataframe(videoFrm)
-        mySF = stateSF.merge(vidSF, how = 'left')
+        mySF = stateSF.merge(vidSF, how = 'left').merge(infoSF_fix, how = 'left')
         hitSF = sf.specify_hit_events(mySF)
 
         if hitSF.is_empty():
