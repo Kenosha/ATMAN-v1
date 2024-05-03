@@ -33,11 +33,11 @@ from ATMANpy.types.ShapesTennis3D import Player
 
 import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.sf_apply_funcs as sa
+import ATMANpy.funcs.util_funcs as ut
 
 @dataclass(frozen = True)
 class PlayerMovement:
     playerFrm: pd.DataFrame
-    name: str
     
     @staticmethod
     def from_features(ply3DSF, which):
@@ -48,24 +48,35 @@ class PlayerMovement:
         chosen_feature = player_features[trunc_features.index(which)]
         
         playerFrm = ply3DSF[chosen_feature].apply(sa.point3D_to_coords).to_dataframe()
-        return PlayerMovement(playerFrm, name = which)
+        playerFrm.index.name = 'frame_num'
+        return PlayerMovement(playerFrm)
     
     def __getitem__(self, item):
-        if item in ['x', 'y', 'z']:
+        if item in self.playerFrm.columns:
             return self.playerFrm[item]
         else:
             return self.playerFrm.loc[item] ### TODO: maybe as point?
         
     def get_frames(self):
-        return self.playerFrm.index.to_list()
+        return self.playerFrm.index.get_level_values('frame_num').to_list()
     
     def get_hit_frame(self):
         return self.get_frames()[0]
     
     def get_initial_position(self):
-        x, y, z = self.playerFrm.loc[self.get_hit_frame()]
-        return Point3D((x, y, z))
+        x, y = self.playerFrm.loc[self.get_hit_frame(), ['x', 'y']]
+        return Point3D((x, y, 0))
     
+    def get_name(self):
+        names = self.playerFrm.name.unique()
+        assert len(names) == 1
+        return names[0]
+    
+    def get_side(self):
+        sides = self.playerFrm.side.unique()
+        assert len(sides) == 1
+        return sides[0]
+
     def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
             courtLines = CourtLines.make()
@@ -80,21 +91,18 @@ class PlayerMovement:
         if across_net:
             signed_distance_to_center = newFrm['y'] - centre_y
             newFrm['y'] = centre_y - signed_distance_to_center
-        
-        flipStr = 'top' if self.name == 'bot' else 'bot'
-        
-        return PlayerMovement(newFrm, name = flipStr)
+            
+        return PlayerMovement(newFrm)
     
     def feat_player(self):
-        def applicator(x, y, z):
-            coords = x, y, z
+        def applicator(x, y):
+            coords = x, y, 0
             player = Player.make(coords)
             return player 
             
         plSF = StreamFeatures.from_dataframe(self.playerFrm).apply(applicator)
-        plSF = plSF.rename(f'{self.name}Player3D')
+        plSF = plSF.rename('Player3D')
         return plSF
-    
     
 @dataclass(frozen = True)
 class Trajectory:
@@ -128,7 +136,7 @@ class Trajectory:
             return self.trajFrm.loc[item]
     
     def get_frames(self):
-        return self.trajFrm.index.to_list()
+        return self.trajFrm.index.get_level_values('frame_num').to_list()
     
     def get_hit_series(self):
         return self.trajFrm.iloc[0]
@@ -141,6 +149,9 @@ class Trajectory:
     
     def get_hit_event_info(self):
         return self['event_info'].iloc[0]
+
+    def get_hit_event_descriptor(self):
+        return self['event_descriptor'].iloc[0]
 
     def get_hit_player(self):
         hit_event = self.get_hit_event()
@@ -160,7 +171,7 @@ class Trajectory:
         return self['event'][self['event'].str.startswith('B')].values.tolist()
     
     def get_bounce_frames(self):
-        return self['event'][self['event'].str.startswith('B')].index.tolist()
+        return self['event'][self['event'].str.startswith('B')].index.get_level_values('frame_num').tolist()
     
     def get_num_bounces(self):
         return len(self.get_bounce_events())
@@ -373,11 +384,26 @@ class Shot:
         hit_player = shotTraj.get_hit_player()
         rec_player = shotTraj.get_rec_player()
         
-        hitMvmt = PlayerMovement(frmDict[hit_player], name = hit_player)
-        recMvmt = PlayerMovement(frmDict[rec_player], name = rec_player)
+        hitMvmt = PlayerMovement(frmDict[hit_player])
+        recMvmt = PlayerMovement(frmDict[rec_player])
     
         return Shot(shotTraj, hitMvmt, recMvmt)
+    
+    @staticmethod
+    def from_shot_table(shotFrm):
+        hitFrm = shotFrm[[c for c in shotFrm if 'hit_' in c]]
+        recFrm = shotFrm[[c for c in shotFrm if 'rec_' in c]]
+
+        trajFrm = shotFrm[[c for c in shotFrm if c not in hitFrm.columns and c not in recFrm.columns]]
+        shotTraj = Trajectory(trajFrm)
         
+        hitFrm.columns = hitFrm.columns.str.replace('hit_', '')
+        recFrm.columns = recFrm.columns.str.replace('rec_', '')
+        hitMvmt = PlayerMovement(hitFrm)
+        recMvmt = PlayerMovement(recFrm)
+
+        return Shot(shotTraj, hitMvmt, recMvmt)
+
     def __post_init__(self):
         assert self.shotTraj.get_frames() == self.hitPlayer.get_frames() == self.recPlayer.get_frames()
     
@@ -386,7 +412,7 @@ class Shot:
         min_frame, max_frame = frames[0], frames[-1]
         events = self.get_events()
         event_strings = '->'.join(events)
-        hitStr, recStr = self.hitPlayer.name, self.recPlayer.name
+        hitStr, recStr = self.hitPlayer.get_name(), self.recPlayer.get_name()
         return f'Shot({event_strings}, hitting: {hitStr}, receiving: {recStr}, frames: {min_frame}...{max_frame})'
         
     def get_frames(self):
@@ -403,6 +429,9 @@ class Shot:
     
     def get_hit_event_info(self):
         return self.shotTraj.get_hit_event_info()
+    
+    def get_hit_event_descriptor(self):
+        return self.shotTraj.get_hit_event_descriptor()
     
     def get_hit_series(self):
         return self.shotTraj.get_hit_series()
@@ -486,17 +515,10 @@ class Shot:
         return not self.is_serve()
     
     def is_fore(self):
-        ### TODO: Handedness of player!
-        playerPt = self.get_player_hit_position()
-        ballPt = self.get_ball_hit_position()
-        
-        if self.hitPlayer.name == 'bot':
-            is_fore_side = ballPt.is_right(playerPt)
-        else:
-            is_fore_side = ballPt.is_left(playerPt)
-    
-        return self.is_hit() and is_fore_side
-    
+        desc = self.get_hit_event_descriptor()
+        stroke = desc.split('_', 1)[0]
+        return stroke == 'fh'
+
     def is_back(self):
         return self.is_hit() and not self.is_fore()
     
@@ -581,13 +603,13 @@ class Shot:
         return self.recPlayer.feat_player()
     
     def feat_top_player(self):
-        if self.hitPlayer.name == 'top':
+        if self.hitPlayer.get_side() == 'top':
             return self.hitPlayer.feat_player()
         else:
             return self.recPlayer.feat_player()
         
     def feat_bot_player(self):
-        if self.hitPlayer.name == 'bot':
+        if self.hitPlayer.get_side() == 'bot':
             return self.hitPlayer.feat_player()
         else:
             return self.recPlayer.feat_player()
@@ -660,7 +682,7 @@ class Point(Shots):
     
     @staticmethod
     def from_shot_frame_and_player_SFs(trajFrm, topSF, botSF):
-        if trajFrm.dropna().empty:
+        if trajFrm.dropna(how = 'all', axis = 0).empty:
             return Point([])
         
         last_frame = trajFrm.dropna(how = 'all').index[-1]
@@ -675,13 +697,18 @@ class Point(Shots):
             shots.append(myShot)
             
         return Point(shots)
-            
+    
+    @staticmethod
+    def from_point_table(pointFrm):
+        shotList = [Shot.from_shot_table(shotFrm) for _, shotFrm in pointFrm.groupby('shot_idx')]
+        return Point(shotList)
+
     def __repr__(self):
         if len(self.shotList) == 0:
             return 'Point()'
         else:
             serveShot = self.shotList[0]
-            server, receiver = serveShot.hitPlayer.name, serveShot.recPlayer.name
+            server, receiver = serveShot.hitPlayer.get_name(), serveShot.recPlayer.get_name()
             events = self.get_events()
             frames = self.get_frames()
             event_string = '->'.join(events)
@@ -794,6 +821,11 @@ class Points:
             
         return Points(pointList)
     
+    @staticmethod
+    def from_datatable(tableFrm):
+        pointList = [Point.from_point_table(pointFrm) for pointFrm in ut.split(tableFrm)]
+        return Points(pointList)
+
     def __repr__(self):
         pointStrs = [f'  {i}: {p},' for i, p in enumerate(self)]
         innerStr = '\n'.join(pointStrs)
@@ -916,3 +948,20 @@ for methodStr in dir(Shot):
             __make_method_get(Shots, methodStr)
         if not methodStr in dir(Point): ### do not overwrite
             __make_method_get(Point, methodStr)
+
+if __name__ == '__main__':
+    from ATMANpy.funcs.util_funcs import get_folder_struct
+    import ATMANpy.scripts.pipeline_brest_tightseg as ppl
+    import ATMANpy.funcs.feature_funcs as ff
+
+    cnf_mod = ppl.config_files.default
+       
+    avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
+    vid = avail_vids[0]
+    conf = cnf_mod.get_conf(vid)
+    sto = conf['store_name']
+
+    tableFrm = ff.read_feature_frame('dataTable', vid, sto)
+
+    print(Points.from_datatable(tableFrm))
+
