@@ -14,8 +14,8 @@ from ATMANpy.funcs.util_funcs import get_folder_struct, shift_array, add_in_nan_
 ### SEARCH SPACE PARAMETERS ###
 GRANULARITY_INITIAL_GROUND = 60 #100 # 325 ### how many different initial conditions in x
 GRANULARITY_INITIAL_VERT = 41 #50 # 200 ### how many different initial conditions in z
-GRANULARITY_SPIN = 31 #301 ### how many different spin rates
-GRANULARITY_HEIGHT = 20 ### how many different initial heights
+GRANULARITY_SPIN = 41 #301 ### how many different spin rates
+GRANULARITY_HEIGHT = 46 ### how many different initial heights
 MIN_SPEED_GROUND = 1 ## lowest possible ground speed of ball, in m/s
 MAX_SPEED_GROUND = 60 ## highest possible ground speed of ball, in m/s
 MIN_SPEED_VERT = -20
@@ -23,8 +23,8 @@ MAX_SPEED_VERT =  20
 MIN_SPIN_RATE = -5000 ### highest topspin RPM (negative, because topspin causes negative lift)  
 MAX_SPIN_RATE = 5000  ### higgest slice RPM (positive, because slice causes positive lift)
 MIN_HIT_HEIGHT = 0 ### min height of ball, at hit
-MAX_HIT_HEIGHT = 3 ### max height of ball, at hit
-DURATION_OF_TRAJECTORY = 4 ### in seconds
+MAX_HIT_HEIGHT = 4.5 ### max height of ball, at hit
+DURATION_OF_TRAJECTORY = 2.5 ### in seconds
 PATHOLOGICAL_RANGE = 2 # 10 -> twice the min/max spin rate is added to the thing. 
 PATHOLOGICAL_TAIL_GRANULARITY = 0 ## zero for no pathological cases
 
@@ -57,7 +57,7 @@ I_cm = alpha * m * R**2 ### moment of inertia
 
 
 ########
-NAME = f'FullTrajectories_g{GRANULARITY_INITIAL_GROUND}_v{GRANULARITY_INITIAL_VERT}_s{GRANULARITY_SPIN}_h{GRANULARITY_HEIGHT}'
+NAME = f'ShorterTrajectories_g{GRANULARITY_INITIAL_GROUND}_v{GRANULARITY_INITIAL_VERT}_s{GRANULARITY_SPIN}_h{GRANULARITY_HEIGHT}'
 ########
 
 def RPM_to_omega(RPM):
@@ -254,9 +254,11 @@ def create_trajectories(name, dtype_calc = 'float64', dtype_save = 'float64',
                         granularity_initial_ground = GRANULARITY_INITIAL_GROUND, 
                         granularity_initial_vert = GRANULARITY_INITIAL_VERT, 
                         granularity_spin = GRANULARITY_SPIN,
+                        granularity_height = GRANULARITY_HEIGHT,
                         min_speed_ground = MIN_SPEED_GROUND, max_speed_ground = MAX_SPEED_GROUND,
                         min_speed_vert = MIN_SPEED_VERT, max_speed_vert = MAX_SPEED_VERT,
                         min_spin_rate = MIN_SPIN_RATE, max_spin_rate = MAX_SPIN_RATE,
+                        min_hit_height = MIN_HIT_HEIGHT, max_hit_height = MAX_HIT_HEIGHT,
                         duration_of_trajectory = DURATION_OF_TRAJECTORY,
                         step_duration = STEP_DURATION,
                         p = p, R = R, m = m, g = g, C_D = C_D,
@@ -273,10 +275,11 @@ def create_trajectories(name, dtype_calc = 'float64', dtype_save = 'float64',
                                        granularity_initial_ground = granularity_initial_ground, 
                                        granularity_initial_vert = granularity_initial_vert, 
                                        granularity_spin = granularity_spin,
+                                       granularity_height = granularity_height,
                                        min_speed_ground = min_speed_ground, max_speed_ground = max_speed_ground,
                                        min_speed_vert = min_speed_vert, max_speed_vert = max_speed_vert,
-                                       min_spin_rate = min_spin_rate, 
-                                       max_spin_rate = max_spin_rate)
+                                       min_spin_rate = min_spin_rate, max_spin_rate = max_spin_rate,
+                                       min_hit_height = min_hit_height, max_hit_height = max_hit_height)
     dimensions = v_x.shape[0], v_y.shape[1], rpm.shape[2], height.shape[3]
     
     initial_x = np.zeros(dimensions, dtype = dtype_calc)
@@ -348,10 +351,12 @@ def create_trajectories(name, dtype_calc = 'float64', dtype_save = 'float64',
                           granularity_initial_ground = granularity_initial_ground, 
                           granularity_initial_vert = granularity_initial_vert, 
                           granularity_spin = granularity_spin,
+                          granularity_height = granularity_height,
                           min_speed_ground = min_speed_ground, max_speed_ground = max_speed_ground,
                           min_speed_vert = min_speed_vert, max_speed_vert = max_speed_vert,
                           min_spin_rate = min_spin_rate, 
                           max_spin_rate = max_spin_rate,
+                          min_hit_height = min_hit_height, max_hit_height = max_hit_height,
                           duration_of_trajectory = duration_of_trajectory,
                           step_duration = step_duration,
                           p = p, R = R, m = m, g = g, C_D = C_D,
