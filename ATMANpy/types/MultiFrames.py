@@ -480,9 +480,9 @@ class Frames:
         list_of_typed_cts = [Contours([Contour(cnt) for cnt in cnts]) for cnts in list_of_contour_arrays]
         return list_of_typed_cts, list_of_hierarchies
     
-    def save(self, savePath, saveName, lossless = True):
-        if not saveName.endswith('.avi'):
-            saveName = saveName + '.avi'
+    def save(self, savePath, saveName, lossless = True, save_as = 'avi'):
+        if not saveName.endswith(f'.{save_as}'):
+            saveName = saveName + f'.{save_as}'
             
         fullPath = os.path.join(savePath, saveName)
         

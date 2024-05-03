@@ -524,6 +524,7 @@ class StreamFeature(StreamFeaturesBase):
         saveSF = self.dropna()
         
         if saveSF.is_empty():
+            _ = ff.get_and_make_save_path(self.name, videoName, storeName) ### do make the folder anyway!
             print(f'Did not save {self}, all None!')
             return None
         
