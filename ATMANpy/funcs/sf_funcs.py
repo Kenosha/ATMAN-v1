@@ -2259,7 +2259,7 @@ def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
                 flightLn = Line3D(currPt_ground, nextPt_ground)
                 top_bottom = '+y' if flightLn.to_vector().y > 0 else '-y'
                 left_right = '+x' if flightLn.to_vector().x > 0 else '-x'
-                flightReg = Region3D.from_line(flightLn, flight_plane_size, dim = 'z', top_bottom = top_bottom, left_right = left_right)
+                flightReg = Region3D.from_line3D(flightLn, flight_plane_size, dim = 'z', top_bottom = top_bottom, left_right = left_right)
                 
                 flightLen = flightLn.to_vector().length()
                 
@@ -2417,7 +2417,10 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
     return StreamFeature(outDict, name = 'bounceArr')
   
     
-def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_factor = 1/3):
+def viterbi_trajectories(prob_coordSF, 
+                         dst_factor = 1/6, dev_factor = 1/6, 
+                         bnc_factor = 1/6, net_factor = 1/6,
+                         fair_factor = 1/6, spin_factor = 1/6):
     
     ### figure out where we have gaps in the trajectory finder 
         # can only apply viterbi between these gaps, so that prev_lsArr and curr_fsArr are well defined
@@ -2444,13 +2447,18 @@ def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_f
         num_hits = len(hit_frames)
         
         prev_lsArr = None
-        
+        dist_prob_dict = {}
+
+
         ### FORWARD PASS ###
         for idx, frame in enumerate(hit_frames):
             ### get arrays
             featDict = prob_coordSF[frame]
             bounceArr = featDict['bounce_probs']
             devArr = featDict['dev_probs']
+            netArr = featDict['net_probs']
+            fairArr = featDict['fair_probs']
+            spinArr = featDict['spin_probs']
             coordArr = featDict['traj_coordArr']
             
             plane, traj = bounceArr.shape
@@ -2462,8 +2470,15 @@ def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_f
                 
                 log_devArr = np.log(devArr)
                 log_bounceArr = np.log(bounceArr)
+                log_netArr = np.log(netArr)
+                log_fairArr = np.log(fairArr)
+                log_spinArr = np.log(spinArr)
                 
-                trellis[0] = log_devArr + log_bounceArr
+                dist_prob_dict[frame] = None
+
+                dist_missing_correction = 1 / (1 - dst_factor)
+
+                trellis[0] = dist_missing_correction * (dev_factor * log_devArr + bnc_factor * log_bounceArr + net_factor * log_netArr + fair_factor * log_fairArr + spin_factor * log_spinArr)
                 # pointers[0] = np.zeros((plane, traj, 2)) 
             else:
                 curr_fsArr = coordArr[:, :, 0, :]
@@ -2474,18 +2489,22 @@ def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_f
                 distArr = prev_lsArr[:, :, np.newaxis, np.newaxis] - curr_fsArr[np.newaxis, np.newaxis, :, :]    
                 distArr = (distArr ** 2).sum(axis = -1) ** 0.5
                 ### -> shape: plane, traj, plane, traj
-        
-                ### calculate the 'probability of transition' from the distances
-                dist_probArr = 1 / (1 + distArr)
                 
+                ### calculate the 'probability of transition' from the distances
+                stretch_factor = 1 / const.SCALE
+                likelihood_norm_in_px = 24 ### this is a yard (three feet) in voxel
+                dist_probArr = 1 / (1 + np.exp(-stretch_factor * -(distArr - likelihood_norm_in_px)))
+                dist_prob_dict[frame] = dist_probArr ### have to keep this for later, since we don't have it in a featDict
+
                 log_dist_probArr = np.log(dist_probArr)
                 log_devArr = np.log(devArr)
                 log_bounceArr = np.log(bounceArr)
+                log_netArr = np.log(netArr)
+                log_fairArr = np.log(fairArr)
+                log_spinArr = np.log(spinArr)
                 
                 ### combine the distance probabilities with the current bounce audio and deviation probabilities
-                log_bounceArr_brdcst, log_devArr_brdcst = log_devArr[np.newaxis, np.newaxis, :, :], log_bounceArr[np.newaxis, np.newaxis, :, :]
-                # probArr = (dist_probArr ** dst_factor) * (bounceArr_brdcst ** bnc_factor) * (devArr_brdcst ** dev_factor)
-                log_probArr = dst_factor * log_dist_probArr + dev_factor * log_devArr + bnc_factor * log_bounceArr
+                log_probArr = dst_factor * log_dist_probArr + dev_factor * log_devArr + bnc_factor * log_bounceArr + net_factor * log_netArr + fair_factor * log_fairArr + spin_factor * log_spinArr
                 
                 ### combine it with the trellis likelihood: -> what is the likelihood of being in the previous trajectory in the first place
                 trellis_brdcst = trellis[idx - 1, :, :, np.newaxis, np.newaxis]
@@ -2513,8 +2532,32 @@ def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_f
                 best_plane, best_traj = pointers[hit, best_plane_before, best_traj_before]
             best_trajectories[hit-1] = best_plane, best_traj
             
-        outDict = {frame: {'best_plane': best_trajectories[idx][0], 
-                           'best_traj': best_trajectories[idx][1]} for idx, frame in enumerate(hit_frames)}
+        ### CREATE THE UNINTERRUPTED HIT SEGMENT DICTIONARIES (best indices and probabilities)
+        outDict = {}
+        for idx, frame in enumerate(hit_frames):
+            best_plane, best_traj = best_trajectories[idx]
+            outDict[frame] = {'best_plane': best_plane, 'best_traj': best_traj}
+            
+            featDict = prob_coordSF[frame]
+            bounceArr = featDict['bounce_probs']
+            devArr = featDict['dev_probs']
+            netArr = featDict['net_probs']
+            fairArr = featDict['fair_probs']
+            spinArr = featDict['spin_probs']
+
+            outDict[frame]['bounce_prob'] = bounceArr[best_plane, best_traj]
+            outDict[frame]['dev_prob'] = devArr[best_plane, best_traj]
+            outDict[frame]['net_prob'] = netArr[best_plane, best_traj]
+            outDict[frame]['fair_prob'] = fairArr[best_plane, best_traj]
+            outDict[frame]['spin_prob'] = spinArr[best_plane, best_traj]
+            
+            if idx > 0:
+                dist_probArr = dist_prob_dict[frame]
+                prev_best_plane, prev_best_traj = best_trajectories[idx - 1]
+                outDict[frame]['dist_prob'] = dist_probArr[prev_best_plane, prev_best_traj, best_plane, best_traj]
+            else:
+                outDict[frame]['dist_prob'] = None
+
         outDicts.append(outDict)
         
     allDict = {k: v for outDict in outDicts for k, v in outDict.items()}
@@ -2522,7 +2565,13 @@ def viterbi_trajectories(prob_coordSF, dst_factor = 1/3, dev_factor = 1/3, bnc_f
     ### add in None for frames without measurement
     for f in hit_frames_without_measurement:
         allDict[f] = {'best_plane': None,
-                      'best_traj': None}
+                      'best_traj': None,
+                      'bounce_prob': None,
+                      'dev_prob': None,
+                      'net_prob': None,
+                      'fair_prob': None,
+                      'spin_prob': None,
+                      'dist_prob': None}
     
     return StreamFeatures(allDict)    
     
@@ -2549,7 +2598,7 @@ def make_trajectory_frame(traj_evtSF, courtLines = None):
             hitDF['is_bounce'] = np.where(hitDF.z_t == 0, True, False)
             
             ### Determine Hit and Serve Side
-            side = hitFlag.split('_')[0]
+            side, desc = hitFlag.split('_', 1)
             if srvFlag is not None:
                 srv_side = srvFlag[2]
             else:
@@ -2580,6 +2629,18 @@ def make_trajectory_frame(traj_evtSF, courtLines = None):
             else:
                 hitDF.loc[frame, 'event'] = 'H' + hitFlag[0].capitalize()
     
+            ### Add event descriptor
+            hitDF['event_descriptor'] = desc
+            
+            ### add hand and player name
+            if side == 'top':
+                player_name, player_hand = featDict['top_name_Flag'], featDict['top_hand_Flag']
+            elif side == 'bot':
+                player_name, player_hand = featDict['bot_name_Flag'], featDict['bot_hand_Flag']
+
+            hitDF['player_name'] = player_name
+            hitDF['player_hand'] = player_hand
+
             ### drop unnecessary booleans
             hitDF = hitDF.drop(columns = ['is_net', 'is_bounce', 'is_bounce_in'])
             
@@ -2925,25 +2986,72 @@ def specify_hit_events(mySF):
     myFrm = mySF.to_dataframe()
     myFrms = ut.split(myFrm)
 
+    extra_cols = ['bot_name_Flag', 'bot_hand_Flag', 'top_name_Flag', 'top_hand_Flag']
+
     outDict = {}
     for frm in myFrms:
         unspecific_events = frm['hitFlag'].str.split('_', expand = True)[0].unique()
         assert len(unspecific_events) == 1
         unspecific_event = unspecific_events[0]
         side = unspecific_event[3:]
-        side_columns = [c for c in frm if side in c and not 'oth' in c]
-        average_event_probabilities = frm[side_columns].mean() ### average event probabilities over the duration of the hit
-        likeliest_event = average_event_probabilities.index[average_event_probabilities.argmax()]
+        side_columns = [c for c in frm if side in c and not 'oth' in c and not c in extra_cols]
+        hand_column = [c for c in frm if side in c and c in extra_cols and 'hand' in c]
+
+        assert len(hand_column) == 1
+        hand_column = hand_column[0]
+        hand = frm[hand_column].unique()
+        assert len(hand) == 1
+        hand = hand[0]
+
+        ### average event probabilities over the duration of the hit
+        average_event_probabilities = frm[side_columns].mean() 
+
+        ### depending on the hand, we have to flip the wrong-handed strokes and combine them with their correctly-handed counterpart
+        lf_probs = average_event_probabilities[average_event_probabilities.index.str.contains('_lf')]
+        rt_probs = average_event_probabilities[average_event_probabilities.index.str.contains('_rt')]
+
+        lf_probs.index = lf_probs.index.str.replace('_lf', '')
+        rt_probs.index = rt_probs.index.str.replace('_rt', '')
+
+        if hand == 'right':
+            base_probs = rt_probs.copy()
+            repl_probs = lf_probs.copy()
+            repl_probs.index = repl_probs.index.str.replace('_bh', '_chng').str.replace('_fh', '_bh').str.replace('_chng', '_fh') ### triple swap to avoid replacing same row twice
+
+        elif hand == 'left':
+            base_probs = lf_probs.copy()
+            repl_probs = rt_probs.copy()
+            repl_probs.index = repl_probs.index.str.replace('_bh', '_chng').str.replace('_fh', '_bh').str.replace('_chng', '_fh') ### triple swap to avoid replacing same row twice
+
+        probs = base_probs + repl_probs
+        
+        ### create the event aggregators -> have to map the very granular events to something more usable
+        srv_or_ov = [i for i in probs.index if '_ov' in i or '_srv' in i]
+        gs_or_vl = [i for i in probs.index if i not in srv_or_ov] 
+
+        p_srv_or_ov = probs[srv_or_ov].sum()
+        
+        ps_gs_or_vl = probs[gs_or_vl]
+        ps_gs_or_vl.index = ps_gs_or_vl.index.str.replace('_gs', '').str.replace('_vl', '')
+        ps_gs_or_vl = ps_gs_or_vl.groupby(level = 0).sum()
+
+        max_gs_or_vl, p_gs_or_vl = ps_gs_or_vl.index[ps_gs_or_vl.argmax()], ps_gs_or_vl.max()
+        
         if len(outDict) == 0: ### need a serve!
-            if likeliest_event.split('_')[1] == 'srv':
-                outDict.update({frame: likeliest_event for frame in frm.index})
+            if p_srv_or_ov > p_gs_or_vl:
+                outDict.update({frame: f'{side}_srv' for frame in frm.index})
             else:
                 print(f'{mySF} -> did not see serve at beginning!')
         else: ### anything that looks like a serve is an overhead!
-            if likeliest_event.split('_')[1] == 'srv':
-                write_event = likeliest_event.replace('srv', 'ovh')
+            if p_srv_or_ov > p_gs_or_vl:
+                outDict.update({frame: f'{side}_ovh' for frame in frm.index})
             else:
-                write_event = likeliest_event
-            outDict.update({frame: write_event for frame in frm.index})
+                outDict.update({frame: max_gs_or_vl for frame in frm.index})
 
     return StreamFeature(outDict, name = 'hitFlag')
+
+def count_remaining_shots(mySF):
+    frames = mySF.get_frames()
+    num_shots = len(frames) - 1 ### noting that the last frame in the SF is an added frame for the calculation of the last shot
+    remaining_shots = {f: num_shots - i for i, f in enumerate(frames)}
+    return StreamFeature(remaining_shots, name = 'remaining_shots')
