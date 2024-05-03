@@ -460,6 +460,7 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag, ball_choicePt
     return cldPt3D  
 
 def get_3D_hit_plane_point(P, topPlayerCnt, botPlayerCnt, hitFlag,
+                           top_hand_Flag, bot_hand_Flag,
                            max_sideways_reach_in_feet = 5,
                            height_in_feet = 5, resolution = 1):
     ### As opposed to the above function, we calculate a line of points parallel to the baseline.
@@ -467,7 +468,7 @@ def get_3D_hit_plane_point(P, topPlayerCnt, botPlayerCnt, hitFlag,
     ### all connections between any two points on the two lines will PARSIMONIOUSLY describe all relevant flight planes.
     ### Note that for the purposes of trajectory finding, height_in_feet is irrelevant
     try:
-        side, hit = hitFlag.split('_') ### if we have a serve
+        side, hit = hitFlag.split('_') ### if we have a serve or overhead
         is_serve = True
     except:
         side, stroke, kind = hitFlag.split('_') ### if we have a groundstroke
@@ -481,31 +482,27 @@ def get_3D_hit_plane_point(P, topPlayerCnt, botPlayerCnt, hitFlag,
     
     max_reach_in_axis_units = max_sideways_reach_in_feet * const.SCALE
     
-    ### TODO: Make depend on HANDEDNESS!
-    #### decide angular limits
-    if side == 'top':
-        if is_serve:
-            ### these go up, but generally close to the player sideways
-            leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units / 2), hingePt3D.right(max_reach_in_axis_units / 2)
+    relevant_hand = top_hand_Flag if side == 'top' else bot_hand_Flag
+
+    if is_serve:
+        ### these go up, but generally close to the player sideways
+        leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units / 2), hingePt3D.right(max_reach_in_axis_units / 2)
+    else:
+        ### Idea -> determine number of horizontal flips. 
+            # Default (0 flips): Ball is hit at the bottom, on the forehand, by a right-handed player --> ball is hit on the right
+            # 1 Flip: one of these three factors flips -> ball is hit on the left
+            # 2 Flips: two of these three factors flip -> ball is hit on the right
+            # 3 Flips: all factors flip --> top, backhand, left handed -> ball is hit on the left.
+        side_flip = side == 'top'
+        stroke_flip = stroke == 'bh'
+        hand_flip = relevant_hand == 'left'
+
+        flips = side_flip + stroke_flip + hand_flip
+        if flips % 2 == 0:
+            leftPt3D, rightPt3D = hingePt3D, hingePt3D.right(max_reach_in_axis_units)
         else:
-            if stroke == 'fh':
-                ### a forehand at the top is struck left from the player
-                leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units), hingePt3D
-            elif stroke == 'bh':
-                ### a backhand at the top is struck right from the player
-                leftPt3D, rightPt3D = hingePt3D, hingePt3D.right(max_reach_in_axis_units)
-    elif side == 'bot':
-        if is_serve:
-            ### these go up, but generally close to the player sideways
-            leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units / 2), hingePt3D.right(max_reach_in_axis_units / 2)
-        else:
-            if stroke == 'fh':
-                ### a forehand at the bot is struck right from the player
-                leftPt3D, rightPt3D = hingePt3D, hingePt3D.right(max_reach_in_axis_units)
-            elif stroke == 'bh':
-                ### a backhand at the bot is struck left from the player
-                leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units), hingePt3D
-        
+            leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units), hingePt3D
+
     hitLn = Line3D(leftPt3D, rightPt3D)
     pointArr = hitLn.rasterize(resolution)
     x, y, z = pointArr.T
@@ -605,9 +602,12 @@ def coords_to_ball2D(x, y):
 
 def project_ball(ball3D, P):
     ball2D_array = ball3D.project(P, resolution = 0.1)
-    ball2D = Point2D(ball2D_array.mean(axis = 0))
-    return ball2D
-        
+    if np.isnan(ball2D_array).any():
+        ball2D = None
+    else:
+        ball2D = Point2D(ball2D_array.mean(axis = 0))
+        return ball2D
+            
 def determine_serve_position(topPlayer_3D, botPlayer_3D, hitFlag, schemaLines = schemaLines):
     middle_x = schemaLines.get_half_line().leftPt.x
     
@@ -874,7 +874,9 @@ def resample(coordArr, paramArr, planeArr, pointArr, netArr, penalties,
         
     return coordArr, paramArr, planeArr, pointArr, netArr, penalties
 
-def fit_trajectory(planeArr, netArr, groundArr = None, vertArr = None, rpmArr = None, 
+def fit_trajectory(planeArr, netArr, hitFlag, 
+                   groundArr = None, vertArr = None, rpmArr = None, height_space = None,
+                   groundstrokes_are_below = 2.5, serves_and_overheads_are_above = 2,
                    observation_threshold = 3,
                    sum_of_squares = True, number_of_local_minima = 15,
                    ram_allowed_in_gb = 32):
@@ -894,13 +896,25 @@ def fit_trajectory(planeArr, netArr, groundArr = None, vertArr = None, rpmArr = 
         if valid_observations < observation_threshold:
             trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
         else:
-            ### Fit Trajectories
+            ### Figure out which height subspace to use, depending on the type of shot
+            if 'srv' in hitFlag or 'ovh' in hitFlag:
+                h_filt = height_space > serves_and_overheads_are_above
+            else:
+                h_filt = height_space < groundstrokes_are_below
+            
+            groundArr_hfilt, vertArr_hfilt, rpmArr_hfilt = groundArr[:, :, :, h_filt], vertArr[:, :, :, h_filt], rpmArr[:, :, :, h_filt]
+            
+            ### fit trajectories
             trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = fit_trajectories_pointless(planeArr,
-                                                                                            groundArr, vertArr, rpmArr, 
+                                                                                            groundArr_hfilt, vertArr_hfilt, rpmArr_hfilt, 
                                                                                             sum_of_squares = sum_of_squares,
                                                                                             number_of_local_minima = number_of_local_minima,
                                                                                             ram_allowed_in_gb = ram_allowed_in_gb)
             
+            ### add an offset to the trajArr, to account for the restricted height space
+            offset = np.argmax(h_filt) ### the index of the first True height in the filter is the offset.
+            trajArr[:, :, 3] = trajArr[:, :, 3] + offset
+
             if not netArr is None:
                 ### only needed if the num_frames exceeds the theoretical_max_num_frames in fit_trajectories_pointless
                 num_frames = groundArr_filt.shape[-1]
@@ -975,8 +989,166 @@ def trajectory_deviation_prob(trajArr):
     else:
         dev_probs = 1 / (1 + trajArr[:, :, -1])
     return dev_probs
-    
-    
+
+def trajectory_net_prob(traj_coordArr, netArr, stretch_factor = 0.25):
+    if traj_coordArr is None:
+        net_probs = None
+    else:
+        from ATMANpy.types.ShapesTennis3D import Net
+        myNet = Net.make_singles()
+        trajs, mins, t, d = traj_coordArr.shape
+
+        lPt, cPt, rPt = myNet['Left Net']['Top'].leftPt, myNet['Left Net']['Top'].rightPt, myNet['Right Net']['Top'].rightPt
+        depth_of_net = cPt.y 
+        
+        ### find net crossing Index
+        depth_of_ball = traj_coordArr[:, :, :, 1].copy() 
+
+        contact_depth = depth_of_ball[:, :, 0]
+        hit_from_bot = contact_depth > depth_of_net
+        relative_depth_of_ball = np.where(hit_from_bot[:, :, np.newaxis], 
+                                          depth_of_net - depth_of_ball, ### if the ball is hit from bot, this will be negative and then positive
+                                          depth_of_ball - depth_of_net) ### if the ball is hit from top, this will be negative and then positive
+        ball_is_beyond_net_bool = np.max(relative_depth_of_ball > 0, axis = 2) ### if the ball crosses at all, this will be True
+        ball_is_beyond_net_index = np.argmax(relative_depth_of_ball > 0, axis = 2) ### as soon as the value is positive, we have a crossing
+        
+        ### find the height of the ball as it crosses the net
+        over_net_heightArr = np.full((trajs, mins), fill_value = np.nan)
+        for traj_idx in range(trajs):
+            for min_idx in range(mins):
+                ### check if the ball crosses the net at all
+                ball_crosses_net = ball_is_beyond_net_bool[traj_idx, min_idx]
+                if not ball_crosses_net:
+                    over_net_heightArr[traj_idx, min_idx] = 0 ### at height = 0, the resulting likelihood will be 0.5
+                    continue
+
+                ### as soon as we know the ball crosses the net, collect the index at which it has crossed
+                cross_idx = ball_is_beyond_net_index[traj_idx, min_idx]      
+                
+                ### collect the trajectory point dimensions right before the net, and right after the net
+                bef_dims = traj_coordArr[traj_idx, min_idx, cross_idx - 1]
+                aft_dims = traj_coordArr[traj_idx, min_idx, cross_idx]
+                bef_width, bef_depth, bef_height = bef_dims
+                aft_width, aft_depth, aft_height = aft_dims
+
+                ### interpolate the height between the trajectory point right before the net, and right after the net
+                itpl_lambda = (aft_depth - depth_of_net) / (aft_depth - bef_depth)
+                height_at_net = bef_height * itpl_lambda + aft_height * (1 - itpl_lambda) 
+
+                ### figure out where the ball crosses the net, so we can find the height of the net at that point
+                width_at_net = bef_width * itpl_lambda + aft_width * (1 - itpl_lambda) 
+
+                if width_at_net < cPt.x:
+                    width_lambda = (width_at_net - lPt.x) / (cPt.x - lPt.x)
+                    net_height_at_crossing = width_lambda * cPt.z + (1 - width_lambda) * lPt.z
+                else:
+                    width_lambda = (width_at_net - cPt.x) / (rPt.x - cPt.x)
+                    net_height_at_crossing = width_lambda * rPt.z + (1 - width_lambda) * cPt.z
+
+                over_net_heightArr[traj_idx, min_idx] = height_at_net - net_height_at_crossing
+
+        ### calculate the degree to which the ball flies over the net        
+        out_of_net_degree = 1 / (1 + np.exp(-stretch_factor * over_net_heightArr))
+
+        ### figure out if the ball is supposed to be in the net or not
+        if netArr is None:
+            in_net = False
+        else:
+            in_net = netArr.max()
+        
+        if in_net:
+            net_probs = 1 - out_of_net_degree
+        else:
+            net_probs = out_of_net_degree
+
+    return net_probs
+
+def trajectory_spin_prob(rpmArr_filt, hitFlag):
+    if rpmArr_filt is None:
+        spin_probs = None
+    else:
+        initial_rpm = rpmArr_filt[:, :, 0]
+
+        ### set likelihoods for different hit kinds
+        ### these are created using a simple spline interpolation using eleven lkl values that have to be supplied by the user  
+        from ATMANpy.funcs.line_funcs import spline_func
+
+        if '_srv' in hitFlag: # 1) serve -> could be flat or kick -> no spin or topspin!
+            eleven_values = [0.05, 0.1, 0.15, 0.4, 0.75, 1, 1, 1, 1, 0.9, 0.75]
+        elif '_ovh' in hitFlag: # 2) usually just flat, but can not discount the possibility of some spin
+            eleven_values = [0.05, 0.1, 0.15, 0.6, 1, 1, 1, 0.9, 0.45, 0.2, 0.05]
+        elif '_sf' in hitFlag: # 3) slice or flat -> can not be topspin!
+            eleven_values = [0.5, 0.75, 1, 1, 1, 1, 0.75, 0.5, 0.25, 0.1, 0.05]
+        elif '_ts' in hitFlag:
+            eleven_values = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1, 1, 1, 0.75, 0.5]
+        
+        lkl_func = spline_func(eleven_values)
+        spin_probs = lkl_func(initial_rpm)
+
+    return spin_probs
+
+def trajectory_fair_prob(traj_coordArr, remaining_shots, hitFlag, srvFlag, courtLines = None, 
+                         stretch_factor = 1, on_the_line_correction = 3):
+    from ATMANpy.types.Points import Point2D
+
+    if traj_coordArr is None:
+        fair_probs = None
+    else:
+        if courtLines is None:
+            courtLines = CourtLines.make().add_singles_netline()
+
+        trajs, mins, t, d = traj_coordArr.shape
+
+        if remaining_shots <= 2: ### include also the case where the shot in question is the penultimate shot (remaining shots = 2)
+                                    # since it might be that the ball is hit again, even though it landed out.
+            fair_probs = np.full((trajs, mins), fill_value = 1)
+        else:
+            side = hitFlag.split('_')[0]
+            if side == 'bot':
+                side_opposite = 'Top'
+            elif side == 'top':
+                side_opposite = 'Bottom'
+            
+            if srvFlag is None:
+                relevant_region = courtLines.get_half_region(side = side_opposite, width = 'Singles')
+            else:
+                _, _, which_letter = srvFlag
+                if which_letter == 'D':
+                    service_box = 'Deuce'
+                elif which_letter == 'A':
+                    service_box = 'Ad'
+                relevant_region = courtLines.get_service_box(side = side_opposite, which = service_box)
+
+            distance_to_regArr = np.full((trajs, mins), fill_value = np.nan)
+            for traj_idx in range(trajs):
+                for min_idx in range(mins):
+                    traj_coords = traj_coordArr[traj_idx, min_idx]
+                    is_bounce = traj_coords[:, 2] == 0
+
+                    ### check if ball bounces at all
+                    bounces_at_all = np.max(is_bounce)
+                    if not bounces_at_all:
+                        distance_to_regArr[traj_idx, min_idx] = 0 ### at dist = 0, the resulting likelihood will be 0.5
+                        continue
+
+                    ### get first bounce point
+                    first_bounce_idx = np.argmax(is_bounce)
+                    bx, by = traj_coords[first_bounce_idx, :2]
+                    bouncePt = Point2D((bx, by))
+
+                    ### determine distance to region boundary
+                    distances = [boundaryLn.distance_to(bouncePt) for boundaryLn in relevant_region.lineList]
+                    d = min(distances)
+                    sign = 1 if bouncePt.within(relevant_region) else -1
+
+                    distance_to_regArr[traj_idx, min_idx] = sign * d + on_the_line_correction ### correct for a ball on the line being good!
+
+            ### calculate the degree to which the ball is fair
+            fair_probs = 1 / (1 + np.exp(-stretch_factor * distance_to_regArr))
+
+    return fair_probs
+
+
 def compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = None):
     
     ######## Integrate bounce audio ##########
@@ -1048,11 +1220,12 @@ def calculate_trajectory_coordinates(groundArr_filt, vertArr_filt, pointArr):
         
 
 def make_trajectory_arrays(best_plane, best_traj, 
+                           bounce_prob, dev_prob, net_prob, fair_prob, spin_prob, dist_prob,
                            traj_coordArr, coordArr, planeArr, netArr,
                            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt,
                            v_init_ground_space = None, v_init_vert_space = None, spin_rate_space = None, height_space = None):
-    
     ### traj is best is a boolean array with N entries, one for each trajectory
+    ### all _prob variables are scalars!
     ### all other arrays are N (x T) x ... arrays
     if trajArr is None:
         outArr, columns = None, None
@@ -1084,21 +1257,29 @@ def make_trajectory_arrays(best_plane, best_traj,
             netArr_opt = np.zeros((T, 1), dtype = 'bool')
         else:
             netArr_opt = netArr[:, np.newaxis]
-        
+
+        ### 5) Gather the scalar probabilities
+        probArr = np.array([bounce_prob, dev_prob, net_prob, fair_prob, spin_prob, dist_prob], dtype = 'float')
+        probArr = np.ones((T, 1)) * probArr[np.newaxis, :]
+
         ### 5) Join Arrays
         outArr = np.concatenate([coordArr_opt[:T],
                                  traj_coordArr_opt[:T],
                                  planeArr_opt[:T],
                                  traj_planeArr_opt[:T],
                                  condArr_opt[:T],
-                                 netArr_opt[:T]],
+                                 netArr_opt[:T],
+                                 probArr[:T]
+                                 ],
                                 axis = 1)
         columns =  [*['x_o', 'y_o', 'z_o'], 
                     *['x_t', 'y_t', 'z_t'], 
                     *['px_o', 'pz_o'],
                     *['px_t', 'pz_t', 'rpm_t'],
                     *['vx0', 'vz0', 'rpm0', 'height0'],
-                    *['is_net']]
+                    *['is_net'],
+                    *['bounce_prob', 'dev_prob', 'net_prob', 'fair_prob', 'spin_prob', 'dist_prob']
+                    ]
                         
         assert outArr.shape[1] == len(columns)
         
