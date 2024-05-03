@@ -40,7 +40,9 @@ def load(vid, sto):
     hitSF = StreamFeature.from_store(vid, sto, featname = 'hitFlag')
     plySF = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayerCnt', 'botPlayerCnt'])
     audFrm = ff.read_feature_frame('sound_hitTable', vid, sto)
-    return HPCF, segBF, ballSF, hitSF, plySF, audFrm
+    infoSF = StreamFeatures.from_store(vid, sto, featnameList = ['top_name_Flag', 'top_hand_Flag', 'bot_name_Flag', 'bot_hand_Flag'])
+    infoSF_tb = StreamFeatures.from_store(vid, sto, featnameList = ['top_name_tb_Flag', 'top_hand_tb_Flag', 'bot_name_tb_Flag', 'bot_hand_tb_Flag'])
+    return HPCF, segBF, ballSF, hitSF, plySF, audFrm, infoSF, infoSF_tb
 
 def save(trajDFs, vid, sto):
     trajFrm = pd.concat(trajDFs)
@@ -129,7 +131,7 @@ def check_trajectories(trajDF, vid, sto, folder_name = 'fitted', graph_name = 'p
     
     ### tighten the plot
     bleed = 0.1
-    gridspec_kw = {'wspace': 0.1, 'hspace': 0.1}
+    gridspec_kw = {'wspace': 0.1, 'hspace': 0.15}
     
     rng = np.random.default_rng()
 
@@ -149,6 +151,9 @@ def check_trajectories(trajDF, vid, sto, folder_name = 'fitted', graph_name = 'p
         t_x, t_y = flightFrm['px_t'].values, flightFrm['pz_t'].values
         ax.scatter(x, y)
         ax.scatter(t_x, t_y)
+
+        shot_kind = shotFrm['event_descriptor'].iloc[0]
+        ax.set_title(shot_kind)
 
     fig.savefig(os.path.join(run_path, f'{graph_name}.png'))
     plt.close()
@@ -170,9 +175,18 @@ def main(conf,
     timestamp = ut.make_timestamp() 
 
     #### READ IN ####
-    HPCF, segBF, ballSF, hitSF, plySF, audFrm = load(vid, sto)
+    HPCF, segBF, ballSF, hitSF, plySF, audFrm, infoSF, infoSF_tb = load(vid, sto)
     hitSF = hitSF.thin()
-    
+
+    ### FIX NAMES AND HANDEDNESS IN TIEBREAKS    
+    if infoSF_tb.is_empty():
+        infoSF_fix = infoSF
+    else:
+        replSF = infoSF_tb
+        for feature_name in replSF.get_features():
+            replSF = replSF.rename_feature(feature_name, feature_name.replace('_tb', ''))
+        infoSF_fix = infoSF.replace(replSF)
+
     courtLines = CourtLines.make()
     courtLines = courtLines.add_singles_netline()
     
@@ -200,6 +214,7 @@ def main(conf,
     traj_fit_params['groundArr'] = groundArr
     traj_fit_params['vertArr'] = vertArr
     traj_fit_params['rpmArr'] = rpmArr
+    traj_fit_params['height_space'] = height_space ### this is needed to segment the trajectory fitting into serves and overheads (hit high) and groundstrokes (hit low)
 
     ### MAKE A HAS_PLAYER FILTER -> we need players throughout the entire exchange for this
     ### TODO: turn this into a separate step, earlier in the pipeline (right after player tracking / in player tracking)
@@ -224,10 +239,11 @@ def main(conf,
     
     # # b) For serve, we need to know from which side the serve happens)
     srvSF = ply3DSF.merge(hitSF, how = 'inner').apply(sa.determine_serve_position)
+    srvSFs = srvSF.conform(plyBF).filter(plyBF).split()
     
     ### CONSTRUCT ANCHOR POINTS FOR THE HYPOTHETICAL TRAJECTORY PLANES ###
     # a) make hit plane points
-    hit_player_ball_SF = plySF.merge(hitSF, how = 'inner').merge(HPCF['P']).merge(ballSF)
+    hit_player_ball_SF = plySF.merge(hitSF, how = 'inner').merge(HPCF['P']).merge(ballSF).merge(infoSF_fix)
     cld3DSF_hits = hit_player_ball_SF.apply(sa.get_3D_hit_plane_point, **plane_point_params)
     
     # b) add in points after the last shot, to simulate the ball flying off after last hit.
@@ -258,20 +274,28 @@ def main(conf,
     
     planeSFs_raw = planeSFs.merge(penSFs).merge(netSFs)
     
-    if VISUALIZE:
-        for idx, planeSF_raw in enumerate(planeSFs_raw):
-            check_planes(planeSF_raw, vid, sto, 
-                         folder_name = 'planes_pre_resampling', graph_name = f'rally_{idx}', 
-                         dim = 5, timestamp = timestamp)
+    # if VISUALIZE:
+    #     for idx, planeSF_raw in enumerate(planeSFs_raw):
+    #         check_planes(planeSF_raw, vid, sto, 
+    #                      folder_name = 'planes_pre_resampling', graph_name = f'rally_{idx}', 
+    #                      dim = 5, timestamp = timestamp)
     
     planeSFs_downsampled = planeSFs_raw.apply(sa.resample, **downsample_params)
     
+    ### MERGE IN HIT FLAGS
+    hitSFs = hitSF.conform(plyBF).filter(plyBF).split().dropna()
+    planeSFs_downsampled = planeSFs_downsampled.merge(hitSFs)
+
     ###### FIT TRAJECTORIES ###   
-    nwo_fit = 6
+    nwo_fit = 4
     total_ram = 12
     ram_allowed_in_gb = total_ram / nwo_fit
     trajSFs_fitted = planeSFs_downsampled.apply_mp(sa.fit_trajectory, nwo_fit, ram_allowed_in_gb = ram_allowed_in_gb, **traj_fit_params)
-    
+
+    ###### GET TRAJECTORY COORDINATES ###
+    ### use the pointArr to calculate a flight line, with which the fitted trajectory coordinates can be reconstructed
+    traj_coordSFs = trajSFs_fitted.merge(planeSFs_downsampled['pointArr']).apply(sa.calculate_trajectory_coordinates)
+
     ##### GET TRAJECTORY PROBABILITIES ###
     # a) bounce
     mySFs = trajSFs_fitted.merge(bounceSFs).merge(planeSFs_downsampled['netArr'])
@@ -279,13 +303,23 @@ def main(conf,
 
     # b) deviation
     dev_probSFs = trajSFs_fitted.apply(sa.trajectory_deviation_prob)
+
+    # c) is net / is not in net
+    mySFs = planeSFs_downsampled['netArr'].merge(traj_coordSFs)
+    net_probSFs = mySFs.apply(sa.trajectory_net_prob, stretch_factor = viterbi_net_params['stretch_factor'])
     
-    ###### GET TRAJECTORY ###
-    ### use the pointArr to calculate a flight line, with which the fitted trajectory coordinates can be reconstructed
-    traj_coordSFs = trajSFs_fitted.merge(planeSFs_downsampled['pointArr']).apply(sa.calculate_trajectory_coordinates)
-    
+    # d) prior probability over spin, given the visually detected type of shot
+    mySFs = trajSFs_fitted.merge(hitSFs)
+    spin_probSFs = mySFs.apply(sa.trajectory_spin_prob)
+
+    # e) prior probability over ball having to be in court if the rally continues after the shot in question
+    # -> first, need an indication shot by shot how long the rally will still be going on after.
+    remSFs = traj_coordSFs.apply_whole(sf.count_remaining_shots)
+    mySFs = traj_coordSFs.merge(remSFs).merge(hitSFs).merge(srvSFs)
+    fair_probSFs = mySFs.apply(sa.trajectory_fair_prob)
+
     ####### FIND BEST VITERBI PATH ###
-    probSFs = audio_probSFs.merge(dev_probSFs)
+    probSFs = audio_probSFs.merge(dev_probSFs).merge(net_probSFs).merge(spin_probSFs).merge(fair_probSFs)
     prob_coordSFs = probSFs.merge(traj_coordSFs)
 
     vitSFs = prob_coordSFs.apply_whole(sf.viterbi_trajectories, **viterbi_traj_params)
@@ -300,7 +334,7 @@ def main(conf,
                                 height_space = height_space)
     
     # b) add in hit and serve info to construct events
-    evtSFs = srvSF.merge(hitSF, how = 'outer').conform(plyBF).filter(plyBF).split()
+    evtSFs = srvSF.merge(hitSF, how = 'outer').merge(infoSF_fix, how = 'left').conform(plyBF).filter(plyBF).split()
     
     # c) collect frames 
     traj_evtSFs = trajSFs.merge(evtSFs)
@@ -316,6 +350,20 @@ def main(conf,
                 folder_name = 'fitted', graph_name = f'rally_{rally_idx}', 
                 timestamp = timestamp)
 
+    # ### Show on Stream!
+    # idx = 5
+    # myDF = trajDFs[idx]
+    # coordDF = myDF[['x_t', 'y_t', 'z_t']]
+    # coordDF.columns = ['x', 'y', 'z']
+
+    # myBF = plyBF.filter(plyBF).split()[idx]
+
+    # b2DSF = StreamFeatures.from_dataframe(coordDF).apply(sa.coords_to_ball3D).merge(HPCF).apply(sa.project_ball)
+    
+    # Stream.from_SF(ballSF.conform(myBF), cap).show(ms_between_frames = 100)
+
+    # Stream.from_SF(b2DSF.conform(myBF), cap).show(ms_between_frames = 100)
+
     ### SAVE TRAJECTORY TABLES ###
     save(trajDFs, vid, sto)
     
@@ -327,7 +375,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[0])
+    conf = cnf_mod.get_conf(avail_vids[4])
 
     trajectory_params = prm_mod.ball_interpolation_plane.trajectory_params
     plane_point_params = prm_mod.ball_interpolation_plane.plane_point_params    
