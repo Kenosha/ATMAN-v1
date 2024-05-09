@@ -61,11 +61,15 @@ class PlayerMovement:
     
     def get_initial_position(self):
         x, y = self.playerFrm.loc[0, ['x', 'y']]
-        return Point3D((x, y, 0))
+        # return Point3D((x, y, 0))
+        return x, y
     
     def get_name(self):
         return self.playerFrm.loc[0, 'name']
        
+    def get_hand(self):
+        return self.playerFrm.loc[0, 'hand']
+
     def get_side(self):
         return self.playerFrm.loc[0, 'side']
 
@@ -142,19 +146,19 @@ class Trajectory:
     def get_hit_event_descriptor(self):
         return self['event_descriptor'].iloc[0]
 
-    def get_hit_player(self):
+    def get_hit_side(self):
         hit_event = self.get_hit_event()
         if hit_event[1] == 'T':
-            return 'top'
+            return 'Top'
         elif hit_event[1] == 'B':
-            return 'bot'
+            return 'Bot'
     
-    def get_rec_player(self):
+    def get_rec_side(self):
         hit_event = self.get_hit_event()
         if hit_event[1] == 'T':
-            return 'bot'
+            return 'Bot'
         elif hit_event[1] == 'B':
-            return 'top'
+            return 'Top'
             
     def get_bounce_events(self):
         return self['event'][self['event'].str.startswith('B')].values.tolist()
@@ -375,10 +379,10 @@ class Shot:
         shot_frames = shotFrm.index
         shotTraj = Trajectory(shotFrm)
         
-        frmDict = {'top': topSF.conform(shot_frames).to_dataframe(),
-                   'bot': botSF.conform(shot_frames).to_dataframe()}
-        hit_player = shotTraj.get_hit_player()
-        rec_player = shotTraj.get_rec_player()
+        frmDict = {'Top': topSF.conform(shot_frames).to_dataframe(),
+                   'Bot': botSF.conform(shot_frames).to_dataframe()}
+        hit_player = shotTraj.get_hit_side()
+        rec_player = shotTraj.get_rec_side()
         
         hitMvmt = PlayerMovement(frmDict[hit_player])
         recMvmt = PlayerMovement(frmDict[rec_player])
@@ -433,6 +437,9 @@ class Shot:
     def get_hit_event(self):
         return self.shotTraj.get_hit_event()
     
+    def get_hit_side(self):
+        return self.shotTraj.get_hit_side()
+    
     def get_hit_event_info(self):
         return self.shotTraj.get_hit_event_info()
     
@@ -445,6 +452,9 @@ class Shot:
     def get_player_hit_position(self):
         return self.hitPlayer.get_initial_position()
     
+    def get_player_rec_position(self):
+        return self.recPlayer.get_initial_position()
+
     def get_ball_hit_position(self):
         return self.shotTraj.get_initial_position()
     
@@ -640,8 +650,17 @@ class Shots:
     #     min_frame, max_frame = fsShot.get_frames()[0], lsShot.get_frames()[-1]
     #     return f'Shots(N = {num_shots}, between frames {min_frame} and {max_frame})'
 
+    
     def __repr__(self):
-        shotStrs = [f'  {i}: {s},' for i, s in enumerate(self)]
+        SHOW_THRESHOLD = 20
+        if len(self) > SHOW_THRESHOLD:
+            firstShots, lastshots = self[:SHOW_THRESHOLD // 2], self[-SHOW_THRESHOLD // 2:] 
+            firstIdxs, lastIdxs = range(len(self))[:SHOW_THRESHOLD // 2], range(len(self))[-SHOW_THRESHOLD // 2:] 
+            firstStrs, lastStrs = [f'  {i}: {p},' for i, p in zip(firstIdxs, firstShots)], [f'  {i}: {p},' for i, p in zip(lastIdxs, lastshots)]
+            shotStrs = [*firstStrs, '...', *lastStrs]
+        else:   
+            shotStrs = [f'  {i}: {p},' for i, p in enumerate(self)]
+            
         innerStr = '\n'.join(shotStrs)
         return f'Shots([\n{innerStr}\n])'
 
@@ -681,7 +700,17 @@ class Shots:
         keyFunc = lambda el: el.get_hit_frame()
         return Shots(sorted(self.shotList, key = keyFunc))
     
+    def enforce_direction(self, from_where):
+        ### TODO: ADD SORT!
+        assert from_where in ['Top', 'Bot']
+        t2bShots = self.filter('is_top_to_bot')
+        b2tShots = self.filter('is_bot_to_top')
 
+        if from_where == 'Top':
+            return t2bShots.join(b2tShots.flip())
+        elif from_where == 'Bot':
+            return b2tShots.join(t2bShots.flip())
+        
     ### STAT GETTERS ###
     # -> .get methods of Shot, done with make_method below
         
@@ -842,12 +871,20 @@ class Points:
         return cls(pointList)
     
     @classmethod
-    def from_datatable(cls, tableFrm):
-        pointList = [Point.from_point_table(pointFrm) for pointFrm in ut.split(tableFrm, index_level = -1)]
+    def from_datatable(cls, tableFrm):    
+        curr_shot_idx, prev_shot_idx = tableFrm.groupby('match_idx')['shot_idx'].shift(0), tableFrm.groupby('match_idx')['shot_idx'].shift(1)
+        diff_shot_idx = curr_shot_idx - prev_shot_idx
+        ### nans only occur at the very first frame of a match 
+            # -> there is no prev_shot_idx here. 
+        # The theoretical previous shot idx would have been > 0, so we just plug in a negative number.
+        diff_shot_idx = diff_shot_idx.fillna(-1) 
+        rally_idx = (diff_shot_idx < 0).cumsum()
+
+        pointList = [Point.from_point_table(pointFrm) for _, pointFrm in tableFrm.groupby(rally_idx)]
         return cls(pointList)
 
     def __repr__(self):
-        SHOW_THRESHOLD = 50
+        SHOW_THRESHOLD = 20
         if len(self) > SHOW_THRESHOLD:
             firstPnts, lastPnts = self[:SHOW_THRESHOLD // 2], self[-SHOW_THRESHOLD // 2:] 
             firstIdxs, lastIdxs = range(len(self))[:SHOW_THRESHOLD // 2], range(len(self))[-SHOW_THRESHOLD // 2:] 
@@ -868,9 +905,12 @@ class Points:
     def __len__(self):
         return len(self.pointList)
     
-    def filter(self, bool_method):
-        return Points([myPnt for myPnt in self if getattr(myPnt, bool_method)()])
-    
+    def filter(self, bool_func, **filter_kwargs):
+        if isinstance(bool_func, str):
+            return Points([myPnt for myPnt in self if getattr(myPnt, bool_func)(**filter_kwargs)])
+        else:
+            return Points([myPnt for myPnt in self if bool_func(myPnt, **filter_kwargs)])
+            
     def flatten(self):
         ### turn into shots
         return Shots([myShot for myPnt in self for myShot in myPnt])
