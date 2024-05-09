@@ -456,23 +456,45 @@ class View:
     alArr: np.array ### alphas
     pxArr: np.array ### points in 2D space -> 3D points projected onto screen
     dsArr: np.array ### distance of objects to camera
+
+    text_param_dicts: list = None
     
     sensor_dims: tuple = (1920, 1080)
     
     @staticmethod
-    def make_empty(sensor_dims = (1920, 1080)):
+    def make_empty(sensor_dims = (1920, 1080), text_param_dicts = None):
         return View(np.zeros((0, 3)), 
                     np.zeros((0, 3)), 
                     np.zeros((0, 1)),
                     np.zeros((0, 2), dtype = int),  ### pixels need to be integer!
                     np.zeros(0),
+                    text_param_dicts = text_param_dicts,
                     sensor_dims = sensor_dims)
     
     @staticmethod
-    def make(myCamera, myScene, resolution = 10, alpha_threshold = 0.05):
-        
+    def make(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05):
+
+        ### Deal with annotated points
+        if annotatedPoints is not None:
+            text_param_dicts = []
+            for anPnt in annotatedPoints:
+                ### get parameters like text body, font size, font color, etc.
+                pnt_params = anPnt.get_parameters()
+                
+                ### project the location of the point
+                pnt_coordArr = np.array([anPnt.coords])
+                pnt_pxArr = myCamera.project_points(pnt_coordArr).astype(int)
+                
+                ### make a point dictionary
+                pnt_tuple = tuple(pnt_pxArr.flatten())
+                pnt_params['where'] = pnt_tuple
+                text_param_dicts.append(pnt_params)
+        else:
+            text_param_dicts = None
+
+
         if myScene.is_empty(): 
-            return View.make_empty()
+            return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
         else:
             ### 1) Collect real world points and their colors
             ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold)
@@ -495,9 +517,10 @@ class View:
             
             ### 4) For every point, get distance from Pinhole
             dsArr = ((ptArr - myCamera.get_cw()) ** 2).sum(axis = 1) ** 0.5
-            aView = View(ptArr, clArr, alArr, pxArr, dsArr, 
+            aView = View(ptArr, clArr, alArr, pxArr, dsArr,
+                         text_param_dicts = text_param_dicts, 
                          sensor_dims = myCamera.sensor_dims)
-        
+            
             return aView
 
     def sort_by_pixel(self):
@@ -505,6 +528,7 @@ class View:
         return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], 
                     self.alArr[sort_idxs], self.pxArr[sort_idxs], 
                     self.dsArr[sort_idxs],
+                    text_param_dicts = self.text_param_dicts,
                     sensor_dims = self.sensor_dims)
     
     def sort_by_distance(self, near_to_far = True):
@@ -515,6 +539,7 @@ class View:
         return View(self.ptArr[sort_idxs], self.clArr[sort_idxs], 
                     self.alArr[sort_idxs], self.pxArr[sort_idxs], 
                     self.dsArr[sort_idxs],
+                    text_param_dicts = self.text_param_dicts,
                     sensor_dims = self.sensor_dims)
         
     def filter_duplicates(self, verbose = False):
@@ -532,6 +557,7 @@ class View:
         return View(self.ptArr[fs_mask], self.clArr[fs_mask], 
                     self.alArr[fs_mask], self.pxArr[fs_mask], 
                     self.dsArr[fs_mask],
+                    text_param_dicts = self.text_param_dicts,
                     sensor_dims = self.sensor_dims)
 
     def snap(self):
@@ -557,25 +583,40 @@ class View:
                 snapArr[v, u] = curr_color * (1 - alpha) + premul_color
         
         snapFrm = BGRFrame(snapArr)
+
+        if self.text_param_dicts is not None:
+            for param_dict in self.text_param_dicts:
+                text = param_dict.pop('text')
+                snapFrm = snapFrm.put(text, **param_dict)
         
         return snapFrm
         
     def combine(self, otherView):
+        assert self.sensor_dims == otherView.sensor_dims
+
         ptArr = np.concatenate([self.ptArr, otherView.ptArr], axis = 0)
         clArr = np.concatenate([self.clArr, otherView.clArr], axis = 0)
         alArr = np.concatenate([self.alArr, otherView.alArr], axis = 0) 
         pxArr = np.concatenate([self.pxArr, otherView.pxArr], axis = 0)
         dsArr = np.concatenate([self.dsArr, otherView.dsArr], axis = 0)
         
-        aView = View(ptArr, clArr, alArr, pxArr, dsArr)
+        self_dicts = [] if self.text_param_dicts is None else self.text_param_dicts
+        othr_dicts = [] if otherView.text_param_dicts is None else otherView.text_param_dicts
+        text_param_dicts = [*self_dicts, *othr_dicts]
+        text_param_dicts = None if len(text_param_dicts) == 0 else text_param_dicts
+        
+        aView = View(ptArr, clArr, alArr, pxArr, dsArr, text_param_dicts = text_param_dicts, sensor_dims = self.sensor_dims)
     
         aView = aView.sort_by_distance(near_to_far = False)
         return aView
 
 if __name__ == '__main__':
-    from ATMANpy.types.Shapes3D import Point3D, Ball3D, Lines3D, Region3D, Regions3D
-    
-    courtLines = CourtLines.make()
+    from ATMANpy.types.Shapes3D import Point3D, Ball3D, Lines3D, Region3D, Regions3D, AnnotatedPoint3D
+    import cv2 as cv
+
+    RESOLUTION = 1
+
+    courtLines = CourtLines.make().add_singles_netline()
 
     c_w_2D = courtLines['Bottom Baseline'].center().left(100)
     d_w_2D = courtLines.get_center_point()
@@ -583,16 +624,61 @@ if __name__ == '__main__':
     c_w = Point3D.from_point2D(c_w_2D, z = 100)
     d_w = Point3D.from_point2D(d_w_2D, z = 0)
         
-    botReg = courtLines.add_singles_netline().get_half_region(side = 'Bottom', width = 'Singles')
-    bot_adReg = courtLines.add_singles_netline().get_service_box(side = 'Bottom', which = 'Deuce')
+    botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+    bot_adReg = courtLines.get_service_box(side = 'Bottom', which = 'Deuce')
     botReg3D = Region3D.from_region2D(botReg, z = 0).recolor(const.BGR['grass_green'])
     ad_botReg3D = Region3D.from_region2D(bot_adReg, z = 1).recolor(const.BGR['strong_pink'])
     courtScn = Scene.make_court(courtLines).put(botReg3D).put(ad_botReg3D)
     
     myCam = Camera.from_to(c_w, d_w)
 
-    View.make(myCam, courtScn).snap().show()
+    View.make(myCam, courtScn, resolution = RESOLUTION).snap().show()
 
+    ### TESTING ANNOTATED POINTS ###
+    
+    l_coords, c_coords, r_coords = courtLines.get_3D_net_points()
+    lPt, cPt, rPt = Point3D(l_coords), Point3D(c_coords), Point3D(r_coords)
+
+    cv.FONT_HERSHEY_SIMPLEX
+    cv.FONT_HERSHEY_PLAIN
+    cv.FONT_HERSHEY_DUPLEX
+    cv.FONT_HERSHEY_COMPLEX
+    cv.FONT_HERSHEY_TRIPLEX
+    cv.FONT_HERSHEY_COMPLEX_SMALL
+    cv.FONT_HERSHEY_SCRIPT_SIMPLEX
+    cv.FONT_HERSHEY_SCRIPT_COMPLEX
+    cv.FONT_ITALIC
+
+    #### SERIF FONTS -> THEY LOOK BAD
+    # q4 = rPt.up(30).annotate('FONT_HERSHEY_COMPLEX').refont(cv.FONT_HERSHEY_COMPLEX)
+    # p1 = lPt.up(120).annotate('FONT_HERSHEY_TRIPLEX').refont(cv.FONT_HERSHEY_TRIPLEX)
+    # p2 = lPt.up(90).annotate('FONT_HERSHEY_COMPLEX_SMALL').refont(cv.FONT_HERSHEY_COMPLEX_SMALL)
+
+    ### SCRIPT FONTS -> TERRIBLE
+    # p3 = lPt.up(60).annotate('FONT_HERSHEY_SCRIPT_SIMPLEX').refont(cv.FONT_HERSHEY_SCRIPT_SIMPLEX)
+    # p4 = lPt.up(30).annotate('FONT_HERSHEY_SCRIPT_COMPLEX').refont(cv.FONT_HERSHEY_SCRIPT_COMPLEX)
+
+    ### ITALIC
+    # p1 = rPt.up(30).annotate('FONT_ITALIC').refont(cv.FONT_ITALIC) ## -> doesn't work?
+
+    ### SANS SERIF -> OK
+    # q1 = rPt.up(120).annotate('FONT_HERSHEY_SIMPLEX').refont(cv.FONT_HERSHEY_SIMPLEX) ### ok, but not great
+    q1 = rPt.up(20).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).reline(cv.LINE_AA)
+    q2 = rPt.up(50).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).reline(cv.LINE_AA)
+    q3 = rPt.up(80).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).rethicken(2).reline(cv.LINE_AA)
+
+    # p1 = lPt.up(40).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX) ####### good, but plain is slightly better (and can be smaller!)
+    # p2 = lPt.up(70).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX).rethicken(2)
+    # p3 = lPt.up(100).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX).rethicken(3) 
+    
+    p1 = lPt.up(40).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).reline(cv.FILLED)
+    p2 = lPt.up(70).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).reline(cv.FILLED)
+    p3 = lPt.up(100).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).rethicken(2).reline(cv.FILLED)
+
+    #### RESULTS -> LINE AA is best, FONT_HERSHEY_PLAIN is best
+
+
+    View.make(myCam, courtScn, annotatedPoints = [p1, p2, p3, q1, q2, q3], resolution = RESOLUTION).snap().show()
 
     # emptyScn = Scene.empty() 
     # courtRegions3D = Regions3D.make_court()

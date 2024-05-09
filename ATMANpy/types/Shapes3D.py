@@ -5,7 +5,7 @@ Created on Mon Apr  3 11:25:12 2023
 @author: gianl
 """
 
-
+import cv2 as cv
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, List
@@ -275,6 +275,54 @@ class Point3D:
         
         return pixArr
     
+    def annotate(self, text):
+        attrDict = get_updated_attribute_dictionary(self, {})
+        return AnnotatedPoint3D(text = text, **attrDict)
+
+@dataclass(frozen = True)
+class AnnotatedPoint3D(Point3D):
+    ### Used to store a block of text that appears somewhere in a 3D scene, until after the scene has been rasterized and snapped to 2D
+    text: str = None
+    size: int = 1
+    thickness: int = 1
+    color: tuple = (0, 255, 0)
+    font: int = cv.FONT_HERSHEY_PLAIN
+    lineType: int = cv.LINE_AA
+
+    def get_parameters(self):
+        return {'text': self.text,
+                'size': self.size,
+                'thickness': self.thickness,
+                'color': self.color,
+                'font': self.font,
+                'lineType': self.lineType}
+    
+    def retext(self, new_text): ### point does not have radius, but subclasses may!
+        updDict = {'text': new_text}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def resize(self, new_size): ### point does not have radius, but subclasses may!
+        updDict = {'size': new_size}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def rethicken(self, new_thickness): ### point does not have radius, but subclasses may!
+        updDict = {'thickness': new_thickness}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def refont(self, new_font): ### point does not have radius, but subclasses may!
+        updDict = {'font': new_font}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def reline(self, new_lineType):
+        updDict = {'lineType': new_lineType}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+
 
 @dataclass(frozen = True)
 class Circle3D(Point3D):

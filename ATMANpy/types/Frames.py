@@ -507,11 +507,13 @@ class BoolFrame(Frame):
         
     def put(self, anyObj, 
             color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            font = None, lineType = None,
             marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self.to_grey(), anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, marker = marker,
+                   where = where, size = size, marker = marker, 
+                   font = font, lineType = None,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
     
@@ -657,11 +659,13 @@ class MaskFrame(Frame):
         
     def put(self, anyObj, 
             color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            font = None, lineType = None,
             marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, marker = marker,
+                   where = where, size = size, marker = marker, 
+                   font = font, lineType = lineType,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
     
@@ -770,11 +774,13 @@ class GreyFrame(Frame):
     
     def put(self, anyObj, 
             color = 255, radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            font = None, lineType = None,
             marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, marker = marker,
+                   where = where, size = size, marker = marker, 
+                   font = font, lineType = lineType,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
         
@@ -940,11 +946,13 @@ class BGRFrame(Frame):
     
     def put(self, anyObj, 
             color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            font = None, lineType = None,
             marker = None, annotation = None, enumeration = False,
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, marker = marker,
+                   where = where, size = size, marker = marker, 
+                   font = font, lineType = lineType,
                    annotation = annotation, enumeration = enumeration,
                    verbose = verbose)
         
@@ -1047,11 +1055,13 @@ class HSVFrame(Frame):
     
     def put(self, anyObj, 
             color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
-            marker = None, annotation = None, enumeration = False,
+            font = None, lineType = None,
+            marker = None, annotation = None, enumeration = False, 
             verbose = False):
         return put(self, anyObj, 
                    color = color, radius = radius, thickness = thickness, 
-                   where = where, size = size, marker = marker,
+                   where = where, size = size, marker = marker, 
+                   font = font, lineType = lineType,
                    annotation = annotation, enumeration = enumeration,
                    verbose = False)
         

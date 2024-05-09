@@ -11,9 +11,14 @@ from ATMANpy.types.Lines import Line, Lines, Region
 from ATMANpy.types.Contours import Contour, Contours
 
 def put(someFrm, someObj, 
-        color = None, radius = None, thickness = None, where = None, size = None, marker = None,
+        color = None, radius = None, thickness = None, where = None, size = None, marker = None, font = None, lineType = None,
         annotation = None, enumeration = False, verbose = False):
     
+    if font is None:
+        font = cv.FONT_HERSHEY_PLAIN
+    if lineType is None:
+        lineType = cv.LINE_AA
+
     offset_margin = 10
     
     if verbose:
@@ -93,8 +98,7 @@ def put(someFrm, someObj,
                     
     if isinstance(someObj, str):
         if verbose: print('String!')
-        font = cv.FONT_HERSHEY_SIMPLEX
-        return InstClass(cv.putText(self_copy, someObj, where, font, size, color, thickness))
+        return InstClass(cv.putText(self_copy, someObj, where, font, size, color, thickness, lineType))
     
     if isinstance(someObj, list):
         if verbose: print('List!')
