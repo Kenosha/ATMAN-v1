@@ -486,3 +486,12 @@ def linear_regress(relPoints):
     results = model.fit()
     b_0, b_1 = results.params
     return b_0, b_1
+
+### OTHERS ###
+def spline_func(eleven_values):
+    ### eleven_values -> waypoint likelihood values for rpms -5000, -4000, -3000, ..., 3000, 4000, 5000
+    from functools import partial
+    
+    xp = np.linspace(-5000, 5000, num = 11, endpoint = True)
+    itpl_func = partial(np.interp, xp = xp, fp = eleven_values)
+    return itpl_func
