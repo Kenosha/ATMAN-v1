@@ -144,22 +144,28 @@ class Point3D:
     
     ### METHODS ###
     def left(self, units):
-        return Point3D((max(self.x - units, 0), self.y, self.z))
+        new_coords = (max(self.x - units, 0), self.y, self.z)
+        return self.reposition(new_coords)
 
     def right(self, units):
-        return Point3D((self.x + units, self.y, self.z))
+        new_coords = (self.x + units, self.y, self.z)
+        return self.reposition(new_coords)
     
     def front(self, units):
-        return Point3D((self.x, max(self.y - units, 0), self.z))
+        new_coords = (self.x, max(self.y - units, 0), self.z)
+        return self.reposition(new_coords)
 
     def back(self, units):
-        return Point3D((self.x, self.y + units, self.z))
+        new_coords = (self.x, self.y + units, self.z)
+        return self.reposition(new_coords)
 
     def down(self, units):
-        return Point3D((self.x, self.y, max(self.z - units, 0)))
+        new_coords = (self.x, self.y, max(self.z - units, 0))
+        return self.reposition(new_coords)
     
     def up(self, units):
-        return Point3D((self.x, self.y, self.z + units))
+        new_coords = (self.x, self.y, self.z + units)
+        return self.reposition(new_coords)
 
     def distance_to(self, aPt):
         x_dist = self.x - aPt.x
@@ -241,7 +247,7 @@ class Point3D:
         return dir_hori, dir_vert
     
     def cross(self, otherPt):
-        return Point3D(tuple(np.cross(self.coords, otherPt.coords)))
+        return self.__class__(tuple(np.cross(self.coords, otherPt.coords)))
     
     def is_vectorized(self):
         try:
