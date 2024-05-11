@@ -197,7 +197,7 @@ class Trajectory:
             x, y, z = self.get_bounce_positions()[0]
         except IndexError:
             x, y, z = None, None, None
-        return x, y, z
+        return x, y ### z = 0 always!
 
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how).z
@@ -990,7 +990,7 @@ def __make_method_get(myClass, shotMethodStr):
     def method(self, **kwargs):
         outList = [getattr(myShot, shotMethodStr)(**kwargs) for myShot in self]
         try:
-            return np.array(outList)
+            return np.array(outList, dtype = float)
         except: ### sometimes, outList is a list of lists of unequal size
             return outList
 
