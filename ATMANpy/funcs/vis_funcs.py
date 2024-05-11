@@ -125,11 +125,11 @@ def animate_sequence(animation_sequence_objects,
 
     ### make a kwarg dictionary for the next animation
     if isinstance(current_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(current_scene),
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(current_scene, keep_which = 'other'),
                                      'previous_dummy_scene': previous_dummy_scene}
     elif isinstance(current_scene, DummyScene):
         next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene,
-                                     'previous_dummy_scene': previous_dummy_scene.combine(current_scene)}
+                                     'previous_dummy_scene': previous_dummy_scene.combine(current_scene, keep_which = 'other')}
 
     return myFrms, next_animation_dictionary
 
@@ -210,11 +210,11 @@ def animate_cam_motion(animation_object, num_frames = None,
 
     ### make a kwarg dictionary for the next animation
     if isinstance(static_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene),
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene, keep_which = 'other'),
                                      'previous_dummy_scene': previous_dummy_scene}
     elif isinstance(static_scene, DummyScene):
         next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene,
-                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene)}
+                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene, keep_which = 'other')}
 
     return myFrms, next_animation_dictionary
 
@@ -272,11 +272,11 @@ def animate_static(animation_object, num_frames = 100, static_cam = None,
     
     ### make a kwarg dictionary for the next animation
     if isinstance(static_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene),
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene, keep_which = 'other'),
                                      'previous_dummy_scene': previous_dummy_scene}
     elif isinstance(static_scene, DummyScene):
         next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene,
-                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene)}
+                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene, keep_which = 'other')}
 
     return myFrms, next_animation_dictionary
 

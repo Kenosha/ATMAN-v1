@@ -93,6 +93,8 @@ class Point3D:
     def __neg__(self):
         outCoords = -self.x, -self.y, -self.z
         return Point3D(outCoords)
+    def __eq__(self, otherPnt3D):
+        return self.coords == otherPnt3D.coords ### equality ONLY by location! (relevant for scene filtering)
 
     ### REINSTANTIATION ###
     def reposition(self, new_coords):
@@ -517,6 +519,9 @@ class Line3D:
     def get_container(cls):
         return Lines3D
     
+    def __eq__(self, otherLn3D):
+        return (self.leftPt == otherLn3D.leftPt) and (self.rightPt == otherLn3D.rightPt)
+
     ### REINSTANTIATION ###
     def rename(self, new_name):
         updDict = {'name': new_name}
@@ -779,6 +784,9 @@ class Region3D():
     def __len__(self):
         return len(self.lineList)
     
+    def __eq__(self, otherReg3D):
+        return all([myLn == othLn for myLn, othLn in zip(self, otherReg3D)])
+
     @classmethod
     def from_region2D(cls, myReg, x = None, y = None, z = None):
         return Region3D([Line3D.from_line2D(myLn, x = x, y = y, z = z) for myLn in myReg.lineList])
@@ -952,6 +960,12 @@ class Container3D:
     def __len__(self):
         return len(self.shapeList)
     
+    def __eq__(self, otherContainer):
+        if len(self) != len(otherContainer):
+            return False
+        else:
+            return all([myShape == otherShape for myShape, otherShape in zip(self, otherContainer)])
+
     ### REINSTANTIATION ###
     def rename(self, new_name):
         updDict = {'name': new_name}

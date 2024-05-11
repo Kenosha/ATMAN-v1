@@ -57,8 +57,16 @@ class Scene:
     def prune_transparents(self, alpha_threshold = 0.05):
         return Scene([s for s in self.shapes if s.alpha > alpha_threshold])
 
-    def combine(self, otherScn):
-        return Scene([*self.shapes, *otherScn.shapes])
+    def combine(self, otherScn, keep_which = 'both'):
+        ### keep_which = 'self', 'other', 'both' -> what to keep in case of duplicates
+        if keep_which == 'both':
+            return Scene([*self.shapes, *otherScn.shapes])
+        elif keep_which == 'self':
+            unmatched_shapes = [shape for shape in otherScn.shapes if shape not in self.shapes]
+            return Scene([*self.shapes, *unmatched_shapes])
+        elif keep_which == 'other':
+            unmatched_shapes = [shape for shape in self.shapes if shape not in otherScn.shapes]
+            return Scene([*unmatched_shapes, *otherScn.shapes])
 
     ### METHODS ###
     def rasterize(self, resolution, alpha_threshold = 0.05):
@@ -133,12 +141,31 @@ class DummyScene:
             new_alphaArrs.append(alphaArr[is_above])
         return DummyScene(new_rastArrs, new_colArrs, new_alphaArrs)
 
-    def combine(self, otherDummyScn):
-        comb_rastArrs = [*self.rastArrs, *otherDummyScn.rastArrs]
-        comb_colArrs = [*self.colArrs, *otherDummyScn.colArrs]
-        comb_alphaArrs = [*self.alphaArrs, *otherDummyScn.alphaArrs]
-        return DummyScene(comb_rastArrs, comb_colArrs, comb_alphaArrs)
-
+    def combine(self, otherDummyScn, keep_which = 'both'):
+        ### keep_which = 'self', 'other', 'both' -> what to keep in case of duplicates
+        array_is_in_list = lambda arr, lst: any([(arr == el).all() for el in lst])
+        slf_r, slf_c, slf_a = self.rastArrs, self.colArrs, self.alphaArrs
+        oth_r, oth_c, oth_a = otherDummyScn.rastArrs, otherDummyScn.colArrs, otherDummyScn.alphaArrs
+        if keep_which == 'both':
+            cmb_r = [*slf_r, *oth_r]
+            cmb_c = [*slf_c, *oth_c]
+            cmb_a = [*slf_a, *oth_a]
+            return DummyScene(cmb_r, cmb_c, cmb_a)
+        elif keep_which == 'self':
+            unm_r, unm_c, unm_a = [], [], []
+            for r, c, a in zip(oth_r, oth_c, oth_a):
+                if not array_is_in_list(r, slf_r):
+                    unm_r.append(r)
+                    unm_c.append(c)
+                    unm_a.append(a)
+        elif keep_which == 'other':
+            unm_r, unm_c, unm_a = [], [], []
+            for r, c, a in zip(slf_r, slf_c, slf_a):
+                if not array_is_in_list(r, oth_r):
+                    unm_r.append(r)
+                    unm_c.append(c)
+                    unm_a.append(a)
+        
 
     def rasterize(self, resolution, alpha_threshold = 0.05):
         ### TODO: implement pruning with alpha thresholding (see above) 
