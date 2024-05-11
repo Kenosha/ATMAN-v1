@@ -381,14 +381,29 @@ def fill_with_hard_limit(
 
     return out
 
-def split(df):
+def split(df, index_level = 0):
     """
     Split a dataframe into a list of dataframes with consecutive indices
     """
-    nonconsecIdx = df.index
-    consecidx = np.arange(len(df))
-    return [d for _, d in df.groupby(nonconsecIdx - consecidx)]
-    
+    ### Find other indices, which are not to be split by consecutivity...
+    try:
+        otherIdxs = df.index.droplevel(index_level)
+    except ValueError: ### can not drop from a one level index
+        otherIdxs = pd.Index(np.ones(len(df)))
+
+    all_consec_dfs = []
+    for _, sub_df in df.groupby(otherIdxs): # ... and group the frame by these.
+        ### ... Now, we can split the sub frames into consecutive indices.
+        ### Determine the index level that should be consecutive, and the corresponding consecutive index
+        nonconsecIdx = sub_df.index.get_level_values(index_level)
+        consecidx = np.arange(len(sub_df))
+        
+        ### Collect all frames with that are consecutive
+        consec_dfs = [consec_df for _, consec_df in sub_df.groupby(nonconsecIdx - consecidx)]
+        all_consec_dfs.extend(consec_dfs)
+
+    return all_consec_dfs
+
 ### CLASS CREATION UTILS ###
 
 def get_updated_attribute_dictionary(someObj, updDict):
