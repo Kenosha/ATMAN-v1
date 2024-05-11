@@ -24,9 +24,9 @@ class Scene:
         return Scene([])
     
     @staticmethod
-    def make_court(courtLines = None):
-        courtRegions3D = Court.make(courtLines = courtLines)
-        net3D = Net.make_singles()
+    def make_court(courtLines = None, line_color = const.BGR['bright_grey'], net_color = const.BGR['smokey_grey']):
+        courtRegions3D = Court.make(courtLines = courtLines, color = line_color)
+        net3D = Net.make_singles(color = net_color)
 
         return Scene.make_empty().put(courtRegions3D).put(net3D)
     
@@ -67,7 +67,7 @@ class Scene:
         pruned_self = self.prune_transparents(alpha_threshold = alpha_threshold)
 
         if pruned_self.is_empty():
-            return None, None
+            return None, None, None
         else:
             rastArr_all = []
             colArr_all = []
@@ -499,6 +499,9 @@ class View:
             ### 1) Collect real world points and their colors
             ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold)
             
+            if ptArr is None:
+                return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
+
             ### 2) Suppress negative coordinates
             all_positive_indices = (ptArr >= 0).all(axis = 1)
             ptArr = ptArr[all_positive_indices]
