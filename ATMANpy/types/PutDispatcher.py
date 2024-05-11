@@ -98,7 +98,19 @@ def put(someFrm, someObj,
                     
     if isinstance(someObj, str):
         if verbose: print('String!')
-        return InstClass(cv.putText(self_copy, someObj, where, font, size, color, thickness, lineType))
+        ### Determine text height, to be able to offset
+        text_size, _ = cv.getTextSize(someObj, font, size, thickness)
+        line_offset = text_size[1] + 5
+        
+        text_lines = someObj.split('\n')
+        for idx, ln in enumerate(text_lines):
+            ln = ln.strip(' ')
+            x, y = where
+            y += idx * line_offset
+
+            cv.putText(self_copy, ln, (x, y), font, size, color, thickness, lineType)
+            
+        return InstClass(self_copy)
     
     if isinstance(someObj, list):
         if verbose: print('List!')
