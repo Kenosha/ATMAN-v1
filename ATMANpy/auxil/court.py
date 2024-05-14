@@ -28,32 +28,45 @@ bot_bsl_ad_2D = courtLines['Bottom Baseline'].leftPt
 bot_bsl_cnt_2D = courtLines['Bottom Baseline'].center()
 
 ### CAMERAS ###
-c_w = Point3D.from_point2D(top_deu_2D, z = 190).left(1) ### why we need to go one left is a mystery...
-f_w = Point3D.from_point2D(top_deu_2D, z = 0)
-top_deuCam = Camera.from_to(c_w, f_w, f = 1000).rotate(-0.5)
+def birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top'):
+    if side == 'Top' and which == 'Deuce':
+        relevantPnt = top_deu_2D
+    elif side == 'Top' and which == 'Ad':
+        relevantPnt = top_ad_2D
+    elif side == 'Bot' and which == 'Deuce':
+        relevantPnt = bot_deu_2D
+    elif side == 'Bot' and which == 'Ad':
+        relevantPnt = bot_ad_2D
+    
+    c_w = Point3D.from_point2D(relevantPnt, z = 190).left(1) ### why we need to go one left is a mystery...
+    f_w = Point3D.from_point2D(relevantPnt, z = 0)
+    myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom).rotate(-0.5)
+    return myCam
 
-c_w = Point3D.from_point2D(top_ad_2D, z = 180).left(1) ### why we need to go one left is a mystery...
-f_w = Point3D.from_point2D(top_ad_2D, z = 0)
-top_adCam = Camera.from_to(c_w, f_w, f = 1000).rotate(-0.5)
+def back_view_asymmetric_cam(which = 'Deuce', side = 'Top'):
+    d_w = Point3D.from_point2D(cnt_2D, z = 0)
+    if side == 'Top' and which == 'Deuce':
+        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).front(350).left(50)
+    elif side == 'Top' and which == 'Ad':
+        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).front(350).right(50)
+    elif side == 'Bot' and which == 'Deuce':
+        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).back(350).right(50)
+    elif side == 'Bot' and which == 'Ad':
+        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).back(350).left(50)
 
-c_w = Point3D.from_point2D(bot_deu_2D, z = 190).left(1) ### why we need to go one left is a mystery...
-f_w = Point3D.from_point2D(bot_deu_2D, z = 0)
-bot_deuCam = Camera.from_to(c_w, f_w, f = 1000).rotate(-0.5)
-
-c_w = Point3D.from_point2D(bot_ad_2D, z = 180).left(1) ### why we need to go one left is a mystery...
-f_w = Point3D.from_point2D(bot_ad_2D, z = 0)
-bot_adCam = Camera.from_to(c_w, f_w, f = 1000).rotate(-0.5)
-
-c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).front(350).left(50)
-d_w = Point3D.from_point2D(cnt_2D, z = 0)
-top_back_deuCam = Camera.from_to(c_w, d_w, f = 1700)
-
-c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).front(350).right(50)
-d_w = Point3D.from_point2D(cnt_2D, z = 0)
-top_back_adCam = Camera.from_to(c_w, d_w, f = 1700)
+    myCam = Camera.from_to(c_w, d_w, f = 1700)
+    return myCam
 
 
 if __name__ == '__main__':
+    top_deuCam = birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top')
+    bot_deuCam = birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Bot')
+    top_adCam = birds_eye_service_box_cam(zoom = 1, which = 'Ad', side = 'Top')
+    bot_adCam = birds_eye_service_box_cam(zoom = 1, which = 'Ad', side = 'Bot')
+
+    top_back_deuCam = back_view_asymmetric_cam(which = 'Deuce', side = 'Top')
+    top_back_deuCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
+
     View.make(top_deuCam, courtScn, resolution = 1).snap().show()
     View.make(top_adCam, courtScn, resolution = 1).snap().show()
     View.make(bot_deuCam, courtScn, resolution = 1).snap().show()
