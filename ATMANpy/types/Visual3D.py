@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 from ATMANpy.types.Frames import BGRFrame
+from ATMANpy.types.Shapes3D import Point3D
 from ATMANpy.types.ShapesTennis3D import Court, Net
 from ATMANpy.types.Lines import CourtLines
 
@@ -18,7 +19,16 @@ import ATMANpy.auxil.constants as const
 @dataclass(frozen = True)
 class Scene:
     shapes: List ### a collection of various 3D shapes
-    
+        
+    def __repr__(self):
+        fsStr = f'{self.__class__.__name__}(['
+        sStrs = ['  ' + repr(shape) + ',' for shape in self.shapes]
+        lsStr = '])'
+        if len(sStrs) == 0:
+            return 'Scene()'
+        else:
+            return '\n'.join([fsStr, *sStrs, lsStr])
+
     @staticmethod
     def make_empty():
         return Scene([])
@@ -69,7 +79,9 @@ class Scene:
             return Scene([*unmatched_shapes, *otherScn.shapes])
 
     ### METHODS ###
-    def rasterize(self, resolution, alpha_threshold = 0.05):
+    def rasterize(self, resolution, alpha_threshold = 0.05, 
+                  camera_point = None, resnorm_point = None, adaptive_resolution_exponent = 0): ### these factors are relevant if we want adaptive resolution
+        RES_BOUND_MULTIPLICATIVE = 10
         ### yields a point-cloud representation of the objects in the scene, 
         # with points stored in rastArr_all and their colors stored in colArr_all
         pruned_self = self.prune_transparents(alpha_threshold = alpha_threshold)
@@ -81,7 +93,19 @@ class Scene:
             colArr_all = []
             alphaArr_all = []
             for shape3D in pruned_self.shapes:
-                rastArr = shape3D.rasterize(resolution)
+            
+                ### If needed: Adaptive Resolution!
+                ### Problem: if an object is further away, it will appear denser at constant resolution, and brighter therefore!
+                ### Solution: reduce resolution of objects further away, and increase it for closer objects
+                if adaptive_resolution_exponent != 0: 
+                    norm_dist = camera_point.distance_to(resnorm_point)
+                    shape_dist = camera_point.distance_to(shape3D.center_point())
+                    lo, hi = resolution / RES_BOUND_MULTIPLICATIVE, resolution * RES_BOUND_MULTIPLICATIVE
+                    resolution_modifier = (norm_dist / shape_dist) ** adaptive_resolution_exponent
+                    adaptive_resolution = max(lo, min(resolution * resolution_modifier, hi))
+                    rastArr = shape3D.rasterize(adaptive_resolution)
+                else:
+                    rastArr = shape3D.rasterize(resolution)
                 
                 colTup = shape3D.color
                 alpha = shape3D.alpha
@@ -104,10 +128,20 @@ class DummyScene:
     rastArrs: List ### list of np.arrays, each holding coordinates, with shape N x 3 (xyz)
     colArrs: List ### list of np.arrays, each holding BGR colors, with shape N x 3 (BGR)
     alphaArrs: List ### List of np.arrays, each holding alpha opacities, with shape N x 1  
-    
+        
+    def __repr__(self):
+        arrays_to_str = lambda r, c, a: f'Raster, colors and alphas of size {r.shape[0]}'
+        fsStr = f'{self.__class__.__name__}(['
+        sStrs = ['  ' + arrays_to_str(r, c, a) for r, c, a in zip(self.rastArrs, self.colArrs, self.alphaArrs)]
+        lsStr = '])'
+        if len(sStrs) == 0:
+            return 'DummyScene()'
+        else:
+            return '\n'.join([fsStr, *sStrs, lsStr])
+
     @staticmethod
     def make_empty():
-        return DummyScene([], [])
+        return DummyScene([], [], [])
     
     def is_empty(self):
         return len(self.rastArrs) == 0
@@ -150,7 +184,6 @@ class DummyScene:
             cmb_r = [*slf_r, *oth_r]
             cmb_c = [*slf_c, *oth_c]
             cmb_a = [*slf_a, *oth_a]
-            return DummyScene(cmb_r, cmb_c, cmb_a)
         elif keep_which == 'self':
             unm_r, unm_c, unm_a = [], [], []
             for r, c, a in zip(oth_r, oth_c, oth_a):
@@ -158,6 +191,9 @@ class DummyScene:
                     unm_r.append(r)
                     unm_c.append(c)
                     unm_a.append(a)
+            cmb_r = [*slf_r, *unm_r]
+            cmb_c = [*slf_c, *unm_c]
+            cmb_a = [*slf_a, *unm_a]
         elif keep_which == 'other':
             unm_r, unm_c, unm_a = [], [], []
             for r, c, a in zip(slf_r, slf_c, slf_a):
@@ -165,9 +201,15 @@ class DummyScene:
                     unm_r.append(r)
                     unm_c.append(c)
                     unm_a.append(a)
+            cmb_r = [*unm_r, *oth_r]
+            cmb_c = [*unm_c, *oth_c]
+            cmb_a = [*unm_a, *oth_a]
+    
+        return DummyScene(cmb_r, cmb_c, cmb_a)
         
 
-    def rasterize(self, resolution, alpha_threshold = 0.05):
+    def rasterize(self, resolution, alpha_threshold = 0.05, 
+                  camera_point = None, resnorm_point = None, adaptive_resolution_exponent = 0): ### TODO: adaptive resolution -> necessary for dummy scenes?
         ### TODO: implement pruning with alpha thresholding (see above) 
         pruned_self = self.prune_transparents()
 
@@ -329,6 +371,8 @@ class Camera:
         return self.M_ext[:3, 3] 
     def get_cw(self): ### center of camera, in world coordinates
         return - self.get_R_inv() @ self.get_t()
+    def get_center_point(self):
+        return Point3D(tuple(self.get_cw()))
     
     def project_points(self, ptArr):
         num_points, num_dims = ptArr.shape
@@ -499,7 +543,8 @@ class View:
                     sensor_dims = sensor_dims)
     
     @staticmethod
-    def make(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05):
+    def make(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05,
+             adaptive_resolution_exponent = 0):
 
         ### Deal with annotated points
         if annotatedPoints is not None:
@@ -523,8 +568,17 @@ class View:
         if myScene.is_empty(): 
             return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
         else:
+            if adaptive_resolution_exponent != 0:
+                camPt = myCamera.get_center_point()
+                cntPt = Point3D.from_point2D(CourtLines.make().get_center_point(), z = 0)
+            else:
+                camPt = None
+                cntPt = None
             ### 1) Collect real world points and their colors
-            ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold)
+            ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold, 
+                                                    camera_point = camPt, 
+                                                    resnorm_point = cntPt,
+                                                    adaptive_resolution_exponent = adaptive_resolution_exponent)
             
             if ptArr is None:
                 return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
@@ -642,6 +696,7 @@ class View:
 
 if __name__ == '__main__':
     from ATMANpy.types.Shapes3D import Point3D, Ball3D, Lines3D, Region3D, Regions3D, AnnotatedPoint3D
+    from ATMANpy.types.ShapesTennis3D import Player
     import cv2 as cv
 
     RESOLUTION = 1
@@ -706,9 +761,33 @@ if __name__ == '__main__':
     p3 = lPt.up(100).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).rethicken(2).reline(cv.FILLED)
 
     #### RESULTS -> LINE AA is best, FONT_HERSHEY_PLAIN is best
-
-
     View.make(myCam, courtScn, annotatedPoints = [p1, p2, p3, q1, q2, q3], resolution = RESOLUTION).snap().show()
+
+
+    #### TESTING ADAPTIVE RESOLUTION ###
+    
+    c_w_2D = courtLines['Bottom Baseline'].center().down(150).left(100)
+    d_w_2D = courtLines.get_center_point()
+ 
+    c_w = Point3D.from_point2D(c_w_2D, z = 100)
+    d_w = Point3D.from_point2D(d_w_2D, z = 0)
+    
+    myCam = Camera.from_to(c_w, d_w)
+
+    p1_2D = courtLines['Bottom Baseline'].center().right(100)
+    p2_2D = courtLines['Top Baseline'].center().left(100).up(100)
+
+    ply1 = Player.make(p1_2D.coords)
+    ply2 = Player.make(p2_2D.coords)
+    courtScn = Scene.make_court(courtLines).put(ply1).put(ply2)
+
+    
+    View.make(myCam, courtScn, adaptive_resolution_exponent = 0, resolution = RESOLUTION).snap().show()
+    View.make(myCam, courtScn, adaptive_resolution_exponent = 1, resolution = RESOLUTION).snap().show()
+    View.make(myCam, courtScn, adaptive_resolution_exponent = 2, resolution = RESOLUTION).snap().show()
+    View.make(myCam, courtScn, adaptive_resolution_exponent = 3, resolution = RESOLUTION).snap().show()
+
+    # Player.make()
 
     # emptyScn = Scene.empty() 
     # courtRegions3D = Regions3D.make_court()

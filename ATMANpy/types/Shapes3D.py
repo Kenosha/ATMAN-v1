@@ -39,6 +39,9 @@ class Point3D:
         object.__setattr__(self, 'z', self.coords[2])
         #############################
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.coords})'
+
     @staticmethod
     def from_point2D(aPt, x = None, y = None, z = None):
         if x is not None:
@@ -133,11 +136,14 @@ class Point3D:
         return self.__class__(**newDict)
 
     def dim(self, dim_factor):
-        dimmed_color = tuple([c * dim_factor for c in self.color]) ### at dim_factor = 1, nothing changes
+        dimmed_color = tuple([max(0, min(c * dim_factor, 255)) for c in self.color]) ### at dim_factor = 1, nothing changes
+        is_extreme = [c in [0, 255] for c in dimmed_color]
+        if any(is_extreme):
+            print(f'Dimming {self.color} to {dimmed_color} hit 0 or 255, verify if color satisfactory!')
         updDict = {'color': dimmed_color} 
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
-        
+
     def transparify(self, transparence_factor):
         transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
         updDict = {'alpha': transparent_alpha}
@@ -218,6 +224,12 @@ class Point3D:
             comp = inObj
         return self.z > comp
 
+    def center_point(self):
+        return self
+            
+    def center_coords(self):
+        return self.center_point().coords
+
     ### VECTOR FUNCTIONS
     def length(self):
         return self.distance_to(Point3D((0, 0, 0)))
@@ -296,7 +308,14 @@ class AnnotatedPoint3D(Point3D):
     color: tuple = (0, 255, 0)
     font: int = cv.FONT_HERSHEY_PLAIN
     lineType: int = cv.LINE_AA
-
+    
+    def __repr__(self):
+        if len(self.text) > 20:
+            textStr = self.text[:10] + ' ... ' + self.text[-10:]
+        else:
+            textStr = self.text
+        return f'{self.__class__.__name__}({self.coords}, text = {textStr})'
+    
     def get_parameters(self):
         return {'text': self.text,
                 'size': self.size,
@@ -356,6 +375,9 @@ class Circle3D(Point3D):
         object.__setattr__(self, 'z', self.coords[2])
         #############################  
     
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.coords}, radius = {self.radius})'
+
     @staticmethod
     def from_point3D(myPnt, radius = 1, limit_theta = None, fixed_dimension = 'z', name = 'Circle3D'):
         return Circle3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
@@ -433,6 +455,9 @@ class Ball3D(Point3D):
         object.__setattr__(self, 'z', self.coords[2])
         #############################  
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.coords}, radius = {self.radius})'
+
     @staticmethod
     def from_point3D(myPnt, radius = 1, limit_phi = None, limit_theta = None, name = 'Ball3D'):
         return Ball3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha, 
@@ -509,6 +534,9 @@ class Line3D:
     thickness: Optional[int] = 0
     alpha: Optional[float] = 1
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}(left = {self.leftPt}, right = {self.rightPt})'
+
     @staticmethod
     def from_line2D(aLn, x = None, y = None, z = None):
         leftPt = Point3D.from_point2D(aLn.leftPt, x = x, y = y, z = z)
@@ -544,10 +572,7 @@ class Line3D:
         return self.__class__(**newDict)
     
     def dim(self, dim_factor):
-        dimmed_color = tuple([c * dim_factor for c in self.color]) ### at dim_factor = 1, nothing changes
-        updDict = {'color': dimmed_color} 
-        newDict = get_updated_attribute_dictionary(self, updDict)
-        return self.__class__(**newDict)
+        return Point3D.dim(self, dim_factor) ### Point3D is class agnostic for dimming. TODO: repeat this pattern for other cases!
         
     def transparify(self, transparence_factor):
         transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
@@ -634,6 +659,9 @@ class Line3D:
     def center_point(self):
         return (self.leftPt + self.rightPt) / 2
             
+    def center_coords(self):
+        return self.center_point().coords
+
     def subdivide(self, elements = 100, return_coords = False):
         x_space = np.linspace(self.leftPt.x, self.rightPt.x, num = elements)
         y_space = np.linspace(self.leftPt.y, self.rightPt.y, num = elements)
@@ -762,6 +790,9 @@ class Region3D():
         object.__setattr__(self, 'p4', self['Bottom'].rightPt)
         object.__setattr__(self, 'points', (self.p1, self.p2, self.p3, self.p4))
     
+    def __repr__(self):
+        return f'{self.__class__.__name__}(p1 = {self.p1}, p2 = {self.p2}, p3 = {self.p3}, p4 = {self.p4})'
+
     def __iter__(self):
         return iter(self.lineList)
     
@@ -882,6 +913,15 @@ class Region3D():
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
 
+    def dim(self, dim_factor):
+        return Point3D.dim(self, dim_factor) ### Point3D is class agnostic for dimming. TODO: repeat this pattern for other cases!
+
+    def center_point(self):
+        return Line3D(self.p1, self.p4).center_point()
+            
+    def center_coords(self):
+        return self.center_point().coords
+
     ### METHODS ###
     def rasterize(self, resolution):
         ### resolution -> points in a area of 1 sq. unit size 
@@ -938,6 +978,12 @@ class Container3D:
     color: Optional[tuple] = _DEFAULT_COLOR
     alpha: Optional[float] = _DEFAULT_ALPHA
     
+    def __repr__(self):
+        fsStr = f'{self.__class__.__name__}('
+        sStrs = ['  ' + repr(shape) + ',' for shape in self.shapeList]
+        lsStr = ')'
+        return '\n'.join([fsStr, *sStrs, lsStr])
+
     def __iter__(self):
         return iter(self.shapeList)
     
@@ -994,6 +1040,14 @@ class Container3D:
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
     
+    def center_point(self):
+        center_coords = np.array([shape.center_coords() for shape in self.shapeList])
+        mean_center_coord = center_coords.mean(axis = 0)
+        return Point3D(tuple(mean_center_coord))
+            
+    def center_coords(self):
+        return self.center_point().coords
+
     ### METHODS ###
     def rasterize(self, resolution):
         return np.concatenate([el.rasterize(resolution) for el in self.shapeList], axis = 0)

@@ -27,7 +27,19 @@ def interpolate_camera(startCam, endCam, num_frames):
     itplCams = [Camera(M_int, M_ext, startCam.sensor_dims) for (M_int, M_ext) in zip(M_ints, M_exts)]
     return itplCams
 
-def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames):
+def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
+                             x_fill = None, y_fill = None, z_fill = None):
+    def fill_column(arr1, arr2, fill_val, which):
+        ### which -> 0, 1 or 2
+        if isinstance(fill_val, int):
+            arr1[:, which] = np.where(np.isnan(arr1[:, which]), fill_val, arr1[:, which])
+            arr2[:, which] = np.where(np.isnan(arr2[:, which]), fill_val, arr2[:, which])
+        elif isinstance(fill_val, str):
+            if fill_val == 'other':
+                arr1[:, which] = np.where(np.isnan(arr1[:, which]), arr2[:, which], arr1[:, which])
+                arr2[:, which] = np.where(np.isnan(arr2[:, which]), arr1[:, which], arr2[:, which])
+        return arr1, arr2
+    
     fs_len, ls_len = len(start_dummyScn.rastArrs), len(end_dummyScn.rastArrs)
     assert fs_len == ls_len
 
@@ -39,9 +51,14 @@ def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames):
         itpl_colArrs = []
         itpl_alphaArrs = []
         for idx in range(fs_len):
-            fs_rastArr, ls_rastArr = start_dummyScn.rastArrs[idx], end_dummyScn.rastArrs[idx]
-            fs_colArr, ls_colArr = start_dummyScn.colArrs[idx], end_dummyScn.colArrs[idx]
-            fs_alphaArr, ls_alphaArr = start_dummyScn.alphaArrs[idx], end_dummyScn.alphaArrs[idx]
+            fs_rastArr, ls_rastArr = start_dummyScn.rastArrs[idx].copy(), end_dummyScn.rastArrs[idx].copy()
+            fs_colArr, ls_colArr = start_dummyScn.colArrs[idx].copy(), end_dummyScn.colArrs[idx].copy()
+            fs_alphaArr, ls_alphaArr = start_dummyScn.alphaArrs[idx].copy(), end_dummyScn.alphaArrs[idx].copy()
+
+            ### figure out how to fill nans in rastArr
+            fs_rastArr, ls_rastArr = fill_column(fs_rastArr, ls_rastArr, x_fill, 0)
+            fs_rastArr, ls_rastArr = fill_column(fs_rastArr, ls_rastArr, y_fill, 1)
+            fs_rastArr, ls_rastArr = fill_column(fs_rastArr, ls_rastArr, z_fill, 2)
 
             itpl_rastArr = (1 - lmbd) * fs_rastArr + lmbd * ls_rastArr
             itpl_colArr = (1 - lmbd) * fs_colArr + lmbd * ls_colArr
@@ -60,6 +77,7 @@ def animate_sequence(animation_sequence_objects,
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     start_cam = None, stop_cam = None,
+                    adaptive_resolution_exponent = 0,
                     cumulative_foreground_transparence = None, 
                     annotatedPoints = None,
             text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
@@ -81,7 +99,7 @@ def animate_sequence(animation_sequence_objects,
         previous_foreground_scene = Scene.make_empty()
 
     if previous_dummy_scene is None:
-        previous_dummy_scene = Scene.make_empty()
+        previous_dummy_scene = DummyScene.make_empty()
     
     cams = interpolate_camera(start_cam, stop_cam, num_frames) 
 
@@ -102,12 +120,12 @@ def animate_sequence(animation_sequence_objects,
             current_scene = Scene(current_object)
         else:
             current_scene = Scene([current_object])
-        current_view = View.make(current_cam, current_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution) 
+        current_view = View.make(current_cam, current_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     
         ### create previous and base views
-        front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution)
-        dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution)
-        base_view = View.make(current_cam, background_scene, resolution = background_resolution)
+        front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
+        dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution) ### TODO: adaptive resolution not done for dummy scenes
+        base_view = View.make(current_cam, background_scene, resolution = background_resolution) ### TODO: adaptive resolution redundant for the background?
 
         joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
         
@@ -139,6 +157,7 @@ def animate_cam_motion(animation_object, num_frames = None,
                         argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                         start_cam = None, stop_cam = None,
                         cumulative_foreground_transparence = 0, 
+                        adaptive_resolution_exponent = 0,
                         annotatedPoints = None,
                         text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
@@ -167,7 +186,7 @@ def animate_cam_motion(animation_object, num_frames = None,
         previous_foreground_scene = Scene.make_empty()
 
     if previous_dummy_scene is None:
-        previous_dummy_scene = Scene.make_empty()
+        previous_dummy_scene = DummyScene.make_empty()
     
     cams = interpolate_camera(start_cam, stop_cam, num_frames) 
 
@@ -180,10 +199,10 @@ def animate_cam_motion(animation_object, num_frames = None,
             previous_foreground_scene = previous_foreground_scene.transparify(cumulative_foreground_transparence)
             previous_dummy_scene = previous_dummy_scene.transparify(cumulative_foreground_transparence)
         
-        current_view = View.make(current_cam, static_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution) 
+        current_view = View.make(current_cam, static_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     
         ### create previous and base views
-        front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution)
+        front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
         dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution)
         base_view = View.make(current_cam, background_scene, resolution = background_resolution)
 
@@ -223,6 +242,7 @@ def animate_static(animation_object, num_frames = 100, static_cam = None,
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     annotatedPoints = None,
+                    adaptive_resolution_exponent = 0,
                     text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
 
@@ -248,11 +268,11 @@ def animate_static(animation_object, num_frames = 100, static_cam = None,
         previous_foreground_scene = Scene.make_empty()
 
     if previous_dummy_scene is None:
-        previous_dummy_scene = Scene.make_empty()
+        previous_dummy_scene = DummyScene.make_empty()
     
     ### create previous and base views
-    current_view = View.make(static_cam, static_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution) 
-    front_view = View.make(static_cam, previous_foreground_scene, resolution = foreground_resolution)
+    current_view = View.make(static_cam, static_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
+    front_view = View.make(static_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     dummy_view = View.make(static_cam, previous_dummy_scene, resolution = dummy_resolution)
     base_view = View.make(static_cam, background_scene, resolution = background_resolution)
 
@@ -430,7 +450,8 @@ def kde_contourmap(myShots,
                    position_func = 'get_first_bounce_position',
                    bandwidth = 30, threshold_proportion = 0.5, 
                    epsilon = 0.005, n_components = None,
-                   fill = False, preserve_showarr_shape = True,
+                   fill = False, max_height = 30,
+                   preserve_showarr_shape = True, 
                    contour_color = const.BGR['intense_red'],
                    contour_alpha = 1):
     
@@ -477,14 +498,15 @@ def kde_contourmap(myShots,
             cluster_data.append(clusterDict)
     else:
         cluster_data = None
-    
+
+    heightArr = np.full((num_x, num_y, 1), fill_value = threshold_density * max_height)
+    showArr_with_height = np.concatenate([showArr, heightArr], axis = 2)
+
     show_condition = density_is_above & density_is_below if not fill else density_is_above
     if preserve_showarr_shape:
-        showArr_long = np.where(show_condition[:, :, np.newaxis], showArr, np.nan).reshape((num_x * num_y, num_coords))
+        showArr_long = np.where(show_condition[:, :, np.newaxis], showArr_with_height, np.nan).reshape((num_x * num_y, 3))
     else:
-        showArr_long = showArr[show_condition]
-
-    showArr_long = np.concatenate([showArr_long, np.zeros((num_x * num_y, 1))], axis = 1)
+        showArr_long = showArr_with_height[show_condition]
 
     bgrArr_long = np.ones((num_x * num_y, 3)) * contour_color
     alphaArr_long = np.ones((num_x * num_y, 1)) * contour_alpha
@@ -514,9 +536,23 @@ def cluster_data_to_points(cluster_data, text_func = None, thickness = 1, size =
     return clusterPts
 
 def players(myShots, 
-            hit_player_color = const.BGR['smokey_grey'], rec_player_color = const.BGR['smokey_grey'],
-            hit_player_distance = 10, rec_player_distance = 10,
-            hit_player_dir_vert = 0, rec_player_dir_vert = 0):
+            hit_player_color = const.BGR['smokey_grey'], rec_player_color = const.BGR['smokey_grey']):
+    from ATMANpy.types.ShapesTennis3D import Player, Racquet
+
+    ### PREP PLAYERS
+    hit_x, hit_y = myShots.get_player_hit_position().mean(axis = 0)
+    rec_x, rec_y = myShots.get_player_rec_position().mean(axis = 0)
+
+    hitPly = Player.make((hit_x, hit_y), color = hit_player_color)
+    recPly = Player.make((rec_x, rec_y), color = rec_player_color)
+
+    plyScn = Scene([hitPly, recPly])
+    return plyScn
+    
+def players_and_racquets(myShots, 
+                        hit_player_color = const.BGR['smokey_grey'], rec_player_color = const.BGR['smokey_grey'],
+                        hit_player_distance = 10, rec_player_distance = 10,
+                        hit_player_dir_vert = 0, rec_player_dir_vert = 0):
     from ATMANpy.types.ShapesTennis3D import Player, Racquet
 
     ### PREP PLAYERS
