@@ -158,7 +158,7 @@ class DummyScene:
         return DummyScene(self.rastArrs, self.colArrs, new_alphaArrs)
 
     def dim(self, dim_factor):
-        dim_colArrs = [colArr * dim_factor for colArr in self.colArrs]
+        dim_colArrs = [np.clip(colArr * dim_factor, 0, 255) for colArr in self.colArrs]
         return DummyScene(self.rastArrs, dim_colArrs, self.alphaArrs)
     
     def transparify(self, transparence_factor):

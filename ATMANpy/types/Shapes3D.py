@@ -136,7 +136,7 @@ class Point3D:
         return self.__class__(**newDict)
 
     def dim(self, dim_factor):
-        dimmed_color = tuple([max(0, min(c * dim_factor, 255)) for c in self.color]) ### at dim_factor = 1, nothing changes
+        dimmed_color = tuple([max(0, min(int(c * dim_factor), 255)) for c in self.color]) ### at dim_factor = 1, nothing changes
         is_extreme = [c in [0, 255] for c in dimmed_color]
         if any(is_extreme):
             print(f'Dimming {self.color} to {dimmed_color} hit 0 or 255, verify if color satisfactory!')
@@ -299,7 +299,7 @@ class Point3D:
         attrDict = get_updated_attribute_dictionary(self, {})
         return AnnotatedPoint3D(text = text, **attrDict)
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class AnnotatedPoint3D(Point3D):
     ### Used to store a block of text that appears somewhere in a 3D scene, until after the scene has been rasterized and snapped to 2D
     text: str = None
@@ -351,7 +351,7 @@ class AnnotatedPoint3D(Point3D):
 
 
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class Circle3D(Point3D):
     """
     A circle: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
@@ -432,7 +432,7 @@ class Circle3D(Point3D):
         return outArr
     
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class Ball3D(Point3D):
     """
     A sphere: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
@@ -1029,10 +1029,7 @@ class Container3D:
         return self.__class__(**newDict)
 
     def dim(self, dim_factor):
-        dimmed_color = tuple([c * dim_factor for c in self.color]) ### at dim_factor = 1, nothing changes
-        updDict = {'color': dimmed_color} 
-        newDict = get_updated_attribute_dictionary(self, updDict)
-        return self.__class__(**newDict)
+        return Point3D.dim(self, dim_factor)
         
     def transparify(self, transparence_factor):
         transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
@@ -1058,7 +1055,7 @@ class Container3D:
                               color = self.color, alpha = self.alpha, name = self.name)
 
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class Points3D(Container3D):
     """
     A list of Point3D
@@ -1081,7 +1078,7 @@ class Points3D(Container3D):
         return Point3D(coordArr.T, color = self.color, alpha = self.alpha)
 
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class Circles3D(Container3D):
     """
     A list of Circle3D
@@ -1107,7 +1104,7 @@ class Circles3D(Container3D):
                         radius = canonical_radius, limit_theta = canonical_limit_theta)
     
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class Balls3D(Container3D):
     """
     A list of Ball3D
@@ -1132,7 +1129,7 @@ class Balls3D(Container3D):
         return Ball3D(coordArr.T, color = self.color, alpha = self.alpha, 
                       radius = canonical_radius, limit_theta = canonical_limit_theta, limit_phi = canonical_limit_phi)
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class Lines3D(Container3D):
     """
     A list of Line3D
@@ -1159,7 +1156,7 @@ class Lines3D(Container3D):
         return Line3D(leftPt, rightPt, name = self.name, color = self.color, 
                       thickness = canonical_thickness)
 
-@dataclass(frozen = True)
+@dataclass(frozen = True, eq = False)
 class Regions3D(Container3D):
     """
     A list of Region3D
