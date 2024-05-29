@@ -738,6 +738,9 @@ class GreyFrame(Frame):
     def __repr__(self):
         return f'GreyFrame({self.cols} by {self.rows}, name: {self.name})'
     
+    def __invert__(self):
+        return GreyFrame(255 - self.array)
+
     # ### INEQUALITIES ###
     # #for a grey frame, these are defined with respect to integers, and return a boolean frame.
     # def __lt__(self, other: int):
@@ -843,6 +846,18 @@ class GreyFrame(Frame):
         self_copy = self.array.copy()
         kernel = cv.getStructuringElement(kernelType, kernelSize)
         arr = cv.morphologyEx(self_copy, cv.MORPH_CLOSE, kernel)
+        return GreyFrame(arr)
+    
+    def dilate(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
+        self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
+        arr = cv.dilate(self_copy, kernel)
+        return GreyFrame(arr)
+    
+    def erode(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
+        self_copy = self.array.copy()
+        kernel = cv.getStructuringElement(kernelType, kernelSize)
+        arr = cv.erode(self_copy, kernel)
         return GreyFrame(arr)
     
     def corners_of_interest(self, max_corners = 10, quality_level = 0.01, min_distance = 10):
