@@ -12,6 +12,7 @@ import cv2 as cv
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from fuzzywuzzy import fuzz
 
 ### GET SCHEMA ###
 from ATMANpy.types.Lines import CourtLines, NetLines
@@ -57,8 +58,9 @@ def load(vid, sto):
     segBF = StreamFeature.from_store(vid, sto, featname = 'isRally_warmup_removed')
     plySF = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayerCnt', 'botPlayerCnt'])
     srvSF = StreamFeature.from_store(vid, sto, featname = 'srvFlag')
+    scrSF = StreamFeatures.from_store(vid, sto, featnameList = ['sb_name_lower_Flag', 'sb_name_upper_Flag', 'sb_score_lower_Flag', 'sb_score_upper_Flag'])
     trajFrm = ff.read_feature_frame('trajTable', vid, sto)
-    return HPCF, segBF, plySF, srvSF, trajFrm
+    return HPCF, segBF, plySF, srvSF, scrSF, trajFrm
 
 def save(trajDFs, vid, sto):
     trajFrm = pd.concat(trajDFs)
@@ -71,7 +73,7 @@ def main(conf, name = None):
     
     courtLines = CourtLines.make().add_singles_netline()
 
-    HPCF, segBF, plySF, srvSF, trajFrm = load(vid, sto)
+    HPCF, segBF, plySF, srvSF, scrSF, trajFrm = load(vid, sto)
     # trajFrm = fix_traj_frame(trajFrm)
     trajSF = StreamFeatures.from_dataframe(trajFrm)
     trajSF = trajSF.merge(srvSF.rename('event_info'))
@@ -94,7 +96,9 @@ def main(conf, name = None):
     topSFs = topSF.conform(segBF).filter(segBF).split()
     botSFs = botSF.conform(segBF).filter(segBF).split()
     trajSFs = trajSF.conform(segBF).filter(segBF).split()
+    scrSFs = scrSF.conform(segBF).filter(segBF).split()
 
+    ### Prepare some utility functions for player name and handedness
     player_cols = ['player_name', 'player_hand']
     def get_fs(mySer):
         return mySer.iloc[0]
@@ -107,7 +111,63 @@ def main(conf, name = None):
     def swap_player(plStr, player_names = player_names):
         assert plStr in player_names
         return [pl for pl in player_names if pl != plStr][0]
+       
+    ### Postprocess Player Names from Scoreboard
+    lower_names = scrSFs['sb_name_lower_Flag'].apply_whole(lambda sf: sf.first()[1])
+    upper_names = scrSFs['sb_name_upper_Flag'].apply_whole(lambda sf: sf.first()[1])
+
+    lower_name = pd.Series(lower_names).value_counts().index[0]
+    upper_name = pd.Series(upper_names).value_counts().index[0]
+
+    proper_name_1, proper_name_2 = trajSF['player_name'].unique()
+
+    available_surnames = [full_name.split(' ')[1] for full_name in [proper_name_1, proper_name_2]]
+    lower_match_ratios = [fuzz.partial_ratio(lower_name.upper(), surname.upper()) / 100 for surname in available_surnames]
+    upper_match_ratios = [fuzz.partial_ratio(upper_name.upper(), surname.upper()) / 100 for surname in available_surnames]
+
+    ratio_1 = lower_match_ratios[0] * upper_match_ratios[1]
+    ratio_2 = lower_match_ratios[1] * upper_match_ratios[0]
+    
+    if ratio_1 > ratio_2:
+        nameMap = {proper_name_1: lower_name,
+                   proper_name_2: upper_name}
+        print(f'Info Names to Scoreboard Names (confidence: {ratio_1}):')
+        print(nameMap)
+        lower_upper_names_proper = [proper_name_1, proper_name_2]
+    else:
+        nameMap = {proper_name_1: upper_name,
+                   proper_name_2: lower_name}
+        print(f'Info Names to Scoreboard Names (confidence: {ratio_2}):')
+        print(nameMap)
+        lower_upper_names_proper = [proper_name_2, proper_name_1]
+
+    ### Use correspondence to make a score frame by player
+    scoreFrm = scrSF[['sb_score_lower_Flag', 'sb_score_upper_Flag']].to_dataframe()
+    scoreFrm.columns = lower_upper_names_proper
+
+    for c in scoreFrm:
+        if scoreFrm[c].dtype != 'object': ### this happens if the player in column c has never reached Advanta ('A'), thus the column is read in as numeric
+            scoreFrm[c] = scoreFrm[c].fillna(0)
+            scoreFrm[c] = scoreFrm[c].astype('int').astype('object')
+        else:
+            scoreFrm[c] = scoreFrm[c].fillna('0')
         
+    # -> replacing weird numbers. Very Crude, but hey.
+    print('Before value replacement: ')
+    print('   unique scores p1: ', list(scoreFrm[proper_name_1].unique()))
+    print('   unique scores p2: ', list(scoreFrm[proper_name_2].unique()))
+
+    replDict = {'16': '15',
+                '18': '15'} 
+    scoreFrm = scoreFrm.replace(replDict)
+
+    print('After value replacement: ')
+    print('   unique scores p1: ', list(scoreFrm[proper_name_1].unique()))
+    print('   unique scores p2: ', list(scoreFrm[proper_name_2].unique()))
+    
+    # split
+    scoreFrms = ut.split(scoreFrm)
+
     frmList = []
     for idx in range(trajSFs.length()):
         trjFrm = trajSFs[idx].to_dataframe()
@@ -146,6 +206,17 @@ def main(conf, name = None):
 
         plyFrm['rec_x'], plyFrm['rec_y'] = rec_x, rec_y
 
+        ### Merge in the score information 
+        scoreFrm = scoreFrms[idx]
+        p1, p2 = scoreFrm.columns
+        p1_vals, p2_vals = scoreFrm[p1].unique(), scoreFrm[p2].unique()
+        assert len(p1_vals) == 1 and len(p2_vals) == 1
+        p1_val, p2_val = p1_vals[0], p2_vals[0]
+        scoreDict = {p1: p1_val, p2: p2_val}
+        
+        plyFrm['hit_score'] = plyFrm['hit_name'].map(scoreDict)
+        plyFrm['rec_score'] = plyFrm['rec_name'].map(scoreDict)
+
         ### join, and write to list
         allFrm = trjFrm.merge(plyFrm, left_index = True, right_index = True)
         frmList.append(allFrm)
@@ -162,7 +233,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[0])
+    conf = cnf_mod.get_conf(avail_vids[16])
 
     name = ppl._name
 
