@@ -45,7 +45,7 @@ def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
 
     scenes = []
     for frame in range(num_frames):
-        lmbd = frame / num_frames
+        lmbd = frame / (num_frames - 1)
         
         itpl_rastArrs = []
         itpl_colArrs = []
@@ -73,13 +73,11 @@ def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
 
     return scenes
 
-def animate_sequence(animation_sequence_objects, 
-                    background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None,
+def animate_sequence(animation_sequence_objects, annotated_points = None,
+                    background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
+                    argument_luminosity = 1, adaptive_resolution_exponent = 0, cumulative_foreground_transparence = None, 
                     start_cam = None, stop_cam = None,
-                    adaptive_resolution_exponent = 0,
-                    cumulative_foreground_transparence = None, 
-                    annotatedPoints = None,
             text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
@@ -101,6 +99,18 @@ def animate_sequence(animation_sequence_objects,
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
     
+    ### create joint_annotated_points -> previous points and current foreground point
+    if annotated_points is None: annotated_points = []
+    if previous_annotated_points is None: previous_annotated_points = []
+
+    ### cull previous annotated points if they are included in annotated points (this can be useful if one wants to keep a text lit up)
+    previous_annotated_points = [p for p in previous_annotated_points if p not in annotated_points]
+
+    ### change text luminosity 
+    argument_annotated_points_brightened = [p.dim(argument_luminosity) for p in annotated_points]
+    argument_annotated_points_dimmed = [p.dim(1 / argument_luminosity) for p in annotated_points] ### this passes into the next_animation_dictionary
+    annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
+
     cams = interpolate_camera(start_cam, stop_cam, num_frames) 
 
     frameList = []
@@ -120,7 +130,10 @@ def animate_sequence(animation_sequence_objects,
             current_scene = Scene(current_object)
         else:
             current_scene = Scene([current_object])
-        current_view = View.make(current_cam, current_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
+
+        current_scene_brightened = current_scene.dim(argument_luminosity)
+        current_scene_dimmed = current_scene.dim(1 / argument_luminosity)
+        current_view = View.make(current_cam, current_scene_brightened, annotatedPoints = annotated_points_to_show, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     
         ### create previous and base views
         front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
@@ -143,24 +156,25 @@ def animate_sequence(animation_sequence_objects,
 
     ### make a kwarg dictionary for the next animation
     if isinstance(current_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(current_scene, keep_which = 'other'),
-                                     'previous_dummy_scene': previous_dummy_scene}
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(current_scene_dimmed, keep_which = 'other'),
+                                     'previous_dummy_scene': previous_dummy_scene,
+                                     'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
     elif isinstance(current_scene, DummyScene):
         next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene,
-                                     'previous_dummy_scene': previous_dummy_scene.combine(current_scene, keep_which = 'other')}
+                                     'previous_dummy_scene': previous_dummy_scene.combine(current_scene_dimmed, keep_which = 'other'),
+                                     'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
 
     return myFrms, next_animation_dictionary
 
 
-def animate_cam_motion(animation_object, num_frames = None,
-                        background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, ### these are static/previous scenes that are not animated, but can be faded out/in
+def animate_cam_motion(animation_object, annotated_points = None, num_frames = None,
+                        background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None, ### these are static/previous scenes that are not animated, but can be faded out/in
                         argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
+                        argument_luminosity = 1, cumulative_foreground_transparence = 0, adaptive_resolution_exponent = 0,
                         start_cam = None, stop_cam = None,
-                        cumulative_foreground_transparence = 0, 
-                        adaptive_resolution_exponent = 0,
-                        annotatedPoints = None,
                         text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
+    num_frames = int(num_frames)
 
     ### create current scene
     if animation_object is None:
@@ -188,6 +202,23 @@ def animate_cam_motion(animation_object, num_frames = None,
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
     
+    ### dim or lumify scenes based on whether they're argument or previous
+    static_scene_brightened = static_scene.dim(argument_luminosity)
+    static_scene_dimmed = static_scene.dim(1 / argument_luminosity) ### this passes into the next_animation_dictionary
+
+    ### create joint_annotated_points -> previous points and current foreground point
+    if annotated_points is None: annotated_points = []
+    if previous_annotated_points is None: previous_annotated_points = []
+
+    ### cull previous annotated points if they are included in annotated points (this can be useful if one wants to keep a text lit up)
+    previous_annotated_points = [p for p in previous_annotated_points if p not in annotated_points]
+
+    ### change text luminosity 
+    argument_annotated_points_brightened = [p.dim(argument_luminosity) for p in annotated_points]
+    argument_annotated_points_dimmed = [p.dim(1 / argument_luminosity) for p in annotated_points] ### this passes into the next_animation_dictionary
+    annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
+
+    ### make cams
     cams = interpolate_camera(start_cam, stop_cam, num_frames) 
 
     frameList = []
@@ -199,7 +230,7 @@ def animate_cam_motion(animation_object, num_frames = None,
             previous_foreground_scene = previous_foreground_scene.transparify(cumulative_foreground_transparence)
             previous_dummy_scene = previous_dummy_scene.transparify(cumulative_foreground_transparence)
         
-        current_view = View.make(current_cam, static_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
+        current_view = View.make(current_cam, static_scene_brightened, annotatedPoints = annotated_points_to_show, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     
         ### create previous and base views
         front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
@@ -229,22 +260,24 @@ def animate_cam_motion(animation_object, num_frames = None,
 
     ### make a kwarg dictionary for the next animation
     if isinstance(static_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene, keep_which = 'other'),
-                                     'previous_dummy_scene': previous_dummy_scene}
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene_dimmed, keep_which = 'other'),
+                                     'previous_dummy_scene': previous_dummy_scene,
+                                     'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
     elif isinstance(static_scene, DummyScene):
         next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene,
-                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene, keep_which = 'other')}
+                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene_dimmed, keep_which = 'other'),
+                                     'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
 
     return myFrms, next_animation_dictionary
 
 
-def animate_static(animation_object, num_frames = 100, static_cam = None, 
-                    background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None,
+def animate_static(animation_object, annotated_points = None, num_frames = 100, static_cam = None, 
+                    background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
-                    annotatedPoints = None,
-                    adaptive_resolution_exponent = 0,
+                    argument_luminosity = 1, adaptive_resolution_exponent = 0,
                     text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
+    num_frames = int(num_frames)
 
     ### create current scene
     if animation_object is None:
@@ -269,9 +302,25 @@ def animate_static(animation_object, num_frames = 100, static_cam = None,
 
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
-    
+
+    ### dim or lumify scenes based on whether they're argument or previous
+    static_scene_brightened = static_scene.dim(argument_luminosity)
+    static_scene_dimmed = static_scene.dim(1 / argument_luminosity) ### this passes into the next_animation_dictionary
+
+    ### create joint_annotated_points -> previous points and current foreground point
+    if annotated_points is None: annotated_points = []
+    if previous_annotated_points is None: previous_annotated_points = []
+
+    ### cull previous annotated points if they are included in annotated points (this can be useful if one wants to keep a text lit up)
+    previous_annotated_points = [p for p in previous_annotated_points if p not in annotated_points]
+
+    ### change text luminosity 
+    argument_annotated_points_brightened = [p.dim(argument_luminosity) for p in annotated_points]
+    argument_annotated_points_dimmed = [p.dim(1 / argument_luminosity) for p in annotated_points] ### this passes into the next_animation_dictionary
+    annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
+
     ### create previous and base views
-    current_view = View.make(static_cam, static_scene, annotatedPoints = annotatedPoints, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
+    current_view = View.make(static_cam, static_scene_brightened, annotatedPoints = annotated_points_to_show, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     front_view = View.make(static_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     dummy_view = View.make(static_cam, previous_dummy_scene, resolution = dummy_resolution)
     base_view = View.make(static_cam, background_scene, resolution = background_resolution)
@@ -292,11 +341,14 @@ def animate_static(animation_object, num_frames = 100, static_cam = None,
     
     ### make a kwarg dictionary for the next animation
     if isinstance(static_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene, keep_which = 'other'),
-                                     'previous_dummy_scene': previous_dummy_scene}
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene_dimmed, keep_which = 'other'),
+                                     'previous_dummy_scene': previous_dummy_scene,
+                                     'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
     elif isinstance(static_scene, DummyScene):
         next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene,
-                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene, keep_which = 'other')}
+                                     'previous_dummy_scene': previous_dummy_scene.combine(static_scene, keep_which = 'other'),
+                                     'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
+    
 
     return myFrms, next_animation_dictionary
 
