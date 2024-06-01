@@ -26,7 +26,7 @@ import pandas as pd
 from dataclasses import dataclass
 
 from ATMANpy.types.Lines import CourtLines
-from ATMANpy.types.Streams import Stream
+from ATMANpy.types.Streams import Stream, StreamList
 from ATMANpy.types.Features import StreamFeature, StreamFeatures, SFList
 from ATMANpy.types.Shapes3D import Point3D, Circle3D, Ball3D, Line3D, Points3D, Circles3D, Balls3D, Lines3D
 from ATMANpy.types.ShapesTennis3D import Player
@@ -34,6 +34,7 @@ from ATMANpy.types.ShapesTennis3D import Player
 import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.sf_apply_funcs as sa
 import ATMANpy.funcs.util_funcs as ut
+import ATMANpy.funcs.feature_funcs as ff
 
 @dataclass(frozen = True)
 class PlayerMovement:
@@ -72,6 +73,9 @@ class PlayerMovement:
 
     def get_side(self):
         return self.playerFrm.loc[0, 'side']
+    
+    def get_score(self):
+        return self.playerFrm.loc[0, 'score']
 
     def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
@@ -252,7 +256,11 @@ class Trajectory:
         outSer = ser2 + speed2 + accel
         return outSer.values
 
-    def stream(self, cap, P, how = 'trajectory'):
+    def stream(self, cap):
+        fs, ls = self.get_frames()[0], self.get_frames()[-1]
+        return Stream(cap, fs, ls - 1) ### last frame is next shot frame
+
+    def stream_ball(self, cap, P, how = 'trajectory'):
         coordArr = self.get_ball_array(how = how)
         oneArr = np.ones(len(self.trajFrm))[:, np.newaxis]
         homArr = np.concatenate([coordArr, oneArr], axis = 1)
@@ -639,6 +647,9 @@ class Shot:
     def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth'):
         return self.shotTraj.feat_spline(how = how, which_endpoint = which_endpoint)
         
+    def stream(self, cap):
+        return self.shotTraj.stream(cap)
+
 @dataclass(frozen = True)
 class Shots:
     ### a general collection of shots.
@@ -711,6 +722,9 @@ class Shots:
         elif from_where == 'Bot':
             return b2tShots.join(t2bShots.flip())
         
+    def stream(self, cap):
+        return StreamList([myShot.stream(cap) for myShot in self]).join()
+        
     ### STAT GETTERS ###
     # -> .get methods of Shot, done with make_method below
         
@@ -774,14 +788,79 @@ class Point(Shots):
     def get_frames(self):
         return [frame for shot in self.shotList for frame in shot.get_frames()]
     
-    def get_winner(self):
+    def get_winner_from_trajectory(self):
         lastShot = self.shotList[-1]
         
         if lastShot.is_fair(None): ### None -> there is no nextShot
             return lastShot.hitPlayer.get_name()
         else:
             return lastShot.recPlayer.get_name()
+            
+    def get_winner_from_score(self, nextPnt):    
+        score_func_regular = lambda scoreStr: {'0': 0, '15': 1, '30': 2, '40': 3, 'A': 4}[scoreStr]
+        score_func_tiebreak = lambda scoreStr: int(scoreStr)
+
+        srvShot = self.get_serve()
+        if srvShot is None:
+            return None
+        else:
+            srv_name, rec_name = srvShot.hitPlayer.get_name(), srvShot.recPlayer.get_name()
+
+        ### Deal with Current Score
+        curr_srv_str, curr_rec_str = self.get_score()
         
+        try:
+            curr_srv_val, curr_rec_val = score_func_regular(curr_srv_str), score_func_regular(curr_rec_str)
+        except:
+            curr_srv_val, curr_rec_val = score_func_tiebreak(curr_srv_str), score_func_tiebreak(curr_rec_str)
+
+        ### Deal with Next Score
+        if nextPnt is None:
+            if curr_srv_val > curr_rec_val:
+                return srv_name
+            elif curr_srv_val < curr_rec_val:
+                return rec_name 
+        else:
+            next_srv_str, next_rec_str = nextPnt.get_score()
+
+        try:
+            next_srv_val, next_rec_val = score_func_regular(next_srv_str), score_func_regular(next_rec_str)
+        except:
+            next_srv_val, next_rec_val = score_func_tiebreak(next_srv_str), score_func_tiebreak(next_rec_str)
+
+        ### in this case, the current point is the last in the game, and the winner is whoever has the higher score.
+        if next_srv_val == next_rec_val == 0: 
+            if curr_srv_val > curr_rec_val:
+                return srv_name
+            elif curr_srv_val < curr_rec_val:
+                return rec_name
+        
+        ### Score does not contain advantage; server wins point
+        elif next_srv_val > curr_srv_val and next_rec_val == curr_rec_val: 
+            return srv_name
+        
+        ### Score does not contain advantage; server wins point
+        elif next_srv_val == curr_srv_val and next_rec_val > curr_rec_val: 
+            return rec_name 
+        
+        ### Score is 40-A --> 40-40
+        elif next_srv_val == curr_srv_val and next_rec_val < curr_rec_val:
+            return srv_name
+        
+        ### Score is A-40 --> 40-40
+        elif next_srv_val < curr_srv_val and next_rec_val == curr_rec_val:
+            return rec_name
+
+        ### Score does not change -> first serve fault most likely!
+        elif next_srv_val == curr_srv_val and next_rec_val == curr_rec_val: 
+            print(f'Score Unchanged: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
+            return None
+
+        else:
+            print(f'Unhandled: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
+            return None
+
+
     def get_serve(self):
         if len(self) == 0:
             return None
@@ -851,6 +930,17 @@ class Point(Shots):
             return srvShot.is_bot_to_top()
         else:
             return False
+        
+    def get_score(self):
+        serveShot = self.get_serve()
+        if serveShot is None:
+            return None
+        else:
+            return serveShot.hitPlayer.get_score(), serveShot.recPlayer.get_score()
+
+    def stream(self, cap):
+        fs, ls = self.get_frames()[0], self.get_frames()[-1]
+        return Stream(cap, fs, ls)
     
 @dataclass(frozen = True)
 class Points:
@@ -1018,28 +1108,35 @@ for methodStr in dir(Shot):
         if not methodStr in dir(Point): ### do not overwrite
             __make_method_get(Point, methodStr)
 
+def read_in_all_tables(confs):
+    ### READ IN DATA
+    tables = []
+    for conf_idx, conf in enumerate(confs):
+        vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    
+        dataTable = ff.read_feature_frame('dataTable', vid, sto)
+        dataTable.index = pd.MultiIndex.from_product([[conf_idx], dataTable.index])
+        dataTable.index.names = ['match_idx', 'frame_num']
+        
+        tables.append(dataTable)
+
+    allTable = pd.concat(tables)    
+    return allTable
+
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
     import ATMANpy.scripts.pipeline_brest_tightseg as ppl
     import ATMANpy.funcs.feature_funcs as ff
     import ATMANpy.funcs.util_funcs as ut
     
-
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    vid = avail_vids[0]
-    conf = cnf_mod.get_conf(vid)
-    sto = conf['store_name']
 
-    tableFrm = ff.read_feature_frame('dataTable', vid, sto)
+    confs = [cnf_mod.get_conf(avail_vids[0]), cnf_mod.get_conf(avail_vids[1])] 
 
-    tables = ut.split(tableFrm, index_level = -1)
+    tableFrm = read_in_all_tables(confs)
     
-    pointFrm = tables[0]
-    Point.from_point_table(pointFrm)
-
-    print(tableFrm.x_t)
-
+    myPnts = Points.from_datatable(tableFrm)
     print(Points.from_datatable(tableFrm))
 
