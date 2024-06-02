@@ -212,10 +212,14 @@ class Stream:
         fileName = os.path.basename(filePath)
         
         ### find start and end frame
-        fileStump = fileName.split('.')[0]
-        _, start, _, stop = fileStump.split('_')
-        start, stop = int(start), int(stop)
-        
+        try:
+            fileStump = fileName.split('.')[0]
+            _, start, _, stop = fileStump.split('_')
+            start, stop = int(start), int(stop)
+        except:
+            start = 0
+            stop = int(cap.get(cv.CAP_PROP_FRAME_COUNT)) - 1 ### last frame is included!
+
         return Stream(cap, start, stop, 
                       truncation_anchor = start, ### NOTE: truncation anchor is the first frame given in file name! 
                       cap_color_space = cap_color_space, target_color_space = target_color_space, 
