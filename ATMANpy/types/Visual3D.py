@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 from ATMANpy.types.Frames import BGRFrame
-from ATMANpy.types.Shapes3D import Point3D
+from ATMANpy.types.Shapes3D import Point3D, Region3D
 from ATMANpy.types.ShapesTennis3D import Court, Net
 from ATMANpy.types.Lines import CourtLines
 
@@ -388,12 +388,36 @@ class Camera:
         homArr_2D = np.einsum('ij, nj -> ni', M_proj, homArr)
         pixArr = homArr_2D[:, :2] / homArr_2D[:, 2][:, np.newaxis]
         return pixArr
+    
+    def approximate_fov(self, distance_from_pinhole_in_px):
+        ### Get the world region that is projected onto the corners of the sensor of a birds eye camera of height z:
+        K = self.get_K()
+        fx, fy = K[0, 0], K[1, 1]
+        ox, oy = K[0, 2], K[1, 2]
+        f = (fx + fy) / 2
+        z = distance_from_pinhole_in_px
+        M_ext_inv = np.linalg.inv(self.M_ext)
+
+        ### one sensor corner point corresponds to the following point in the world, expressed in camera coordinates
+        px_c, py_c = ox * z / f, oy * z / f
+    
+        ### from this point (and from the symmetry of the sensor), calculate two points in the world, expressed in world coordinates
+        px_w, py_w, pz_w, _ = M_ext_inv @ np.array([-px_c, -py_c, -z, 1]) 
+        qx_w, qy_w, qz_w, _ = M_ext_inv @ np.array([px_c, py_c, -z, 1]) 
+
+        ### unclear what happens when we don't have birds eye here.
+        mz_w = (pz_w + qz_w) / 2
+
+        ### these two points define a region
+        p1, p2, p3, p4 = Point3D((px_w, py_w, pz_w)), Point3D((qx_w, py_w, mz_w)), Point3D((px_w, qy_w, mz_w)), Point3D((qx_w, qy_w, qz_w))
+        return Region3D.from_points3D(p1, p2, p3, p4)
+
 
     ############ Internal Matrix Changes ##########
     
     def zoom(self, factor):
         ### factor > 1 -> zoom in; factor < 1 -> zoom out
-        M_int_new = self.M_int
+        M_int_new = self.M_int.copy()
         M_int_new[0, 0] *= factor
         M_int_new[1, 1] *= factor
 
@@ -443,37 +467,37 @@ class Camera:
         
     def right(self, feet):
         #### left-right motion occurs along the x-axis
-        M_ext_new = self.M_ext
+        M_ext_new = self.M_ext.copy()
         M_ext_new[0, 3] += feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def left(self, feet):
         #### left-right motion occurs along the x-axis
-        M_ext_new = self.M_ext
+        M_ext_new = self.M_ext.copy()
         M_ext_new[0, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def down(self, feet):
         #### up-down motion occurs along the y-axis
-        M_ext_new = self.M_ext
+        M_ext_new = self.M_ext.copy()
         M_ext_new[1, 3] += feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def up(self, feet):
         #### up-down motion occurs along the y-axis
-        M_ext_new = self.M_ext
+        M_ext_new = self.M_ext.copy()
         M_ext_new[1, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
     
     def into(self, feet):
         #### in-out motion occurs along the z-axis
-        M_ext_new = self.M_ext
+        M_ext_new = self.M_ext.copy()
         M_ext_new[2, 3] += feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
        
     def out(self, feet):
         #### in-out motion occurs along the z-axis
-        M_ext_new = self.M_ext
+        M_ext_new = self.M_ext.copy()
         M_ext_new[2, 3] -= feet * const.SCALE
         return Camera(self.M_int, M_ext_new, self.sensor_dims)
     
