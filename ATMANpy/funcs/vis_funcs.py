@@ -459,13 +459,13 @@ def kde_heatmap(myShots, showReg = None,
     
     return kdeScn
 
-
 def kde_hillmap(myShots, 
                 showReg = None, resolution = 1,
                 position_func = 'get_first_bounce_position',
                 bandwidth = 30, max_height = 30,
                 mix_colors = True, 
-                zero_color = (0, 0, 0), one_color = const.BGR['intense_red']):
+                zero_color = (0, 0, 0), one_color = const.BGR['intense_red'],
+                threshold_proportion = None, epsilon = 0.005, threshold_color = const.BGR['intense_red']):
     
     ### Gather courtlines
     if showReg is None:
@@ -486,6 +486,20 @@ def kde_hillmap(myShots,
     
     bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
     
+    ### Optionally -> mark out a threshold
+    if threshold_proportion is not None:
+        sortArr = np.sort(norm_heightArr.flatten())
+        threshArr = sortArr.cumsum() / norm_heightArr.sum() > threshold_proportion
+        threshold_density = sortArr[threshArr.argmax()]
+        
+        density_is_above = threshold_density - epsilon < norm_heightArr
+        density_is_below = norm_heightArr < threshold_density + epsilon
+        
+        long_density_filter = (density_is_above & density_is_below).reshape((num_x * num_y))
+
+        bgrArr_long_replace = np.tile(threshold_color, reps = (num_x * num_y, 1))
+        bgrArr_long = np.where(long_density_filter[:, np.newaxis], bgrArr_long_replace, bgrArr_long)
+
     heightArr = norm_heightArr * max_height
     heightArr_long = heightArr.reshape((num_x * num_y, 1))
 
@@ -502,7 +516,7 @@ def kde_contourmap(myShots,
                    position_func = 'get_first_bounce_position',
                    bandwidth = 30, threshold_proportion = 0.5, 
                    epsilon = 0.005, n_components = None,
-                   fill = False, max_height = 30,
+                   fill = False, max_height = 30, normalize_density = False,
                    preserve_showarr_shape = True, 
                    contour_color = const.BGR['intense_red'],
                    contour_alpha = 1):
@@ -522,7 +536,7 @@ def kde_contourmap(myShots,
     ### Prepare the resulting Scene
     ### Here, we simply get out the raw kde values by ignoring the BGR channel and turning off normalization
     _, kdeArr = epanechnikov(posArr_nonnan, showArr, bandwidth = bandwidth, 
-                            normalize_density = False, mix_alpha = True)
+                            normalize_density = normalize_density, mix_alpha = True)
     kdeArr = kdeArr[:, :, 0]
 
     ### find threshold density
