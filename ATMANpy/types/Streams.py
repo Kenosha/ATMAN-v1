@@ -473,10 +473,10 @@ class Stream:
         else:
             yield self.conform(chunk_start, chunk_stop).decap() ### yield one last time
 
-    def show(self, ms_between_frames = 25, frame_counter = False):
+    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
         frmNum, myFrm, myDict = next(gen) ### prime the generator
-        drawFunc = draw(self.features.get_features())
+        drawFunc = draw(self.features.get_features(), textRegion = text_region)
         
         while True:
             sendFrm = drawFunc({'cFrm': myFrm}, myDict) ### TODO: Clean this up! myFrm is not always cFrm!
@@ -885,8 +885,8 @@ class StillStream:
         else:
             cv.destroyAllWindows()
     
-    def show(self, ms_between_frames = 25, frame_counter = False):
-        return Stream.show(self,  ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
+        return Stream.show(self,  ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
     
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
@@ -1308,9 +1308,9 @@ class StreamList:
         cap = self[0].cap ### needs generalisation...
         return NCStream(cap, frameList)
     
-    def show(self, ms_between_frames = 25, frame_counter = False):
+    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
         for myStm in self:
-            myStm.show(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+            myStm.show(ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
     
     # def chunk_generator(self, chunksize = None): 
     #     ### chunks are simply the elements!
@@ -1470,8 +1470,8 @@ class DecapStream:
         else:
             cv.destroyAllWindows()
            
-    def show(self, ms_between_frames = 30, frame_counter = False):
-        return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    def show(self, ms_between_frames = 30, frame_counter = False, text_region = None):
+        return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
            
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
@@ -1599,8 +1599,8 @@ class NCDecapStream:
         else:
             cv.destroyAllWindows()
     
-    def show(self, ms_between_frames = 30, frame_counter = False):
-        return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    def show(self, ms_between_frames = 30, frame_counter = False, text_region = None):
+        return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
            
     def extract(self, featureFunc, **kwargs):
         return Stream.extract(self, featureFunc, **kwargs)
@@ -1952,8 +1952,8 @@ class CachedStream(Stream):
         return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, 
                                  cache_size = self.cache_size, name = self.name)
 
-    def show(self, ms_between_frames = 30, frame_counter = False):
-        self.decache().show(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    def show(self, ms_between_frames = 30, frame_counter = False, text_region = None):
+        self.decache().show(ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = None)
     
     
 @dataclass(frozen = True)
@@ -2248,8 +2248,8 @@ class NCStream:
             chunkNums = self.frmNums[slice_start: slice_stop]
             yield self.conform(chunkNums).decap()
 
-    def show(self, ms_between_frames = 25, frame_counter = False):
-        Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
+        Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
           
     def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
         return Stream.extract(self, featureFunc, **kwargs)
