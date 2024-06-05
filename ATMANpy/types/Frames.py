@@ -202,8 +202,8 @@ class Frame:
         cv.imwrite(filePath, self.array)
     
     ### SHOW METHODS ###
-    def show(self):
-        show(self.array, name = self.name)
+    def show(self, num_seconds = None):
+        show(self.array, name = self.name, num_seconds = num_seconds)
 
     def show_continuous(self, ms_between_frames = 30, name = 'frame'):
         still_showing = show_continuous(self.array, ms_between_frames = ms_between_frames, name = name)
@@ -565,10 +565,6 @@ class BoolFrame(Frame):
         hough_lines = Lines.from_coordList(hough_lines)
         return hough_lines
 
-    ## override show
-    def show(self):
-        show(self.array, name = self.name)
-        
 @dataclass(frozen = True)
 class MaskFrame(Frame):
     ### Introduced 16.06.2023 -> This is a BoolFrame with one channel! BoolFrame itself always has three
@@ -709,11 +705,6 @@ class MaskFrame(Frame):
                                      minLineLength = minLineLength, maxLineGap = maxLineGap)
         hough_lines = Lines.from_coordList(hough_lines)
         return hough_lines
-
-    ## override show
-    def show(self):
-        show(self.array, name = self.name)
-        
 
 @dataclass(frozen = True)
 class GreyFrame(Frame):
