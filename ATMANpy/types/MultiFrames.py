@@ -115,6 +115,16 @@ class Frames:
         
         return convFrms
     
+    @classmethod
+    def from_frame(cls, myFrm, repetitions):
+        conversionFuncStr = cls.get_converter()
+        try:
+            convFrm = getattr(myFrm, conversionFuncStr)()
+        except AttributeError:
+            convFrm = myFrm
+        convArr = np.repeat(convFrm.array[np.newaxis], repetitions, axis = 0)
+        return cls(convArr)
+
     # @staticmethod       
     # def dispatch_arithmetic(x, y, func, *args, **kwargs):
         # try:
