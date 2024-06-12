@@ -860,6 +860,47 @@ class Point(Shots):
             print(f'Unhandled: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
             return None
 
+    def get_score_pressure(self, p_server = 0.5):
+        ### TODO: for a tiebreak situation, the probability p_server has to switch -> this has to be reflected in the next shots p_server, potentially!
+
+        curr_srv_str, curr_rec_str = self.get_score()
+
+        score_func_regular = lambda scoreStr: {'0': 0, '15': 1, '30': 2, '40': 3, 'A': 4}[scoreStr]
+        score_func_tiebreak = lambda scoreStr: int(scoreStr)
+
+        try:
+            curr_srv_val, curr_rec_val = score_func_regular(curr_srv_str), score_func_regular(curr_rec_str)
+            max_score = 4
+        except:
+            curr_srv_val, curr_rec_val = score_func_tiebreak(curr_srv_str), score_func_tiebreak(curr_rec_str)
+            max_score = 7
+
+        def probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val):
+            if (curr_srv_val > curr_rec_val + 1) and (curr_srv_val >= max_score): ### server wins
+                return 1
+            elif (curr_rec_val > curr_srv_val + 1) and (curr_rec_val >= max_score): # receiver wins
+                return 0
+            elif curr_srv_val == curr_rec_val >= max_score - 2: ## deuce like situation
+                return (p_server ** 2) / (1 - 2 * p_server + 2 * p_server ** 2)
+            elif curr_srv_val > curr_rec_val >= max_score - 2: ### ad-in like situation 
+                return p_server + (1 - p_server) * probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val + 1)
+            elif curr_rec_val > curr_srv_val >= max_score - 2: ### ad-out like situation
+                return p_server * probability_server_wins_game_or_tiebreak(curr_srv_val + 1, curr_rec_val)
+            else:
+                return p_server * probability_server_wins_game_or_tiebreak(curr_srv_val + 1, curr_rec_val) + (1 - p_server) * probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val + 1)
+        
+        ### the score pressure depends on the difference between 
+        # -> the probability to win the service game if the point is won...
+        p_srv_if_win = probability_server_wins_game_or_tiebreak(curr_srv_val + 1, curr_rec_val)
+        # -> the probability to win the service game if the point is lost
+        p_srv_if_lose = probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val + 1)
+
+        ### note that the score pressure is symmetric for the server and receiver if calculated as a difference, 
+        ### since the probability that the receiver wins the game or tiebreak is 1 - p_if_win and 1 - p_if_lose depending on what happens
+        ### -> has been checked!
+        diff_srv = p_srv_if_win - p_srv_if_lose
+        
+        return round(diff_srv, 3)
 
     def get_serve(self):
         if len(self) == 0:
@@ -964,6 +1005,8 @@ class Points:
     def from_datatable(cls, tableFrm):    
         curr_shot_idx, prev_shot_idx = tableFrm.groupby('match_idx')['shot_idx'].shift(0), tableFrm.groupby('match_idx')['shot_idx'].shift(1)
         diff_shot_idx = curr_shot_idx - prev_shot_idx
+        ### TODO: This is not good enough! whenever we only have a serve, the shot idx does not decrement like assumed here!
+        ### fix -> in join_traj_and_other_info, add a point_idx.
         ### nans only occur at the very first frame of a match 
             # -> there is no prev_shot_idx here. 
         # The theoretical previous shot idx would have been > 0, so we just plug in a negative number.
