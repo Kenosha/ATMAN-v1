@@ -14,6 +14,18 @@ from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Shapes3D import Line3D
 
 
+def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
+    hold_frames = 25 // blinks_per_second
+    assert hold_frames > 0
+
+    onFrms = BGRFrames.from_frame(onFrm, hold_frames)
+    offFrms = BGRFrames.from_frame(offFrm, hold_frames)
+    combFrms = BGRFrames.from_frames([onFrms, offFrms])
+
+    repeats = duration_in_frames // (hold_frames * 2) + 1
+
+    return BGRFrames.from_frames([combFrms] * repeats)[:duration_in_frames]
+
 def interpolate_camera(startCam, endCam, num_frames):
     assert startCam.sensor_dims == endCam.sensor_dims
     frames = range(0, num_frames)
@@ -77,8 +89,8 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     argument_luminosity = 1, adaptive_resolution_exponent = 0, cumulative_foreground_transparence = None, 
-                    start_cam = None, stop_cam = None,
-            text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
+                    argument_blinks_per_second = None,
+                    start_cam = None, stop_cam = None):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
     num_frames = len(animation_sequence_objects)
@@ -144,12 +156,6 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         
         myFrm = joint_view.snap()
 
-        if text_lines is not None:
-            pos_x, pos_y = text_where
-            for textStr in text_lines:
-                myFrm = myFrm.put(textStr, where = (pos_x, pos_y), color = text_color, size = text_size)
-                pos_y += text_offset
-
         frameList.append(myFrm)
 
     myFrms = BGRFrames(np.array([f.array for f in frameList]))
@@ -171,8 +177,8 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
                         background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None, ### these are static/previous scenes that are not animated, but can be faded out/in
                         argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                         argument_luminosity = 1, cumulative_foreground_transparence = 0, adaptive_resolution_exponent = 0,
-                        start_cam = None, stop_cam = None,
-                        text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
+                        argument_blinks_per_second = None,
+                        start_cam = None, stop_cam = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -241,19 +247,6 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
         
         myFrm = joint_view.snap()
 
-        if text_lines is not None:
-            pos_x, pos_y = text_where
-            for textStr in text_lines:
-                myFrm = myFrm.put(textStr, where = (pos_x, pos_y), color = text_color, size = text_size)
-                pos_y += text_offset
-
-        frameList.append(myFrm)
-        if text_lines is not None:
-            pos_x, pos_y = text_where
-            for textStr in text_lines:
-                myFrm = myFrm.put(textStr, where = (pos_x, pos_y), color = text_color, size = text_size)
-                pos_y += text_offset
-
         frameList.append(myFrm)
 
     myFrms = BGRFrames(np.array([f.array for f in frameList]))
@@ -275,7 +268,7 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     argument_luminosity = 1, adaptive_resolution_exponent = 0,
-                    text_lines = None, text_size = 1, text_color = const.BGR['strong_pink'], text_where = (50, 50), text_offset = 50):
+                    argument_blinks_per_second = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -325,20 +318,18 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
     dummy_view = View.make(static_cam, previous_dummy_scene, resolution = dummy_resolution)
     base_view = View.make(static_cam, background_scene, resolution = background_resolution)
 
-    joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
-    static_frame = joint_view.snap()
+    if argument_blinks_per_second is None:
+        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
+        static_frame = joint_view.snap()
+        myFrms = BGRFrames.from_frame(static_frame, repetitions = num_frames)
+    else:
+        on_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
+        off_view = base_view.combine(dummy_view).combine(front_view)
+        onFrm = on_view.snap()
+        offFrm = off_view.snap()
+        
+        myFrms = blinking(onFrm, offFrm, blinks_per_second = argument_blinks_per_second, duration_in_frames = num_frames)
 
-    ### MANAGE TEXT
-    if text_lines is not None:
-        pos_x, pos_y = text_where
-        for textStr in text_lines:
-            static_frame = static_frame.put(textStr, where = (pos_x, pos_y), color = text_color, size = text_size)
-            pos_y += text_offset
-
-    ### COLLATE STATIC FRAMES 
-    frameList = [static_frame for _ in range(num_frames)]
-    myFrms = BGRFrames(np.array([f.array for f in frameList]))
-    
     ### make a kwarg dictionary for the next animation
     if isinstance(static_scene, Scene):
         next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(static_scene_dimmed, keep_which = 'other'),

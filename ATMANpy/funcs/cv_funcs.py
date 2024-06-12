@@ -15,7 +15,7 @@ import ATMANpy.funcs.util_funcs as atu
 
 def show(frame, name = 'frame', num_seconds = None):
     cv.imshow(name, frame)
-    cv.waitKey(0 if num_seconds is None else num_seconds * 1000)
+    cv.waitKey(0 if num_seconds is None else round(num_seconds * 1000))
     #closing all open windows  
     cv.destroyAllWindows()  
     
