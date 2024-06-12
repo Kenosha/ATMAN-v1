@@ -348,8 +348,7 @@ class AnnotatedPoint3D(Point3D):
         updDict = {'lineType': new_lineType}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
-
-
+    
 
 @dataclass(frozen = True, eq = False)
 class Circle3D(Point3D):
@@ -907,6 +906,12 @@ class Region3D():
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
 
+    def rescale(self, scale_factor):
+        c = self.center_point()
+        scale_func = lambda p: p * scale_factor + c * (1 - scale_factor)
+        q1, q2, q3, q4 = scale_func(self.p1), scale_func(self.p2), scale_func(self.p3), scale_func(self.p4)
+        return Region3D.from_points3D(q1, q2, q3, q4, color = self.color, alpha = self.alpha, name = self.name)
+
     def transparify(self, transparence_factor):
         transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
         updDict = {'alpha': transparent_alpha}
@@ -959,6 +964,55 @@ class Region3D():
         reg_orig = topLn.leftPt
         reg_vec1, reg_vec2 = topLn.to_vector(), leftLn.to_vector()
         return reg_orig, reg_vec1, reg_vec2
+
+    def split(self, numerator = 1, denominator = 2, how = 'horizontal'):
+        ### split a region into two parts, which might be of unequal size.
+        ### keyword arguments numerator and denominator determine how the region is split in two
+        ### how is in [horizontal, vertical] -> which of the lines to split along!
+
+        ### collect the appropriate lines
+        if how == 'horizontal':
+            l1, l2 = self['Left'], self['Right']
+        elif how == 'vertical':
+            l1, l2 = self['Top'], self['Bottom']
+
+        ### find the right point at which to split
+        ps1, ps2 = l1.subdivide(elements = denominator + 1), l2.subdivide(elements = denominator + 1) ### plus one since endpoint is included
+        p1, p2 = ps1[numerator], ps2[numerator]
+
+        if how == 'horizontal':
+            r1 = Region3D.from_points3D(self.p1, self.p2, p1, p2) ### the upper region
+            r2 = Region3D.from_points3D(p1, p2, self.p3, self.p4) ### the lower region
+        else:
+            r1 = Region3D.from_points3D(self.p1, p1, self.p3, p2) ### the left region
+            r2 = Region3D.from_points3D(p1, self.p2, p2, self.p4) ### the right region
+
+        return Regions3D([r1, r2])
+    
+    def subdivide(self, elements = 10, how = 'horizontal'):
+        ### subdivide a region into elements regions of equal size
+        
+        ### collect the appropriate lines
+        if how == 'horizontal':
+            l1, l2 = self['Left'], self['Right']
+        elif how == 'vertical':
+            l1, l2 = self['Top'], self['Bottom']
+
+        l1s, l2s = l1.subdivide(elements = elements + 1), l2.subdivide(elements = elements + 1) ## plus one since endpoint is included
+
+        regList = []
+        prev_p1, prev_p2 = None, None
+        for curr_p1, curr_p2 in zip(l1s, l2s):
+            if prev_p1 is not None and prev_p2 is not None:
+                if how == 'horizontal':
+                    subReg = Region3D.from_points3D(prev_p1, prev_p2, curr_p1, curr_p2)
+                elif how == 'vertical':
+                    subReg = Region3D.from_points3D(prev_p1, curr_p1, prev_p2, curr_p2)
+                regList.append(subReg)
+
+            prev_p1, prev_p2 = curr_p1, curr_p2
+
+        return Regions3D(regList)
 
     def intersect(self, aLn):
         return aLn.intersect(self)
@@ -1145,6 +1199,9 @@ class Lines3D(Container3D):
     @classmethod
     def get_constituent(cls):
         return Line3D
+
+    def resize(self, new_thickness):
+        return Lines3D([ln.resize(new_thickness) for ln in self])
 
     def vectorize(self):
         ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...

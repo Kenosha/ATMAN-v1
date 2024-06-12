@@ -864,7 +864,56 @@ class Region(Lines):
             return Region.from_points(p1, p4)
         else:
             return None
+    
+    def split(self, numerator = 1, denominator = 2, how = 'horizontal'):
+        ### split a region into two parts, which might be of unequal size.
+        ### keyword arguments numerator and denominator determine how the region is split in two
+        ### how is in [horizontal, vertical] -> which of the lines to split along!
+
+        ### collect the appropriate lines
+        if how == 'horizontal':
+            l1, l2 = self['Left'], self['Right']
+        elif how == 'vertical':
+            l1, l2 = self['Top'], self['Bottom']
+
+        ### find the right point at which to split
+        ps1, ps2 = l1.subdivide(elements = denominator + 1), l2.subdivide(elements = denominator + 1) ### plus one since endpoint is included
+        p1, p2 = ps1[numerator], ps2[numerator]
+
+        if how == 'horizontal':
+            r1 = Region.from_points(self.p1, self.p2, p1, p2) ### the upper region
+            r2 = Region.from_points(p1, p2, self.p3, self.p4) ### the lower region
+        else:
+            r1 = Region.from_points(self.p1, p1, self.p3, p2) ### the left region
+            r2 = Region.from_points(p1, self.p2, p2, self.p4) ### the right region
+
+        return Regions([r1, r2])
+    
+    def subdivide(self, elements = 10, how = 'horizontal'):
+        ### subdivide a region into elements regions of equal size
         
+        ### collect the appropriate lines
+        if how == 'horizontal':
+            l1, l2 = self['Left'], self['Right']
+        elif how == 'vertical':
+            l1, l2 = self['Top'], self['Bottom']
+
+        l1s, l2s = l1.subdivide(elements = elements + 1), l2.subdivide(elements = elements + 1) ## plus one since endpoint is included
+
+        regList = []
+        prev_p1, prev_p2 = None, None
+        for curr_p1, curr_p2 in zip(l1s, l2s):
+            if prev_p1 is not None and prev_p2 is not None:
+                if how == 'horizontal':
+                    subReg = Region.from_points(prev_p1, prev_p2, curr_p1, curr_p2)
+                elif how == 'vertical':
+                    subReg = Region.from_points(prev_p1, curr_p1, prev_p2, curr_p2)
+                regList.append(subReg)
+
+            prev_p1, prev_p2 = curr_p1, curr_p2
+
+        return Regions(regList)
+
     
 @dataclass(frozen = True)
 class Regions:
