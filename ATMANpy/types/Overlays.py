@@ -1,0 +1,141 @@
+
+import numpy as np
+
+from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D
+from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
+import ATMANpy.auxil.constants as const
+
+from dataclasses import dataclass
+
+
+def make_region_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
+    assert offset < 0.5
+    myReg = subReg.rescale(1 - offset * 2)
+    myReg = myReg.recolor(color)
+    return myReg
+
+def make_text_in(subReg, textStr, size = 1, thickness = 1, color = const.BGR['leafy_green'], offset = 0):
+    textPt = subReg['Left'].center_point().annotate(textStr)
+    textPt = textPt.resize(size).rethicken(thickness).recolor(color).right(offset)
+    return textPt
+
+@dataclass(frozen = True)
+class Legend:
+    element_parameters: list
+    legend_dimensions: tuple = (600, 400)
+    render_height: int = 100
+    resolution: int = 10
+    header_size: int = 2
+    header_thickness: int = 2
+    header_offset: int = 10
+    header_color: tuple = const.BGR['smokey_grey']
+
+    @staticmethod
+    def make_empty(legend_dimensions = (600, 400), render_height = 100, resolution = 10, 
+                   header_size = 2, header_thickness = 2, header_offset = 10, header_color = const.BGR['smokey_grey']):
+        return Legend([], 
+                      legend_dimensions = legend_dimensions, 
+                      render_height = render_height,
+                      resolution = resolution,
+                      header_size = header_size,
+                      header_thickness = header_thickness,
+                      header_offset = header_offset,
+                      header_color = header_color)
+    
+    def add(self, parameter_dict):
+        return Legend([*self.element_parameters, parameter_dict], 
+                      legend_dimensions = self.legend_dimensions, 
+                      render_height = self.render_height,
+                      resolution = self.resolution,
+                      header_size = self.header_size,
+                      header_thickness = self.header_thickness,
+                      header_offset = self.header_offset,
+                      header_color = self.header_color)
+    
+    def render(self):
+        legCam = Camera.birds_eye(self.render_height, sensor_dims = self.legend_dimensions)
+        legReg = legCam.approximate_fov(self.render_height)
+
+        legLines = legReg.lineList
+        legLines = legLines.resize(0.25)
+
+        num_els = len(self.element_parameters)
+
+        subRegs = legReg.subdivide(elements = num_els + 1, how = 'horizontal')
+        headerReg, otherRegs = subRegs[0], subRegs[1:]
+
+        headerPt = make_text_in(headerReg, 'Legend', 
+                                size = self.header_size, 
+                                thickness = self.header_thickness,
+                                offset = self.header_offset,
+                                color = self.header_color)
+
+        legend_shapes, annotated_points = [legLines], [headerPt]
+        for params, subReg in zip(self.element_parameters, otherRegs):
+            
+            if params is None: ### this is so we can have a legend of fixed subdivisions with empty elements -> None as a placeholder
+                continue
+
+            subReg_left, subReg_right = subReg.split(numerator = 1, denominator = 4, how = 'vertical')
+
+            shape_color = params['shape_color']
+            shape_offset = params['shape_offset']
+
+            text_string = params['text_string']
+            text_color = params['text_color']
+            text_size = params['text_size']
+            text_thickness = params['text_thickness']
+
+            shapeReg = make_region_in(subReg_left, offset = shape_offset, color = shape_color)
+            textPt = make_text_in(subReg_right, text_string, size = text_size, thickness = text_thickness, color = text_color)
+
+            legend_shapes.append(shapeReg)
+            annotated_points.append(textPt)
+
+        legScn = Scene(legend_shapes)
+        legView = View.make(legCam, legScn, annotatedPoints = annotated_points, resolution = self.resolution)
+        legFrm = legView.snap()
+
+        return legFrm
+
+def overlay(baseFrm, legFrm, top_left_point = None):
+    from ATMANpy.types.Frames import BGRFrame
+    from ATMANpy.types.MultiFrames import BGRFrames
+    
+    if top_left_point is None:
+        tl_col, tl_row = 0, 0
+    else:
+        tl_col, tl_row = top_left_point.coords
+
+    if isinstance(baseFrm, BGRFrame):
+        bs_row, bs_col, _ = baseFrm.array.shape
+        bs_t = None
+    elif isinstance(baseFrm, BGRFrames):
+        bs_t, bs_row, bs_col, _ = baseFrm.array.shape
+    
+    if isinstance(legFrm, BGRFrame):
+        lg_row, lg_col, _ = legFrm.array.shape
+        lg_t = None
+    elif isinstance(legFrm, BGRFrames):
+        lg_t, lg_row, lg_col, _ = legFrm.array.shape
+    
+    if lg_t is not None: ### if we have a legend with a time dimension...
+        assert bs_t == lg_t
+
+    assert tl_col + lg_col < bs_col and tl_row + lg_row < bs_row
+
+    combArr = baseFrm.array.copy()
+    legArr = legFrm.array.copy()
+
+    ### bring to have four dims, so we can add in, and squeeze later
+    if len(combArr.shape) == 3:
+        combArr = combArr[np.newaxis]
+    if len(legArr.shape) == 3:
+        legArr = legArr[np.newaxis]
+
+    combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col] = legArr
+
+    if combArr.shape[0] == 1:    
+        return BGRFrame(combArr[0])
+    else:
+        return BGRFrames(combArr)
