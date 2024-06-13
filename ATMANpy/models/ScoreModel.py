@@ -50,7 +50,7 @@ def probability_server_wins_match(srv, rec, sets_to_win = 2):
     else:
         return 0.5 * probability_server_wins_match(srv + 1, rec, sets_to_win = sets_to_win) + 0.5 * probability_server_wins_match(srv, rec + 1, sets_to_win = sets_to_win)
 
-class PressureModel:    
+class ScoreModel:    
     def __init__(self, p_server = 0.65, sets_to_win = 2):
         # p_server -> probability that the server wins the point
         self.p_server = p_server
