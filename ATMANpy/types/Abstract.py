@@ -36,6 +36,11 @@ import ATMANpy.funcs.sf_apply_funcs as sa
 import ATMANpy.funcs.util_funcs as ut
 import ATMANpy.funcs.feature_funcs as ff
 
+from ATMANpy.models.ScoreModel import ScoreModel
+P_SERVER = 0.65
+SETS_TO_WIN = 2
+scoreMod = ScoreModel(P_SERVER, SETS_TO_WIN)
+
 @dataclass(frozen = True)
 class PlayerMovement:
     playerFrm: pd.DataFrame
@@ -74,8 +79,14 @@ class PlayerMovement:
     def get_side(self):
         return self.playerFrm.loc[0, 'side']
     
-    def get_score(self):
+    def get_point_score(self):
         return self.playerFrm.loc[0, 'score']
+    
+    def get_game_score(self):
+        return self.playerFrm.loc[0, 'games']
+    
+    def get_set_score(self):
+        return self.playerFrm.loc[0, 'sets']
 
     def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
@@ -807,7 +818,7 @@ class Point(Shots):
             srv_name, rec_name = srvShot.hitPlayer.get_name(), srvShot.recPlayer.get_name()
 
         ### Deal with Current Score
-        curr_srv_str, curr_rec_str = self.get_score()
+        curr_srv_str, curr_rec_str = self.get_point_score()
         
         try:
             curr_srv_val, curr_rec_val = score_func_regular(curr_srv_str), score_func_regular(curr_rec_str)
@@ -821,7 +832,7 @@ class Point(Shots):
             elif curr_srv_val < curr_rec_val:
                 return rec_name 
         else:
-            next_srv_str, next_rec_str = nextPnt.get_score()
+            next_srv_str, next_rec_str = nextPnt.get_point_score()
 
         try:
             next_srv_val, next_rec_val = score_func_regular(next_srv_str), score_func_regular(next_rec_str)
@@ -860,47 +871,20 @@ class Point(Shots):
             print(f'Unhandled: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
             return None
 
-    def get_score_pressure(self, p_server = 0.5):
-        ### TODO: for a tiebreak situation, the probability p_server has to switch -> this has to be reflected in the next shots p_server, potentially!
+    def get_point_score_pressure(self):
+        srv_str, rec_str = self.get_point_score()
+        return scoreMod.point_score_pressure(srv_str, rec_str)
 
-        curr_srv_str, curr_rec_str = self.get_score()
+    def get_game_score_pressure(self):
+        srv, rec = self.get_game_score()
+        return scoreMod.game_score_pressure(srv, rec)
 
-        score_func_regular = lambda scoreStr: {'0': 0, '15': 1, '30': 2, '40': 3, 'A': 4}[scoreStr]
-        score_func_tiebreak = lambda scoreStr: int(scoreStr)
-
-        try:
-            curr_srv_val, curr_rec_val = score_func_regular(curr_srv_str), score_func_regular(curr_rec_str)
-            max_score = 4
-        except:
-            curr_srv_val, curr_rec_val = score_func_tiebreak(curr_srv_str), score_func_tiebreak(curr_rec_str)
-            max_score = 7
-
-        def probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val):
-            if (curr_srv_val > curr_rec_val + 1) and (curr_srv_val >= max_score): ### server wins
-                return 1
-            elif (curr_rec_val > curr_srv_val + 1) and (curr_rec_val >= max_score): # receiver wins
-                return 0
-            elif curr_srv_val == curr_rec_val >= max_score - 2: ## deuce like situation
-                return (p_server ** 2) / (1 - 2 * p_server + 2 * p_server ** 2)
-            elif curr_srv_val > curr_rec_val >= max_score - 2: ### ad-in like situation 
-                return p_server + (1 - p_server) * probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val + 1)
-            elif curr_rec_val > curr_srv_val >= max_score - 2: ### ad-out like situation
-                return p_server * probability_server_wins_game_or_tiebreak(curr_srv_val + 1, curr_rec_val)
-            else:
-                return p_server * probability_server_wins_game_or_tiebreak(curr_srv_val + 1, curr_rec_val) + (1 - p_server) * probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val + 1)
-        
-        ### the score pressure depends on the difference between 
-        # -> the probability to win the service game if the point is won...
-        p_srv_if_win = probability_server_wins_game_or_tiebreak(curr_srv_val + 1, curr_rec_val)
-        # -> the probability to win the service game if the point is lost
-        p_srv_if_lose = probability_server_wins_game_or_tiebreak(curr_srv_val, curr_rec_val + 1)
-
-        ### note that the score pressure is symmetric for the server and receiver if calculated as a difference, 
-        ### since the probability that the receiver wins the game or tiebreak is 1 - p_if_win and 1 - p_if_lose depending on what happens
-        ### -> has been checked!
-        diff_srv = p_srv_if_win - p_srv_if_lose
-        
-        return round(diff_srv, 3)
+    def get_set_score_pressure(self):
+        srv, rec = self.get_set_score()
+        return scoreMod.set_score_pressure(srv, rec)
+    
+    def get_joint_score_pressure(self):
+        return self.get_point_score_pressure() * self.get_game_score_pressure() * self.get_set_score_pressure()
 
     def get_serve(self):
         if len(self) == 0:
@@ -972,12 +956,51 @@ class Point(Shots):
         else:
             return False
         
-    def get_score(self):
+    def is_game_point(self):
+        srv_pnt, rec_pnt = self.get_point_score()
+        srv_gms, rec_gms = self.get_game_score()
+        return scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt) and not scoreMod.is_tiebreak(srv_gms, rec_gms)
+
+    def is_break_point(self):
+        srv_pnt, rec_pnt = self.get_point_score()
+        srv_gms, rec_gms = self.get_game_score()
+        return scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt) and not scoreMod.is_tiebreak(srv_gms, rec_gms)
+    
+    def is_set_point(self):
+        srv_pnt, rec_pnt = self.get_point_score()
+        srv_gms, rec_gms = self.get_game_score()
+        hold_to_win_set = scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt) and scoreMod.is_hold_to_win_set(srv_gms, rec_gms)
+        break_to_win_set = scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt) and scoreMod.is_break_to_win_set(srv_gms, rec_gms)
+        return hold_to_win_set or break_to_win_set
+
+    def is_match_point(self):
+        srv_pnt, rec_pnt = self.get_point_score()
+        srv_gms, rec_gms = self.get_game_score()
+        srv_set, rec_set = self.get_set_score()
+        hold_to_win_match = scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt) and scoreMod.is_hold_to_win_set(srv_gms, rec_gms) and scoreMod.is_server_deciding_set(srv_set, rec_set)
+        break_to_win_match = scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt) and scoreMod.is_break_to_win_set(srv_gms, rec_gms) and scoreMod.is_receiver_deciding_set(srv_set, rec_set)
+        return hold_to_win_match or break_to_win_match
+
+    def get_point_score(self):
         serveShot = self.get_serve()
         if serveShot is None:
-            return None
+            return None, None
         else:
-            return serveShot.hitPlayer.get_score(), serveShot.recPlayer.get_score()
+            return serveShot.hitPlayer.get_point_score(), serveShot.recPlayer.get_point_score()
+    
+    def get_game_score(self):
+        serveShot = self.get_serve()
+        if serveShot is None:
+            return None, None
+        else:
+            return serveShot.hitPlayer.get_game_score(), serveShot.recPlayer.get_game_score()
+    
+    def get_set_score(self):
+        serveShot = self.get_serve()
+        if serveShot is None:
+            return None, None
+        else:
+            return serveShot.hitPlayer.get_set_score(), serveShot.recPlayer.get_set_score()
 
     def stream(self, cap):
         fs, ls = self.get_frames()[0], self.get_frames()[-1]
@@ -1002,19 +1025,16 @@ class Points:
         return cls(pointList)
     
     @classmethod
-    def from_datatable(cls, tableFrm):    
-        curr_shot_idx, prev_shot_idx = tableFrm.groupby('match_idx')['shot_idx'].shift(0), tableFrm.groupby('match_idx')['shot_idx'].shift(1)
-        diff_shot_idx = curr_shot_idx - prev_shot_idx
-        ### TODO: This is not good enough! whenever we only have a serve, the shot idx does not decrement like assumed here!
-        ### fix -> in join_traj_and_other_info, add a point_idx.
-        ### nans only occur at the very first frame of a match 
-            # -> there is no prev_shot_idx here. 
-        # The theoretical previous shot idx would have been > 0, so we just plug in a negative number.
-        diff_shot_idx = diff_shot_idx.fillna(-1) 
-        rally_idx = (diff_shot_idx < 0).cumsum()
-
-        pointList = [Point.from_point_table(pointFrm) for _, pointFrm in tableFrm.groupby(rally_idx)]
-        return cls(pointList)
+    def from_datatable(cls, tableFrm, split_by_match = False):
+        if split_by_match:
+            matchList = []
+            for _, matchFrm in tableFrm.groupby('match_idx'):
+                pointList = [Point.from_point_table(pointFrm) for _, pointFrm in matchFrm.groupby('point_idx')]
+                matchList.append(cls(pointList))
+            return matchList
+        else:   
+            pointList = [Point.from_point_table(pointFrm) for _, pointFrm in tableFrm.groupby(['match_idx', 'point_idx'])]
+            return cls(pointList)
 
     def __repr__(self):
         SHOW_THRESHOLD = 20

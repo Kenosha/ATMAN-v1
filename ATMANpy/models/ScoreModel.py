@@ -109,6 +109,49 @@ class ScoreModel:
         diff_p = p_match_if_win - p_match_if_lose
         
         return round(diff_p, 3)
+    
+    def is_deciding_point_on_serve(self, srv_str, rec_str):
+        ### Server has game point
+        score_func_regular = lambda scoreStr: {'0': 0, '15': 1, '30': 2, '40': 3, 'A': 4}[scoreStr]
+        score_func_tiebreak = lambda scoreStr: int(scoreStr)
+
+        try:
+            srv_val, rec_val = score_func_regular(srv_str), score_func_regular(rec_str)
+            regular_game = True
+        except:
+            srv_val, rec_val = score_func_tiebreak(srv_str), score_func_tiebreak(rec_str)
+            regular_game = False
+
+        return probability_server_wins_game(srv_val + 1, rec_val) == 1
+
+    def is_deciding_point_against_serve(self, srv_str, rec_str):
+        ### Server has game point
+        score_func_regular = lambda scoreStr: {'0': 0, '15': 1, '30': 2, '40': 3, 'A': 4}[scoreStr]
+        score_func_tiebreak = lambda scoreStr: int(scoreStr)
+
+        try:
+            srv_val, rec_val = score_func_regular(srv_str), score_func_regular(rec_str)
+            regular_game = True
+        except:
+            srv_val, rec_val = score_func_tiebreak(srv_str), score_func_tiebreak(rec_str)
+            regular_game = False
+
+        return probability_server_wins_game(srv_val, rec_val + 1) == 1
+    
+    def is_hold_to_win_set(self, srv, rec):
+        return probability_server_wins_set(srv + 1, rec) == 1
+    
+    def is_break_to_win_set(self, srv, rec):
+        return probability_server_wins_set(srv, rec + 1) == 1
+    
+    def is_server_deciding_set(self, srv, rec):
+        return srv + 1 == self.sets_to_win
+
+    def is_receiver_deciding_set(self, srv, rec):
+        return rec + 1 == self.sets_to_win
+
+    def is_tiebreak(self, srv, rec):
+        return srv == rec == 6
 
 if __name__ == '__main__':
         
