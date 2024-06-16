@@ -58,7 +58,7 @@ def load(vid, sto):
     segBF = StreamFeature.from_store(vid, sto, featname = 'isRally_warmup_removed')
     plySF = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayerCnt', 'botPlayerCnt'])
     srvSF = StreamFeature.from_store(vid, sto, featname = 'srvFlag')
-    scrSF = StreamFeatures.from_store(vid, sto, featnameList = ['sb_name_lower_Flag', 'sb_name_upper_Flag', 'sb_score_lower_Flag', 'sb_score_upper_Flag'])
+    scrSF = StreamFeatures.from_store(vid, sto, featnameList = ['sb_name_lower_Flag', 'sb_name_upper_Flag', 'sb_score_lower_Flag', 'sb_score_upper_Flag', 'sb_games_lower_cleaned_Flag', 'sb_games_upper_cleaned_Flag'])
     trajFrm = ff.read_feature_frame('trajTable', vid, sto)
     return HPCF, segBF, plySF, srvSF, scrSF, trajFrm
 
@@ -145,8 +145,11 @@ def main(conf, name = None):
     scoreFrm = scrSF[['sb_score_lower_Flag', 'sb_score_upper_Flag']].to_dataframe()
     scoreFrm.columns = lower_upper_names_proper
 
+    gamesFrm = scrSF[['sb_games_lower_cleaned_Flag', 'sb_games_upper_cleaned_Flag']].to_dataframe()
+    gamesFrm.columns = lower_upper_names_proper
+
     for c in scoreFrm:
-        if scoreFrm[c].dtype != 'object': ### this happens if the player in column c has never reached Advanta ('A'), thus the column is read in as numeric
+        if scoreFrm[c].dtype != 'object': ### this happens if the player in column c has never reached Advantage ('A'), thus the column is read in as numeric
             scoreFrm[c] = scoreFrm[c].fillna(0)
             scoreFrm[c] = scoreFrm[c].astype('int').astype('object')
         else:
@@ -157,8 +160,23 @@ def main(conf, name = None):
     print('   unique scores p1: ', list(scoreFrm[proper_name_1].unique()))
     print('   unique scores p2: ', list(scoreFrm[proper_name_2].unique()))
 
-    replDict = {'16': '15',
-                '18': '15'} 
+    if conf['video_id'] == '2021-7341-ms012-brest-maxime-janvier-vs-hugo-gaston':
+        replDict = {'16': '15',
+                    '18': '15',
+                    'D\n7': '0',
+                    '07': '1',
+                    '20': '2',
+                    '7': '0'} 
+    elif conf['video_id'] == '2021-7341-ms014-brest-federico-gaio-vs-frederico-ferreira-silva':
+        replDict = {'16': '15',
+                    '18': '15',
+                    'D\n7': '0',
+                    '07': '0',
+                    '20': '2',
+                    '7': '0'} 
+    else:
+        replDict = {'16': '15',
+                    '18': '15'}
     scoreFrm = scoreFrm.replace(replDict)
 
     print('After value replacement: ')
@@ -167,6 +185,7 @@ def main(conf, name = None):
     
     # split
     scoreFrms = ut.split(scoreFrm)
+    gamesFrms = ut.split(gamesFrm)
 
     frmList = []
     for idx in range(trajSFs.length()):
@@ -183,6 +202,8 @@ def main(conf, name = None):
         ### Create some series to be used or added
         sideSer = trjFrm.groupby('shot_idx')['event'].transform(get_side)
         srvSer = trjFrm.groupby('shot_idx')['event_info'].transform(get_fs)
+
+        trjFrm['point_idx'] = idx
 
         ### Extend the first_serve/second_serve flag to the whole serve traj
         trjFrm['event_info'] = srvSer
@@ -217,6 +238,39 @@ def main(conf, name = None):
         plyFrm['hit_score'] = plyFrm['hit_name'].map(scoreDict)
         plyFrm['rec_score'] = plyFrm['rec_name'].map(scoreDict)
 
+        ### Merge in the set information
+        gamesFrm = gamesFrms[idx]
+        p1, p2 = gamesFrm.columns
+        p1_vals, p2_vals = gamesFrm[p1].unique(), gamesFrm[p2].unique()
+        assert len(p1_vals) == 1 and len(p2_vals) == 1
+
+        p1_val, p2_val = p1_vals[0], p2_vals[0]
+        p1_vals, p2_vals = [int(x) for x in p1_val.split('-')], [int(x) for x in p2_val.split('-')]
+        assert len(p1_vals) == len(p2_vals)
+
+        p1_sets, p2_sets = 0, 0
+        for p1_set_score, p2_set_score in zip(p1_vals, p2_vals):
+            if p1_set_score == 7 or (p1_set_score == 6 and p2_set_score <= 4):
+                p1_sets += 1
+            elif p2_set_score == 7 or (p2_set_score == 6 and p1_set_score <= 4):
+                p2_sets += 1
+            else:
+                p1_games = p1_set_score
+                p2_games = p2_set_score
+
+        if len(p1_vals) == p1_sets + p2_sets: ### if the set just ended
+            p1_games, p2_games = 0, 0
+
+        gamesDict = {p1: p1_games, p2: p2_games}
+        setsDict = {p1: p1_sets, p2: p2_sets}
+        del p1_games, p2_games
+        
+        plyFrm['hit_games'] = plyFrm['hit_name'].map(gamesDict)
+        plyFrm['rec_games'] = plyFrm['rec_name'].map(gamesDict)
+        
+        plyFrm['hit_sets'] = plyFrm['hit_name'].map(setsDict)
+        plyFrm['rec_sets'] = plyFrm['rec_name'].map(setsDict)
+
         ### join, and write to list
         allFrm = trjFrm.merge(plyFrm, left_index = True, right_index = True)
         frmList.append(allFrm)
@@ -233,7 +287,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[16])
+    conf = cnf_mod.get_conf(avail_vids[13])
 
     name = ppl._name
 

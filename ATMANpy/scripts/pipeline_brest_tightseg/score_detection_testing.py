@@ -33,10 +33,11 @@ RESCALE_FACTOR = 2.8 ### at 2.8, our letters come out to roughly 32 pixel height
 BACK_PIXEL_ROW = 5
 THRESHOLD_VALUE_BACKGROUND = 255 // 2
 THRESHOLD_VALUE_FOREGROUND = 100
-X1, X2 = 10, 140
+X1, X2 = 10, 200#140 -> for just the point score, no games
 Y1, Y2 = 305, 350
 EROSION_KERNEL = (3, 3)
 VERBOSE = False
+SUPER_VERBOSE = False
 
 LEN_X, LEN_Y = (X2 - X1), (Y2 - Y1)
 
@@ -52,7 +53,9 @@ def preprocess_frame(someFrm,
     ### Erosion -> since we want to erode white features on dark background, we flip to white text on dark background...
     if background_value == 255:
         workFrm = ~workFrm
-    workFrm = workFrm.erode(erosion_kernel)
+
+    if erosion_kernel is not None:
+        workFrm = workFrm.erode(erosion_kernel)
 
     ### ... and then flip back
     workFrm = ~workFrm
@@ -85,10 +88,13 @@ def load(vid, sto):
 def save(vid, sto, outSF):
     topnameSF, botnameSF = outSF['sb_name_upper_Flag'], outSF['sb_name_lower_Flag'],
     topscoreSF, botscoreSF = outSF['sb_score_upper_Flag'],  outSF['sb_score_lower_Flag']
+    topgamesSF, botgamesSF = outSF['sb_games_upper_Flag'],outSF['sb_games_lower_Flag']
     topnameSF.rename('sb_name_upper_Flag').save(vid, sto)
     botnameSF.rename('sb_name_lower_Flag').save(vid, sto)
     topscoreSF.rename('sb_score_upper_Flag').save(vid, sto)
     botscoreSF.rename('sb_score_lower_Flag').save(vid, sto)
+    topgamesSF.rename('sb_games_upper_Flag').save(vid, sto)
+    botgamesSF.rename('sb_games_lower_Flag').save(vid, sto)
 
 def main(conf, name = None):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
@@ -109,19 +115,19 @@ def main(conf, name = None):
     for segStm in segStms:
         fs, ls = segStm.start_frame, segStm.stop_frame
         myFrm = segStm.get(fs + 5)
-        if VERBOSE: 
+        if SUPER_VERBOSE: 
             myFrm.put(scoreReg).show()
 
         cropFrm = myFrm.crop(scoreReg)
-        if VERBOSE: 
+        if SUPER_VERBOSE: 
             cropFrm.show()
 
         greyFrm = cropFrm.to_grey()
-        if VERBOSE: 
+        if SUPER_VERBOSE: 
             greyFrm.show()
 
         threshMask = greyFrm > THRESHOLD_VALUE_BACKGROUND
-        if VERBOSE: 
+        if SUPER_VERBOSE: 
             threshMask.to_grey().to_BGR().put(myLn).show()
 
         ### find the longest run of consecutive background values -> this is the name box, which contains only letters
@@ -138,19 +144,21 @@ def main(conf, name = None):
             xl1 = 0
         else:
             xl1 = cum_segment_lengths[name_box_idx - 1]
-        xl2, xl3 = cum_segment_lengths[name_box_idx], cum_segment_lengths[name_box_idx + 1]
-        
+        xl2, xl3, xl4 = cum_segment_lengths[name_box_idx], cum_segment_lengths[name_box_idx + 1], cum_segment_lengths[name_box_idx + 2]
+
         l1, l2 = Point2D((xl1, 0)), Point2D((xl2, LEN_Y))
         letterReg = Region.from_points(l1, l2)
         l3, l4 = Point2D((xl2, 0)), Point2D((xl3, LEN_Y))
         numberReg = Region.from_points(l3, l4)
+        l5, l6 = Point2D((xl3, 0)), Point2D((xl4, LEN_Y))
+        gamesReg = Region.from_points(l5, l6)
 
-        if VERBOSE: 
-            cropFrm.put(letterReg).put(numberReg, color = const.BGR['strong_pink']).show()
+        if SUPER_VERBOSE: 
+            cropFrm.put(letterReg).put(numberReg, color = const.BGR['strong_pink']).put(gamesReg, color = const.BGR['ball_yellow'], thickness = 2).show()
 
-        letterFrm, numberFrm = cropFrm.crop(letterReg), cropFrm.crop(numberReg)
+        letterFrm, numberFrm, gamesFrm = cropFrm.crop(letterReg), cropFrm.crop(numberReg), cropFrm.crop(gamesReg)
 
-        background_value_letters, background_value_numbers = segment_values[name_box_idx], segment_values[name_box_idx + 1]
+        background_value_letters, background_value_numbers, background_value_games = segment_values[name_box_idx], segment_values[name_box_idx + 1], segment_values[name_box_idx + 2]
 
         # print('______')
         
@@ -169,9 +177,13 @@ def main(conf, name = None):
             
         letterFrm_processed = preprocess_frame(letterFrm, background_value = background_value_letters)
         numberFrm_processed = preprocess_frame(numberFrm, background_value = background_value_numbers)
+        gamesFrm_processed = preprocess_frame(gamesFrm, background_value = background_value_games, 
+                                              erosion_kernel = (3, 3), rescale_factor = round(RESCALE_FACTOR * 0.75, 1),
+                                              threshold_value = THRESHOLD_VALUE_FOREGROUND)
         
         upper_letter_array, lower_letter_array = np.split(letterFrm_processed.array, 2, axis = 0)
         upper_number_array, lower_number_array = np.split(numberFrm_processed.array, 2, axis = 0)
+        upper_games_array, lower_games_array = np.split(gamesFrm_processed.array, 2, axis = 0)
 
         ### letters_tennis whitelists the alphabet, - and .
         upper_letters = tess.image_to_string(upper_letter_array, config = f'--psm 6 letters_tennis')
@@ -180,13 +192,21 @@ def main(conf, name = None):
         ### digits_tennis whitelists chars 0123456789AD, AD for advantage
         upper_numbers = tess.image_to_string(upper_number_array, config = f'--psm 6 digits_tennis')
         lower_numbers = tess.image_to_string(lower_number_array, config = f'--psm 6 digits_tennis') 
+        
+        ### games_tennis whitelists chars 01234567
+        upper_games = tess.image_to_string(upper_games_array, config = f'--psm 6 games_tennis')
+        lower_games = tess.image_to_string(lower_games_array, config = f'--psm 6 games_tennis') 
 
         ### kill the line break
         upper_letters, lower_letters = upper_letters.rstrip('\n'), lower_letters.rstrip('\n')
         upper_numbers, lower_numbers = upper_numbers.rstrip('\n'), lower_numbers.rstrip('\n')
+        upper_games, lower_games = upper_games.rstrip('\n'), lower_games.rstrip('\n')
+
+        upper_games, lower_games = '-'.join(upper_games), '-'.join(lower_games)
 
         featDict = {'sb_name_upper_Flag': upper_letters, 'sb_name_lower_Flag': lower_letters, 
-                    'sb_score_upper_Flag': upper_numbers, 'sb_score_lower_Flag': lower_numbers}
+                    'sb_score_upper_Flag': upper_numbers, 'sb_score_lower_Flag': lower_numbers,
+                    'sb_games_upper_Flag': upper_games, 'sb_games_lower_Flag': lower_games}
         
         if VERBOSE: 
             print(featDict)
@@ -201,6 +221,9 @@ def main(conf, name = None):
     print('sb_score_upper_Flag uniques: ', outSF['sb_score_upper_Flag'].unique())
     print('sb_score_lower_Flag uniques: ', outSF['sb_score_lower_Flag'].unique())
 
+    print('sb_games_upper_Flag uniques: ', outSF['sb_games_upper_Flag'].unique())
+    print('sb_games_lower_Flag uniques: ', outSF['sb_games_lower_Flag'].unique())
+
     save(vid, sto, outSF)                                       
 
 if __name__ == '__main__':
@@ -211,7 +234,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[1])
+    conf = cnf_mod.get_conf(avail_vids[12])
 
     name = ppl._name
     main(conf, name = name)
