@@ -184,8 +184,14 @@ class Trajectory:
     def get_num_bounces(self):
         return len(self.get_bounce_events())
     
+    def is_in_net(self):
+        return (self['event'] == 'N').any()
+
     def get_events(self):
-        return [self.get_hit_event(), *self.get_bounce_events()]
+        if self.is_in_net():
+            return [self.get_hit_event(), *self.get_bounce_events(), 'N'] ### TODO: can not deal with net cord right now!
+        else:
+            return [self.get_hit_event(), *self.get_bounce_events()]
     
     def get_initial_position(self, how = 'trajectory'):
         ### how: trajectory / observed
@@ -623,6 +629,9 @@ class Shot:
         # if there is no nextShot, it's fault, otherwise, it's fair.
         return not self.is_fair(nextShot)
     
+    def is_in_net(self):
+        return self.shotTraj.is_in_net() ### TODO: can not deal with net cord right now.
+
     def is_top_to_bot(self):
         return self.get_hit_event()[1] == 'T'
     
@@ -695,11 +704,14 @@ class Shots:
     def __len__(self):
         return len(self.shotList)
     
-    def filter(self, bool_method, is_below = None, is_above = None, **filter_kwargs):
+    def filter(self, bool_method, is_below = None, is_above = None, negate = False, **filter_kwargs):
         def filter_func(myShot):
             val = getattr(myShot, bool_method)(**filter_kwargs)
             if is_below is None and is_above is None:
-                myBool = val
+                if negate:
+                    myBool = not val
+                else:
+                    myBool = val
             elif is_below is None:
                 myBool = val > is_above
             elif is_above is None:
