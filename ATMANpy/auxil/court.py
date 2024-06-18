@@ -1,6 +1,6 @@
 
 from ATMANpy.types.Points import Point2D
-from ATMANpy.types.Lines import CourtLines
+from ATMANpy.types.Lines import Line, CourtLines
 from ATMANpy.types.Shapes3D import Point3D
 from ATMANpy.types.Visual3D import Camera, Scene, View
 
@@ -26,6 +26,20 @@ top_bsl_cnt_2D = courtLines['Top Baseline'].center()
 bot_bsl_deu_2D = courtLines['Bottom Baseline'].rightPt
 bot_bsl_ad_2D = courtLines['Bottom Baseline'].leftPt
 bot_bsl_cnt_2D = courtLines['Bottom Baseline'].center()
+
+top_srv_lft_2D = courtLines['Top Service Line'].leftPt
+top_srv_rgt_2D = courtLines['Top Service Line'].rightPt
+top_srv_cnt_2D = courtLines['Top Service Line'].center()
+
+bot_srv_lft_2D = courtLines['Bottom Service Line'].leftPt
+bot_srv_rgt_2D = courtLines['Bottom Service Line'].rightPt
+bot_srv_cnt_2D = courtLines['Bottom Service Line'].center()
+
+top_srv_ad_cnt_2D = Line(top_srv_cnt_2D, top_srv_rgt_2D).center()
+top_srv_deu_cnt_2D = Line(top_srv_cnt_2D, top_srv_lft_2D).center()
+
+bot_srv_deu_cnt_2D = Line(bot_srv_cnt_2D, bot_srv_rgt_2D).center()
+bot_srv_ad_cnt_2D = Line(bot_srv_cnt_2D, bot_srv_lft_2D).center()
 
 ### CAMERAS ###
 def birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top'):
@@ -57,6 +71,22 @@ def back_view_asymmetric_cam(which = 'Deuce', side = 'Top'):
     myCam = Camera.from_to(c_w, d_w, f = 1700)
     return myCam
 
+def onto_service_box_cam(which = 'Deuce', side = 'Top', z = 100, dist = 350, f = 1700):
+    if side == 'Top' and which == 'Deuce':
+        c_w = Point3D.from_point2D(top_srv_deu_cnt_2D, z = z).front(dist)
+        d_w = c_w.back(dist) ### dist doesn't matter here.
+    elif side == 'Top' and which == 'Ad':
+        c_w = Point3D.from_point2D(top_srv_ad_cnt_2D, z = 100).front(dist)
+        d_w = c_w.back(dist) ### dist doesn't matter here.
+    elif side == 'Bot' and which == 'Deuce':
+        c_w = Point3D.from_point2D(bot_srv_deu_cnt_2D, z = 100).back(dist)
+        d_w = c_w.front(dist) ### dist doesn't matter here.
+    elif side == 'Bot' and which == 'Ad':
+        c_w = Point3D.from_point2D(bot_srv_ad_cnt_2D, z = 100).back(dist)
+        d_w = c_w.front(dist) ### dist doesn't matter here.
+
+    myCam = Camera.from_to(c_w, d_w, f = f)
+    return myCam
 
 if __name__ == '__main__':
     top_deuCam = birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top')
@@ -65,7 +95,7 @@ if __name__ == '__main__':
     bot_adCam = birds_eye_service_box_cam(zoom = 1, which = 'Ad', side = 'Bot')
 
     top_back_deuCam = back_view_asymmetric_cam(which = 'Deuce', side = 'Top')
-    top_back_deuCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
+    top_back_adCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
 
     View.make(top_deuCam, courtScn, resolution = 1).snap().show()
     View.make(top_adCam, courtScn, resolution = 1).snap().show()
@@ -73,3 +103,15 @@ if __name__ == '__main__':
     View.make(bot_adCam, courtScn, resolution = 1).snap().show()
     View.make(top_back_deuCam, courtScn, resolution = 1).snap().show()
     View.make(top_back_adCam, courtScn, resolution = 1).snap().show()
+
+    top_deuCam = onto_service_box_cam(which = 'Deuce', side = 'Top')
+    top_adCam = onto_service_box_cam(which = 'Ad', side = 'Top')
+    bot_deuCam = onto_service_box_cam(which = 'Deuce', side = 'Bot')
+    bot_adCam = onto_service_box_cam(which = 'Ad', side = 'Bot')
+    
+    View.make(top_deuCam, courtScn, resolution = 1).snap().show()
+    View.make(top_adCam, courtScn, resolution = 1).snap().show()
+    View.make(bot_deuCam, courtScn, resolution = 1).snap().show()
+    View.make(bot_adCam, courtScn, resolution = 1).snap().show()
+
+
