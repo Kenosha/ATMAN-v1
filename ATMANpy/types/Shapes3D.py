@@ -97,7 +97,11 @@ class Point3D:
         outCoords = -self.x, -self.y, -self.z
         return Point3D(outCoords)
     def __eq__(self, otherPnt3D):
-        return self.coords == otherPnt3D.coords ### equality ONLY by location! (relevant for scene filtering)
+        slfArr, othArr = np.array(self.coords), np.array(otherPnt3D.coords) ### make into np array so it works for single points and vectors
+        try:
+            return (slfArr == othArr).all() ### equality ONLY by location! (relevant for scene filtering)
+        except:
+            return False
 
     ### REINSTANTIATION ###
     def reposition(self, new_coords):
@@ -889,7 +893,7 @@ class Region3D():
     @classmethod
     def get_container(cls):
         return Regions3D
-
+    
     ### REINSTANTIATION ###
     def rename(self, new_name):
         updDict = {'name': new_name}
@@ -921,6 +925,42 @@ class Region3D():
     def dim(self, dim_factor):
         return Point3D.dim(self, dim_factor) ### Point3D is class agnostic for dimming. TODO: repeat this pattern for other cases!
 
+    def left(self, units):
+        moved_lineList = [ln.left(units) for ln in self.lineList]
+        updDict = {'lineList': moved_lineList}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def right(self, units):
+        moved_lineList = [ln.right(units) for ln in self.lineList]
+        updDict = {'lineList': moved_lineList}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def back(self, units):
+        moved_lineList = [ln.back(units) for ln in self.lineList]
+        updDict = {'lineList': moved_lineList}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def front(self, units):
+        moved_lineList = [ln.front(units) for ln in self.lineList]
+        updDict = {'lineList': moved_lineList}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def up(self, units):
+        moved_lineList = [ln.up(units) for ln in self.lineList]
+        updDict = {'lineList': moved_lineList}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def down(self, units):
+        moved_lineList = [ln.down(units) for ln in self.lineList]
+        updDict = {'lineList': moved_lineList}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
     def center_point(self):
         return Line3D(self.p1, self.p4).center_point()
             
