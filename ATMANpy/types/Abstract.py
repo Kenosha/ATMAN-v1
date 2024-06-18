@@ -883,8 +883,11 @@ class Point(Shots):
         srv, rec = self.get_set_score()
         return scoreMod.set_score_pressure(srv, rec)
     
-    def get_joint_score_pressure(self):
-        return self.get_point_score_pressure() * self.get_game_score_pressure() * self.get_set_score_pressure()
+    def get_joint_score_pressure(self, normalize = False):
+        pressure = self.get_point_score_pressure() * self.get_game_score_pressure() * self.get_set_score_pressure()
+        if normalize:
+            pressure = pressure ** (1/3)
+        return pressure
 
     def get_serve(self):
         if len(self) == 0:
