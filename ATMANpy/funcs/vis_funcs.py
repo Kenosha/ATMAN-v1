@@ -88,7 +88,8 @@ def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
 def animate_sequence(animation_sequence_objects, annotated_points = None,
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
-                    argument_luminosity = 1, adaptive_resolution_exponent = 0, cumulative_foreground_transparence = None, 
+                    argument_luminosity = 1, adaptive_resolution_exponent = 0, 
+                    cumulate_argument = False, cumulative_foreground_transparence = None, 
                     argument_blinks_per_second = None,
                     start_cam = None, stop_cam = None):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
@@ -158,11 +159,14 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
 
         frameList.append(myFrm)
 
+        if cumulate_argument: ### this allows the animation_sequence_objects (the argument of the function) to be faded out in trailing motion.
+            previous_foreground_scene = previous_foreground_scene.combine(current_scene_brightened, keep_which = 'other')
+
     myFrms = BGRFrames(np.array([f.array for f in frameList]))
 
     ### make a kwarg dictionary for the next animation
     if isinstance(current_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(current_scene_dimmed, keep_which = 'other'),
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(current_scene_dimmed, keep_which = 'other'), ### TODO: might have to be adapted to the case in which cumulate_argument = True
                                      'previous_dummy_scene': previous_dummy_scene,
                                      'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
     elif isinstance(current_scene, DummyScene):
@@ -403,15 +407,19 @@ def epanechnikov(posArr_nonnan, showArr, normalize_density = True, bandwidth = 3
 
 def meshgrid_region(showReg, resolution = 1):
     ### delineate the region to show
-    x1, y1 = showReg.p1.coords
-    x2, y2 = showReg.p4.coords
+    try:
+        x1, y1 = showReg.p1.coords
+        x2, y2 = showReg.p4.coords
+    except:
+        x1, y1, _ = showReg.p1.coords
+        x2, y2, _ = showReg.p4.coords
     xv, yv = np.meshgrid(np.arange(x1, x2, step = 1 / resolution), np.arange(y1, y2, step = 1 / resolution))
     showArr = np.stack([xv, yv], axis = -1)
     return showArr
 
 def kde_heatmap(myShots, showReg = None,
                 position_func = 'get_first_bounce_position',
-                bandwidth = 30,
+                bandwidth = 30, normalize_density = True,
                 resolution = 1, 
                 mix_colors = True, mix_alpha = True,
                 zero_color = (0, 0, 0), one_color = const.BGR['intense_red']):
@@ -422,8 +430,10 @@ def kde_heatmap(myShots, showReg = None,
         showReg = CourtLines.make().get_court_region()
     
     ### Get first bounce position
-    coords = getattr(myShots, position_func)()
-    posArr = np.array(coords, dtype = 'float32')[:, :2]
+    if isinstance(position_func, str):
+        posArr = getattr(myShots, position_func)()
+    else:
+        posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
     posArr_nonnan = posArr[~np.isnan(posArr).all(axis = 1)]
     
     ### delineate the region to show
@@ -433,7 +443,8 @@ def kde_heatmap(myShots, showReg = None,
     ### Prepare the resulting Scene
     bgrArr, alphaArr = epanechnikov(posArr_nonnan, showArr, bandwidth = bandwidth, 
                                     zero_color = zero_color, one_color = one_color, 
-                                    mix_colors = mix_colors, mix_alpha = mix_alpha)
+                                    mix_colors = mix_colors, mix_alpha = mix_alpha,
+                                    normalize_density = normalize_density)
     bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
     alphaArr_long = alphaArr.reshape((num_x * num_y, 1))
 
@@ -453,7 +464,7 @@ def kde_heatmap(myShots, showReg = None,
 def kde_hillmap(myShots, 
                 showReg = None, resolution = 1,
                 position_func = 'get_first_bounce_position',
-                bandwidth = 30, max_height = 30,
+                bandwidth = 30, max_height = 30, normalize_density = True,
                 mix_colors = True, 
                 zero_color = (0, 0, 0), one_color = const.BGR['intense_red'],
                 threshold_proportion = None, epsilon = 0.005, threshold_color = const.BGR['intense_red']):
@@ -463,7 +474,10 @@ def kde_hillmap(myShots,
         showReg = CourtLines.make().get_court_region()
     
     ### Get first bounce position
-    posArr = getattr(myShots, position_func)()
+    if isinstance(position_func, str):
+        posArr = getattr(myShots, position_func)()
+    else:
+        posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
     posArr_nonnan = posArr[~np.isnan(posArr).all(axis = 1)]
     
     showArr = meshgrid_region(showReg, resolution = resolution)
@@ -473,7 +487,8 @@ def kde_hillmap(myShots,
     ### As opposed to above, we use the alpha channel to tell us about the height, here
     bgrArr, norm_heightArr = epanechnikov(posArr_nonnan, showArr, bandwidth = bandwidth, 
                                     zero_color = zero_color, one_color = one_color, 
-                                    mix_colors = mix_colors, mix_alpha = True)
+                                    mix_colors = mix_colors, mix_alpha = True,
+                                    normalize_density = normalize_density)
     
     bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
     
@@ -517,8 +532,10 @@ def kde_contourmap(myShots,
         showReg = CourtLines.make().get_court_region()
     
     ### Get first bounce position
-    coords = getattr(myShots, position_func)()
-    posArr = np.array(coords, dtype = 'float32')[:, :2]
+    if isinstance(position_func, str):
+        posArr = getattr(myShots, position_func)()
+    else:
+        posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
     posArr_nonnan = posArr[~np.isnan(posArr).all(axis = 1)]
     
     showArr = meshgrid_region(showReg, resolution = resolution)
