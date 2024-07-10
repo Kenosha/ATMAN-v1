@@ -80,13 +80,13 @@ class PlayerMovement:
         return self.playerFrm.loc[0, 'side']
     
     def get_point_score(self):
-        return self.playerFrm.loc[0, 'score']
+        return str(self.playerFrm.loc[0, 'score']) ### just to be sure, make this a string! -> a score of '40' does not mean the integer 40, a score of 'A' is not an integer at all!
     
     def get_game_score(self):
-        return self.playerFrm.loc[0, 'games']
+        return int(self.playerFrm.loc[0, 'games']) ### these by contrast are integers
     
     def get_set_score(self):
-        return self.playerFrm.loc[0, 'sets']
+        return int(self.playerFrm.loc[0, 'sets']) ### these by contrast are integers
 
     def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
@@ -885,7 +885,8 @@ class Point(Shots):
 
     def get_point_score_pressure(self):
         srv_str, rec_str = self.get_point_score()
-        return scoreMod.point_score_pressure(srv_str, rec_str)
+        srv_game, rec_game = self.get_game_score()
+        return scoreMod.point_score_pressure(srv_str, rec_str, srv_game, rec_game)
 
     def get_game_score_pressure(self):
         srv, rec = self.get_game_score()
@@ -895,11 +896,11 @@ class Point(Shots):
         srv, rec = self.get_set_score()
         return scoreMod.set_score_pressure(srv, rec)
     
-    def get_joint_score_pressure(self, normalize = False):
-        pressure = self.get_point_score_pressure() * self.get_game_score_pressure() * self.get_set_score_pressure()
-        if normalize:
-            pressure = pressure ** (1/3)
-        return pressure
+    def get_total_score_pressure(self):
+        srv_pt_str, rec_pt_str = self.get_point_score()
+        srv_game, rec_game = self.get_game_score()
+        srv_set, rec_set = self.get_set_score()
+        return scoreMod.total_score_pressure(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
 
     def get_serve(self):
         if len(self) == 0:
