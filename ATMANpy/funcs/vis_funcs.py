@@ -589,6 +589,68 @@ def kde_contourmap(myShots,
 
     return kdeScn, cluster_data
 
+
+def scatter_markmap(myShots, showReg = None,
+                    position_func = 'get_first_bounce_position',
+                    color_func = 'get_total_score_pressure',
+                    normalize = True,
+                    mix_colors = True, mix_alpha = False,
+                    zero_color = (0, 0, 0), one_color = const.BGR['intense_red']):        
+    from ATMANpy.types.ShapesTennis3D import Mark
+    from ATMANpy.types.Shapes3D import Point3D
+    from ATMANpy.types.Points import Point2D
+
+    ### Get first bounce position (or different position function)
+    if isinstance(position_func, str):
+        posArr = getattr(myShots, position_func)()
+    else:
+        posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
+    
+    position_is_not_none = ~np.isnan(posArr).all(axis = 1)
+    posArr_nonnan = posArr[position_is_not_none]
+    
+    ### Get color function (if it is not None)
+    if color_func is not None:
+        if isinstance(color_func, str):
+            colArr = getattr(myShots, color_func)()
+        else:
+            colArr = np.array([color_func(aShot) for aShot in myShots], dtype = float)
+    else:
+        colArr = np.ones_like(posArr)
+
+    colArr_nonnan = colArr[position_is_not_none]
+
+    if normalize:
+        colArr_nonnan = colArr_nonnan / colArr_nonnan.max()
+
+    shapeList = []
+    for coords, color in zip(posArr_nonnan, colArr_nonnan):
+        
+        ### make a point from coords, and check if it is eligible
+        pt2D = Point2D(coords)
+        if showReg is not None:
+            if not pt2D.within(showReg):
+                continue
+
+        ### figure out color mixing
+        if mix_colors:
+            mixed_tuple = tuple([hi * color + lo * (1 - color) for hi, lo in zip(one_color, zero_color)])
+        else:
+            mixed_tuple = one_color
+        
+        ### figure out alpha mixing
+        if mix_alpha:
+            mixed_alpha = color ### note that color is basically a lambda (see its use above), so we can pass it directly to alpha
+        else:
+            mixed_alpha = 1
+
+        ### make a mark
+        pt3D = Point3D.from_point2D(pt2D, z = 0)
+        myMark = Mark.make(pt3D, color = mixed_tuple, alpha = mixed_alpha)
+        shapeList.append(myMark)
+
+    return Scene(shapeList)
+
 def cluster_data_to_points(cluster_data, text_func = None, thickness = 1, size = 1, color = const.BGR['intense_red'],
                            up = 0, down = 0, front = 0, back = 0, left = 0, right = 0):
     if text_func is None:
