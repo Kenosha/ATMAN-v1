@@ -146,6 +146,9 @@ class Trajectory:
         else:
             return self.trajFrm.loc[item]
     
+    def get_shot_index(self):
+        return self['shot_idx'].iloc[0]
+
     def get_frames(self):
         return self.trajFrm.frame_num.to_list()
     
@@ -450,6 +453,9 @@ class Shot:
         hitStr, recStr = self.hitPlayer.get_name(), self.recPlayer.get_name()
         return f'Shot({event_strings}, hitting: {hitStr}, receiving: {recStr}. Duration: {len(frames)} frames)'
         
+    def get_shot_index(self):
+        return self.shotTraj.get_shot_index()
+
     def get_frames(self):
         return self.shotTraj.get_frames()
 
@@ -638,6 +644,12 @@ class Shot:
     def is_bot_to_top(self):
         return self.get_hit_event()[1] == 'B'
     
+    def is_by_server(self):
+        return self.get_shot_index() % 2 == 0
+    
+    def is_by_returner(self):
+        return self.get_shot_index() % 2 == 1
+
     #### 
     def mean_deviation(self, dof_correction = 0):
         return self.shotTraj.mean_deviation(dof_correction = dof_correction)
