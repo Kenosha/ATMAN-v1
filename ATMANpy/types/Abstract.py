@@ -540,6 +540,13 @@ class Shot:
         else:
             return self.recPlayer.get_set_score(), self.hitPlayer.get_set_score()
 
+    def get_score_string(self):
+        srv_pt, rec_pt = self.get_point_score()
+        srv_gm, rec_gm = self.get_game_score()
+        srv_st, rec_st = self.get_set_score()
+
+        return f'{srv_st}-{rec_st} {srv_gm}-{rec_gm} {srv_pt}-{rec_pt}'
+
     def get_point_score_pressure(self):
         srv_str, rec_str = self.get_point_score()
         srv_game, rec_game = self.get_game_score()
@@ -558,6 +565,12 @@ class Shot:
         srv_game, rec_game = self.get_game_score()
         srv_set, rec_set = self.get_set_score()
         return scoreMod.total_score_pressure(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
+
+    def get_total_win_probabilities(self):
+        srv_pt_str, rec_pt_str = self.get_point_score()
+        srv_game, rec_game = self.get_game_score()
+        srv_set, rec_set = self.get_set_score()
+        return scoreMod.total_win_probabilities(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
 
     def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
@@ -950,6 +963,12 @@ class Point(Shots):
         srv_game, rec_game = self.get_game_score()
         srv_set, rec_set = self.get_set_score()
         return scoreMod.total_score_pressure(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
+    
+    def get_total_win_probabilities(self):
+        srv_pt_str, rec_pt_str = self.get_point_score()
+        srv_game, rec_game = self.get_game_score()
+        srv_set, rec_set = self.get_set_score()
+        return scoreMod.total_win_probabilities(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
 
     def get_serve(self):
         if len(self) == 0:
