@@ -522,6 +522,43 @@ class Shot:
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
     
+    def get_point_score(self):
+        if self.is_by_server():
+            return self.hitPlayer.get_point_score(), self.recPlayer.get_point_score()
+        else:
+            return self.recPlayer.get_point_score(), self.hitPlayer.get_point_score()
+           
+    def get_game_score(self):
+        if self.is_by_server():
+            return self.hitPlayer.get_game_score(), self.recPlayer.get_game_score()
+        else:
+            return self.recPlayer.get_game_score(), self.hitPlayer.get_game_score()
+    
+    def get_set_score(self):
+        if self.is_by_server():
+            return self.hitPlayer.get_set_score(), self.recPlayer.get_set_score()
+        else:
+            return self.recPlayer.get_set_score(), self.hitPlayer.get_set_score()
+
+    def get_point_score_pressure(self):
+        srv_str, rec_str = self.get_point_score()
+        srv_game, rec_game = self.get_game_score()
+        return scoreMod.point_score_pressure(srv_str, rec_str, srv_game, rec_game)
+
+    def get_game_score_pressure(self):
+        srv, rec = self.get_game_score()
+        return scoreMod.game_score_pressure(srv, rec)
+
+    def get_set_score_pressure(self):
+        srv, rec = self.get_set_score()
+        return scoreMod.set_score_pressure(srv, rec)
+    
+    def get_total_score_pressure(self):
+        srv_pt_str, rec_pt_str = self.get_point_score()
+        srv_game, rec_game = self.get_game_score()
+        srv_set, rec_set = self.get_set_score()
+        return scoreMod.total_score_pressure(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
+
     def flip(self, courtLines = None, across_net = True, across_middle = True):
         if courtLines is None:
             courtLines = CourtLines.make()
