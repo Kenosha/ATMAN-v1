@@ -563,12 +563,12 @@ class Shot:
     def get_total_set_score_pressure(self):
         srv_pt_str, rec_pt_str = self.get_point_score()
         srv_game, rec_game = self.get_game_score()
-        return scoreMod.total_match_score_pressure(srv_game, rec_game, srv_pt_str, rec_pt_str)
+        return scoreMod.total_set_score_pressure(srv_game, rec_game, srv_pt_str, rec_pt_str)
 
     def get_total_set_win_probabilities(self):
         srv_pt_str, rec_pt_str = self.get_point_score()
         srv_game, rec_game = self.get_game_score()
-        return scoreMod.total_match_win_probabilities(srv_game, rec_game, srv_pt_str, rec_pt_str)
+        return scoreMod.total_set_win_probabilities(srv_game, rec_game, srv_pt_str, rec_pt_str)
 
     def get_total_match_score_pressure(self):
         srv_pt_str, rec_pt_str = self.get_point_score()
@@ -971,12 +971,12 @@ class Point(Shots):
     def get_total_set_score_pressure(self):
         srv_pt_str, rec_pt_str = self.get_point_score()
         srv_game, rec_game = self.get_game_score()
-        return scoreMod.total_match_score_pressure(srv_game, rec_game, srv_pt_str, rec_pt_str)
+        return scoreMod.total_set_score_pressure(srv_game, rec_game, srv_pt_str, rec_pt_str)
 
     def get_total_set_win_probabilities(self):
         srv_pt_str, rec_pt_str = self.get_point_score()
         srv_game, rec_game = self.get_game_score()
-        return scoreMod.total_match_win_probabilities(srv_game, rec_game, srv_pt_str, rec_pt_str)
+        return scoreMod.total_set_win_probabilities(srv_game, rec_game, srv_pt_str, rec_pt_str)
 
     def get_total_match_score_pressure(self):
         srv_pt_str, rec_pt_str = self.get_point_score()
