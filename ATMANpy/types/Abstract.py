@@ -776,9 +776,13 @@ class Shots:
     def __len__(self):
         return len(self.shotList)
     
-    def filter(self, bool_method, is_below = None, is_above = None, negate = False, **filter_kwargs):
+    def filter(self, bool_func, is_below = None, is_above = None, negate = False, **filter_kwargs):
         def filter_func(myShot):
-            val = getattr(myShot, bool_method)(**filter_kwargs)
+            if isinstance(bool_func, str):
+                val = getattr(myShot, bool_func)(**filter_kwargs)
+            else:
+                val = bool_func(myShot, **filter_kwargs)
+
             if is_below is None and is_above is None:
                 if negate:
                     myBool = not val
