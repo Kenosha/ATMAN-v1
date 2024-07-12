@@ -347,7 +347,10 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
 
     return myFrms, next_animation_dictionary
 
-def divide_line(someLn, num_divisions, reverse_direction = False):
+def divide_line(someLn, num_divisions, reverse_direction = False, dashed = False):
+    if dashed:
+        num_divisions *= 2 ### since we simply take every second element...
+
     if someLn is None:
         itpl_lines = [None] * num_divisions
     else:
@@ -369,7 +372,11 @@ def divide_line(someLn, num_divisions, reverse_direction = False):
                 itplLn = Line3D(prevPt, currPt, color = someLn.color, thickness = someLn.thickness, alpha = someLn.alpha)
                 itpl_lines.append(itplLn)
             prevPt = currPt
-    return itpl_lines
+
+    if not dashed:
+        return itpl_lines
+    else:
+        return itpl_lines[::2] ### so simple :)
 
 ### Define our Kernel Density Estimator
 def epanechnikov(posArr_nonnan, showArr, normalize_density = True, bandwidth = 30, 
