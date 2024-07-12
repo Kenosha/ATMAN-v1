@@ -96,25 +96,40 @@ class ScoreModel:
         
         return p_match_if_win, p_match_if_lose
 
-    def total_win_probabilities(self, srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str):
-        ### basically, the idea here is to calculate
-            # -> the probability of winning the match when winning the point
-            # -> the probability of winning the match when losing the point
+    def total_set_win_probabilities(self, srv_game, rec_game, srv_pt_str, rec_pt_str):
+        ### The idea here is to calculate
+            # -> the probability of winning the SET when winning the point
+            # -> the probability of winning the SET when losing the point
+        #### ---> this is calculated with the law of total probability -> hence total win probabilities
+        
+        ### the building blocks are conditional probabilities as above: 
+            # probability of winning the game when winning the point, 
+            # probability of winning the set when winning the game,
+
+        p_srv_if_win, p_srv_if_lose = self.game_win_probabilities(srv_pt_str, rec_pt_str, srv_game, rec_game)
+        p_set_if_win, p_set_if_lose = self.set_win_probabilities(srv_game, rec_game)
+        
+        p_win_set_given_win_point = p_set_if_win * p_srv_if_win + p_set_if_lose * (1 - p_srv_if_win)
+        p_win_set_given_lose_point = p_set_if_win * p_srv_if_lose + p_set_if_lose * (1 - p_srv_if_lose)
+        
+        return p_win_set_given_win_point, p_win_set_given_lose_point
+
+    def total_match_win_probabilities(self, srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str):
+        ### The idea here is to calculate
+            # -> the probability of winning the MATCH when winning the point
+            # -> the probability of winning the MATCH when losing the point
         #### ---> this is calculated with the law of total probability -> hence total win probabilities
         
         ### the building blocks are conditional probabilities as above: 
             # probability of winning the game when winning the point, 
             # probability of winning the set when winning the game,
             # probability of winning the match when winning the set.
-        p_srv_if_win, p_srv_if_lose = self.game_win_probabilities(srv_pt_str, rec_pt_str, srv_game, rec_game)
-        p_set_if_win, p_set_if_lose = self.set_win_probabilities(srv_game, rec_game)
-        p_match_if_win, p_match_if_lose = self.match_win_probabilities(srv_set, rec_set)
 
-        p_win_set_given_win_point = p_set_if_win * p_srv_if_win + p_set_if_lose * (1 - p_srv_if_win)
+        p_win_set_given_win_point, p_win_set_given_lose_point = self.total_set_win_probabilities(srv_game, rec_game, srv_pt_str, rec_pt_str)
         p_lose_set_given_win_point = 1 - p_win_set_given_win_point
-
-        p_win_set_given_lose_point = p_set_if_win * p_srv_if_lose + p_set_if_lose * (1 - p_srv_if_lose)
         p_lose_set_given_lose_point = 1 - p_win_set_given_lose_point
+
+        p_match_if_win, p_match_if_lose = self.match_win_probabilities(srv_set, rec_set)
 
         p_win_match_given_win_point = p_match_if_win * p_win_set_given_win_point + p_match_if_lose * p_lose_set_given_win_point
         p_win_match_given_lose_point = p_match_if_win * p_win_set_given_lose_point + p_match_if_lose * p_lose_set_given_lose_point
@@ -150,12 +165,23 @@ class ScoreModel:
         
         return round(diff_p, 3)
     
-    def total_score_pressure(self, srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str):
+    def total_set_score_pressure(self, srv_game, rec_game, srv_pt_str, rec_pt_str):
         ### basically, the idea here is to calculate the difference between
-            # -> the probability of winning the match when winning the point
-            # -> the probability of winning the match when losing the point
+            # -> the probability of winning the SET when winning the point
+            # -> the probability of winning the SET when losing the point
         #### ---> this is calculated with the law of total probability -> hence total score pressure
-        p_total_if_win, p_total_if_lose = self.total_win_probabilities(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
+        p_total_if_win, p_total_if_lose = self.total_set_win_probabilities(srv_game, rec_game, srv_pt_str, rec_pt_str)
+        ### By the same argument as for point score pressure, the difference is symmetric between server and receiver
+        diff_p = p_total_if_win - p_total_if_lose
+
+        return round(diff_p, 3)
+    
+    def total_match_score_pressure(self, srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str):
+        ### basically, the idea here is to calculate the difference between
+            # -> the probability of winning the MATCH when winning the point
+            # -> the probability of winning the MATCH when losing the point
+        #### ---> this is calculated with the law of total probability -> hence total score pressure
+        p_total_if_win, p_total_if_lose = self.total_match_win_probabilities(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
         ### By the same argument as for point score pressure, the difference is symmetric between server and receiver
         diff_p = p_total_if_win - p_total_if_lose
 
