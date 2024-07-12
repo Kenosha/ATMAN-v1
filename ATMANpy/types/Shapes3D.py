@@ -141,7 +141,7 @@ class Point3D:
 
     def dim(self, dim_factor):
         dimmed_color = tuple([max(0, min(int(c * dim_factor), 255)) for c in self.color]) ### at dim_factor = 1, nothing changes
-        is_extreme = [c in [0, 255] for c in dimmed_color]
+        is_extreme = [(dim_c == 0 < old_c) or (old_c < dim_c == 255) for old_c, dim_c in zip(self.color, dimmed_color)]
         if any(is_extreme):
             print(f'Dimming {self.color} to {dimmed_color} hit 0 or 255, verify if color satisfactory!')
         updDict = {'color': dimmed_color} 
