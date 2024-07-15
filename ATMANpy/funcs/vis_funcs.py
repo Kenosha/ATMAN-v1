@@ -11,7 +11,7 @@ from ATMANpy.types.Visual3D import Scene, DummyScene, Camera, View
 import ATMANpy.auxil.constants as const
 
 from ATMANpy.types.MultiFrames import BGRFrames
-from ATMANpy.types.Shapes3D import Line3D
+from ATMANpy.types.Shapes3D import Point3D, Line3D
 
 
 def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
@@ -38,6 +38,22 @@ def interpolate_camera(startCam, endCam, num_frames):
 
     itplCams = [Camera(M_int, M_ext, startCam.sensor_dims) for (M_int, M_ext) in zip(M_ints, M_exts)]
     return itplCams
+
+def interpolate_shape(fs_shape, ls_shape, itpl_lambda = 0.5):
+    assert fs_shape.__class__ == ls_shape.__class__
+    return fs_shape.interpolate(ls_shape, itpl_lambda = itpl_lambda)
+
+def interpolate_scenes(start_scene, end_scene, num_frames):
+    start_shapes, end_shapes = start_scene.shapes, end_scene.shapes
+    assert len(start_shapes) == len(end_shapes)
+
+    scenes = []
+    for frame in range(num_frames):
+        lmbd = frame / (num_frames - 1)
+        itpl_shapes = [interpolate_shape(fs, ls, itpl_lambda = lmbd) for fs, ls in zip(start_shapes, end_shapes)]
+        scenes.append(Scene(itpl_shapes))
+
+    return scenes
 
 def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
                              x_fill = None, y_fill = None, z_fill = None):
@@ -180,7 +196,7 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
 def animate_cam_motion(animation_object, annotated_points = None, num_frames = None,
                         background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None, ### these are static/previous scenes that are not animated, but can be faded out/in
                         argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
-                        argument_luminosity = 1, cumulative_foreground_transparence = 0, adaptive_resolution_exponent = 0,
+                        argument_luminosity = 1, cumulative_foreground_transparence = None, adaptive_resolution_exponent = 0,
                         argument_blinks_per_second = None,
                         start_cam = None, stop_cam = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
@@ -349,7 +365,8 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
 
 def divide_line(someLn, num_divisions, reverse_direction = False, dashed = False):
     if dashed:
-        num_divisions *= 2 ### since we simply take every second element...
+        num_divisions = (num_divisions * 2) + 1 ### * 2, since we simply take every second element,
+                                                ### + 1, since we want the last element to be filled in!
 
     if someLn is None:
         itpl_lines = [None] * num_divisions
@@ -599,7 +616,7 @@ def kde_contourmap(myShots,
 
 def scatter_markmap(myShots, showReg = None,
                     position_func = 'get_first_bounce_position',
-                    color_func = 'get_total_score_pressure',
+                    color_func = None,
                     normalize = True,
                     mix_colors = True, mix_alpha = False,
                     zero_color = (0, 0, 0), one_color = const.BGR['intense_red']):        
@@ -752,3 +769,31 @@ def gmm_empirical_density_rings(myShots, threshold_proportion = 0.5, n_component
         mixture_shares.append(mixture_filter.mean())
 
     return Circles3D(mixture_circles), mixture_shares
+
+def kill_nans_in_vectorized_line(aLn):
+    leftPt, rightPt = aLn.leftPt, aLn.rightPt
+
+    lFilt = np.isnan(leftPt.coords).all(axis = 0)
+    rFilt = np.isnan(rightPt.coords).all(axis = 0)
+    
+    ### since nans typically occur in later frames, lFilt <= rFilt ...
+    assert lFilt.sum() <= rFilt.sum() 
+    ### ... therefore, we use rFilt
+
+    l_coords = leftPt.coords[:, ~rFilt]
+    r_coords = rightPt.coords[:, ~rFilt]
+
+    return Line3D(Point3D(l_coords), Point3D(r_coords), color = aLn.color, alpha = aLn.alpha, thickness = aLn.thickness)
+
+def ball_flight(myShots, line_interpolation_factor = None):
+    splineSF = myShots.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = 'actual')
+    shapes = list(splineSF.values())
+    shapes_vectorized = [f.vectorize() for f in shapes if f is not None]
+    shapes_vectorized_nanfilt = [kill_nans_in_vectorized_line(aLn) for aLn in shapes_vectorized]
+
+    if line_interpolation_factor is None:
+        shapes_vectorized_nanfilt_expanded = shapes_vectorized_nanfilt
+    else:
+        shapes_vectorized_nanfilt_expanded = [subLn for aLn in shapes_vectorized_nanfilt for subLn in divide_line(aLn, num_divisions = line_interpolation_factor)]
+    
+    return shapes_vectorized_nanfilt_expanded
