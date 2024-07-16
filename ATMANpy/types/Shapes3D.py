@@ -96,8 +96,11 @@ class Point3D:
     def __neg__(self):
         outCoords = -self.x, -self.y, -self.z
         return Point3D(outCoords)
-    def __eq__(self, otherPnt3D):
-        slfArr, othArr = np.array(self.coords), np.array(otherPnt3D.coords) ### make into np array so it works for single points and vectors
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        
+        slfArr, othArr = np.array(self.coords), np.array(other.coords) ### make into np array so it works for single points and vectors
         try:
             return (slfArr == othArr).all() ### equality ONLY by location! (relevant for scene filtering)
         except:
@@ -138,12 +141,23 @@ class Point3D:
         updDict = {'limit_theta': new_limit_theta}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
+    
+    def interpolate(self, otherPt, itpl_lambda = 0.5):
+        avg_coords = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.coords, otherPt.coords)])
+        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherPt.color)])
+        avg_alpha = self.alpha * (1 - itpl_lambda) + otherPt.alpha * itpl_lambda
+        
+        updDict = {'coords': avg_coords,
+                   'color': avg_color,
+                   'alpha': avg_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     def dim(self, dim_factor):
         dimmed_color = tuple([max(0, min(int(c * dim_factor), 255)) for c in self.color]) ### at dim_factor = 1, nothing changes
         is_extreme = [(dim_c == 0 < old_c) or (old_c < dim_c == 255) for old_c, dim_c in zip(self.color, dimmed_color)]
-        if any(is_extreme):
-            print(f'Dimming {self.color} to {dimmed_color} hit 0 or 255, verify if color satisfactory!')
+        # if any(is_extreme):
+        #     print(f'Dimming {self.color} to {dimmed_color} hit 0 or 255, verify if color satisfactory!')
         updDict = {'color': dimmed_color} 
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
@@ -302,6 +316,7 @@ class Point3D:
     def annotate(self, text):
         attrDict = get_updated_attribute_dictionary(self, {})
         return AnnotatedPoint3D(text = text, **attrDict)
+    
 
 @dataclass(frozen = True, eq = False)
 class AnnotatedPoint3D(Point3D):
@@ -550,8 +565,10 @@ class Line3D:
     def get_container(cls):
         return Lines3D
     
-    def __eq__(self, otherLn3D):
-        return (self.leftPt == otherLn3D.leftPt) and (self.rightPt == otherLn3D.rightPt)
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return (self.leftPt == other.leftPt) and (self.rightPt == other.rightPt)
 
     ### REINSTANTIATION ###
     def rename(self, new_name):
@@ -580,6 +597,21 @@ class Line3D:
     def transparify(self, transparence_factor):
         transparent_alpha = np.clip(self.alpha * transparence_factor, 0, 1) ### at transparence_factor = 1, nothing changes
         updDict = {'alpha': transparent_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def interpolate(self, otherLn, itpl_lambda = 0.5):
+        avg_leftPt = self.leftPt.interpolate(otherLn.leftPt, itpl_lambda = itpl_lambda)
+        avg_rightPt = self.rightPt.interpolate(otherLn.rightPt, itpl_lambda = itpl_lambda)
+        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherLn.color)])
+        avg_alpha = self.alpha * (1 - itpl_lambda) + otherLn.alpha * itpl_lambda
+        avg_thickness = round(self.thickness * (1 - itpl_lambda) + otherLn.thickness * itpl_lambda)
+
+        updDict = {'leftPt': avg_leftPt,
+                   'rightPt': avg_rightPt,
+                   'color': avg_color,
+                   'alpha': avg_alpha,
+                   'thickness': avg_thickness}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
 
@@ -818,8 +850,10 @@ class Region3D():
     def __len__(self):
         return len(self.lineList)
     
-    def __eq__(self, otherReg3D):
-        return all([myLn == othLn for myLn, othLn in zip(self, otherReg3D)])
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return all([myLn == othLn for myLn, othLn in zip(self, other)])
 
     @classmethod
     def from_region2D(cls, myReg, x = None, y = None, z = None):
@@ -924,6 +958,17 @@ class Region3D():
 
     def dim(self, dim_factor):
         return Point3D.dim(self, dim_factor) ### Point3D is class agnostic for dimming. TODO: repeat this pattern for other cases!
+
+    def interpolate(self, otherReg, itpl_lambda = 0.5):
+        avg_lineList = [x.interpolate(y, itpl_lambda = itpl_lambda) for x, y in zip(self.lineList, otherReg.lineList)]
+        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherReg.color)])
+        avg_alpha = self.alpha * (1 - itpl_lambda) + otherReg.alpha * itpl_lambda
+        
+        updDict = {'lineList': avg_lineList,
+                   'color': avg_color,
+                   'alpha': avg_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     def left(self, units):
         moved_lineList = [ln.left(units) for ln in self.lineList]
@@ -1100,11 +1145,14 @@ class Container3D:
     def __len__(self):
         return len(self.shapeList)
     
-    def __eq__(self, otherContainer):
-        if len(self) != len(otherContainer):
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        
+        if len(self) != len(other):
             return False
         else:
-            return all([myShape == otherShape for myShape, otherShape in zip(self, otherContainer)])
+            return all([myShape == otherShape for myShape, otherShape in zip(self, other)])
 
     ### REINSTANTIATION ###
     def rename(self, new_name):
@@ -1119,6 +1167,18 @@ class Container3D:
     
     def realpha(self, new_alpha):
         updDict = {'alpha': new_alpha}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def interpolate(self, otherContainer, itpl_lambda = 0.5):
+        assert len(self.shapeList) == len(otherContainer.shapeList)
+        avg_shapeList = [x.interpolate(y, itpl_lambda = itpl_lambda) for x, y in zip(self, otherContainer)]
+        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherContainer.color)])
+        avg_alpha = self.alpha * (1 - itpl_lambda) + otherContainer.alpha * itpl_lambda
+        
+        updDict = {'shapeList': avg_shapeList,
+                   'color': avg_color,
+                   'alpha': avg_alpha}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
 
