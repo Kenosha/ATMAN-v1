@@ -100,6 +100,8 @@ class Scene:
                 if adaptive_resolution_exponent != 0: 
                     norm_dist = camera_point.distance_to(resnorm_point)
                     shape_dist = camera_point.distance_to(shape3D.center_point())
+                    if isinstance(shape_dist, np.ndarray):
+                        shape_dist = shape_dist.mean()
                     lo, hi = resolution / RES_BOUND_MULTIPLICATIVE, resolution * RES_BOUND_MULTIPLICATIVE
                     resolution_modifier = (norm_dist / shape_dist) ** adaptive_resolution_exponent
                     adaptive_resolution = max(lo, min(resolution * resolution_modifier, hi))
