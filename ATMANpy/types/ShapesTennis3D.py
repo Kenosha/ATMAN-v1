@@ -20,7 +20,7 @@ import ATMANpy.auxil.constants as const
 #         return Lines3D.from_lines(CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN), z = 0, name = 'CourtLines3D')
 
 
-@dataclass(frozen = True, repr = False)
+@dataclass(frozen = True, repr = False, eq = False)
 class Court(Regions3D):
     """
     A list of regions, i.e. a set of planes that make some composite shape.
@@ -57,7 +57,7 @@ class Court(Regions3D):
         return Court(courtRegions3D, name = 'Courtlines', color = color, alpha = alpha)    
     
     
-@dataclass(frozen = True, repr = False)
+@dataclass(frozen = True, repr = False, eq = False)
 class Net(Regions3D):
     _NET_COLOR = const.BGR['bright_blue'] ### a nice aquamarine
     _NET_ALPHA = 1
@@ -84,7 +84,7 @@ class Net(Regions3D):
         return Region3D.from_points3D(p1, p2, p3, p4)
     
     
-@dataclass(frozen = True, repr = False)
+@dataclass(frozen = True, repr = False, eq = False)
 class Ball(Ball3D):
     _RADIUS_IN_FEET = 0.108  ### what is the correct default radius? 
                               ## should be the tennis ball in the usual coord system of court lines.
@@ -101,7 +101,7 @@ class Ball(Ball3D):
     def distance_to(self, otherBall):
         return self.get_point().distance_to(otherBall.get_point())
     
-@dataclass(frozen = True, repr = False)
+@dataclass(frozen = True, repr = False, eq = False)
 class Mark(Lines3D):
     _MARK_COLOR = const.BGR['grass_green'] ### green is default
     _MARK_ALPHA = 1
@@ -126,7 +126,7 @@ class Mark(Lines3D):
         return Mark([aLn, bLn], color = color, alpha = alpha, name = name)
      
     
-@dataclass(frozen = True, repr = False)
+@dataclass(frozen = True, repr = False, eq = False)
 class Player(Region3D):
     _DEFAULT_HEIGHT = 6 ### in feet
     _DEFAULT_WIDTH = 1
@@ -167,7 +167,7 @@ class Player(Region3D):
         
         return bottomPt.up(_DEFAULT_SHOULDER_HEIGHT)
     
-@dataclass(frozen = True, repr = False)
+@dataclass(frozen = True, repr = False, eq = False)
 class Racquet(Region3D):
     _DEFAULT_GRIP_HEIGHT = 4 * const.SCALE
     # _DEFAULT_HEAD_HEIGHT = 5 * SCALE
