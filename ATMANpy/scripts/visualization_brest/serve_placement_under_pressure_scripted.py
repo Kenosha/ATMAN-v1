@@ -56,7 +56,13 @@ def find_intersection_with_service_line(myShot):
     which = 'Ad' if myShot.is_serve_ad() else 'Deuce'
     srvLn, _ = get_service_line_and_indicator(side, which)
 
-    hit_pos, bnc_pos = myShot.get_ball_hit_position(), myShot.get_first_bounce_position()
+    hit_pos = myShot.get_ball_hit_position()
+    if myShot.is_in_net():
+        x, y, _ = myShot.get_ball_last_position()
+    else:
+        x, y = myShot.get_first_bounce_position()
+    bnc_pos = x, y
+    
     if bnc_pos == (None, None):
         return (None, None)
 
@@ -153,7 +159,15 @@ def main(confs, name = None):
 
     #### JOAO SOUSA #####
     serveShots = deucePnts.get_serves().filter(is_player, player_name = 'Joao Sousa')
+    print(f'{len(serveShots)} deuce serves for Joao Sousa')
+    serveShots = serveShots.filter('get_initial_speed', is_above = 130)
+    print(f'{len(serveShots)} after speed filtering')
+
     serveShots_clean_bounce = serveShots.filter(is_bounce_in_region, myReg = boxReg_enlarged)
+    serveShots_net = serveShots.filter('is_in_net')
+
+    serveShots_sample = serveShots_clean_bounce.join(serveShots_net)
+
 
     backCam = back_view_asymmetric_cam(which = 'Deuce', side = 'Top')
     boxCam = onto_service_box_cam(which = 'Deuce', side = 'Top', dist = 150).tilt(0.15)
@@ -166,7 +180,7 @@ def main(confs, name = None):
     ball_bounces_when = 10 * line_slomo
     ball_flight_over_when = 17 * line_slomo
 
-    ball_flight_shapes = vs.ball_flight(serveShots_clean_bounce, line_interpolation_factor = line_slomo)
+    ball_flight_shapes = vs.ball_flight(serveShots_sample, line_interpolation_factor = line_slomo)
     myFrms, animDict = vs.animate_sequence(ball_flight_shapes[:ball_bounces_when], background_scene = court_and_player_scene, 
                                            start_cam = backCam, stop_cam = backCam,
                                             cumulate_argument = True, cumulative_foreground_transparence = 0.9, 
@@ -174,14 +188,24 @@ def main(confs, name = None):
                                             )
     all_frames.append(myFrms)
 
-    markScn_mono = vs.scatter_markmap(serveShots, showReg = boxReg_enlarged,
+    bounceScn_mono = vs.scatter_markmap(serveShots, showReg = boxReg_enlarged,
                                         mix_colors = False, one_color = const.BGR['strong_blue'], 
                                         color_func = None)
-    markScn_poly = vs.scatter_markmap(serveShots, showReg = boxReg_enlarged, 
+    bounceScn_poly = vs.scatter_markmap(serveShots, showReg = boxReg_enlarged, 
                                         zero_color = const.BGR['grass_green'], one_color = const.BGR['intense_red'],
                                         color_func = 'get_total_match_score_pressure')
+    
+    netScn_mono = vs.scatter_markmap(serveShots_net, position_func = 'get_net_crossing_position', flat_along_dimension = 'y',
+                                     mix_colors = False, one_color = const.BGR['strong_blue'])
+    netScn_poly = vs.scatter_markmap(serveShots_net, position_func = 'get_net_crossing_position', flat_along_dimension = 'y',
+                                     zero_color = const.BGR['grass_green'], one_color = const.BGR['intense_red'],
+                                     color_func = 'get_total_match_score_pressure')
+    
+    markScn_mono = bounceScn_mono.combine(netScn_mono)
+    markScn_poly = bounceScn_poly.combine(netScn_poly)
 
-    myFrms, animDict = vs.animate_sequence(ball_flight_shapes[ball_bounces_when:ball_flight_over_when], background_scene = court_and_player_scene.combine(markScn_mono), 
+    myFrms, animDict = vs.animate_sequence(ball_flight_shapes[ball_bounces_when:ball_flight_over_when], 
+                                           background_scene = court_and_player_scene.combine(markScn_mono), 
                                            start_cam = backCam, stop_cam = backCam,
                                             cumulate_argument = True, cumulative_foreground_transparence = 0.9,
                                             **prmDict,
@@ -321,8 +345,15 @@ def main(confs, name = None):
     all_frames.append(myFrms)
 
     ### MOVE OTHER MARKS
-    hitArr = serveShots_clean_bounce.get_ball_hit_position()[:, :2]
-    posArr = serveShots_clean_bounce.get_first_bounce_position()
+    hitArr_bnc = serveShots_clean_bounce.get_ball_hit_position()[:, :2]
+    posArr_bnc = serveShots_clean_bounce.get_first_bounce_position()
+
+    hitArr_net = serveShots_net.get_ball_hit_position()[:, :2]
+    posArr_net = serveShots_net.get_ball_last_position()[:, :2]
+    
+    hitArr = np.concatenate([hitArr_bnc, hitArr_net], axis = 0)
+    posArr = np.concatenate([posArr_bnc, posArr_net], axis = 0)
+
     hitPts = [Point2D(tuple(coords)) for coords in hitArr]
     posPts = [Point2D(tuple(coords)) for coords in posArr]
     flightLns = [Line(hitPt, posPt) for hitPt, posPt in zip(hitPts, posPts)]
@@ -349,9 +380,9 @@ def main(confs, name = None):
     lineReg = Court.make()['Top Service Line'] ### in case of changing away from top or deuce, these might have to be changed!
     deucelineReg, adlineReg = lineReg.split(how = 'vertical') ### in case of changing away from top or deuce, these might have to be changed!
     
-    joint_kde_null_scene = vs.kde_hillmap(serveShots_clean_bounce, showReg = deucelineReg, position_func = find_intersection_with_service_line, 
+    joint_kde_null_scene = vs.kde_hillmap(serveShots_sample, showReg = deucelineReg, position_func = find_intersection_with_service_line, 
                                  resolution = RESOLUTION_KDE, normalize_density = True, max_height = -0.5, one_color = const.BGR['strong_blue'])
-    joint_kde_scene = vs.kde_hillmap(serveShots_clean_bounce, showReg = deucelineReg, position_func = find_intersection_with_service_line, 
+    joint_kde_scene = vs.kde_hillmap(serveShots_sample, showReg = deucelineReg, position_func = find_intersection_with_service_line, 
                                  resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['strong_blue'])
 
     joint_itpl_scenes = vs.interpolate_dummy_scenes(joint_kde_null_scene, joint_kde_scene, num_frames = 25)
@@ -366,9 +397,9 @@ def main(confs, name = None):
     all_frames.append(myFrms)
 
     ### MAKE KDES WITH SPLIT CATEGORIES
-    lowShots = serveShots.filter('get_total_match_score_pressure', is_below = 0.04)
-    midShots = serveShots.filter('get_total_match_score_pressure', is_above = 0.04, is_below = 0.08)
-    hiShots = serveShots.filter('get_total_match_score_pressure', is_above = 0.08)
+    lowShots = serveShots_sample.filter('get_total_match_score_pressure', is_below = 0.04)
+    midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.04, is_below = 0.08)
+    hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
     low_kde_scene = vs.kde_hillmap(lowShots, showReg = deucelineReg, position_func = find_intersection_with_service_line, 
                                     resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
@@ -416,6 +447,7 @@ def main(confs, name = None):
     jntFrms = BGRFrames.from_frames(all_frames)
     DecapStream(jntFrms, 0, 100).show(ms_between_frames = 25)
 
+    myFrms[-1].show()
     
 if __name__ == '__main__':
     
