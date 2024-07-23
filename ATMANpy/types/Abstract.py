@@ -265,29 +265,27 @@ class Trajectory:
     def get_initial_spin(self):
         return self['rpm0'].iloc[0]
 
-    def get_ball_array(self, how = 'trajectory'):
-        if how == 'trajectory':
-            coord_cols = ['x_t', 'y_t', 'z_t']
-        elif how == 'observed':
-            coord_cols = ['x_o', 'y_o', 'z_o']
-        
+    def get_obs_ball_array(self):
+        coord_cols = ['x_o', 'y_o', 'z_o']
         coordArr = self.trajFrm[coord_cols].values
         return coordArr
     
-    def get_last_hit_position(self):
+    def get_traj_ball_array(self):
         coord_cols = ['x_t', 'y_t', 'z_t']
-        tFrm = self.trajFrm[coord_cols]
-        return tFrm.iloc[-2].values
+        coordArr = self.trajFrm[coord_cols].dropna().values ### dropna because net ball have nans in their trajectory
+        return coordArr
+        
+    def get_last_hit_position(self):
+        tArr = self.get_traj_ball_array()
+        return tArr[-2]
 
     def get_actual_next_hit_position(self):
-        coord_cols = ['x_t', 'y_t', 'z_t']
-        tFrm = self.trajFrm[coord_cols]
-        return tFrm.iloc[-1].values
+        tArr = self.get_traj_ball_array()
+        return tArr[-1]
     
     def get_extrapolated_next_hit_position(self):
-        coord_cols = ['x_t', 'y_t', 'z_t']
-        tFrm = self.trajFrm[coord_cols]
-        ser0, ser1, ser2 = tFrm.iloc[-4], tFrm.iloc[-3], tFrm.iloc[-2] ### note that -1 is the next hit
+        tArr = self.get_traj_ball_array()
+        ser0, ser1, ser2 = tArr[-4], tArr[-3], tArr[-2] ### note that -1 is the next hit
         
         speed2 = ser2 - ser1
         speed1 = ser1 - ser0
@@ -301,7 +299,11 @@ class Trajectory:
         return Stream(cap, fs, ls - 1) ### last frame is next shot frame
 
     def stream_ball(self, cap, P, how = 'trajectory'):
-        coordArr = self.get_ball_array(how = how)
+        if how == 'trajectory':
+            coordArr = self.get_traj_ball_array()
+        elif how == 'observed':
+            coordArr = self.get_obs_ball_array()
+
         oneArr = np.ones(len(self.trajFrm))[:, np.newaxis]
         homArr = np.concatenate([coordArr, oneArr], axis = 1)
         
