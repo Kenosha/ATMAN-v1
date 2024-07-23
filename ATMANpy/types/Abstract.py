@@ -222,6 +222,26 @@ class Trajectory:
         except IndexError:
             x, y, z = None, None, None
         return x, y ### z = 0 always!
+    
+    def get_net_crossing_position(self, net_y = 637):
+        coord_cols = ['x_t', 'y_t', 'z_t']
+        trajArr = self.trajFrm[coord_cols].dropna()
+        if self.get_hit_side() == 'Bot':
+            is_after_net = trajArr['y_t'] <= net_y
+        else:
+            is_after_net = trajArr['y_t'] >= net_y
+
+        past_net_idx = np.argmax(is_after_net)
+        assert past_net_idx > 0
+
+        x0, y0, z0 = trajArr.loc[past_net_idx - 1]
+        x1, y1, z1 = trajArr.loc[past_net_idx]
+
+        lmbd = (net_y - y0) / (y1 - y0)
+        itpl_func = lambda a, b: (1 - lmbd) * a + lmbd * b
+
+        x, y, z = itpl_func(x0, x1), net_y, itpl_func(z0, z1)
+        return x, y, z
 
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how).z
@@ -518,6 +538,9 @@ class Shot:
     
     def get_first_bounce_position(self):
         return self.shotTraj.get_first_bounce_position()
+    
+    def get_net_crossing_position(self, net_y = 637):
+        return self.shotTraj.get_net_crossing_position(net_y = net_y)
     
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
@@ -1285,7 +1308,7 @@ def read_in_all_tables(confs):
     for conf_idx, conf in enumerate(confs):
         vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     
-        dataTable = ff.read_feature_frame('dataTable', vid, sto)
+        dataTable = ff.read_feature_frame('dataTable', vid, sto, keep_only = 'last')
         dataTable.index = pd.MultiIndex.from_product([[conf_idx], dataTable.index])
         dataTable.index.names = ['match_idx', 'frame_num']
         
