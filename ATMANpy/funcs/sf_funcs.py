@@ -2440,6 +2440,12 @@ def viterbi_trajectories(prob_coordSF,
     if len(curr_uninterrupted_frames) > 0:
         split_hit_frames_with_measurement.append(curr_uninterrupted_frames)
 
+    if len(frames_with_measurement) > 0:
+        traj_coord_shapes = [arr.shape for arr in prob_coordSF['traj_coordArr'].values() if arr is not None]
+        traj_coord_planes = [shape[0] for shape in traj_coord_shapes]
+        traj_coord_initial_conditions = [shape[1] for shape in traj_coord_shapes]
+        plane, traj = max(traj_coord_planes), max(traj_coord_initial_conditions)
+
     outDicts = []
     ### apply viterbi to each of these sub-blocks of uninterrupted rallying
     for hit_frames in split_hit_frames_with_measurement:
@@ -2448,7 +2454,6 @@ def viterbi_trajectories(prob_coordSF,
         
         prev_lsArr = None
         dist_prob_dict = {}
-
 
         ### FORWARD PASS ###
         for idx, frame in enumerate(hit_frames):
@@ -2460,8 +2465,6 @@ def viterbi_trajectories(prob_coordSF,
             fairArr = featDict['fair_probs']
             spinArr = featDict['spin_probs']
             coordArr = featDict['traj_coordArr']
-            
-            plane, traj = bounceArr.shape
             
             if prev_lsArr is None: ### initialize trellis
             
@@ -2509,7 +2512,20 @@ def viterbi_trajectories(prob_coordSF,
                 ### combine it with the trellis likelihood: -> what is the likelihood of being in the previous trajectory in the first place
                 trellis_brdcst = trellis[idx - 1, :, :, np.newaxis, np.newaxis]
                 probArr = log_probArr + trellis_brdcst
-        
+
+                ### add some dummy log probabilities in case some of the planes have been culled 
+                ### (because they don't contain enough observations)
+                plane_prev, plane_curr = prev_lsArr.shape[0], curr_fsArr.shape[0]
+                prev_to_add = plane - plane_prev
+                curr_to_add = plane - plane_curr
+
+                prev_to_add_probArr = np.full((prev_to_add, traj, plane_curr, traj), -np.inf) ### fill by -np.inf -> will never be chosen!
+                probArr = np.concatenate([probArr, prev_to_add_probArr], axis = 0)
+
+                curr_to_add_probArr = np.full((plane, traj, curr_to_add, traj), -np.inf) ### fill by -np.inf -> will never be chosen!
+                probArr = np.concatenate([probArr, curr_to_add_probArr], axis = 2)
+
+                ### now, we can reshape to consistent plane/traj shape, since plane prev and plane curr have been rectified.
                 probArr_flat = probArr.reshape((plane * traj, plane, traj))
                 maxima = probArr_flat.max(axis = 0)
                 

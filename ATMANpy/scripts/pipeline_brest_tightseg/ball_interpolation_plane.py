@@ -267,12 +267,38 @@ def main(conf,
     
     ### CHECK FOR NET POINTS ###
     netSFs = planeSFs['net_coordArr'].apply_mp(sa.viterbi_net, nwo, **viterbi_net_params)
+
+    ### FIGURE OUT EXACT NET IMPACT TIMING FOR EACH PLANE, AND NULL EVERYTHING POST NET ###
+    mySFs = planeSFs.merge(netSFs)
+    planeSFs_netted = mySFs.apply(sa.null_post_net_values)
+    planeSFs_netted = planeSFs_netted.merge(planeSFs['pointArr'])
+
+    ### TODO: 
+        # -> netArr can be turned into a single boolean, because we have a new, better filter (last pre net index)
+        # -> add last pre net index to sf_apply functions
+        # -> apply the function to coordArr, paramArr, planeArr, pointArr by culling all indices after the last pre net index
+            # (essentially, this is kind of like resample in form)
+        # -> plane penalties do not need netArr anymore, but now, in the net case we have planes of heterogenous length in penalty calculation: problem?
+        # -> netArr should not be needed in fit trajectory -> what is that condition at the end?
+        # -> trajectory audio prob: netArr simply becomes a Boolean.
+        # -> trajectory net prob: netArr simply becomes a Boolean.
+        # -> for trajectory array, we might want to save the exact index (i.e., frame) at which the ball is in net, also!!!
+
+        # -> PENALISE NON-NET HITTING TRAJECTORIES (NEVER PASS NET) IF NET_BOOL = TRUE.
+
+    ### since it is unclear when the net is hit ...
+    ### (it can be projected onto the net while still in flight, esp. when coming from below!)
+    ### we simply limit every trajectory to flight points that are before the net line.
+    ### we do this by extrapolating the flight path and keeping elements we know are before the net
+    ### (this exploits us knowing that the ball starts out in flight).
+    ### once the extrapolated ball crosses the net, we cull everything else.
+
     
     ### PICK LOW PENALTY PLANES ###
-    mySFs = planeSFs['paramArr'].merge(netSFs)
-    penSFs = mySFs.apply(sa.calculate_plane_penalties, **penalty_params)
+    mySFs = planeSFs_netted.merge(netSFs)
+    penSFs = mySFs.apply(sa.calculate_plane_penalties_unvectorized, **penalty_params)
     
-    planeSFs_raw = planeSFs.merge(penSFs).merge(netSFs)
+    planeSFs_raw = planeSFs_netted.merge(penSFs)
     
     # if VISUALIZE:
     #     for idx, planeSF_raw in enumerate(planeSFs_raw):
@@ -294,18 +320,19 @@ def main(conf,
 
     ###### GET TRAJECTORY COORDINATES ###
     ### use the pointArr to calculate a flight line, with which the fitted trajectory coordinates can be reconstructed
-    traj_coordSFs = trajSFs_fitted.merge(planeSFs_downsampled['pointArr']).apply(sa.calculate_trajectory_coordinates)
+    mySFs = trajSFs_fitted.merge(netSFs).merge(planeSFs_downsampled['pointArr'])
+    traj_coordSFs = mySFs.apply(sa.calculate_trajectory_coordinates)
 
     ##### GET TRAJECTORY PROBABILITIES ###
     # a) bounce
-    mySFs = trajSFs_fitted.merge(bounceSFs).merge(planeSFs_downsampled['netArr'])
+    mySFs = traj_coordSFs.merge(bounceSFs).merge(netSFs)
     audio_probSFs = mySFs.apply(sa.trajectory_audio_prob)
 
     # b) deviation
     dev_probSFs = trajSFs_fitted.apply(sa.trajectory_deviation_prob)
 
     # c) is net / is not in net
-    mySFs = planeSFs_downsampled['netArr'].merge(traj_coordSFs)
+    mySFs = traj_coordSFs.merge(netSFs)
     net_probSFs = mySFs.apply(sa.trajectory_net_prob, stretch_factor = viterbi_net_params['stretch_factor'])
     
     # d) prior probability over spin, given the visually detected type of shot
@@ -346,9 +373,12 @@ def main(conf,
             if trajDF is None:
                 continue
             else:
-                check_trajectories(trajDF, vid, sto, 
-                folder_name = 'fitted', graph_name = f'rally_{rally_idx}', 
-                timestamp = timestamp)
+                try:
+                    check_trajectories(trajDF, vid, sto, 
+                    folder_name = 'fitted', graph_name = f'rally_{rally_idx}', 
+                    timestamp = timestamp)
+                except:
+                    print(f'Could not visualize {rally_idx}')
 
     # ### Show on Stream!
     # idx = 5
@@ -375,7 +405,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[4])
+    conf = cnf_mod.get_conf(avail_vids[1])
 
     trajectory_params = prm_mod.ball_interpolation_plane.trajectory_params
     plane_point_params = prm_mod.ball_interpolation_plane.plane_point_params    

@@ -738,14 +738,60 @@ def viterbi_net(net_coordArr,
                                   net_bottom_adjustment_in_pixels = net_bottom_adjustment_in_pixels)
     
     if degree_in_net is None:
-        netArr = None
+        proj_netArr = None
+        netBool = False
     else:
-        netArr = single_dim_viterbi_net(degree_in_net, p = p, epsilon = epsilon, q = q)
-        netArr = netArr.astype(bool)
+        proj_netArr = single_dim_viterbi_net(degree_in_net, p = p, epsilon = epsilon, q = q)
+        proj_netArr = proj_netArr.astype(bool)
+        netBool = proj_netArr.any()
         
-    return netArr
+    return proj_netArr, netBool
         
-def calculate_plane_penalties(paramArr, netArr, 
+def find_last_pre_net_index(y_vector, net_y = 637):
+    nan_slice = np.isnan(y_vector)
+    nan_idxs = nan_slice.nonzero()[0]
+    val_idxs = (~nan_slice).nonzero()[0]
+    
+    y_vector_filled = y_vector.copy()
+    y_vector_filled[nan_slice] = np.interp(nan_idxs, val_idxs, y_vector[val_idxs])
+
+    y, ys = y_vector_filled[0], y_vector_filled[1:]
+    
+    prev_y = y
+    for idx, next_y in enumerate(ys):
+        nextnext_y = prev_y + 2 * (next_y - prev_y)    
+        if (nextnext_y < net_y < y) or (nextnext_y > net_y > y): ### 
+            last_pre_net_index = idx + 1
+            break
+        else:
+            prev_y = next_y
+    else:
+        last_pre_net_index = idx + 1
+
+    return last_pre_net_index
+
+def null_post_net_values(coordArr, paramArr, planeArr, netBool):        
+    ### IDEA: if the ball is in the net, limit every trajectory to flight points that are before the net line.
+    if not netBool: ### replace with netBool!
+        coord_netArr = None
+    else:  
+        last_pre_net_idxs = np.apply_along_axis(find_last_pre_net_index, 2, coordArr[:, :, :, 1])
+
+        coord_netArr = np.zeros(coordArr.shape[:-1], dtype = 'bool')
+        coord_netArr = coord_netArr[:, :, :, np.newaxis]
+
+        for i, last_vec in enumerate(last_pre_net_idxs):
+            for j, last_idx in enumerate(last_vec):
+                null_idx = last_idx + 1
+                coord_netArr[i, j, null_idx:] = True
+
+        coordArr = np.where(coord_netArr, np.nan, coordArr)
+        paramArr = np.where(coord_netArr, np.nan, paramArr)
+        planeArr = np.where(coord_netArr, np.nan, planeArr)
+        
+    return coordArr, paramArr, planeArr, coord_netArr
+
+def calculate_plane_penalties(paramArr, 
                               frame_cutoff = 5, ### calculate the lambda per time only after frame_cutoff frames -> avoid division by zero, avoid instability
                               verbose = False):
     if paramArr is None:
@@ -753,12 +799,7 @@ def calculate_plane_penalties(paramArr, netArr,
     else:
         num_curr_points, num_next_points, T, _ = paramArr.shape
         
-        ### parameters for the ball in flight, for evaluation
-        if netArr is None:
-            flight_paramArr = paramArr
-        else:
-            flight_paramArr = np.where(~netArr[np.newaxis, np.newaxis, :, np.newaxis], 
-                                        paramArr, np.nan)
+        flight_paramArr = paramArr ### update -> the net values in param array are now culled before calculating plane penalties
         
         time_idxs = np.arange(T)
         is_nan = np.isnan(flight_paramArr).all(axis = (0, 1, 3))
@@ -834,12 +875,82 @@ def calculate_plane_penalties(paramArr, netArr,
         
     return penalties
     
+def calculate_below_ground_penalty(param_vector_non_nan):
+    muArr = param_vector_non_nan[:, 1]
+    if len(muArr) == 0:
+        return 0
+    else:
+        return - np.clip(muArr, a_min = None, a_max = 0).mean()
 
-def resample(coordArr, paramArr, planeArr, pointArr, netArr, penalties,
+def calculate_nonmonotonous_penalty(param_vector_non_nan):
+    lmArr = param_vector_non_nan[:, 0]
+    delta_lmArr = np.diff(lmArr)
+    if len(delta_lmArr) == 0:
+        return 0
+    else:
+        return - np.clip(delta_lmArr, a_min = None, a_max = 0).mean()
+
+def calculate_nondecelerating_penalty(param_vector_non_nan, non_na_idxs, keep_filt):
+    lmArr = param_vector_non_nan[:, 0]
+    lambda_per_time = lmArr[keep_filt] / non_na_idxs[keep_filt]
+    delta_lambda_per_time = np.diff(lambda_per_time)
+
+    if len(delta_lambda_per_time) == 0:
+        return 0
+    else:
+        return np.clip(delta_lambda_per_time, a_min = 0, a_max = None).mean()
+
+def calculate_net_penalty(proj_net_vector, coord_net_vector):
+    if coord_net_vector is None:
+        return 0
+    else:
+        return (proj_net_vector != coord_net_vector).sum() / len(proj_net_vector) ### the closer the coord net vector to projected net vector, the better.
+
+def calculate_penalty(param_vector, proj_net_vector, coord_net_vector, time_idxs, frame_cutoff):
+    is_nan = np.isnan(param_vector).all(axis = 1)
+    non_na_idxs = time_idxs[~is_nan]
+    keep_filt = non_na_idxs >= frame_cutoff
+
+    param_vector_non_nan = param_vector[non_na_idxs]
+
+    p1 = calculate_below_ground_penalty(param_vector_non_nan)
+    p2 = calculate_nonmonotonous_penalty(param_vector_non_nan)
+    p3 = calculate_nondecelerating_penalty(param_vector_non_nan, non_na_idxs, keep_filt)
+    p4 = calculate_net_penalty(proj_net_vector, coord_net_vector)
+
+    return p1 + p2 + p3 + p4
+
+def calculate_plane_penalties_unvectorized(paramArr, proj_netArr, coord_netArr, frame_cutoff = 5):
+    ### IDEA like above, but here we allow for heterogenous non_nans (due to net balls being culled),
+    ### which comes at the cost of vectorization.
+
+    if paramArr is None:
+        penalties = None
+    else:
+        num_curr_points, num_next_points, T, _ = paramArr.shape
+        time_idxs = np.arange(T)
+
+        proj_net_vector = proj_netArr ### this is plane-independent!
+
+        penalties = np.zeros((num_curr_points, num_next_points))
+        for i in range(num_curr_points):
+            for j in range(num_next_points):
+                param_vector = paramArr[i, j]
+                if coord_netArr is None:
+                    coord_net_vector = None
+                else:
+                    coord_net_vector = coord_netArr[i, j, :, 0]
+                penalty = calculate_penalty(param_vector, proj_net_vector, coord_net_vector, time_idxs, frame_cutoff)
+                penalties[i, j] = penalty
+
+    return penalties
+
+
+def resample(coordArr, paramArr, planeArr, pointArr, penalties,
              logit_coeff = 1, sampling_rate = None, sampling_number = None):
     # logit_coeff ---> the higher the number, the more we favor low penalty points
     if penalties is None:
-        coordArr, paramArr, planeArr, pointArr, netArr, penalties = None, None, None, None, None, None
+        coordArr, paramArr, planeArr, pointArr, penalties = None, None, None, None, None
     else:
         if np.isnan(penalties).all(): ### this happens only if there is not a single observation in the flight path.
             penalties = np.zeros_like(penalties) # in this case, all hit and rec points have the same penalty of 0
@@ -870,11 +981,10 @@ def resample(coordArr, paramArr, planeArr, pointArr, netArr, penalties,
         planeArr = planeArr[hit_idxs_resampled, rec_idxs_resampled]
         pointArr = pointArr[hit_idxs_resampled, rec_idxs_resampled]
         penalties = penalties[hit_idxs_resampled, rec_idxs_resampled]
-        ### netArr is constant, independent of trajectory!
         
-    return coordArr, paramArr, planeArr, pointArr, netArr, penalties
+    return coordArr, paramArr, planeArr, pointArr, penalties
 
-def fit_trajectory(planeArr, netArr, hitFlag, 
+def fit_trajectory(planeArr, hitFlag, 
                    groundArr = None, vertArr = None, rpmArr = None, height_space = None,
                    groundstrokes_are_below = 2.5, serves_and_overheads_are_above = 2,
                    observation_threshold = 3,
@@ -884,18 +994,23 @@ def fit_trajectory(planeArr, netArr, hitFlag,
     from ATMANpy.models.BallTrajectory.flight_bounce_model import fit_trajectories_pointless
     
     if planeArr is None:
-        trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
+        trajArr, groundArr_filt, vertArr_filt, rpmArr_filt, trajectory_has_enough_observations = None, None, None, None, None
     else:
         
-        #kill plane observations in net
-        if netArr is not None:
-            planeArr = np.where(~netArr[np.newaxis, :, np.newaxis], planeArr, np.nan)
+        # #kill plane observations in net
+        # if netArr is not None:
+        #     planeArr = np.where(~netArr[np.newaxis, :, np.newaxis], planeArr, np.nan)
+        ### update: this has already happened!
           
-        coords_are_not_nan = ~np.isnan(planeArr).all(axis = (0, 2))
-        valid_observations = coords_are_not_nan.sum()
-        if valid_observations < observation_threshold:
+        coords_are_not_nan = ~np.isnan(planeArr).all(axis = 2)
+        non_nan_observations = coords_are_not_nan.sum(axis = 1)
+        trajectory_has_enough_observations = non_nan_observations >= observation_threshold
+
+        if trajectory_has_enough_observations.sum() == 0:
             trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
         else:
+            planeArr = planeArr[trajectory_has_enough_observations]
+
             ### Figure out which height subspace to use, depending on the type of shot
             if 'srv' in hitFlag or 'ovh' in hitFlag:
                 h_filt = height_space > serves_and_overheads_are_above
@@ -915,45 +1030,47 @@ def fit_trajectory(planeArr, netArr, hitFlag,
             offset = np.argmax(h_filt) ### the index of the first True height in the filter is the offset.
             trajArr[:, :, 3] = trajArr[:, :, 3] + offset
 
-            if not netArr is None:
-                ### only needed if the num_frames exceeds the theoretical_max_num_frames in fit_trajectories_pointless
-                num_frames = groundArr_filt.shape[-1]
-                netArr_brdcst = netArr[np.newaxis, np.newaxis, :num_frames]
+            # if not netArr is None:
+            #     ### only needed if the num_frames exceeds the theoretical_max_num_frames in fit_trajectories_pointless
+            #     num_frames = groundArr_filt.shape[-1]
+            #     netArr_brdcst = netArr[np.newaxis, np.newaxis, :num_frames]
                 
-                groundArr_filt = np.where(~netArr_brdcst, groundArr_filt, np.nan)
-                vertArr_filt = np.where(~netArr_brdcst, vertArr_filt, np.nan)
-                rpmArr_filt = np.where(~netArr_brdcst, rpmArr_filt, np.nan)
+            #     groundArr_filt = np.where(~netArr_brdcst, groundArr_filt, np.nan)
+            #     vertArr_filt = np.where(~netArr_brdcst, vertArr_filt, np.nan)
+            #     rpmArr_filt = np.where(~netArr_brdcst, rpmArr_filt, np.nan)
+            ## Update -> lets not do this right here -> we might need the longer trajectories when deciding
     
-    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
+    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt, trajectory_has_enough_observations
         
-def trajectory_audio_prob(bounceArr, vertArr_filt, netArr):
+def trajectory_audio_prob(bounceArr, traj_coordArr, netBool):
     ### bounceArr shape: T x 5 (pcond1, pcond2, prior0, prior1, prior2)
     ### vertArr_filt shape: plane x traj x T
     ### netArr shape: None or T
-    if bounceArr is None or vertArr_filt is None: ### occurs if final inferred flight point is taken to be hit point 
+    if bounceArr is None or traj_coordArr is None: ### occurs if final inferred flight point is taken to be hit point 
         bounce_probs = None
     else:
+
+        traj_yArr = traj_coordArr[:, :, :, 2]
+    
+
         ### Prep some variables
         bounce_cond1 = bounceArr[:, 0]
         bounce_cond2 = bounceArr[:, 1]
-        plane, traj, time = vertArr_filt.shape # plane (between a hit and a rec point), traj (given by initial conditions), time in frames
-        vertArr_filt_reshaped = vertArr_filt.reshape((plane * traj, time))
+        plane, traj, time = traj_yArr.shape # plane (between a hit and a rec point), traj (given by initial conditions), time in frames
+        traj_yArr_reshaped = traj_yArr.reshape((plane * traj, time))
         
         ### Construct Plane Specific Priors
         priorArr_in_flight = bounceArr[0, 2:] ### priors are constant across T
         priorArr_in_net = np.array([0.9, 0.09, 0.01])
         
-        if netArr is None:
-            priors_by_plane = np.repeat(priorArr_in_flight[np.newaxis, :], repeats = plane, axis = 0)
+        if netBool:
+            priors_by_plane = np.repeat(priorArr_in_net[np.newaxis, :], repeats = plane, axis = 0)
         else:
-            if netArr.max(): ### ball is in net at some point
-                priors_by_plane = np.repeat(priorArr_in_net[np.newaxis, :], repeats = plane, axis = 0)
-            else:
-                priors_by_plane = np.repeat(priorArr_in_flight[np.newaxis, :], repeats = plane, axis = 0)
-            
+            priors_by_plane = np.repeat(priorArr_in_flight[np.newaxis, :], repeats = plane, axis = 0)
+         
         ### Gather implied trajectory bounce data ###
-        frm_bounces = [np.arange(time)[is_bounce] for is_bounce in vertArr_filt_reshaped == 0]
-        num_bounces = (vertArr_filt_reshaped == 0).sum(axis = 1)
+        frm_bounces = [np.arange(time)[is_bounce] for is_bounce in traj_yArr_reshaped == 0]
+        num_bounces = (traj_yArr_reshaped == 0).sum(axis = 1)
         
         ### figure out conditional bounce probabilities
         bounce_cond_probs = []
@@ -990,7 +1107,7 @@ def trajectory_deviation_prob(trajArr):
         dev_probs = 1 / (1 + trajArr[:, :, -1])
     return dev_probs
 
-def trajectory_net_prob(traj_coordArr, netArr, stretch_factor = 0.25):
+def trajectory_net_prob(traj_coordArr, netBool, stretch_factor = 0.25):
     if traj_coordArr is None:
         net_probs = None
     else:
@@ -1051,12 +1168,7 @@ def trajectory_net_prob(traj_coordArr, netArr, stretch_factor = 0.25):
         out_of_net_degree = 1 / (1 + np.exp(-stretch_factor * over_net_heightArr))
 
         ### figure out if the ball is supposed to be in the net or not
-        if netArr is None:
-            in_net = False
-        else:
-            in_net = netArr.max()
-        
-        if in_net:
+        if netBool:
             net_probs = 1 - out_of_net_degree
         else:
             net_probs = out_of_net_degree
@@ -1149,7 +1261,8 @@ def trajectory_fair_prob(traj_coordArr, remaining_shots, hitFlag, srvFlag, court
     return fair_probs
 
 
-def compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = None):
+def compare_trajectories_with_audio(traj_coordArr, bounceFrm, prior_override = None):
+    traj_yArr = traj_coordArr[:, :, :, 2]
     
     ######## Integrate bounce audio ##########
     bounce_frames = bounceFrm.index.tolist()
@@ -1161,12 +1274,12 @@ def compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = No
     else:
         p0, p1, p2 = prior_override
     
-    plane, traj, time = vertArr_filt.shape # plane (between a hit and a rec point), traj (given by initial conditions), time in frames
-    vertArr_filt_reshaped = vertArr_filt.reshape((plane * traj, time))
+    plane, traj, time = traj_yArr.shape # plane (between a hit and a rec point), traj (given by initial conditions), time in frames
+    traj_yArr_reshaped = traj_yArr.reshape((plane * traj, time))
     
     ### Gather implied trajectory bounce data ###
-    frm_bounces = [np.array(flight_frames)[is_bounce] for is_bounce in vertArr_filt_reshaped == 0]
-    num_bounces = (vertArr_filt_reshaped == 0).sum(axis = 1)
+    frm_bounces = [np.array(flight_frames)[is_bounce] for is_bounce in traj_yArr_reshaped == 0]
+    num_bounces = (traj_yArr_reshaped == 0).sum(axis = 1)
     
     ### Calculate conditional bounce probabilities and priors
     bounce_cond_probs = []
@@ -1192,16 +1305,20 @@ def compare_trajectories_with_audio(vertArr_filt, bounceFrm, prior_override = No
     bounce_probs = bounce_probs.reshape(plane, traj) ### shape back to input shape
     return bounce_probs
 
-def calculate_trajectory_coordinates(groundArr_filt, vertArr_filt, pointArr):
+def calculate_trajectory_coordinates(groundArr_filt, vertArr_filt, pointArr, 
+                                     trajectory_has_enough_observations, netBool, net_y = 637):
     # groundArr_filt.shape, vertArr_filt.shape ### Plane x Traj x T
     # pointArr.shape ### Plane x 2 (start, end) x 3 (x, y, z)
     if groundArr_filt is None:
-        coords = None
+        traj_coordArr = None
     else:
         ### rescale ground and vert arrays
         groundArr_resc = groundArr_filt * const.SCALE / const.FOOT_TO_METER
         vertArr_resc = vertArr_filt * const.SCALE / const.FOOT_TO_METER
         
+        ### conform pointArr to the trajectory filter (a plane has yielded enough observations.)
+        pointArr = pointArr[trajectory_has_enough_observations]
+
         ### calculate the flight line of the ball for each path, and a length of the plane line
         flatArr = pointArr[:, :, [0, 1]] ### points projected on the ground
         fsArr, lsArr = flatArr[:, 0], flatArr[:, 1]
@@ -1215,13 +1332,45 @@ def calculate_trajectory_coordinates(groundArr_filt, vertArr_filt, pointArr):
         ground_coords = fsArr[:, np.newaxis, np.newaxis] + lmbd[:, :, :, np.newaxis] * vecArr[:, np.newaxis, np.newaxis] ### shape: Plane x Traj x T x 2 (x, y)
         vert_coords = vertArr_resc[:, :, :, np.newaxis] ### shape: Plane x Traj x T x 1 (z)
         
+        ### for any shot for which the ball is registered to be in the net (by netBool),
+        ### cull any ground_coord values which are on the opposite side of the net, save the very first that just crossed.
+        ### we keep this last observation to be able to feed the coordinates to trajectory_net_prob, which checks where the ball intersects the net.
+        if netBool:
+            starting_y = pointArr[:, 0, 1] 
+            measured_y = ground_coords[:, :, :, 1]
+
+            ### figure out from which side of the net the ball is hit
+            y_starts_below = (starting_y < net_y).all()
+            y_starts_above = (starting_y > net_y).all()
+
+            ### cull values if they're past net
+            if y_starts_below:
+                y_past_net = measured_y > net_y
+            elif y_starts_above:
+                y_past_net = measured_y < net_y
+            else:
+                raise Exception('starting cloud both above and below net...')
+
+            ### add an extra 'False' value in place of the first 'True' (ball is past net)
+            ### -> this way, we also get the first value past the net!
+            y_past_net_rolled = np.roll(y_past_net, 1, axis = 2)
+            y_past_net_rolled[:, :, 0] = False ### since the value at the end is introduced at beginning by rolling
+            ground_coords = np.where(y_past_net_rolled[:, :, :, np.newaxis], np.nan, ground_coords)
+            vert_coords = np.where(y_past_net_rolled[:, :, :, np.newaxis], np.nan, vert_coords)
+
+            ### additionally, we slightly adjust the barely-past-net z coordinate upwards, so it doesn't register as a bounce! 
+            ### (it is a synthetic coordinate anyway, an extrapolation slightly past the net.)
+            y_barely_past_net = (~y_past_net_rolled & y_past_net) 
+            vert_coords = np.where(y_barely_past_net[:, :, :, np.newaxis], vert_coords + 0.1, vert_coords)
+
         traj_coordArr = np.concatenate([ground_coords, vert_coords], axis = -1)
-        return traj_coordArr
+    
+    return traj_coordArr
         
 
 def make_trajectory_arrays(best_plane, best_traj, 
                            bounce_prob, dev_prob, net_prob, fair_prob, spin_prob, dist_prob,
-                           traj_coordArr, coordArr, planeArr, netArr,
+                           traj_coordArr, coordArr, planeArr, 
                            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt,
                            v_init_ground_space = None, v_init_vert_space = None, spin_rate_space = None, height_space = None):
     ### traj is best is a boolean array with N entries, one for each trajectory
@@ -1252,11 +1401,14 @@ def make_trajectory_arrays(best_plane, best_traj,
         vx0, vz0, rpm0, height0 = v_init_ground_space[vx0_idx], v_init_vert_space[vy0_idx], spin_rate_space[rpm0_idx], height_space[height_idx]
         condArr_opt = np.ones((T, 4)) * np.array([[vx0, vz0, rpm0, height0]])
         
-        ### 4) Gather the net data -> when is the ball in the net?
-        if netArr is None:
-            netArr_opt = np.zeros((T, 1), dtype = 'bool')
-        else:
-            netArr_opt = netArr[:, np.newaxis]
+        # ### 4) Gather the net data -> when is the ball in the net?
+        # if netArr is None:
+        #     netArr_opt = np.zeros((T, 1), dtype = 'bool')
+        # else:
+        #     netArr_opt = netArr[:, np.newaxis]
+
+        ### 4) netArr_opt -> now done with nan trajectory points!
+        netArr_opt = np.isnan(traj_coordArr_opt).all(axis = 1)[:, np.newaxis]
 
         ### 5) Gather the scalar probabilities
         probArr = np.array([bounce_prob, dev_prob, net_prob, fair_prob, spin_prob, dist_prob], dtype = 'float')
