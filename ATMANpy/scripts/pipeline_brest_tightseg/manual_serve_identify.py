@@ -30,20 +30,24 @@ from ATMANpy.types.Visual3D import Scene, Camera, View
 
 from ATMANpy.types.Shapes3D import Point3D, Ball3D, Region3D, Line3D
 
-def fix_traj_frame(trajFrm):
-    ### TODO: this can go as soon as ball_interpolation_plane is re-run 
-    ### with overheads recognized as serves that have a serve event (SBA, SBD, STA, STD) at shot_idx > 0
-    not_first = trajFrm.shot_idx > 0
-    serve_recognized = trajFrm.event.isin(['SBA', 'SBD', 'STA', 'STD'])
-    to_fix = not_first & serve_recognized
-    print(f'Fixing {to_fix.sum()} instances of serves that are recognized during the rally.')
-    trajFrm.event = np.where(not_first & serve_recognized, 'H' + trajFrm.event.str[1], trajFrm.event)
-    return trajFrm
+# def fix_traj_frame(trajFrm):
+#     ### TODO: this can go as soon as ball_interpolation_plane is re-run 
+#     ### with overheads recognized as serves that have a serve event (SBA, SBD, STA, STD) at shot_idx > 0
+#     not_first = trajFrm.shot_idx > 0
+#     serve_recognized = trajFrm.event.isin(['SBA', 'SBD', 'STA', 'STD'])
+#     to_fix = not_first & serve_recognized
+#     print(f'Fixing {to_fix.sum()} instances of serves that are recognized during the rally.')
+#     trajFrm.event = np.where(not_first & serve_recognized, 'H' + trajFrm.event.str[1], trajFrm.event)
+#     return trajFrm
+
+def load_older_classifications(vid, sto):
+    flagSF = StreamFeature.from_store(vid, sto, featname = 'srvFlag')
+    return flagSF
 
 def load(vid, sto):
     crtBF = StreamFeature.from_store(vid, sto, featname = 'isCourt') ### use this as a way of marking changeovers
     segBF = StreamFeature.from_store(vid, sto, featname = 'isRally_warmup_removed') ### TODO: once we remove warmups earlier in the pipeline, this will not be necessary!
-    trajFrm = ff.read_feature_frame('trajTable', vid, sto)
+    trajFrm = ff.read_feature_frame('trajTable', vid, sto, keep_only = 'last')
     return crtBF, segBF, trajFrm
 
 def save(vid, sto, outSF):
@@ -55,7 +59,10 @@ def main(conf, name = None):
     
     #### READ IN ####
     crtBF, segBF, trajFrm = load(vid, sto)
-    trajFrm = fix_traj_frame(trajFrm)
+    # trajFrm = fix_traj_frame(trajFrm)
+    flagSF = load_older_classifications(vid, sto)
+
+    print(f'Number of serves identified previously: {flagSF.length()}')
 
     srvFrm = trajFrm[trajFrm.event.isin(['SBA', 'SBD', 'STA', 'STD'])]
     srvSF = StreamFeature.from_series(srvFrm['event'])
@@ -63,6 +70,11 @@ def main(conf, name = None):
 
     srvSFs = srvSF.conform(crtBF).filter(crtBF).split()
     srvSFs = srvSFs.dropna()
+
+    flagSF = flagSF.filter(segBF)
+    flagSFs = flagSF.conform(crtBF).filter(crtBF).split()
+    flagSFs = flagSFs.dropna()
+
 
     ### How to check whether a serve is first or second serve:
     ### if there are no lets, and every serve is caught, then looking at consecutive serve events suffices
@@ -91,6 +103,9 @@ def main(conf, name = None):
         serve_splits = ut.split_into_contiguous(serve_flags, offset = '')
         frame_splits = ut.split_like(serve_frames, serve_splits)
 
+        previous_flag_sf = flagSFs[seg_idx]
+
+
         for frames, serves in zip(frame_splits, serve_splits):
             if len(frames) <= 2:
                 ### normal -> mapped as above!
@@ -102,28 +117,43 @@ def main(conf, name = None):
 
                 ### FILL IN THE WEIRD SEGMENTS!
                 filled_dict = {}
-                while len(filled_dict) < len(frames):
-                    Stream(cap, frames[0] - 25, frames[-1] + 25).show(frame_counter = True)
-                    for idx, frame in enumerate(frames):
-                        if frame in filled_dict:
-                            continue
+                previously_done_frames = [f for f in previous_flag_sf if f in frames]
+                previously_done_dict = {f: previous_flag_sf[f] for f in previously_done_frames}
+                if sorted(previously_done_frames) == sorted(frames):
+                    print('        Already Done!')
+                    outDict.update(previously_done_dict) 
+                else: 
+                    print('        Still to Do!')
+                    while len(filled_dict) < len(frames):
+                        Stream(cap, frames[0] - 25, frames[-1] + 25).show(frame_counter = True)
+                        for idx, frame in enumerate(frames):
+                            if frame in filled_dict:
+                                continue
 
-                        print(f'    Categorizing Serve Number {idx} at frame {frame} ...')
-                        serve_event_key = input(f'      ... 1 for 1st, 2 for 2nd, 0 for let, x for not a serve, any other key for replay: ')
-                        if serve_event_key == '1':
-                            filled_dict[frame] = 'first_serve'
-                        elif serve_event_key == '2':
-                            filled_dict[frame] = 'second_serve'
-                        elif serve_event_key == '0':
-                            filled_dict[frame] = 'let'
-                        elif serve_event_key == 'x':
-                            filled_dict[frame] = 'not a serve'
-                        else:
-                            continue
+                            print(f'    Categorizing Serve Number {idx} at frame {frame} ...')
+                            serve_event_key = input(f'      ... 1 for 1st, 2 for 2nd, 0 for let, x for not a serve, any other key for replay: ')
+                            if serve_event_key == '1':
+                                filled_dict[frame] = 'first_serve'
+                            elif serve_event_key == '2':
+                                filled_dict[frame] = 'second_serve'
+                            elif serve_event_key == '0':
+                                filled_dict[frame] = 'let'
+                            elif serve_event_key == 'x':
+                                filled_dict[frame] = 'not a serve'
+                            else:
+                                continue
 
-                outDict.update(filled_dict)
+                    outDict.update(filled_dict)
 
     outSF = StreamFeature(outDict, name = 'srvFlag')
+
+    print(f'Number of serves identified now: {outSF.length()}')
+
+    newly_identified = {k: v for k, v in outSF.items() if k not in flagSF.keys()}
+    not_identified_now = {k: v for k, v in flagSF.items() if k not in outSF.keys()}
+
+    print(f'Newly identified: {newly_identified}')
+    print(f'Not identified: {not_identified_now}')
 
     save(vid, sto, outSF)
 
@@ -135,7 +165,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[1])
+    conf = cnf_mod.get_conf(avail_vids[0])
 
     name = ppl._name
     main(conf, name = name)

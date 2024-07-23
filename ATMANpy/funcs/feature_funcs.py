@@ -208,8 +208,9 @@ def save_events(stream_features, featureName, videoName, storeName):
 
 ###### Loading #############
 
-def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
-    
+def read_feature_frame(featureName, videoName, storeName, keep_which = 'last', keep_only = None):
+    ### keep_only -> in case we want ONLY the last or the first. None for default behaviour with consolidation among all frames.
+
     print(f'Reading {featureName}...')
     
     import os
@@ -218,7 +219,14 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
 
     if os.path.isdir(savePath):
         frmList = []
-        for file in os.listdir(savePath):
+
+        files = os.listdir(savePath)
+        if keep_only == 'first':
+            files = [files[0]]
+        elif keep_only == 'last':
+            files = [files[-1]]
+
+        for file in files:
             ### read file
             filePath = os.path.join(savePath, file)
             myFrm = pd.read_csv(filePath, index_col = False)
@@ -252,7 +260,7 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last'):
     else:
         print(f'   ... No data found!')
         return pd.DataFrame()
-
+    
 def single_2D_feature_to_object(singlefeatSeries):
     ### Turns a dictionary corresponding to a row of a feature frame (a single picture frame)
     ### into the object that we can work with.
