@@ -196,6 +196,7 @@ def make_digraph(depDict, posDict, saveName = None):
                  'hits': 'violet',
                  'manual': 'crimson',
                  'visualization': 'turquoise',
+                 'score': 'mediumpurple',
                  'default': 'grey'}
     
     saveDir = ut.get_folder_struct('graphs')['pipeline_dependencies']
