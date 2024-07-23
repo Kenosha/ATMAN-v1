@@ -59,7 +59,7 @@ def load(vid, sto):
     plySF = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayerCnt', 'botPlayerCnt'])
     srvSF = StreamFeature.from_store(vid, sto, featname = 'srvFlag')
     scrSF = StreamFeatures.from_store(vid, sto, featnameList = ['sb_name_lower_Flag', 'sb_name_upper_Flag', 'sb_score_lower_Flag', 'sb_score_upper_Flag', 'sb_games_lower_cleaned_Flag', 'sb_games_upper_cleaned_Flag'])
-    trajFrm = ff.read_feature_frame('trajTable', vid, sto)
+    trajFrm = ff.read_feature_frame('trajTable', vid, sto, keep_only = 'last')
     return HPCF, segBF, plySF, srvSF, scrSF, trajFrm
 
 def save(trajDFs, vid, sto):
@@ -287,7 +287,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[13])
+    conf = cnf_mod.get_conf(avail_vids[0])
 
     name = ppl._name
 
