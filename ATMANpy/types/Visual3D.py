@@ -29,6 +29,9 @@ class Scene:
         else:
             return '\n'.join([fsStr, *sStrs, lsStr])
 
+    def __getitem__(self, item):
+        return self.shapes[item]
+
     @staticmethod
     def make_empty():
         return Scene([])
