@@ -23,10 +23,3 @@ posDict = {s: (lat_orderDict[s], -seq_orderDict[s]) for s in lat_orderDict.keys(
 
 ppl_fs.make_digraph(depDict, posDict, saveName = ppl._name)
 
-
-
-
-
-
-
-

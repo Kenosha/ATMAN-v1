@@ -35,7 +35,7 @@ from ATMANpy.types.Shapes3D import Point3D, Ball3D, Region3D, Line3D
 
 def load(vid, sto):
     crtBF = StreamFeature.from_store(vid, sto, featname = 'isCourt') ### use this as a way of marking changeovers
-    segBF = StreamFeature.from_store(vid, sto, featname = 'isRally_warmup_removed')
+    segBF = StreamFeature.from_store(vid, sto, featname = 'isRally_sound') ### EDIT: IMPORTANT: USED TO BE isRally_warmup_removed, but is circular!
     plySF = StreamFeatures.from_store(vid, sto, featnameList = ['top_name_Flag', 'top_hand_Flag', 'bot_name_Flag', 'bot_hand_Flag'])
     return crtBF, segBF, plySF
 
