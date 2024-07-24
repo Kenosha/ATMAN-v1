@@ -619,6 +619,7 @@ def scatter_markmap(myShots, showReg = None,
                     color_func = None,
                     normalize = True,
                     mix_colors = True, mix_alpha = False,
+                    flat_along_dimension = 'z',
                     zero_color = (0, 0, 0), one_color = const.BGR['intense_red']):        
     from ATMANpy.types.ShapesTennis3D import Mark
     from ATMANpy.types.Shapes3D import Point3D
@@ -633,6 +634,16 @@ def scatter_markmap(myShots, showReg = None,
     position_is_not_none = ~np.isnan(posArr).all(axis = 1)
     posArr_nonnan = posArr[position_is_not_none]
     
+    ### Check for dimensionality, and make consistently 3D
+    frames, dim = posArr_nonnan.shape
+    if dim == 2:
+        if flat_along_dimension == 'x':
+            posArr_nonnan = np.insert(posArr_nonnan, 0, 0, axis = 1)
+        elif flat_along_dimension == 'y':
+            posArr_nonnan = np.insert(posArr_nonnan, 1, 0, axis = 1)
+        elif flat_along_dimension == 'z':
+            posArr_nonnan = np.insert(posArr_nonnan, 2, 0, axis = 1)
+
     ### Get color function (if it is not None)
     if color_func is not None:
         if isinstance(color_func, str):
@@ -650,9 +661,16 @@ def scatter_markmap(myShots, showReg = None,
     shapeList = []
     for coords, color in zip(posArr_nonnan, colArr_nonnan):
         
-        ### make a point from coords, and check if it is eligible
-        pt2D = Point2D(coords)
         if showReg is not None:
+            ### make a point from coords, and check if it is eligible
+            if flat_along_dimension == 'x':
+                coords2D = coords[1], coords[2]
+            elif flat_along_dimension == 'y':
+                coords2D = coords[0], coords[2]
+            elif flat_along_dimension == 'z':
+                coords2D = coords[0], coords[1]
+
+            pt2D = Point2D(coords2D)
             if not pt2D.within(showReg):
                 continue
 
@@ -669,8 +687,8 @@ def scatter_markmap(myShots, showReg = None,
             mixed_alpha = 1
 
         ### make a mark
-        pt3D = Point3D.from_point2D(pt2D, z = 0)
-        myMark = Mark.make(pt3D, color = mixed_tuple, alpha = mixed_alpha)
+        pt3D = Point3D(coords)
+        myMark = Mark.make(pt3D, color = mixed_tuple, alpha = mixed_alpha, flat_along_dimension = flat_along_dimension)
         shapeList.append(myMark)
 
     return Scene(shapeList)
