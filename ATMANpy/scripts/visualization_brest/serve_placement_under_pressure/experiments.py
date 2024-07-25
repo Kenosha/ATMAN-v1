@@ -23,6 +23,75 @@ from ATMANpy.types.Streams import DecapStream
 
 from ATMANpy.auxil.court import courtLines
 
+def get_service_line_and_indicator(side, which):
+    srvReg = courtLines.get_service_box(side = side, which = which)
+    
+    if side == 'Bot':
+        srvLn = srvReg['Bottom']
+    elif side == 'Top':
+        srvLn = srvReg['Top']
+
+    ### get indicator -> which is wide, which is down the middle
+    srvLn.leftPt, srvLn.rightPt
+    center_x, center_y = courtLines.get_center_point().coords
+
+    if srvLn.leftPt.x == center_x:
+        indicator = {'middle': srvLn.leftPt,
+                        'wide': srvLn.rightPt}
+    if srvLn.rightPt.x == center_x:
+        indicator = {'middle': srvLn.rightPt,
+                        'wide': srvLn.leftPt}
+
+    return srvLn, indicator
+
+def find_intersection_with_service_line(myShot):
+    from ATMANpy.types.Points import Point2D
+    from ATMANpy.types.Lines import Line
+
+    assert myShot.is_serve()
+    side = 'Top' if myShot.get_hit_side() == 'Bot' else 'Bottom'
+    which = 'Ad' if myShot.is_serve_ad() else 'Deuce'
+    srvLn, _ = get_service_line_and_indicator(side, which)
+
+    hit_pos, bnc_pos = myShot.get_ball_hit_position(), myShot.get_first_bounce_position()
+    if bnc_pos == (None, None):
+        return (None, None)
+
+    flightLn = Line(Point2D(tuple(hit_pos)), Point2D(tuple(bnc_pos)))
+
+    interPt = flightLn.weak_intersect(srvLn)
+    return interPt.coords
+
+def find_lambda_of_service_line(myShot):
+    from ATMANpy.types.Points import Point2D
+    from ATMANpy.types.Lines import Line
+
+    assert myShot.is_serve()
+    side = 'Top' if myShot.get_hit_side() == 'Bot' else 'Bottom'
+    which = 'Ad' if myShot.is_serve_ad() else 'Deuce'
+    srvLn, indicator = get_service_line_and_indicator(side, which)
+
+    hit_pos, bnc_pos = myShot.get_ball_hit_position(), myShot.get_first_bounce_position()
+    if bnc_pos == (None, None):
+        return None
+
+    flightLn = Line(Point2D(tuple(hit_pos)), Point2D(tuple(bnc_pos)))
+
+    interPt = flightLn.weak_intersect(srvLn)
+
+    pt_x = interPt.x
+    wide_x, middle_x = indicator['wide'].x, indicator['middle'].x
+    middle_dist = middle_x - pt_x
+    extent_to_which_the_ball_is_wide = middle_dist / (middle_x - wide_x)
+    return extent_to_which_the_ball_is_wide
+
+def regress_lambda_on_pressure(lambdaArr_filt, pressArr_filt):    
+    import statsmodels.api as sm
+
+    X = np.stack([pressArr_filt, np.ones(len(pressArr_filt))]).T
+    ols = sm.OLS(lambdaArr_filt, X)
+    ols_result = ols.fit()
+    return ols_result
 
 def main(confs, name = None):
     
@@ -30,12 +99,12 @@ def main(confs, name = None):
     allTable = read_in_all_tables(confs)
     allPnts = Points.from_datatable(allTable, split_by_match = False)
 
-
     deucePnts = allPnts.filter('is_serve_deuce').enforce_direction('Bot')
     # adPnts = allPnts.filter('is_serve_ad').enforce_direction('Bot')
 
     nameDict = {}
     pressDict = {}
+    scoreDict = {}
     for somePnt in deucePnts:
         srvShot = somePnt.get_serve()
         if srvShot is None:
@@ -44,91 +113,35 @@ def main(confs, name = None):
             continue
 
         server = srvShot.hitPlayer.get_name()
-        serve_pressure = somePnt.get_joint_score_pressure(normalize = True)
+        score = somePnt.get_set_score(), somePnt.get_game_score(), somePnt.get_point_score()
+        serve_pressure = somePnt.get_total_match_score_pressure()
         if server in nameDict:
             nameDict[server].append(srvShot)
             pressDict[server].append(serve_pressure)
+            scoreDict[server].append(score)
         else:
             nameDict[server] = [srvShot]
             pressDict[server] = [serve_pressure]
+            scoreDict[server] = [score]
 
     from ATMANpy.types.Abstract import Shots
-    jointDict = {name: (Shots(nameDict[name]), np.array(pressDict[name])) for name in nameDict}
+    jointDict = {name: (Shots(nameDict[name]), np.array(pressDict[name]), scoreDict[name]) for name in nameDict}
 
-    def get_service_line_and_indicator(side, which):
-        srvReg = courtLines.get_service_box(side = side, which = which)
-        
-        if side == 'Bot':
-            srvLn = srvReg['Bottom']
-        elif side == 'Top':
-            srvLn = srvReg['Top']
+    ### joint pressure array, to get a feeling for quantiles
+    all_pressArr = np.concatenate([pressArr for _, pressArr, _ in jointDict.values()])
+    print(np.quantile(all_pressArr, q = [0.1, 0.5, 0.9]))
 
-        ### get indicator -> which is wide, which is down the middle
-        srvLn.leftPt, srvLn.rightPt
-        center_x, center_y = courtLines.get_center_point().coords
+    scores = jointDict['Joao Sousa'][2]
+    pressures = jointDict['Joao Sousa'][1]
 
-        if srvLn.leftPt.x == center_x:
-            indicator = {'middle': srvLn.leftPt,
-                         'wide': srvLn.rightPt}
-        if srvLn.rightPt.x == center_x:
-            indicator = {'middle': srvLn.rightPt,
-                         'wide': srvLn.leftPt}
+    press_score = [(x, y) for x, y in sorted(zip(pressures, scores), reverse = True)]
+    for press, score in press_score:
+        print(score, press)
 
-        return srvLn, indicator
-
-    def find_intersection_with_service_line(myShot):
-        from ATMANpy.types.Points import Point2D
-        from ATMANpy.types.Lines import Line
-
-        assert myShot.is_serve()
-        side = 'Top' if myShot.get_hit_side() == 'Bot' else 'Bottom'
-        which = 'Ad' if myShot.is_serve_ad() else 'Deuce'
-        srvLn, _ = get_service_line_and_indicator(side, which)
-
-        hit_pos, bnc_pos = myShot.get_ball_hit_position(), myShot.get_first_bounce_position()
-        if bnc_pos == (None, None):
-            return (None, None)
-
-        flightLn = Line(Point2D(tuple(hit_pos)), Point2D(tuple(bnc_pos)))
-
-        interPt = flightLn.weak_intersect(srvLn)
-        return interPt.coords
-    
-    def find_lambda_of_service_line(myShot):
-        from ATMANpy.types.Points import Point2D
-        from ATMANpy.types.Lines import Line
-
-        assert myShot.is_serve()
-        side = 'Top' if myShot.get_hit_side() == 'Bot' else 'Bottom'
-        which = 'Ad' if myShot.is_serve_ad() else 'Deuce'
-        srvLn, indicator = get_service_line_and_indicator(side, which)
-
-        hit_pos, bnc_pos = myShot.get_ball_hit_position(), myShot.get_first_bounce_position()
-        if bnc_pos == (None, None):
-            return None
-
-        flightLn = Line(Point2D(tuple(hit_pos)), Point2D(tuple(bnc_pos)))
-
-        interPt = flightLn.weak_intersect(srvLn)
-
-        pt_x = interPt.x
-        wide_x, middle_x = indicator['wide'].x, indicator['middle'].x
-        middle_dist = middle_x - pt_x
-        extent_to_which_the_ball_is_wide = middle_dist / (middle_x - wide_x)
-        return extent_to_which_the_ball_is_wide
-
-    def regress_lambda_on_pressure(lambdaArr_filt, pressArr_filt):    
-        import statsmodels.api as sm
-    
-        X = np.stack([pressArr_filt, np.ones(len(pressArr_filt))]).T
-        ols = sm.OLS(lambdaArr_filt, X)
-        ols_result = ols.fit()
-        return ols_result
-    
     player = 'Joao Sousa'
     for player in jointDict:
         print(player)
-        plShots, pressArr = jointDict[player]
+        plShots, pressArr, score = jointDict[player]
 
         # hitArr, bncArr = shots.get_ball_hit_position()[:, :2], shots.get_first_bounce_position()
         
@@ -150,10 +163,10 @@ def main(confs, name = None):
         lambdaArr_filt = lambdaArr[is_not_nan]
 
         fitted_ols = regress_lambda_on_pressure(lambdaArr_filt, pressArr_filt)
-        # print(fitted_ols.summary())
+        print(fitted_ols.summary())
 
         ### bucketing
-        pressure_thresholds = (0.25, 0.4)
+        pressure_thresholds = (0.04, 0.08)
         shot_buckets = [[] for _ in range(len(pressure_thresholds) + 1)]
         for shot_idx, pressure in enumerate(pressArr):
             for thresh_idx, thresh in enumerate(pressure_thresholds):
@@ -173,6 +186,9 @@ def main(confs, name = None):
         line_scenes = []
         offset = 0
         for bucketShots in shot_buckets:
+            if len(bucketShots) == 0:
+                continue
+
             dummy_scene = vs.kde_hillmap(bucketShots, deucelineReg, position_func = find_intersection_with_service_line, resolution = 5, normalize_density = False)
             dummy_scene.rastArrs[0] += [0, offset, 0]
 
@@ -205,21 +221,63 @@ def main(confs, name = None):
 
         allView.snap().show()
 
+        # ### visualizing high pressure shot trajectories
+        # shot_buckets_nonet = shot_buckets[2].filter('is_in_net', negate = True)
+        # mySF = shot_buckets_nonet.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = 'actual')
+        # shapes = list(mySF.values())
+        # shapes_vectorized = [f.vectorize() for f in shapes if f is not None]
+        # shapes_vectorized = shapes_vectorized[:25]
 
-
-        ### visualizing high pressure shot trajectories
-        shot_buckets_nonet = shot_buckets[2].filter('is_in_net', negate = True)
-        mySF = shot_buckets_nonet.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = 'actual')
-        shapes = list(mySF.values())
-        shapes_vectorized = [f.vectorize() for f in shapes if f is not None]
-        shapes_vectorized = shapes_vectorized[:25]
-
-        myFrms, _ = vs.animate_sequence(shapes_vectorized, background_scene = Scene.make_court(), start_cam = myCam, stop_cam = myCam,
-                                        cumulate_argument = True, cumulative_foreground_transparence = 0.5
-                                        )
+        # myFrms, _ = vs.animate_sequence(shapes_vectorized, background_scene = Scene.make_court(), start_cam = myCam, stop_cam = myCam,
+        #                                 cumulate_argument = True, cumulative_foreground_transparence = 0.5
+        #                                 )
         
-        from ATMANpy.types.Streams import DecapStream
-        DecapStream(myFrms, 0, 25).show(ms_between_frames = 100)
+        # from ATMANpy.types.Streams import DecapStream
+        # DecapStream(myFrms, 0, 25).show(ms_between_frames = 100)
+
+        ### make the scattered marks
+        boxReg = courtLines.make().add_singles_netline().get_service_box(which = 'Deuce', side = 'Top')
+
+        courtScn = Scene.make_court()
+        markScn = vs.scatter_markmap(plShots, showReg = boxReg.scale(1.25), 
+                                     zero_color = const.BGR['grass_green'], one_color = const.BGR['intense_red'])
+        myScn = courtScn.combine(markScn)
+
+        View.make(myCam, myScn).snap().show()
+
+        ### get the highest pressure point, and make a line upwards
+        from ATMANpy.types.Points import Point2D
+        pressArr = plShots.get_total_score_pressure()
+        maxPoint = plShots[np.argmax(pressArr)]
+        hi_coords = maxPoint.get_first_bounce_position()
+        pressPt_lo = Point3D.from_point2D(Point2D(tuple(hi_coords)), z = 0)
+        pressPt_hi = Point3D.from_point2D(Point2D(tuple(hi_coords)), z = 30)
+        myLn = Line3D(pressPt_lo, pressPt_hi, color = const.BGR['intense_red'])
+
+        myLn_itpl = vs.divide_line(myLn, 25, dashed = True)
+
+        myFrms, prev_anim_dict = vs.animate_sequence(myLn_itpl, background_scene = myScn, cumulate_argument = True, 
+                                            start_cam = myCam, stop_cam = myCam)
+
+        DecapStream(myFrms, 0, 25).show()
+
+        prevScn = prev_anim_dict['previous_foreground_scene'].combine(myScn)
+        View.make(myCam, prevScn).snap().show()
+
+        from ATMANpy.types.Shapes3D import AnnotatedPoint3D
+        scoreStr = maxPoint.get_score_string()
+        p_w, p_l = maxPoint.get_total_win_probabilities()
+        pressure = maxPoint.get_total_score_pressure()
+
+        text_lines = [f'Score: {scoreStr}',
+                      f'Win prob. if point is won: {round(p_w * 100)}%',
+                      f'Win prob. if point is lost: {round(p_l * 100)}%',
+                      f'Score Pressure: {round(pressure * 100)}%']
+        annotPt = pressPt_hi.left(2).annotate('\n'.join(text_lines)).recolor(const.BGR['intense_red'])
+
+        View.make(myCam, prevScn, annotatedPoints = [annotPt]).snap().show()
+
+
 
     ### bucketing
     buckets = np.quantile(pressArr_filt, [0.25, 0.5, 0.75, 0.95])

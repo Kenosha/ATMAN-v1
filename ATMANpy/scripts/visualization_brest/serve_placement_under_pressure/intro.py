@@ -5,6 +5,7 @@ import time
 import cv2 as cv
 import numpy as np
 import pandas as pd
+import scipy
 
 import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.util_funcs as ut
@@ -103,6 +104,30 @@ def regress_lambda_on_pressure(lambdaArr_filt, pressArr_filt):
     return ols_result
 
 
+def make_stat_string(lowShots, hiShots, alpha = 0.05):
+    ######## Tests for similarity of distribution #########
+    low_x = np.array([find_intersection_with_service_line(aShot) for aShot in lowShots], dtype = float)[:, 0]
+    hi_x = np.array([find_intersection_with_service_line(aShot) for aShot in hiShots], dtype = float)[:, 0]
+
+    ks_res = scipy.stats.kstest(low_x, hi_x)           ### kolmogorov-smirnov test (2-sample)
+    ad_res = scipy.stats.anderson_ksamp([low_x, hi_x]) ### anderson darling test (2-sample)
+    ks_p, ad_p = ks_res.pvalue, ad_res.pvalue
+
+    if ks_p >= alpha and ad_p >= alpha:
+        textStr = f'High-Pressure and Low-Pressure distributions \n can not be shown to be statistically different at a = {alpha}.'
+    elif ks_p < alpha and ad_p < alpha:
+        textStr = f'High-Pressure and Low-Pressure distributions \n are statistically different at a = {alpha}.'
+    elif ks_p < alpha and ad_p >= alpha:
+        textStr = f'High-Pressure and Low-Pressure distributions \n are statistically different at a = {alpha} \n only according to the Kolmogorov-Smirnov test.'
+    elif ks_p >= alpha and ad_p < alpha:
+        textStr = f'High-Pressure and Low-Pressure distributions \n are statistically different at a = {alpha} \n only according to the Anderson-Darling test.'
+
+    ksStr = f'Kolmogorov-Smirnov 2-Sample p-value: {round(ks_p, 3)}'
+    adStr = f'Anderson-Darling 2-Sample p-value: {round(ad_p, 3)}'
+    jntStr = '\n'.join([textStr, '', ksStr, adStr])
+
+    return jntStr
+
 
 RESOLUTION_MODIFIER = 0.2 # 2
 RESOLUTION_BACKGROUND = 0.5 * RESOLUTION_MODIFIER
@@ -150,7 +175,7 @@ def main(confs, name = None):
     allTable = read_in_all_tables(confs)
     allPnts = Points.from_datatable(allTable, split_by_match = False)
 
-    deucePnts = allPnts.filter('is_serve_deuce').enforce_direction('Bot')
+    deucePnts = allPnts.filter('is_serve_deuce').filter('is_first_serve').enforce_direction('Bot')
     # adPnts = allPnts.filter('is_serve_ad').enforce_direction('Bot')
      
     srvLn, indDict = get_service_line_and_indicator('Top', 'Deuce')
@@ -408,8 +433,8 @@ def main(confs, name = None):
     high_kde_scene = vs.kde_hillmap(hiShots, showReg = deucelineReg, position_func = find_intersection_with_service_line, 
                                     resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
-    mid_kde_scene.rastArrs[0] += [0, 30, 0]
-    high_kde_scene.rastArrs[0] += [0, 60, 0]
+    mid_kde_scene.rastArrs[0] += [0, 40, 0]
+    high_kde_scene.rastArrs[0] += [0, 80, 0]
 
     joint_kde_scenes = joint_kde_scene.combine(joint_kde_scene).combine(joint_kde_scene)
     split_kde_scenes = low_kde_scene.combine(mid_kde_scene).combine(high_kde_scene)
@@ -426,13 +451,19 @@ def main(confs, name = None):
     origPt = x_ax.weak_intersect(y_ax)
     origPt_3D = Point3D.from_point2D(origPt, z = 0)
 
-    loPt = origPt_3D.right(25).annotate('Low Pressure \n (Point Impact <4%)').recolor(const.BGR['grass_green'])
-    midPt = origPt_3D.back(40).right(25).annotate('Medium Pressure \n (Point Impact 4-8%)').recolor(const.BGR['soft_yellow'])
-    hiPt = origPt_3D.back(80).right(25).annotate('High Pressure \n (Point Impact >8%)').recolor(const.BGR['intense_red'])
+    loPt = origPt_3D.right(20).annotate(f'Low Pressure \n (Point Impact <4%) \n n = {len(lowShots)}').recolor(const.BGR['grass_green'])
+    midPt = origPt_3D.back(50).right(25).annotate(f'Medium Pressure \n (Point Impact 4-8%) \n n = {len(midShots)}').recolor(const.BGR['soft_yellow'])
+    hiPt = origPt_3D.back(100).right(27).annotate(f'High Pressure \n (Point Impact >8%) \n n = {len(hiShots)}').recolor(const.BGR['intense_red'])
 
     tPt = origPt_3D.left(5).front(10).annotate('Down the Middle')    
     wPt = origPt_3D.left(100).front(10).annotate('Out Wide')
+    
+    ######## Tests for similarity of distribution #########
+    diagPt = Point3D((x_ax.leftPt.x, y_ax.rightPt.y, 0))
+    jntStr = make_stat_string(lowShots, hiShots)
+    statPt = diagPt.annotate(jntStr).back(110)
 
+    ### animate
     myFrms, animDict = vs.animate_sequence(split_itpl_scenes, background_scene = x_y_scene, cumulate_argument = False, 
                                             start_cam = boxCam, stop_cam = boxCam,
                                             annotated_points = [loPt, midPt, hiPt, tPt, wPt],
@@ -440,7 +471,7 @@ def main(confs, name = None):
     all_frames.append(myFrms)
 
     myFrms, animDict = vs.animate_static(split_kde_scenes, background_scene = x_y_scene, static_cam = boxCam, num_frames = 50,
-                                         annotated_points = [loPt, midPt, hiPt, tPt, wPt],
+                                         annotated_points = [loPt, midPt, hiPt, tPt, wPt, statPt],
                                          **prmDict)
     all_frames.append(myFrms)
 
