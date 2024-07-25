@@ -146,6 +146,9 @@ class Trajectory:
         else:
             return self.trajFrm.loc[item]
     
+    def get_match_index(self):
+        return self['match_num'].iloc[0]
+
     def get_shot_index(self):
         return self['shot_idx'].iloc[0]
 
@@ -474,7 +477,10 @@ class Shot:
         event_strings = '->'.join(events)
         hitStr, recStr = self.hitPlayer.get_name(), self.recPlayer.get_name()
         return f'Shot({event_strings}, hitting: {hitStr}, receiving: {recStr}. Duration: {len(frames)} frames)'
-        
+
+    def get_match_index(self):
+        return self.shotTraj.get_match_index() 
+    
     def get_shot_index(self):
         return self.shotTraj.get_shot_index()
 
@@ -501,6 +507,12 @@ class Shot:
     
     def get_hit_series(self):
         return self.shotTraj.get_hit_series()
+    
+    def get_hit_player_name(self):
+        return self.hitPlayer.get_name()
+    
+    def get_rec_player_name(self):
+        return self.recPlayer.get_name()
     
     def get_player_hit_position(self):
         return self.hitPlayer.get_initial_position()
@@ -1037,6 +1049,16 @@ class Point(Shots):
         else:
             return self[1]
 
+    def get_srv_player_name(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.hitPlayer.get_name()
+    
+    def get_rec_player_name(self):
+        srvShot = self.get_serve()
+        if srvShot is not None:
+            return srvShot.recPlayer.get_name()
+    
     def is_serve(self):
         return self.get_serve() is not None
     
