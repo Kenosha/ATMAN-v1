@@ -78,19 +78,45 @@ class Legend:
 
             subReg_left, subReg_right = subReg.split(numerator = 1, denominator = 4, how = 'vertical')
 
-            shape_color = params['shape_color']
-            shape_offset = params['shape_offset']
+            ### shape on the left side of the legend element
+            try:
+                shape_color = params['shape_color']
+                shape_offset = params['shape_offset']
+            except KeyError:
+                pass
+            else:
+                shapeReg = make_region_in(subReg_left, offset = shape_offset, color = shape_color)
+                legend_shapes.append(shapeReg)
 
-            text_string = params['text_string']
-            text_color = params['text_color']
-            text_size = params['text_size']
-            text_thickness = params['text_thickness']
+            ### text to add on the left side of the legend element, on top of shape potentially
+            try:
+                text_string_shape = params['text_string_shape']
+                text_color_shape = params['text_color_shape']
+                text_size_shape = params['text_size_shape']
+                text_thickness_shape = params['text_thickness_shape']
+                text_offset_shape = params['text_offset_shape']
+            except KeyError:
+                pass
+            else:
+                textPt_left = make_text_in(subReg_left, text_string_shape, 
+                                           size = text_size_shape, thickness = text_thickness_shape, 
+                                           color = text_color_shape, offset = text_offset_shape)
+                annotated_points.append(textPt_left)
 
-            shapeReg = make_region_in(subReg_left, offset = shape_offset, color = shape_color)
-            textPt = make_text_in(subReg_right, text_string, size = text_size, thickness = text_thickness, color = text_color)
-
-            legend_shapes.append(shapeReg)
-            annotated_points.append(textPt)
+            ### text on the right side of the legend element
+            try:
+                text_string = params['text_string']
+                text_color = params['text_color']
+                text_size = params['text_size']
+                text_thickness = params['text_thickness']
+                text_offset = params['text_offset']
+            except KeyError:
+                pass
+            else:
+                textPt_right = make_text_in(subReg_right, text_string, 
+                                            size = text_size, thickness = text_thickness, 
+                                            color = text_color, offset = text_offset)
+                annotated_points.append(textPt_right)
 
         legScn = Scene(legend_shapes)
         legView = View.make(legCam, legScn, annotatedPoints = annotated_points, resolution = self.resolution)
