@@ -319,7 +319,6 @@ fullFrm.show()
 
 static_frames[player_name] = [plainFrm, fullFrm]
 
-
 ##################################
 ######### CARLOS TABERNER ########
 ##################################
@@ -389,44 +388,6 @@ fullFrm = plainFrm + statsFrm
 fullFrm.show()
 
 static_frames[player_name] = [plainFrm, fullFrm]
-
-
-#############################################
-######## SUPPLEMENTARY INFORMATION ##########
-#############################################
-DO_SUPPLEMENTARY = False
-
-if DO_SUPPLEMENTARY:
-
-	lefties = ['Kenny De Schepper', 'Liam Broady', 'Hugo Gaston']
-
-	for player_name in lefties:
-		### Take a look at high pressure serves ###
-		hiShots = deucePnts.get_serves().filter(vis_ut.is_player, player_name = player_name).filter('get_total_match_score_pressure', is_above = 0.08)
-		for shot in hiShots[:-1]:
-			idx = shot.get_match_index()
-			cap = confs[int(idx)]['cap']
-			print(shot.get_total_match_score_pressure())
-			print(f'Speed: {shot.get_initial_speed()}')
-			myStm = shot.stream(cap)
-			myStm.show(ms_between_frames = 100)
-
-	for player_name in lefties:
-		print(player_name)
-		firstShots = allPnts.get_serves().filter(vis_ut.is_player, player_name = player_name)
-		print('mean')
-		print(np.mean(firstShots.get_initial_speed()))
-		print('median')
-		print(np.median(firstShots.get_initial_speed()))
-
-	hiShots = deucePnts.get_serves().filter(vis_ut.is_player, player_name = 'Federico Gaio').filter('get_total_match_score_pressure', is_above = 0.08)
-	for shot in hiShots[:-1]:
-		idx = shot.get_match_index()
-		cap = confs[int(idx)]['cap']
-		print(shot.get_total_match_score_pressure())
-		print(f'Speed: {shot.get_initial_speed()}')
-		myStm = shot.stream(cap)
-		myStm.show(ms_between_frames = 100)
 
 #############################################
 ######## FROM STATIC FRAME TO FRAMES ########

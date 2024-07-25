@@ -3,6 +3,9 @@ import scipy
 from ATMANpy.auxil.court import courtLines
 from ATMANpy.types.Points import Point2D
 
+from ATMANpy.types.Overlays import Legend
+import ATMANpy.auxil.constants as const
+
 def get_service_line_and_indicator(side, which):
     srvReg = courtLines.get_service_box(side = side, which = which)
     
@@ -94,3 +97,23 @@ def is_bounce_in_ad(myShot):
 
 def is_bounce_in_deuce(myShot):
     return is_bounce_in_region(myShot, deuceReg_enlarged)
+
+def make_legend_frame(player_name, handedness):
+    ## legend parameters
+    text_size = 1
+    thickness = 1
+    offset = 0.5
+    color = const.BGR['bright_grey']
+
+    myLeg = Legend.make_empty(resolution = 100, header_offset = 3.25, legend_dimensions = (350, 200), header_thickness = 2)
+
+    l1 = {'text_string_shape': 'Player:', 'text_color_shape': color, 'text_size_shape': text_size, 'text_thickness_shape': thickness, 'text_offset_shape': offset,
+        'text_string': player_name,  'text_color': color, 'text_size': text_size, 'text_thickness': thickness, 'text_offset': 3 * offset}        
+    l2 = {'text_string_shape': 'Handedness:', 'text_color_shape': color, 'text_size_shape': text_size, 'text_thickness_shape': thickness, 'text_offset_shape': offset,
+            'text_string': handedness,  'text_color': color, 'text_size': text_size, 'text_thickness': thickness, 'text_offset': 3 * offset}
+    
+    myLeg = myLeg.add(l1).add(l2)
+
+    legFrm = myLeg.render()
+
+    return legFrm
