@@ -31,6 +31,9 @@ class Scene:
 
     def __getitem__(self, item):
         return self.shapes[item]
+    
+    def __len__(self):
+        return len(self.shapes)
 
     @staticmethod
     def make_empty():
@@ -53,7 +56,12 @@ class Scene:
             return Scene([*self.shapes, *someShape])
         else:
             return Scene([*self.shapes, someShape])
-    
+        
+    def drop(self, index):
+        assert index < len(self)
+        new_shapes = [shape for idx, shape in enumerate(self) if idx != index]
+        return Scene(new_shapes)
+
     ### REINSTANTIATION ###
     def recolor(self, new_color):
         return Scene([s.recolor(new_color) for s in self.shapes])
