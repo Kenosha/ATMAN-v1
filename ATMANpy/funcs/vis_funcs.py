@@ -13,8 +13,14 @@ import ATMANpy.auxil.constants as const
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Shapes3D import Point3D, Line3D
 
+from ATMANpy.types.MultiFrames import Frames
 
 def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
+    if isinstance(onFrm, Frames):
+        onFrm = onFrm[-1]
+    if isinstance(offFrm, Frames):
+        offFrm = offFrm[-1]
+
     hold_frames = 25 // blinks_per_second
     assert hold_frames > 0
 
