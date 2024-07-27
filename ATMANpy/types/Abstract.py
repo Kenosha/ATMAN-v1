@@ -147,10 +147,10 @@ class Trajectory:
             return self.trajFrm.loc[item]
     
     def get_match_index(self):
-        return self['match_num'].iloc[0]
+        return int(self['match_num'].iloc[0])
 
     def get_shot_index(self):
-        return self['shot_idx'].iloc[0]
+        return int(self['shot_idx'].iloc[0])
 
     def get_frames(self):
         return self.trajFrm.frame_num.to_list()
