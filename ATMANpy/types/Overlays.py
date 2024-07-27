@@ -25,6 +25,7 @@ class Legend:
     legend_dimensions: tuple = (600, 400)
     render_height: int = 100
     resolution: int = 10
+    header_text: str = 'Legend'
     header_size: int = 2
     header_thickness: int = 2
     header_offset: int = 10
@@ -32,11 +33,12 @@ class Legend:
 
     @staticmethod
     def make_empty(legend_dimensions = (600, 400), render_height = 100, resolution = 10, 
-                   header_size = 2, header_thickness = 2, header_offset = 10, header_color = const.BGR['smokey_grey']):
+                   header_text = 'Legend', header_size = 2, header_thickness = 2, header_offset = 10, header_color = const.BGR['smokey_grey']):
         return Legend([], 
                       legend_dimensions = legend_dimensions, 
                       render_height = render_height,
                       resolution = resolution,
+                      header_text = header_text,
                       header_size = header_size,
                       header_thickness = header_thickness,
                       header_offset = header_offset,
@@ -47,6 +49,7 @@ class Legend:
                       legend_dimensions = self.legend_dimensions, 
                       render_height = self.render_height,
                       resolution = self.resolution,
+                      header_text = self.header_text,
                       header_size = self.header_size,
                       header_thickness = self.header_thickness,
                       header_offset = self.header_offset,
@@ -64,7 +67,7 @@ class Legend:
         subRegs = legReg.subdivide(elements = num_els + 1, how = 'horizontal')
         headerReg, otherRegs = subRegs[0], subRegs[1:]
 
-        headerPt = make_text_in(headerReg, 'Legend', 
+        headerPt = make_text_in(headerReg, self.header_text, 
                                 size = self.header_size, 
                                 thickness = self.header_thickness,
                                 offset = self.header_offset,
