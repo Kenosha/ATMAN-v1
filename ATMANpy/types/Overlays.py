@@ -26,6 +26,7 @@ class Legend:
     render_height: int = 100
     resolution: int = 10
     split_denominator: int = 4
+    borders: bool = True
     header_text: str = 'Legend'
     header_size: int = 2
     header_thickness: int = 2
@@ -33,13 +34,14 @@ class Legend:
     header_color: tuple = const.BGR['smokey_grey']
 
     @staticmethod
-    def make_empty(legend_dimensions = (600, 400), render_height = 100, resolution = 10, split_denominator = 4,
+    def make_empty(legend_dimensions = (600, 400), render_height = 100, resolution = 10, split_denominator = 4, borders = True,
                    header_text = 'Legend', header_size = 2, header_thickness = 2, header_offset = 10, header_color = const.BGR['smokey_grey']):
         return Legend([], 
                       legend_dimensions = legend_dimensions, 
                       render_height = render_height,
                       resolution = resolution,
                       split_denominator = split_denominator,
+                      borders = borders,
                       header_text = header_text,
                       header_size = header_size,
                       header_thickness = header_thickness,
@@ -51,6 +53,7 @@ class Legend:
                       legend_dimensions = self.legend_dimensions, 
                       render_height = self.render_height,
                       resolution = self.resolution,
+                      borders = self.borders,
                       split_denominator = self.split_denominator,
                       header_text = self.header_text,
                       header_size = self.header_size,
@@ -64,6 +67,9 @@ class Legend:
 
         legLines = legReg.lineList
         legLines = legLines.resize(0.25)
+
+        if not self.borders:
+            legLines = legLines.realpha(0)
 
         num_els = len(self.element_parameters)
 
