@@ -9,7 +9,7 @@ import ATMANpy.auxil.constants as const
 def get_service_line_and_indicator(side, which):
     srvReg = courtLines.get_service_box(side = side, which = which)
     
-    if side == 'Bot':
+    if side == 'Bottom':
         srvLn = srvReg['Bottom']
     elif side == 'Top':
         srvLn = srvReg['Top']
@@ -50,6 +50,65 @@ def find_intersection_with_service_line(myShot):
 
     interPt = flightLn.weak_intersect(srvLn)
     return interPt.coords
+
+def is_down_middle(myShot):
+    from ATMANpy.types.Lines import Line
+    x, _ = find_intersection_with_service_line(myShot)
+    if x is None:
+        return False
+
+    assert myShot.is_serve()
+    side = 'Top' if myShot.get_hit_side() == 'Bot' else 'Bottom'
+    which = 'Ad' if myShot.is_serve_ad() else 'Deuce'
+    srvLn, indDict = get_service_line_and_indicator(side, which)
+
+    xm, _ = indDict['middle'].coords
+    xw, _ = indDict['wide'].coords
+
+    xc = 2/3 * xm + 1/3 * xw ### coordinate that delimits the inner third
+    
+    if xm < xw:
+        x_clipped = np.clip(x, a_min = xm, a_max = xw)
+        if xm <= x_clipped <= xc:
+            return True
+        else:
+            return False
+    else:
+        x_clipped = np.clip(x, a_min = xw, a_max = xm)
+        if xc <= x_clipped <= xm:
+            return True
+        else:
+            return False
+
+def is_out_wide(myShot):
+    from ATMANpy.types.Lines import Line
+    x, _ = find_intersection_with_service_line(myShot)
+    if x is None:
+        return False
+
+    assert myShot.is_serve()
+    side = 'Top' if myShot.get_hit_side() == 'Bot' else 'Bottom'
+    which = 'Ad' if myShot.is_serve_ad() else 'Deuce'
+    srvLn, indDict = get_service_line_and_indicator(side, which)
+
+    xm, _ = indDict['middle'].coords
+    xw, _ = indDict['wide'].coords
+
+    xc = 1/3 * xm + 2/3 * xw ### coordinate that delimits the inner third
+    
+    if xm < xw:
+        x_clipped = np.clip(x, a_min = xm, a_max = xw)
+        if xc <= x_clipped <= xw:
+            return True
+        else:
+            return False
+    else:
+        x_clipped = np.clip(x, a_min = xw, a_max = xm)
+        if xw <= x_clipped <= xc:
+            return True
+        else:
+            return False
+
 
 def make_stat_string(loShots, hiShots, alpha = 0.05, lo_desc = 'Low Pressure', hi_desc = 'High Pressure'):
     ######## Tests for similarity of distribution #########
@@ -117,3 +176,19 @@ def make_legend_frame(player_name, handedness):
     legFrm = myLeg.render()
 
     return legFrm
+
+def collect_video_frames(shots, confs, widen_by = 5):
+    frms_list = []
+    ### Frames object
+    for shot in shots:
+        idx = shot.get_match_index()
+
+        cap = confs[idx]['cap']
+        shotStm = shot.stream(cap).widen(widen_by)
+        shotDtm = shotStm.decap()
+
+        shotFrms = shotDtm.frames
+
+        frms_list.append(shotFrms)
+
+    return frms_list
