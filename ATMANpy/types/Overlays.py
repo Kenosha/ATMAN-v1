@@ -3,10 +3,12 @@ import numpy as np
 
 from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
+
+from ATMANpy.types.MultiFrames import BGRFrames
+
 import ATMANpy.auxil.constants as const
 
 from dataclasses import dataclass
-
 
 def make_region_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
     assert offset < 0.5
@@ -177,3 +179,62 @@ def overlay(baseFrm, legFrm, top_left_point = None):
         return BGRFrame(combArr[0])
     else:
         return BGRFrames(combArr)
+
+class FramesRaster:
+    ### Create rastered MultiFrames from subframes.
+    def __init__(self, rows, cols):
+        self.rows = rows
+        self.cols = cols
+
+        self.raster = np.full((rows, cols), fill_value = None).tolist()
+        self.length = 0
+        self.element_dims = None
+        self.output_dims = None
+
+    def add(self, someFrms, row, col):
+        self.raster[row][col] = someFrms
+
+        if someFrms.length() > self.length:
+            self.length = someFrms.length()
+        
+        dims = someFrms.cols(), someFrms.rows() ### note the switch here.
+        if self.element_dims is not None:
+            assert dims == self.element_dims
+        else:
+            self.element_dims = dims
+
+        if self.output_dims is None:
+            el_cols, el_rows = self.element_dims
+            self.output_dims = el_cols * self.cols, el_rows * self.rows
+        
+    def render(self):
+        ### idea: get all the element MultiFrames to have the target dimensions and the target length
+        ### for None elements, create black 
+        ### then, enlarge them, with padding corresponding to where they are placed in the raster
+        ### then, simply add these new MultiFrames together.
+        el_cols, el_rows = self.element_dims
+        al_cols, al_rows = self.output_dims
+
+        jointArr = np.zeros((self.length, al_rows, al_cols, 3), dtype = 'uint8')
+
+        for row_idx, rows in enumerate(self.raster):
+            for col_idx, someFrms in enumerate(rows):
+                if someFrms is None:
+                    continue
+                
+                addArr = someFrms.array.copy()
+                
+                ### if necessary, bring to proper length by repeating the last frame
+                add_len = addArr.shape[0]
+                if add_len < self.length:
+                    lsArr = addArr[-1]
+                    last_frames_to_add = self.length - add_len
+                    repeatedFrms = np.stack([lsArr] * last_frames_to_add, axis = 0)
+                    addArr = np.concatenate([addArr, repeatedFrms], axis = 0)
+
+                ### find right spot in joint array
+                row_left, row_right = row_idx * el_rows, (row_idx + 1) * el_rows
+                col_left, col_right = col_idx * el_cols, (col_idx + 1) * el_cols
+                jointArr[:, row_left:row_right, col_left:col_right] = addArr
+
+        return BGRFrames(jointArr)
