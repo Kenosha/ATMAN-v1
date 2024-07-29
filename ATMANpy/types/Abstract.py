@@ -808,8 +808,13 @@ class Shots:
         return iter(self.shotList)
     
     def __getitem__(self, item):
-        return self.shotList[item]
-    
+        if isinstance(item, int):
+            return self.shotList[item]
+        elif isinstance(item, slice):
+            return Shots(self.shotList[item])
+        else:
+            raise KeyError('Slicing Shots object requires either integer or slice.')
+
     def __len__(self):
         return len(self.shotList)
     
@@ -843,9 +848,12 @@ class Shots:
     def join(self, otherShots):
         return Shots([*self, *otherShots])
 
-    def sort(self):
-        keyFunc = lambda el: el.get_hit_frame()
-        return Shots(sorted(self.shotList, key = keyFunc))
+    def sort(self, sort_by = None, descending = False):
+        if sort_by is None:
+            keyFunc = lambda el: el.get_hit_frame()
+        elif isinstance(sort_by, str):
+            keyFunc = lambda el: getattr(el, sort_by)()
+        return Shots(sorted(self.shotList, key = keyFunc, reverse = descending))
     
     def enforce_direction(self, from_where):
         ### TODO: ADD SORT!
