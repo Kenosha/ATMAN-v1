@@ -386,6 +386,30 @@ class Frames:
         framesType = self.__class__
         return framesType(self.array, name = new_name)
     
+    def slow(self, slow_factor: int = 2):
+        ### TODO: does not work with slow_factor != 2
+        framesType = self.__class__
+        framesArr = self.array
+        t, other_dims = self.shape()[0], self.shape()[1:]
+        
+        ### create target array, and fill it in every slow_factor position
+        targetArr = np.full((slow_factor * t, *other_dims), fill_value = np.nan)
+        targetArr[::slow_factor] = framesArr
+
+        ### TODO: --> all that follows will have to be adapted if we want to make this work with slow_factor != 2
+        ### find mean values to fill with
+        fore_array = np.roll(framesArr, 1, axis = 0)[1:] ### kill first because of rolling over.
+        back_array = np.roll(framesArr, -1, axis = 0)[:-1] ## kill last because of rolling over
+        fore_array, back_array = fore_array.astype('float'), back_array.astype('float')
+        mean_array = (fore_array + back_array) / 2
+        
+        ### fill nans with means
+        targetArr = targetArr[:-1] ### can not fill last value: we can not extrapolate
+        targetArr[1::slow_factor] = mean_array
+        targetArr = targetArr.astype('uint8')
+
+        return framesType(targetArr, name = self.name)
+
     def pad(self, to_height = None, to_width = None):
         framesType = self.__class__
         
