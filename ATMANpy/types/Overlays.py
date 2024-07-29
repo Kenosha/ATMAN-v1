@@ -4,6 +4,7 @@ import numpy as np
 from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
 
+from ATMANpy.types.Frames import Frame
 from ATMANpy.types.MultiFrames import BGRFrames
 
 import ATMANpy.auxil.constants as const
@@ -191,10 +192,14 @@ class FramesRaster:
         self.element_dims = None
         self.output_dims = None
 
-    def add(self, someFrms, row, col):
+    def add(self, someFrms, row, col,
+            set_size = False): ### added element overwrites the size
         self.raster[row][col] = someFrms
 
-        if someFrms.length() > self.length:
+        if isinstance(someFrms, Frame):
+            BGRFrames.from_frame(someFrms, 1)
+
+        if someFrms.length() > self.length or set_size:
             self.length = someFrms.length()
         
         dims = someFrms.cols(), someFrms.rows() ### note the switch here.
@@ -231,6 +236,8 @@ class FramesRaster:
                     last_frames_to_add = self.length - add_len
                     repeatedFrms = np.stack([lsArr] * last_frames_to_add, axis = 0)
                     addArr = np.concatenate([addArr, repeatedFrms], axis = 0)
+
+                addArr = addArr[:self.length]
 
                 ### find right spot in joint array
                 row_left, row_right = row_idx * el_rows, (row_idx + 1) * el_rows
