@@ -689,6 +689,29 @@ class Shot:
             return self.is_fair(nextShot)
         else:
             return self.is_fair(nextShot) & self.is_double_bounce()
+        
+    def is_slice_rpm(self, threshold_rpm = 500):
+        return self.get_initial_spin() < -threshold_rpm ### slices have negative rpm
+    
+    def is_topspin_rpm(self, threshold_rpm = 500):
+        return self.get_initial_spin() > threshold_rpm
+    
+    def is_slice_visual(self):
+        desc = self.get_hit_event_descriptor()
+        if desc in ['srv', 'ovh']:
+            return False
+        else:
+            _, spin = desc.split('_')
+            return spin == 'sf'    
+
+    def is_topspin_visual(self):
+        desc = self.get_hit_event_descriptor()
+        if desc in ['srv', 'ovh']:
+            return False
+        else:
+            _, spin = desc.split('_')
+            return spin == 'ts'
+
     
     ### HAVE TO THINK ABOUT THESE TWO 
         ### need direction vector in Trajectory (direction independent of bounce!!)
