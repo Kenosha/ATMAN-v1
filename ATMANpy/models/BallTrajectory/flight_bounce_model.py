@@ -20,8 +20,8 @@ MIN_SPEED_GROUND = 1 ## lowest possible ground speed of ball, in m/s
 MAX_SPEED_GROUND = 60 ## highest possible ground speed of ball, in m/s
 MIN_SPEED_VERT = -20
 MAX_SPEED_VERT =  20
-MIN_SPIN_RATE = -5000 ### highest topspin RPM (negative, because topspin causes negative lift)  
-MAX_SPIN_RATE = 5000  ### higgest slice RPM (positive, because slice causes positive lift)
+MIN_SPIN_RATE = -5000 ### highest slice RPM (this has been switched -> used to be topspin, because it has negative lift, but sign is switched)
+MAX_SPIN_RATE = 5000  ### higgest topspin RPM  (this has been switched -> used to be slice, because it has positive lift, but sign is switched)
 MIN_HIT_HEIGHT = 0 ### min height of ball, at hit
 MAX_HIT_HEIGHT = 4.5 ### max height of ball, at hit
 DURATION_OF_TRAJECTORY = 2.5 ### in seconds
@@ -823,6 +823,8 @@ if __name__ == '__main__':
         
     # #### NOTE HOW FLOAT16 TAKES LONGEST (APPARENTLY NO HARDWARE SUPPORT...)
     
+    savePath = get_folder_struct('graphs')['trajectory_model_test']
+
     xArr, zArr, rpmArr = create_trajectories(NAME, 
                                              dtype_calc = 'float32', dtype_save = 'float16',
                                              step_duration = STEP_DURATION)
@@ -857,6 +859,8 @@ if __name__ == '__main__':
     ax.plot(xArr0, zArr0, color = 'black')
     ax.plot(xArr1, zArr1, color = 'red')
     
+    fig.savefig(os.path.join(savePath, 'rod_cross_replication.png'))
+
     #### Replicate Fig. 7 
     
     
