@@ -65,6 +65,9 @@ class PlayerMovement:
     def get_frames(self):
         return self.playerFrm.frame_num.to_list()
     
+    def get_num_franes(self):
+        return len(self.get_frames())
+    
     def get_initial_position(self):
         x, y = self.playerFrm.loc[0, ['x', 'y']]
         # return Point3D((x, y, 0))
@@ -154,6 +157,9 @@ class Trajectory:
 
     def get_frames(self):
         return self.trajFrm.frame_num.to_list()
+    
+    def get_num_franes(self):
+        return len(self.get_frames())
     
     def get_hit_series(self):
         return self.trajFrm.iloc[0]
@@ -486,6 +492,9 @@ class Shot:
 
     def get_frames(self):
         return self.shotTraj.get_frames()
+    
+    def get_num_franes(self):
+        return len(self.get_frames())
 
     def get_events(self):
         return self.shotTraj.get_events()
@@ -957,6 +966,9 @@ class Point(Shots):
     def get_frames(self):
         return [frame for shot in self.shotList for frame in shot.get_frames()]
     
+    def get_num_franes(self):
+        return len(self.get_frames())
+    
     def get_winner_from_trajectory(self):
         lastShot = self.shotList[-1]
         
@@ -1244,7 +1256,12 @@ class Points:
         return iter(self.pointList)
     
     def __getitem__(self, item):
-        return self.pointList[item]
+        if isinstance(item, slice):
+            return Points(self.pointList[item])
+        elif isinstance(item, int):
+            return self.pointList[item]
+        else:
+            raise KeyError('Points __getitem__ has to be supplied an integer or a slice.')
     
     def __len__(self):
         return len(self.pointList)
