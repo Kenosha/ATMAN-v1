@@ -65,7 +65,7 @@ class PlayerMovement:
     def get_frames(self):
         return self.playerFrm.frame_num.to_list()
     
-    def get_num_franes(self):
+    def get_num_frames(self):
         return len(self.get_frames())
     
     def get_initial_position(self):
@@ -158,7 +158,7 @@ class Trajectory:
     def get_frames(self):
         return self.trajFrm.frame_num.to_list()
     
-    def get_num_franes(self):
+    def get_num_frames(self):
         return len(self.get_frames())
     
     def get_hit_series(self):
@@ -493,7 +493,7 @@ class Shot:
     def get_frames(self):
         return self.shotTraj.get_frames()
     
-    def get_num_franes(self):
+    def get_num_frames(self):
         return len(self.get_frames())
 
     def get_events(self):
@@ -966,7 +966,7 @@ class Point(Shots):
     def get_frames(self):
         return [frame for shot in self.shotList for frame in shot.get_frames()]
     
-    def get_num_franes(self):
+    def get_num_frames(self):
         return len(self.get_frames())
     
     def get_winner_from_trajectory(self):
