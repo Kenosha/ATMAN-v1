@@ -312,7 +312,7 @@ class Trajectory:
         
         homArr_2D = np.einsum('ij, nj -> ni', P, homArr)
         pixArr = homArr_2D[:, :2] / homArr_2D[:, 2][:, np.newaxis]
-        ballFrm = pd.DataFrame(pixArr, index = self.trajFrm.index, columns = ['x', 'y'])
+        ballFrm = pd.DataFrame(pixArr, index = self.trajFrm.frame_num, columns = ['x', 'y'])
         
         ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball2D)
         return Stream.from_SF(ballSF, cap)
@@ -801,6 +801,9 @@ class Shot:
         
     def stream(self, cap):
         return self.shotTraj.stream(cap)
+    
+    def stream_ball(self, cap, P, how = 'trajectory'):
+        return self.shotTraj.stream_ball(cap, P, how = how)
 
 @dataclass(frozen = True)
 class Shots:
@@ -813,7 +816,6 @@ class Shots:
     #     min_frame, max_frame = fsShot.get_frames()[0], lsShot.get_frames()[-1]
     #     return f'Shots(N = {num_shots}, between frames {min_frame} and {max_frame})'
 
-    
     def __repr__(self):
         SHOW_THRESHOLD = 20
         if len(self) > SHOW_THRESHOLD:
@@ -1252,7 +1254,13 @@ class Points:
             return Points([myPnt for myPnt in self if getattr(myPnt, bool_func)(**filter_kwargs)])
         else:
             return Points([myPnt for myPnt in self if bool_func(myPnt, **filter_kwargs)])
-            
+
+    def apply(self, appl_func, dtype = float, **appl_kwargs):
+        if isinstance(appl_func, str):
+            return np.array([getattr(myPnt, appl_func)(**appl_kwargs) for myPnt in self], dtype = dtype)
+        else:
+            return np.array([appl_func(myPnt, **appl_kwargs) for myPnt in self], dtype = dtype)
+
     def flatten(self):
         ### turn into shots
         return Shots([myShot for myPnt in self for myShot in myPnt])
