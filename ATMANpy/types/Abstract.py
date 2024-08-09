@@ -1062,6 +1062,9 @@ class Point(Shots):
         srv_set, rec_set = self.get_set_score()
         return scoreMod.total_match_win_probabilities(srv_set, rec_set, srv_game, rec_game, srv_pt_str, rec_pt_str)
 
+    def get_match_index(self):
+        return self[0].get_match_index()
+
     def get_serve(self):
         if len(self) == 0:
             return None
