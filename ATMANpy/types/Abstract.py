@@ -1171,27 +1171,49 @@ class Point(Shots):
     def is_game_point(self):
         srv_pnt, rec_pnt = self.get_point_score()
         srv_gms, rec_gms = self.get_game_score()
-        return scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt) and not scoreMod.is_tiebreak(srv_gms, rec_gms)
+
+        is_dec = scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt, srv_gms, rec_gms)
+        is_tb =  scoreMod.is_tiebreak(srv_gms, rec_gms)
+        return is_dec and not is_tb
 
     def is_break_point(self):
         srv_pnt, rec_pnt = self.get_point_score()
         srv_gms, rec_gms = self.get_game_score()
-        return scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt) and not scoreMod.is_tiebreak(srv_gms, rec_gms)
+
+        is_dec = scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt, srv_gms, rec_gms)
+        is_tb =  scoreMod.is_tiebreak(srv_gms, rec_gms)
+        return is_dec and not is_tb
     
     def is_set_point(self):
         srv_pnt, rec_pnt = self.get_point_score()
         srv_gms, rec_gms = self.get_game_score()
-        hold_to_win_set = scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt) and scoreMod.is_hold_to_win_set(srv_gms, rec_gms)
-        break_to_win_set = scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt) and scoreMod.is_break_to_win_set(srv_gms, rec_gms)
-        return hold_to_win_set or break_to_win_set
+
+        is_dec_srv = scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt, srv_gms, rec_gms)
+        is_dec_rec = scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt, srv_gms, rec_gms)
+        is_hold_to_win = scoreMod.is_hold_to_win_set(srv_gms, rec_gms)
+        is_break_to_win = scoreMod.is_break_to_win_set(srv_gms, rec_gms)
+
+        hold_point_to_win_set = is_dec_srv and is_hold_to_win
+        break_point_to_win_set = is_dec_rec and is_break_to_win
+        return hold_point_to_win_set or break_point_to_win_set
 
     def is_match_point(self):
         srv_pnt, rec_pnt = self.get_point_score()
         srv_gms, rec_gms = self.get_game_score()
         srv_set, rec_set = self.get_set_score()
-        hold_to_win_match = scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt) and scoreMod.is_hold_to_win_set(srv_gms, rec_gms) and scoreMod.is_server_deciding_set(srv_set, rec_set)
-        break_to_win_match = scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt) and scoreMod.is_break_to_win_set(srv_gms, rec_gms) and scoreMod.is_receiver_deciding_set(srv_set, rec_set)
-        return hold_to_win_match or break_to_win_match
+
+        is_dec_srv = scoreMod.is_deciding_point_on_serve(srv_pnt, rec_pnt, srv_gms, rec_gms)
+        is_dec_rec = scoreMod.is_deciding_point_against_serve(srv_pnt, rec_pnt, srv_gms, rec_gms)
+        is_hold_to_win = scoreMod.is_hold_to_win_set(srv_gms, rec_gms)
+        is_break_to_win = scoreMod.is_break_to_win_set(srv_gms, rec_gms)
+
+        srv_set_to_win = scoreMod.is_server_deciding_set(srv_set, rec_set)
+        rec_set_to_win = scoreMod.is_receiver_deciding_set(srv_set, rec_set)
+
+        hold_point_to_win_match = is_dec_srv and is_hold_to_win and srv_set_to_win
+        break_point_to_win_match = is_dec_rec and is_break_to_win and rec_set_to_win
+
+        return hold_point_to_win_match or break_point_to_win_match
 
     def get_point_score(self):
         serveShot = self.get_serve()
