@@ -152,6 +152,9 @@ class Trajectory:
     def get_match_index(self):
         return int(self['match_num'].iloc[0])
 
+    def get_point_index(self):
+        return int(self['point_idx'].iloc[0])
+
     def get_shot_index(self):
         return int(self['shot_idx'].iloc[0])
 
@@ -486,6 +489,9 @@ class Shot:
 
     def get_match_index(self):
         return self.shotTraj.get_match_index() 
+    
+    def get_point_index(self):
+        return self.shotTraj.get_point_index() 
     
     def get_shot_index(self):
         return self.shotTraj.get_shot_index()
@@ -1078,6 +1084,9 @@ class Point(Shots):
 
     def get_match_index(self):
         return self[0].get_match_index()
+    
+    def get_point_index(self):
+        return self[0].get_point_index()
 
     def get_serve(self):
         if len(self) == 0:
@@ -1266,6 +1275,16 @@ class Points:
     def __len__(self):
         return len(self.pointList)
     
+    def get(self, match_index, point_index):
+        getPnts = [myPnt for myPnt in self if myPnt.get_match_index() == match_index and myPnt.get_point_index() == point_index]
+        if len(getPnts) == 0:
+            print(f'Could not find Point {point_index} in Match {match_index}')
+            return None
+        elif len(getPnts) == 1:
+            return getPnts[0]
+        else:
+            raise Exception(f'More than one Point {point_index} in Match {match_index} found! --> {getPnts}')
+        
     def filter(self, bool_func, **filter_kwargs):
         if isinstance(bool_func, str):
             return Points([myPnt for myPnt in self if getattr(myPnt, bool_func)(**filter_kwargs)])
