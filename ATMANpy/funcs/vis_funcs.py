@@ -402,7 +402,8 @@ def divide_line(someLn, num_divisions, reverse_direction = False, dashed = False
         return itpl_lines[::2] ### so simple :)
 
 ### Define our Kernel Density Estimator
-def epanechnikov(posArr_nonnan, showArr, normalize_density = True, bandwidth = 30, 
+def epanechnikov(posArr_nonnan, showArr, weightArr = None,
+                 normalize_density = True, bandwidth = 30, 
                  zero_color = (0, 0, 0), one_color = const.BGR['intense_red'], 
                  mix_colors = True, mix_alpha = True):
     
@@ -411,6 +412,10 @@ def epanechnikov(posArr_nonnan, showArr, normalize_density = True, bandwidth = 3
     norm_devArr = (norm_diffArr ** 2).sum(axis = -1)
     
     kde_values_for_each_kernel = (1 - norm_devArr) * (norm_devArr < 1)
+
+    if weightArr is not None:
+        kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis, np.newaxis]
+
     kde_values = kde_values_for_each_kernel.mean(axis = 0)
     
     if normalize_density:
@@ -449,6 +454,7 @@ def meshgrid_region(showReg, resolution = 1):
 
 def kde_heatmap(myShots, showReg = None,
                 position_func = 'get_first_bounce_position',
+                weight_func_or_arr = None,
                 bandwidth = 30, normalize_density = True,
                 resolution = 1, 
                 mix_colors = True, mix_alpha = True,
@@ -464,14 +470,27 @@ def kde_heatmap(myShots, showReg = None,
         posArr = getattr(myShots, position_func)()
     else:
         posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
-    posArr_nonnan = posArr[~np.isnan(posArr).all(axis = 1)]
+
+    is_not_nan = ~np.isnan(posArr).all(axis = 1)
+    posArr_nonnan = posArr[is_not_nan]
     
+    ### figure out if weights need to be applied ###
+    if weight_func_or_arr is None:
+        weightArr = None
+    elif isinstance(weight_func_or_arr, np.ndarray):
+        weightArr = weight_func_or_arr[is_not_nan]
+    elif isinstance(weight_func_or_arr, str):
+        weightArr = getattr(myShots, weight_func_or_arr)()[is_not_nan]
+    else:
+        weightArr = np.array([weight_func_or_arr(aShot) for aShot in myShots], dtype = float)[is_not_nan]
+
     ### delineate the region to show
     showArr = meshgrid_region(showReg, resolution = resolution)
     num_x, num_y, _ = showArr.shape
     
     ### Prepare the resulting Scene
-    bgrArr, alphaArr = epanechnikov(posArr_nonnan, showArr, bandwidth = bandwidth, 
+    bgrArr, alphaArr = epanechnikov(posArr_nonnan, showArr, weightArr = weightArr, 
+                                    bandwidth = bandwidth, 
                                     zero_color = zero_color, one_color = one_color, 
                                     mix_colors = mix_colors, mix_alpha = mix_alpha,
                                     normalize_density = normalize_density)
@@ -494,6 +513,7 @@ def kde_heatmap(myShots, showReg = None,
 def kde_hillmap(myShots, 
                 showReg = None, resolution = 1,
                 position_func = 'get_first_bounce_position',
+                weight_func_or_arr = None,
                 bandwidth = 30, max_height = 30, normalize_density = True,
                 mix_colors = True, 
                 zero_color = (0, 0, 0), one_color = const.BGR['intense_red'],
@@ -508,17 +528,30 @@ def kde_hillmap(myShots,
         posArr = getattr(myShots, position_func)()
     else:
         posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
-    posArr_nonnan = posArr[~np.isnan(posArr).all(axis = 1)]
-    
+
+    is_not_nan = ~np.isnan(posArr).all(axis = 1)
+    posArr_nonnan = posArr[is_not_nan]
+        
+    ### figure out if weights need to be applied ###
+    if weight_func_or_arr is None:
+        weightArr = None
+    elif isinstance(weight_func_or_arr, np.ndarray):
+        weightArr = weight_func_or_arr[is_not_nan]
+    elif isinstance(weight_func_or_arr, str):
+        weightArr = getattr(myShots, weight_func_or_arr)()[is_not_nan]
+    else:
+        weightArr = np.array([weight_func_or_arr(aShot) for aShot in myShots], dtype = float)[is_not_nan]
+
     showArr = meshgrid_region(showReg, resolution = resolution)
     num_x, num_y, _ = showArr.shape
     
     ### Prepare the resulting Scene
     ### As opposed to above, we use the alpha channel to tell us about the height, here
-    bgrArr, norm_heightArr = epanechnikov(posArr_nonnan, showArr, bandwidth = bandwidth, 
-                                    zero_color = zero_color, one_color = one_color, 
-                                    mix_colors = mix_colors, mix_alpha = True,
-                                    normalize_density = normalize_density)
+    bgrArr, norm_heightArr = epanechnikov(posArr_nonnan, showArr, weightArr = weightArr,
+                                          bandwidth = bandwidth, 
+                                          zero_color = zero_color, one_color = one_color, 
+                                          mix_colors = mix_colors, mix_alpha = True,
+                                          normalize_density = normalize_density)
     
     bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
     
@@ -550,6 +583,7 @@ def kde_hillmap(myShots,
 def kde_contourmap(myShots, 
                    showReg = None, resolution = 1, 
                    position_func = 'get_first_bounce_position',
+                   weight_func_or_arr = None,
                    bandwidth = 30, threshold_proportion = 0.5, 
                    epsilon = 0.005, n_components = None,
                    fill = False, max_height = 30, normalize_density = False,
@@ -566,15 +600,28 @@ def kde_contourmap(myShots,
         posArr = getattr(myShots, position_func)()
     else:
         posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
-    posArr_nonnan = posArr[~np.isnan(posArr).all(axis = 1)]
+
+    is_not_nan = ~np.isnan(posArr).all(axis = 1)
+    posArr_nonnan = posArr[is_not_nan]
     
+    ### figure out if weights need to be applied ###
+    if weight_func_or_arr is None:
+        weightArr = None
+    elif isinstance(weight_func_or_arr, np.ndarray):
+        weightArr = weight_func_or_arr[is_not_nan]
+    elif isinstance(weight_func_or_arr, str):
+        weightArr = getattr(myShots, weight_func_or_arr)()[is_not_nan]
+    else:
+        weightArr = np.array([weight_func_or_arr(aShot) for aShot in myShots], dtype = float)[is_not_nan]
+
     showArr = meshgrid_region(showReg, resolution = resolution)
     num_x, num_y, num_coords = showArr.shape
     
     ### Prepare the resulting Scene
     ### Here, we simply get out the raw kde values by ignoring the BGR channel and turning off normalization
-    _, kdeArr = epanechnikov(posArr_nonnan, showArr, bandwidth = bandwidth, 
-                            normalize_density = normalize_density, mix_alpha = True)
+    _, kdeArr = epanechnikov(posArr_nonnan, showArr, weightArr = weightArr,
+                             bandwidth = bandwidth, 
+                             normalize_density = normalize_density, mix_alpha = True)
     kdeArr = kdeArr[:, :, 0]
 
     ### find threshold density
