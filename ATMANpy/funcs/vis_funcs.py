@@ -515,7 +515,7 @@ def kde_hillmap(myShots,
                 position_func = 'get_first_bounce_position',
                 weight_func_or_arr = None,
                 bandwidth = 30, max_height = 30, normalize_density = True,
-                mix_colors = True, 
+                mix_colors = True, mix_alpha = True,
                 zero_color = (0, 0, 0), one_color = const.BGR['intense_red'],
                 threshold_proportion = None, epsilon = 0.005, threshold_color = const.BGR['intense_red']):
     
@@ -550,7 +550,7 @@ def kde_hillmap(myShots,
     bgrArr, norm_heightArr = epanechnikov(posArr_nonnan, showArr, weightArr = weightArr,
                                           bandwidth = bandwidth, 
                                           zero_color = zero_color, one_color = one_color, 
-                                          mix_colors = mix_colors, mix_alpha = True,
+                                          mix_colors = mix_colors, mix_alpha = True, ### mix alpha is not passed in to epanechnikov! used later.
                                           normalize_density = normalize_density)
     
     bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
@@ -576,6 +576,8 @@ def kde_hillmap(myShots,
     showArr_long = np.concatenate([showArr_long, heightArr_long], axis = 1)
 
     alphaArr_long = np.ones((num_x * num_y, 1))
+    if mix_alpha:
+        alphaArr_long = alphaArr_long * heightArr_long / heightArr_long.max()
 
     kdeScn = DummyScene([showArr_long], [bgrArr_long], [alphaArr_long])
     return kdeScn
@@ -586,7 +588,7 @@ def kde_contourmap(myShots,
                    weight_func_or_arr = None,
                    bandwidth = 30, threshold_proportion = 0.5, 
                    epsilon = 0.005, n_components = None,
-                   fill = False, max_height = 30, normalize_density = False,
+                   fill = False, max_height = 30, normalize_density = True,
                    preserve_showarr_shape = True, 
                    contour_color = const.BGR['intense_red'],
                    contour_alpha = 1):
