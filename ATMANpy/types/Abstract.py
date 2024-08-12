@@ -306,11 +306,27 @@ class Trajectory:
         outSer = ser2 + speed2 + accel
         return outSer.values
 
-    def stream(self, cap):
+    def get_capture(self, confs):
+        idx = self.get_match_index()
+        return confs[idx]['cap']
+
+    def stream(self, cap = None, confs = None):
+        if cap is None and confs is None:
+            raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
+
+        if cap is None:
+            cap = self.get_capture(confs)
+
         fs, ls = self.get_frames()[0], self.get_frames()[-1]
         return Stream(cap, fs, ls - 1) ### last frame is next shot frame
 
-    def stream_ball(self, cap, P, how = 'trajectory'):
+    def stream_ball(self, P, how = 'trajectory', cap = None, confs = None):
+        if cap is None and confs is None:
+            raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
+
+        if cap is None:
+            cap = self.get_capture(confs)
+
         if how == 'trajectory':
             coordArr = self.get_traj_ball_array()
         elif how == 'observed':
@@ -814,10 +830,25 @@ class Shot:
     def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth'):
         return self.shotTraj.feat_spline(how = how, which_endpoint = which_endpoint)
         
-    def stream(self, cap):
+    def get_capture(self, confs):
+        return self.shotTraj.get_capture(confs)
+
+    def stream(self, cap = None, confs = None):
+        if cap is None and confs is None:
+            raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
+
+        if cap is None:
+            cap = self.get_capture(confs)
+
         return self.shotTraj.stream(cap)
     
-    def stream_ball(self, cap, P, how = 'trajectory'):
+    def stream_ball(self, P, how = 'trajectory', cap = None, confs = None):
+        if cap is None and confs is None:
+            raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
+
+        if cap is None:
+            cap = self.get_capture(confs)
+
         return self.shotTraj.stream_ball(cap, P, how = how)
 
 @dataclass(frozen = True)
@@ -906,8 +937,14 @@ class Shots:
         elif from_where == 'Bot':
             return b2tShots.join(t2bShots.flip())
         
-    def stream(self, cap):
-        return StreamList([myShot.stream(cap) for myShot in self]).join()
+    def stream(self, cap = None, confs = None):
+        if cap is None and confs is None:
+            raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
+
+        if cap is None:
+            return StreamList([myShot.stream(myShot.get_capture(confs)) for myShot in self]).join()
+        else:
+            return StreamList([myShot.stream(cap) for myShot in self]).join()
         
     ### STAT GETTERS ###
     # -> .get methods of Shot, done with make_method below
@@ -1249,8 +1286,17 @@ class Point(Shots):
             return None, None
         else:
             return serveShot.hitPlayer.get_set_score(), serveShot.recPlayer.get_set_score()
+    
+    def get_capture(self, confs):
+        return self[0].get_capture(confs)
 
-    def stream(self, cap):
+    def stream(self, cap = None, confs = None):
+        if cap is None and confs is None:
+            raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
+
+        if cap is None:
+            cap = self.get_capture(confs)
+            
         fs, ls = self.get_frames()[0], self.get_frames()[-1]
         return Stream(cap, fs, ls)
     
