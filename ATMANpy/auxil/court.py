@@ -64,9 +64,9 @@ def back_view_asymmetric_cam(which = 'Deuce', side = 'Top'):
     elif side == 'Top' and which == 'Ad':
         c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).front(350).right(50)
     elif side == 'Bot' and which == 'Deuce':
-        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).back(350).right(50)
+        c_w = Point3D.from_point2D(bot_bsl_cnt_2D, z = 100).back(350).right(50)
     elif side == 'Bot' and which == 'Ad':
-        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).back(350).left(50)
+        c_w = Point3D.from_point2D(bot_bsl_cnt_2D, z = 100).back(350).left(50)
 
     myCam = Camera.from_to(c_w, d_w, f = 1700)
     return myCam
