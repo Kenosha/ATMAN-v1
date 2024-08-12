@@ -983,12 +983,13 @@ class Point(Shots):
         else:
             return lastShot.recPlayer.get_name()
             
-    def get_winner_from_score(self, nextPnt):    
+    def get_winner_from_score(self, nextPnt, verbose = False):    
         score_func_regular = lambda scoreStr: {'0': 0, '15': 1, '30': 2, '40': 3, 'A': 4}[scoreStr]
         score_func_tiebreak = lambda scoreStr: int(scoreStr)
 
         srvShot = self.get_serve()
         if srvShot is None:
+            if verbose: print(f'No serve detected: {self}')
             return None
         else:
             srv_name, rec_name = srvShot.hitPlayer.get_name(), srvShot.recPlayer.get_name()
@@ -1004,9 +1005,14 @@ class Point(Shots):
         ### Deal with Next Score
         if nextPnt is None:
             if curr_srv_val > curr_rec_val:
+                if verbose: print(f'Winner on last point: Server -> {curr_srv_str}-{curr_rec_str}')
                 return srv_name
             elif curr_srv_val < curr_rec_val:
+                if verbose: print(f'Winner on last point: Returner -> {curr_srv_str}-{curr_rec_str}')
                 return rec_name 
+            else:
+                if verbose: print(f'Non-Decisive Score on Last Point: {curr_srv_str}-{curr_rec_str}')
+                return None
         else:
             next_srv_str, next_rec_str = nextPnt.get_point_score()
 
@@ -1018,33 +1024,39 @@ class Point(Shots):
         ### in this case, the current point is the last in the game, and the winner is whoever has the higher score.
         if next_srv_val == next_rec_val == 0: 
             if curr_srv_val > curr_rec_val:
+                if verbose: print(f'Winner on game point: Server -> {curr_srv_str}-{curr_rec_str}')
                 return srv_name
             elif curr_srv_val < curr_rec_val:
+                if verbose: print(f'Winner on game point: Returner -> {curr_srv_str}-{curr_rec_str}')
                 return rec_name
         
         ### Score does not contain advantage; server wins point
         elif next_srv_val > curr_srv_val and next_rec_val == curr_rec_val: 
+            if verbose: print(f'Winner: Server -> {curr_srv_str}-{curr_rec_str} to {next_srv_str}-{next_rec_str}')
             return srv_name
         
         ### Score does not contain advantage; server wins point
         elif next_srv_val == curr_srv_val and next_rec_val > curr_rec_val: 
+            if verbose: print(f'Winner: Returner -> {curr_srv_str}-{curr_rec_str} to {next_srv_str}-{next_rec_str}')
             return rec_name 
         
         ### Score is 40-A --> 40-40
         elif next_srv_val == curr_srv_val and next_rec_val < curr_rec_val:
+            if verbose: print(f'Winner: Server -> {curr_srv_str}-{curr_rec_str} to {next_srv_str}-{next_rec_str}')
             return srv_name
         
         ### Score is A-40 --> 40-40
         elif next_srv_val < curr_srv_val and next_rec_val == curr_rec_val:
+            if verbose: print(f'Winner: Returner -> {curr_srv_str}-{curr_rec_str} to {next_srv_str}-{next_rec_str}')
             return rec_name
 
         ### Score does not change -> first serve fault most likely!
         elif next_srv_val == curr_srv_val and next_rec_val == curr_rec_val: 
-            print(f'Score Unchanged: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
+            if verbose: print(f'Score Unchanged: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
             return None
 
         else:
-            print(f'Unhandled: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
+            if verbose: print(f'Unhandled: {curr_srv_str}-{curr_rec_str} --> {next_srv_str}-{next_rec_str}')
             return None
 
     def get_point_score_pressure(self):
@@ -1098,6 +1110,12 @@ class Point(Shots):
             else:
                 return None
             
+    def get_server(self):
+        return self.get_serve().hitPlayer.get_name()
+    
+    def get_returner(self):
+        return self.get_serve().recPlayer.get_name()
+
     def get_return(self):
         if len(self) <= 1:
             return None
@@ -1216,12 +1234,8 @@ class Point(Shots):
         return hold_point_to_win_match or break_point_to_win_match
 
     def get_point_score(self):
-        serveShot = self.get_serve()
-        if serveShot is None:
-            return None, None
-        else:
-            return serveShot.hitPlayer.get_point_score(), serveShot.recPlayer.get_point_score()
-    
+        return self[0].get_point_score()
+        
     def get_game_score(self):
         serveShot = self.get_serve()
         if serveShot is None:
