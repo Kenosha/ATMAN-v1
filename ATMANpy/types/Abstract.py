@@ -574,6 +574,9 @@ class Shot:
     def get_initial_vertical_speed(self, unit = 'km/h'):
         return self.shotTraj.get_initial_vertical_speed(unit = unit)
 
+    def get_launch_angle(self):
+        return self.shotTraj.get_launch_angle()
+
     def get_initial_speed(self, unit = 'km/h'):
         return self.shotTraj.get_initial_speed(unit = unit)
     
