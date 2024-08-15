@@ -5,6 +5,8 @@ Created on Mon Apr 17 22:36:11 2023
 @author: gianl
 """
 
+import numpy as np
+
 ### UNIT CONVERSIONS ###
 FOOT_TO_METER = 0.3048
 METER_TO_FOOT = 1 / FOOT_TO_METER
@@ -16,6 +18,9 @@ HOUR_TO_MIN = 60
 MIN_TO_HOUR = 1 / HOUR_TO_MIN
 MIN_TO_SEC = 60
 SEC_TO_MIN = 1 / MIN_TO_SEC
+
+RAD_TO_ANGLE = 180 / np.pi
+ANGLE_TO_RAD = np.pi / 180
 
 ### SCALE OF MODEL COURT ###
 SCALE = 8
