@@ -675,7 +675,7 @@ def kde_contourmap(myShots,
 
 def scatter_markmap(myShots, showReg = None,
                     position_func = 'get_first_bounce_position',
-                    color_func = None,
+                    color_func_or_arr = None,
                     normalize = True,
                     mix_colors = True, mix_alpha = False,
                     flat_along_dimension = 'z',
@@ -690,8 +690,8 @@ def scatter_markmap(myShots, showReg = None,
     else:
         posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
     
-    position_is_not_none = ~np.isnan(posArr).all(axis = 1)
-    posArr_nonnan = posArr[position_is_not_none]
+    is_not_nan = ~np.isnan(posArr).all(axis = 1)
+    posArr_nonnan = posArr[is_not_nan]
     
     ### Check for dimensionality, and make consistently 3D
     frames, dim = posArr_nonnan.shape
@@ -703,16 +703,17 @@ def scatter_markmap(myShots, showReg = None,
         elif flat_along_dimension == 'z':
             posArr_nonnan = np.insert(posArr_nonnan, 2, 0, axis = 1)
 
-    ### Get color function (if it is not None)
-    if color_func is not None:
-        if isinstance(color_func, str):
-            colArr = getattr(myShots, color_func)()
-        else:
-            colArr = np.array([color_func(aShot) for aShot in myShots], dtype = float)
+    ### figure out if weights need to be applied ###
+    if color_func_or_arr is None:
+        colArr = np.ones(len(posArr))
+    elif isinstance(color_func_or_arr, np.ndarray):
+        colArr = color_func_or_arr
+    elif isinstance(color_func_or_arr, str):
+        colArr = getattr(myShots, color_func_or_arr)()
     else:
-        colArr = np.ones_like(posArr)
+        colArr = np.array([color_func_or_arr(aShot) for aShot in myShots], dtype = float)
 
-    colArr_nonnan = colArr[position_is_not_none]
+    colArr_nonnan = colArr[is_not_nan]
 
     if normalize:
         colArr_nonnan = colArr_nonnan / colArr_nonnan.max()
