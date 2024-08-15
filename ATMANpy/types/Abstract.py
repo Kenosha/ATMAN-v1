@@ -270,6 +270,11 @@ class Trajectory:
         if unit == 'km/h':
             return speed_ms * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
 
+    def get_launch_angle(self):
+        h = self.get_initial_horizontal_speed()
+        v = self.get_initial_vertical_speed()
+        return np.arctan2(v, h) * const.RAD_TO_ANGLE
+        
     def get_initial_speed(self, unit = 'km/h'):
         vx, vz = self.get_initial_horizontal_speed(unit = unit), self.get_initial_vertical_speed(unit = unit) 
         return (vx ** 2 + vz ** 2) ** 0.5
@@ -921,7 +926,7 @@ class Shots:
 
     def sort(self, sort_by = None, descending = False):
         if sort_by is None:
-            keyFunc = lambda el: el.get_hit_frame()
+            keyFunc = lambda el: (el.get_match_index(), el.get_point_index())
         elif isinstance(sort_by, str):
             keyFunc = lambda el: getattr(el, sort_by)()
         return Shots(sorted(self.shotList, key = keyFunc, reverse = descending))
@@ -933,10 +938,12 @@ class Shots:
         b2tShots = self.filter('is_bot_to_top')
 
         if from_where == 'Top':
-            return t2bShots.join(b2tShots.flip())
+            jointShots = t2bShots.join(b2tShots.flip())
         elif from_where == 'Bot':
-            return b2tShots.join(t2bShots.flip())
+            jointShots = b2tShots.join(t2bShots.flip())
         
+        return jointShots.sort()
+
     def stream(self, cap = None, confs = None):
         if cap is None and confs is None:
             raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
@@ -1148,10 +1155,10 @@ class Point(Shots):
                 return None
             
     def get_server(self):
-        return self.get_serve().hitPlayer.get_name()
+        return self.get_serve().hitPlayer
     
     def get_returner(self):
-        return self.get_serve().recPlayer.get_name()
+        return self.get_serve().recPlayer
 
     def get_return(self):
         if len(self) <= 1:
@@ -1392,20 +1399,22 @@ class Points:
         return Points([*self, *otherPnts])
     
     def sort(self):
-        keyFunc = lambda el: el.get_serve().get_hit_frame()
+        ### sort by match_index, then point_index
+        keyFunc = lambda el: (el.get_match_index(), el.get_point_index())
         return Points(sorted(self.pointList, key = keyFunc))
     
     def enforce_direction(self, from_where):
-        ### TODO: ADD SORT!
         assert from_where in ['Top', 'Bot']
         t2bPnts = self.filter('is_top_to_bot')
         b2tPnts = self.filter('is_bot_to_top')
 
         if from_where == 'Top':
-            return t2bPnts.join(b2tPnts.flip())
+            jointPnts = t2bPnts.join(b2tPnts.flip())
         elif from_where == 'Bot':
-            return b2tPnts.join(t2bPnts.flip())
+            jointPnts = b2tPnts.join(t2bPnts.flip())
         
+        return jointPnts.sort()
+
     def get_serves(self):
         pntList = [myPnt.get_serve() for myPnt in self]
         return Shots([p for p in pntList if p is not None])
