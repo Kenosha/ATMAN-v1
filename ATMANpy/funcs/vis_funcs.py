@@ -588,7 +588,8 @@ def kde_contourmap(myShots,
                    weight_func_or_arr = None,
                    bandwidth = 30, threshold_proportion = 0.5, 
                    epsilon = 0.005, n_components = None,
-                   fill = False, max_height = 30, normalize_density = True,
+                   fill = False, max_height = 30, display_at_height = True,
+                   normalize_density = True,
                    preserve_showarr_shape = True, 
                    contour_color = const.BGR['intense_red'],
                    contour_alpha = 1):
@@ -652,7 +653,10 @@ def kde_contourmap(myShots,
     else:
         cluster_data = None
 
-    heightArr = np.full((num_x, num_y, 1), fill_value = threshold_density * max_height)
+    if display_at_height:
+        heightArr = np.full((num_x, num_y, 1), fill_value = threshold_density * max_height)
+    else:
+        heightArr = np.full((num_x, num_y, 1), fill_value = 0)
     showArr_with_height = np.concatenate([showArr, heightArr], axis = 2)
 
     show_condition = density_is_above & density_is_below if not fill else density_is_above
