@@ -919,6 +919,12 @@ class Shots:
         
         return Shots([myShot for myShot in self if filter_func(myShot)])
      
+    def apply(self, appl_func, dtype = float, **appl_kwargs):
+        if isinstance(appl_func, str):
+            return np.array([getattr(myShot, appl_func)(**appl_kwargs) for myShot in self], dtype = dtype)
+        else:
+            return np.array([appl_func(myShot, **appl_kwargs) for myShot in self], dtype = dtype)
+
     def flip(self, courtLines = None, across_middle = True, across_net = True):
         if courtLines is None:
             courtLines = CourtLines.make()
