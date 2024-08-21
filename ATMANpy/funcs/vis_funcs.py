@@ -1011,3 +1011,69 @@ def gmm_clustering_grid_search(myShots,
     ellScn = ellipses_from_cluster_data(cluster_data)
 
     return ellScn, cluster_data
+
+def kde_angle_distribution(myShots, value_func = 'get_launch_angle', weight_func_or_arr = None, 
+                            min_angle = 0, max_angle = 90, resolution = 1,
+                            axis_origin_point = None, axis_length = 100, x_unit_vector = None, y_unit_vector = None, show_axes = True,
+                            bandwidth = 5, color = const.BGR['intense_red'],
+                            min_rel_mode_height = 0.5):
+
+    spaceArr = np.arange(min_angle, max_angle, step = 1 / resolution)
+
+    ### Get angle values
+    if value_func is None:
+        angleArr = np.arange(min_angle - 45, max_angle + 45, step = 1) #### this just makes the unit circle!
+    elif isinstance(value_func, str):
+        angleArr = getattr(myShots, value_func)()
+    else:
+        angleArr = np.array([value_func(aShot) for aShot in myShots], dtype = float)
+    
+    is_not_nan = ~np.isnan(angleArr)
+    angleArr_nonnan = angleArr[is_not_nan]
+
+    ### figure out if weights need to be applied ###
+    if weight_func_or_arr is None:
+        weightArr = None
+    elif isinstance(weight_func_or_arr, np.ndarray):
+        weightArr = weight_func_or_arr[is_not_nan]
+    elif isinstance(weight_func_or_arr, str):
+        weightArr = getattr(myShots, weight_func_or_arr)()[is_not_nan]
+    else:
+        weightArr = np.array([weight_func_or_arr(aShot) for aShot in myShots], dtype = float)[is_not_nan]
+
+    if value_func is None:
+        kdeArr = np.ones_like(spaceArr)
+    else:
+        ### get the classic, one dimensional epanechnikov kde on a line
+        kdeArr = epanechnikov1D(angleArr_nonnan, spaceArr, weightArr = weightArr, bandwidth = bandwidth)
+
+    modes = detect_distribution_modes(kdeArr, spaceArr, min_rel_mode_height = min_rel_mode_height)
+
+    ### now, wrap the KDE values around the angle, on a flat unit circle
+    space_radArr = spaceArr * const.ANGLE_TO_RAD
+    x, y = np.cos(space_radArr) * kdeArr, np.sin(space_radArr) * kdeArr
+
+    ### transform to the 3D coordinates given in kwargs
+    if axis_origin_point is None:
+        axis_origin_point = Point3D.from_point2D(CourtLines.make().get_center_point(), z = 0)
+    if x_unit_vector is None:
+        x_unit_vector = Point3D((1, 0, 0))
+    if y_unit_vector is None:
+        y_unit_vector = Point3D((0, 1, 0))
+
+    x_unit_norm = x_unit_vector * axis_length
+    y_unit_norm = y_unit_vector * axis_length
+
+    x3D = x_unit_norm * x
+    y3D = y_unit_norm * y
+
+    kdePnt = x3D + y3D + axis_origin_point
+
+    kdeScn = Scene([kdePnt.recolor(color)])
+
+    if show_axes:
+        x_axis = Line3D(axis_origin_point, axis_origin_point + x_unit_norm)
+        y_axis = Line3D(axis_origin_point, axis_origin_point + y_unit_norm)
+        kdeScn = kdeScn.put(x_axis).put(y_axis)
+        
+    return kdeScn, modes
