@@ -897,12 +897,14 @@ class Shots:
     def __len__(self):
         return len(self.shotList)
     
-    def filter(self, bool_func, is_below = None, is_above = None, negate = False, **filter_kwargs):
-        def filter_func(myShot):
-            if isinstance(bool_func, str):
-                val = getattr(myShot, bool_func)(**filter_kwargs)
+    def filter(self, bool_func_or_array, is_below = None, is_above = None, negate = False, **filter_kwargs):
+        def filter_func(myShot, index = None):
+            if isinstance(bool_func_or_array, np.ndarray):
+                val = bool_func_or_array[index]
+            elif isinstance(bool_func_or_array, str):
+                val = getattr(myShot, bool_func_or_array)(**filter_kwargs)
             else:
-                val = bool_func(myShot, **filter_kwargs)
+                val = bool_func_or_array(myShot, **filter_kwargs)
 
             if is_below is None and is_above is None:
                 if negate:
@@ -917,7 +919,7 @@ class Shots:
                 myBool = is_above < val < is_below
             return myBool
         
-        return Shots([myShot for myShot in self if filter_func(myShot)])
+        return Shots([myShot for idx, myShot in enumerate(self) if filter_func(myShot, index = idx)])
      
     def apply(self, appl_func, dtype = float, **appl_kwargs):
         if isinstance(appl_func, str):
@@ -1383,12 +1385,15 @@ class Points:
         else:
             raise Exception(f'More than one Point {point_index} in Match {match_index} found! --> {getPnts}')
         
-    def filter(self, bool_func, **filter_kwargs):
-        if isinstance(bool_func, str):
-            return Points([myPnt for myPnt in self if getattr(myPnt, bool_func)(**filter_kwargs)])
+    def filter(self, bool_func_or_array, **filter_kwargs):
+        ### TODO: harmonize Shots.filter and Points.filter
+        if isinstance(bool_func_or_array, np.ndarray):
+            return Points([myPnt for idx, myPnt in enumerate(self) if bool_func_or_array[idx]])
+        elif isinstance(bool_func_or_array, str):
+            return Points([myPnt for myPnt in self if getattr(myPnt, bool_func_or_array)(**filter_kwargs)])
         else:
-            return Points([myPnt for myPnt in self if bool_func(myPnt, **filter_kwargs)])
-
+            return Points([myPnt for myPnt in self if bool_func_or_array(myPnt, **filter_kwargs)])
+        
     def apply(self, appl_func, dtype = float, **appl_kwargs):
         if isinstance(appl_func, str):
             return np.array([getattr(myPnt, appl_func)(**appl_kwargs) for myPnt in self], dtype = dtype)
