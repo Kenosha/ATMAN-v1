@@ -4,6 +4,7 @@ and visualize the Abstract object in a certain way, returning a View
 """
 
 import numpy as np
+import pandas as pd
 
 from ATMANpy.types.Lines import CourtLines
 from ATMANpy.types.Visual3D import Scene, DummyScene, Camera, View
@@ -11,7 +12,7 @@ from ATMANpy.types.Visual3D import Scene, DummyScene, Camera, View
 import ATMANpy.auxil.constants as const
 
 from ATMANpy.types.MultiFrames import BGRFrames
-from ATMANpy.types.Shapes3D import Point3D, Line3D
+from ATMANpy.types.Shapes3D import Point3D, Line3D, Ellipse3D
 
 from ATMANpy.types.MultiFrames import Frames
 
@@ -640,7 +641,7 @@ def kde_contourmap(myShots,
         exceedArr = showArr[density_is_above]
          
         from sklearn.mixture import BayesianGaussianMixture
-        clustering = BayesianGaussianMixture(n_components = n_components, covariance_type = 'full').fit(exceedArr)
+        clustering = BayesianGaussianMixture(n_components = n_components, n_init = 10, covariance_type = 'full').fit(exceedArr)
         
         cluster_data = []
         cluster_idxs, cluster_counts = np.unique(clustering.predict(exceedArr), return_counts = True)
@@ -648,6 +649,7 @@ def kde_contourmap(myShots,
         for idx in cluster_idxs:
             cluster_shares = cluster_counts / cluster_counts.sum()
             clusterDict = {'cluster_centroid': tuple(clustering.means_[idx]),
+                           'cluster_covars': clustering.covariances_[idx],
                            'cluster_share': cluster_shares[idx]}
             cluster_data.append(clusterDict)
     else:
@@ -875,3 +877,111 @@ def ball_flight(myShots, line_interpolation_factor = None):
         shapes_vectorized_nanfilt_expanded = [subLn for aLn in shapes_vectorized_nanfilt for subLn in divide_line(aLn, num_divisions = line_interpolation_factor)]
     
     return shapes_vectorized_nanfilt_expanded
+
+
+def ellipse_from_params(centroid, covars):
+    a, b, _, c = covars[0, 0], covars[0, 1], covars[1, 0], covars[1, 1]
+    e = (a + c) / 2
+    f = (a - c) / 2
+    g = (f ** 2 + b ** 2) ** 0.5
+    
+    l1 = e + g
+    l2 = e - g
+
+    if b == 0:
+        if a >= c:
+            theta = 0
+        else:
+            theta = np.pi / 2
+    else:
+        theta = np.arctan2(l1 - a, b)
+
+    r1 = l1 ** 0.5
+    r2 = l2 ** 0.5
+
+    centroid3D = centroid[0], centroid[1], 0
+
+    return Ellipse3D(centroid3D, radius_long = r1, radius_short = r2, theta = theta)
+
+
+def ellipses_from_cluster_data(cluster_data):
+    ellipses = []
+    for compDict in cluster_data:
+        centroid = compDict['cluster_centroid']
+        covars = compDict['cluster_covars']
+
+        compEll = ellipse_from_params(centroid, covars)
+        ellipses.append(compEll)
+
+    return Scene(ellipses)
+
+def gmm_clustering_grid_search(myShots,
+                                position_func = 'get_first_bounce_position',
+                                weight_func_or_arr = None,
+                                min_components = 1, max_components = 10,
+                                score_func = 'bic', ### bic or aic
+                                take_which = 0, ### 0 -> best result, 1 -> second best, 2 -> third best etc.
+                                ):
+        
+    from sklearn.mixture import GaussianMixture
+    from sklearn.model_selection import GridSearchCV
+
+    ### Get first bounce position (or different position function)
+    if isinstance(position_func, str):
+        posArr = getattr(myShots, position_func)()
+    else:
+        posArr = np.array([position_func(aShot) for aShot in myShots], dtype = float)
+    
+    is_not_nan = ~np.isnan(posArr).all(axis = 1)
+    posArr_nonnan = posArr[is_not_nan]
+
+    ### figure out if weights need to be applied ###
+    if weight_func_or_arr is None:
+        weightArr = None
+    elif isinstance(weight_func_or_arr, np.ndarray):
+        weightArr = weight_func_or_arr[is_not_nan]
+    elif isinstance(weight_func_or_arr, str):
+        weightArr = getattr(myShots, weight_func_or_arr)()[is_not_nan]
+    else:
+        weightArr = np.array([weight_func_or_arr(aShot) for aShot in myShots], dtype = float)[is_not_nan]
+
+    ### weights here are applied by repeating samples a certain number of times.
+    ### alternatively, we could sample from the samples with a probability proportional to weights...
+
+    if weightArr is None:
+        sampled_posArr_nonnan = posArr_nonnan
+    else:
+        rng = np.random.default_rng()
+        weightArr_norm = weightArr / weightArr.sum()
+        sampled_posArr_nonnan = rng.choice(posArr_nonnan, size = len(posArr_nonnan),
+                                            replace = True, p = weightArr_norm)
+
+
+    def gmm_bic_score(estimator, X):
+        return -getattr(estimator, score_func)(X)
+
+    param_grid = {'n_components': range(min_components, max_components + 1)}
+    mixture_model = GaussianMixture(init_params = 'k-means++', n_init = 10)
+
+    grid_search = GridSearchCV(mixture_model, param_grid = param_grid, scoring = gmm_bic_score)
+    grid_search.fit(sampled_posArr_nonnan)
+
+    res_df = pd.DataFrame(grid_search.cv_results_).sort_values('mean_test_score', ascending = False).reset_index(drop = True)
+    print(res_df[["param_n_components", "mean_test_score"]])
+
+    if take_which == 0: ### in this case, we just take the best estimator
+        estimator = grid_search.best_estimator_
+    else: ### in this case, we have to re-estimate
+        n_comps = res_df['param_n_components'][take_which]
+        mixture_model.set_params(n_components = n_comps)
+        mixture_model.fit(sampled_posArr_nonnan)
+        estimator = mixture_model
+
+    means = estimator.means_
+    covars = estimator.covariances_
+    shares = estimator.weights_
+
+    cluster_data = [{'cluster_centroid': tuple(mean), 'cluster_covars': covar, 'cluster_shares': share} for mean, covar, share in zip(means, covars, shares)]
+    ellScn = ellipses_from_cluster_data(cluster_data)
+
+    return ellScn, cluster_data
