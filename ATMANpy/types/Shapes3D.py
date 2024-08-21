@@ -448,7 +448,97 @@ class Circle3D(Point3D):
             n_res, n_vec, n_dims = outArr.shape
             outArr = outArr.reshape((n_res * n_vec, n_dims))
         return outArr
+
+
+@dataclass(frozen = True, eq = False)
+class Ellipse3D(Point3D):
+    """
+    A circle: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
+    ### TODO: for the moment, the circle is flat on the ground -> generalize!
+    """
+    _DEFAULT_COLOR = const.BGR['bright_grey']
+    _DEFAULT_ALPHA = 1
     
+    radius_long: float = 1
+    radius_short: float = 1
+    theta: float = 0
+    color: Optional[tuple] = _DEFAULT_COLOR
+    alpha: Optional[float] = _DEFAULT_ALPHA
+    limit_angle: Optional[tuple] = None
+    fixed_dimension: str = 'z' ### this is the dimension along which the circle is flat
+    
+    name: str = 'Ellipse3D'
+    
+    def __post_init__(self):
+        #### IMMUTABILITY BREAKS ####
+        object.__setattr__(self, 'x', self.coords[0])
+        object.__setattr__(self, 'y', self.coords[1])
+        object.__setattr__(self, 'z', self.coords[2])
+        #############################  
+    
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.coords}, long radius = {self.radius_long}, short radius = {self.radius_short})'
+
+    @staticmethod
+    def from_point3D(myPnt, radius_long = 1, radius_short = 1, theta = 0, limit_angle = None, fixed_dimension = 'z', name = 'Ellipse3D'):
+        return Ellipse3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
+                            radius_long = radius_long, radius_short = radius_short, theta = theta,
+                            limit_angle = limit_angle, fixed_dimension = fixed_dimension,
+                            name = name)
+
+    @classmethod
+    def get_container(cls):
+        # return Circles3D
+        pass
+
+    ### METHODS ###
+    def get_point(self):
+        return Point3D(self.coords)
+    
+    def rasterize(self, resolution):
+        ### resolution: number of points on one arc length
+        limit_angle = self.limit_angle
+        r1, r2 = self.radius_long, self.radius_short
+        theta = self.theta
+
+        h = ((r1 - r2) ** 2) / ((r1 + r2) ** 2)
+        circumference = np.pi * (r1 + r2) * (1 + (3 * h) / (10 + (4 - 3 * h) ** 2)) ### ramanujan's approximation
+        num_points = int(circumference * resolution) + 1 ### ceiling function
+        
+        zeros = np.zeros(num_points)
+        angles = np.linspace(0, 2 * np.pi, endpoint = False, num = num_points)
+        
+        ### filter out points that are outside the angle limits specified
+        ## -> this is how to create semicircles, circle sections, etc.
+        if limit_angle is not None:
+            lo, hi = limit_angle
+            angle_filter = (lo < angles) & (angles < hi)
+        else:
+            angle_filter = np.ones(num_points, dtype = 'bool')
+        
+        zeros_filtered = zeros[angle_filter]
+        angles_filtered = angles[angle_filter]
+        
+        d1 = r1 * np.cos(theta) * np.cos(angles_filtered) - r2 * np.sin(theta) * np.sin(angles_filtered)
+        d2 = r1 * np.sin(theta) * np.cos(angles_filtered) + r2 * np.cos(theta) * np.sin(angles_filtered) 
+
+        if self.fixed_dimension == 'x':
+            base_ellipse = np.array([zeros_filtered, d1, d2]).T
+        if self.fixed_dimension == 'y':
+            base_ellipse = np.array([d1, zeros_filtered, d2]).T
+        if self.fixed_dimension == 'z':
+            base_ellipse = np.array([d1, d2, zeros_filtered]).T
+
+        coordArr = np.array(self.coords)
+
+        if len(coordArr.shape) == 1: ### in this case, we have a simple point -> self.coords is a tuple
+            outArr = base_ellipse + coordArr[np.newaxis, :]
+        elif len(coordArr.shape) == 2: ### in this case, self.coords is already an array, holding a vectorized set of circle centers
+            outArr = base_ellipse[:, :, np.newaxis] + coordArr[np.newaxis, :, :]
+            outArr = outArr.swapaxes(1, 2) ### now, the array is: resolution_points x vector_points x dimensions (=3) 
+            n_res, n_vec, n_dims = outArr.shape
+            outArr = outArr.reshape((n_res * n_vec, n_dims))
+        return outArr
 
 @dataclass(frozen = True, eq = False)
 class Ball3D(Point3D):
@@ -1459,6 +1549,26 @@ if __name__ == '__main__':
     # 4b) Lines vectorized
     myScn = courtScn.put(myLns.vectorize())
     View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    # 5) Ellipses
+    print('Testing Ellipses as Container3D object and vectorized')
+    myEll = Ellipse3D.from_point3D(myPnts[0], radius_long = 50, radius_short = 25)
+
+    myScn = courtScn.put(myEll)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
+    # 5) Ellipses
+    myEll = Ellipse3D.from_point3D(myPnts[0], radius_long = 50, radius_short = 25, theta = np.pi / 2)
+
+    myScn = courtScn.put(myEll)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+    
+    # 5) Ellipses
+    myEll = Ellipse3D.from_point3D(myPnts[0], radius_long = 50, radius_short = 25, theta = -np.pi / 4)
+    
+    myScn = courtScn.put(myEll)
+    View.make(myCam, myScn, resolution = resolution).snap().show()
+
 
     ### BELOW TODO: Not implemented yet if thickness > 0
     # # 4c) Lines with thickness as Container
