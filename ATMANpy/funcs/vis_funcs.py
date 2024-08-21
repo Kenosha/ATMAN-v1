@@ -10,6 +10,7 @@ from ATMANpy.types.Lines import CourtLines
 from ATMANpy.types.Visual3D import Scene, DummyScene, Camera, View
 
 import ATMANpy.auxil.constants as const
+import ATMANpy.funcs.util_funcs as ut
 
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Shapes3D import Point3D, Line3D, Ellipse3D
@@ -435,6 +436,16 @@ def epanechnikov2D(values, space, weightArr = None, bandwidth = 30, normalize_de
         kde_values = kde_values / kde_values.max()
 
     return kde_values
+
+def detect_distribution_modes(kdeArr, spaceArr, min_rel_mode_height = 0.5):
+    loc_max_idxs = ut.detect_local_minima(-kdeArr)
+    max_values, max_heights = spaceArr[loc_max_idxs], kdeArr[loc_max_idxs]
+
+    glob_max = max_heights.max()
+    is_valid = max_heights > min_rel_mode_height * glob_max # is above min height
+
+    max_values_valid = max_values[is_valid]
+    return max_values_valid
 
 def two_dim_kde_to_color_and_alpha(kde_values, zero_color = (0, 0, 0), one_color = const.BGR['intense_red'], 
                                    mix_colors = True, mix_alpha = True):
