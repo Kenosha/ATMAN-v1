@@ -402,13 +402,25 @@ def divide_line(someLn, num_divisions, reverse_direction = False, dashed = False
     else:
         return itpl_lines[::2] ### so simple :)
 
-### Define our Kernel Density Estimator
-def epanechnikov(posArr_nonnan, showArr, weightArr = None,
-                 normalize_density = True, bandwidth = 30, 
-                 zero_color = (0, 0, 0), one_color = const.BGR['intense_red'], 
-                 mix_colors = True, mix_alpha = True):
+def epanechnikov1D(values, space, weightArr = None, bandwidth = 10, normalize_density = True):
+    diffArr = space[np.newaxis] - values[:, np.newaxis]
+    norm_diffArr = diffArr / bandwidth
+    norm_devArr = norm_diffArr ** 2
+
+    kde_values_for_each_kernel = (1 - norm_devArr) * (norm_devArr < 1)
+
+    if weightArr is not None:
+        kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis]
+
+    kde_values = kde_values_for_each_kernel.mean(axis = 0)
     
-    diffArr = showArr[np.newaxis] - posArr_nonnan[:, np.newaxis, np.newaxis]
+    if normalize_density:
+        kde_values = kde_values / kde_values.max()
+
+    return kde_values
+
+def epanechnikov2D(values, space, weightArr = None, bandwidth = 30, normalize_density = True):
+    diffArr = space[np.newaxis] - values[:, np.newaxis, np.newaxis]
     norm_diffArr = diffArr / bandwidth
     norm_devArr = (norm_diffArr ** 2).sum(axis = -1)
     
@@ -422,6 +434,11 @@ def epanechnikov(posArr_nonnan, showArr, weightArr = None,
     if normalize_density:
         kde_values = kde_values / kde_values.max()
 
+    return kde_values
+
+def two_dim_kde_to_color_and_alpha(kde_values, zero_color = (0, 0, 0), one_color = const.BGR['intense_red'], 
+                                   mix_colors = True, mix_alpha = True):
+    
     bgr = np.array([zero_color, one_color]) ### bgr for kde = 0 and 1 resp.
     alpha = np.array([[0], [1]]) ### alpha for kde = 0 and 1 resp.
     
@@ -490,11 +507,11 @@ def kde_heatmap(myShots, showReg = None,
     num_x, num_y, _ = showArr.shape
     
     ### Prepare the resulting Scene
-    bgrArr, alphaArr = epanechnikov(posArr_nonnan, showArr, weightArr = weightArr, 
-                                    bandwidth = bandwidth, 
-                                    zero_color = zero_color, one_color = one_color, 
-                                    mix_colors = mix_colors, mix_alpha = mix_alpha,
-                                    normalize_density = normalize_density)
+    kde_values = epanechnikov2D(posArr_nonnan, showArr, weightArr = weightArr, 
+                                bandwidth = bandwidth, normalize_density = normalize_density)
+    bgrArr, alphaArr = two_dim_kde_to_color_and_alpha(kde_values, 
+                                                      zero_color = zero_color, one_color = one_color, 
+                                                      mix_colors = mix_colors, mix_alpha = mix_alpha)
     bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
     alphaArr_long = alphaArr.reshape((num_x * num_y, 1))
 
@@ -548,12 +565,12 @@ def kde_hillmap(myShots,
     
     ### Prepare the resulting Scene
     ### As opposed to above, we use the alpha channel to tell us about the height, here
-    bgrArr, norm_heightArr = epanechnikov(posArr_nonnan, showArr, weightArr = weightArr,
-                                          bandwidth = bandwidth, 
-                                          zero_color = zero_color, one_color = one_color, 
-                                          mix_colors = mix_colors, mix_alpha = True, ### mix alpha is not passed in to epanechnikov! used later.
-                                          normalize_density = normalize_density)
-    
+    kde_values = epanechnikov2D(posArr_nonnan, showArr, weightArr = weightArr, 
+                                bandwidth = bandwidth, normalize_density = normalize_density)
+    bgrArr, norm_heightArr = two_dim_kde_to_color_and_alpha(kde_values, 
+                                                      zero_color = zero_color, one_color = one_color, 
+                                                      mix_colors = mix_colors, mix_alpha = True) ### mix alpha is not passed in to epanechnikov! used later.
+
     bgrArr_long = bgrArr.reshape((num_x * num_y, 3))
     
     ### Optionally -> mark out a threshold
@@ -622,11 +639,9 @@ def kde_contourmap(myShots,
     num_x, num_y, num_coords = showArr.shape
     
     ### Prepare the resulting Scene
-    ### Here, we simply get out the raw kde values by ignoring the BGR channel and turning off normalization
-    _, kdeArr = epanechnikov(posArr_nonnan, showArr, weightArr = weightArr,
-                             bandwidth = bandwidth, 
-                             normalize_density = normalize_density, mix_alpha = True)
-    kdeArr = kdeArr[:, :, 0]
+    ### Here, we simply get out the raw kde values.
+    kdeArr = epanechnikov2D(posArr_nonnan, showArr, weightArr = weightArr, 
+                                bandwidth = bandwidth, normalize_density = normalize_density)
 
     ### find threshold density
     sortArr = np.sort(kdeArr.flatten())
@@ -917,7 +932,7 @@ def ellipses_from_cluster_data(cluster_data):
 
 def gmm_clustering_grid_search(myShots,
                                 position_func = 'get_first_bounce_position',
-                                weight_func_or_arr = None,
+                                weight_func_or_arr = None, weight_sampling_factor = 1, ### higher weight sampling factors increase stability at the cost of compute if weights are supplied
                                 min_components = 1, max_components = 10,
                                 score_func = 'bic', ### bic or aic
                                 take_which = 0, ### 0 -> best result, 1 -> second best, 2 -> third best etc.
@@ -953,7 +968,7 @@ def gmm_clustering_grid_search(myShots,
     else:
         rng = np.random.default_rng()
         weightArr_norm = weightArr / weightArr.sum()
-        sampled_posArr_nonnan = rng.choice(posArr_nonnan, size = len(posArr_nonnan),
+        sampled_posArr_nonnan = rng.choice(posArr_nonnan, size = weight_sampling_factor * len(posArr_nonnan),
                                             replace = True, p = weightArr_norm)
 
 
