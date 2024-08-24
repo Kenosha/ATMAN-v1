@@ -1,5 +1,9 @@
 
 import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+import statsmodels.api as sm
 
 import ATMANpy.auxil.constants as const
 
@@ -11,6 +15,7 @@ from ATMANpy.types.Points import Point2D
 #######################################
 courtLines = CourtLines.make().add_singles_netline()
 botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+topReg = courtLines.get_half_region(side = 'Top', width = 'Singles')
 
 ##########################################
 ########### POINT APPLICATORS ############
@@ -88,13 +93,14 @@ def get_ret_dist_to_bsl(myPnt):
     return dist_in_meters
 
 def get_ret_dist_to_bh(myPnt):
-    srvShot = myPnt.get_serve()
     retShot = myPnt.get_return()
     botLn = botReg['Bottom']
 
-    if srvShot.hitPlayer.get_hand() == 'right':
+    server_hand = retShot.recPlayer.get_hand()
+
+    if server_hand == 'right':
         bhPnt = botLn.leftPt
-    elif retShot.recPlayer.get_hand() == 'left':
+    elif server_hand == 'left':
         bhPnt = botLn.rightPt
     else:
         return None
@@ -108,7 +114,38 @@ def get_ret_dist_to_bh(myPnt):
     if ret_x is None:
         return None
 
-    dist = ret_x - bh_x
+    if server_hand == 'right':
+        dist = ret_x - bh_x
+    elif server_hand == 'left':
+        dist = bh_x - ret_x
+    
+    dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
+    return dist_in_meters
+
+def get_ret_dist_to_opt(myPnt, meters_behind_baseline = 2):
+    ### calculate the distance of the returning player to the optimal position to be in for the shot after the return.
+    retShot = myPnt.get_return()
+    retLn = retShot.get_flight_line()
+
+    botLn = botReg['Bottom']
+    topLn = topReg['Top']
+    cntPt = courtLines.get_center_point()
+
+    ### calculate where the server will meet the return. assumption: he meets it on the baseline
+    intPt = retLn.weak_intersect(botLn)
+
+    ### the optimal point is opposite the intersection of the return's ball flight with the baseline on the server's side
+    mirrorLn = Line(intPt, cntPt)
+    
+    ### the optimal point is meters_behind_baseline -> the returner is not yet in offense, on average.
+    pt_up = meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
+    recLn = topLn.up(pt_up)
+    optPt = mirrorLn.weak_intersect(recLn)
+
+    ### now, check where the returner actually is, at the time of the return
+    retPt = Point2D(retShot.get_player_hit_position())
+    dist = retPt.distance_to(optPt) 
+
     dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
     return dist_in_meters
 
@@ -248,20 +285,57 @@ def rectify_shots(myShots):
     myShots_rectified = myShots_lh_receiver.join(myShots_rh_receiver).sort()
     return myShots_rectified
 
-def get_X_y_w(regFrm, exog, endog, weight_col = 'weight_topspin', add_constant = True):
+def get_X_y_w(regFrm, exog, endog, weight_col = None, add_constant = True):
     regFrm = regFrm[regFrm.winner_code != 0]
-    regFrm_sub = regFrm[[*exog, endog, weight_col]]
+
+    if weight_col is None:
+        regFrm_sub = regFrm[[*exog, endog]]
+    else:
+        regFrm_sub = regFrm[[*exog, endog, weight_col]]
 
     nan_filter = ~regFrm_sub.isna().any(axis = 1)
     regFrm_valid = regFrm_sub[nan_filter]
 
-    xFrm, yFrm = regFrm_valid[exog], regFrm_valid[endog]
+    xFrm, yFrm = regFrm_valid[exog].astype(float), regFrm_valid[endog].astype(float)
     if add_constant:
-        xFrm['const'] = 1
+        xFrm['const'] = 1.0
     
-    wFrm = regFrm_valid[weight_col]
+    if weight_col is None:
+        wFrm = None
+    else:
+        wFrm = regFrm_valid[weight_col].astype(float)
 
-    return xFrm.astype(float), yFrm.astype(float), wFrm.astype(float)
+    return xFrm, yFrm, wFrm
+
+def save_model_summary_as_png(fitted_model, save_path, save_name):
+    summary_text = fitted_model.summary().as_csv()
+    
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.text(0.01, 0.05, summary_text, fontfamily='monospace', fontsize=14)
+    ax.axis('off')
+    plt.tight_layout()
+
+    full_path = os.path.join(save_path, save_name + '.png')
+    plt.savefig(full_path, dpi=300, bbox_inches='tight')
+
+def make_and_save_model(regressor_frame, regressors, save_path, save_name,
+                        weight_col = None, verbose = True):
+    X, y, w = get_X_y_w(regressor_frame, regressors, 'ret_wins', add_constant = True, weight_col = weight_col)
+    glmReg_win = sm.GLM(y, X, family = sm.families.Binomial(), freq_weights = w).fit()
+    summary = glmReg_win.summary()
+
+    if verbose: 
+        print(summary)
+    
+    save_model_summary_as_png(glmReg_win, save_path = save_path, save_name = save_name)
+
+    return glmReg_win
+
+def retrieve_X_y(fitted_model, regressors):
+    import pandas as pd
+    X = pd.DataFrame(fitted_model.model.exog, columns = [*regressors, 'const'])
+    y = pd.Series(fitted_model.model.endog, name = 'ret_win')
+    return X, y
 
 def get_relative_raster_array(absolute_raster_array, origin_point):
     rel_rastArr = np.copy(absolute_raster_array)
@@ -294,3 +368,15 @@ def get_color_and_alpha_array_from_predictions(glm_model, regressor_array, relat
 
     return colArr, alArr
 
+def make_mode_lines(mode_angles, line_len = 100, x_ax = Point2D((1, 0, 0)), y_ax = Point2D((0, 1, 0)), orig = courtLines.get_center_point()):
+    from ATMANpy.types.Shapes3D import Line3D, Lines3D
+
+    mode_lines = []
+    for ang in mode_angles:
+        rad = ang * const.ANGLE_TO_RAD
+        mode_x, mode_y = np.cos(rad) * line_len, np.sin(rad) * line_len
+        mode_vec = x_ax * mode_x + y_ax * mode_y
+        modeLn = Line3D(orig, mode_vec + orig)
+        mode_lines.append(modeLn)
+
+    return Lines3D(mode_lines)
