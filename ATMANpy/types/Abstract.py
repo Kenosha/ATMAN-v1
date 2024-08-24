@@ -30,6 +30,8 @@ from ATMANpy.types.Streams import Stream, StreamList
 from ATMANpy.types.Features import StreamFeature, StreamFeatures, SFList
 from ATMANpy.types.Shapes3D import Point3D, Circle3D, Ball3D, Line3D, Points3D, Circles3D, Balls3D, Lines3D
 from ATMANpy.types.ShapesTennis3D import Player
+from ATMANpy.types.Lines import Line
+from ATMANpy.types.Points import Point2D
 
 import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.sf_apply_funcs as sa
@@ -254,6 +256,13 @@ class Trajectory:
 
         x, y, z = itpl_func(x0, x1), net_y, itpl_func(z0, z1)
         return x, y, z
+    
+    def get_flight_line(self):
+        hit_x, hit_y, _ = self.get_initial_position()
+        lst_x, lst_y, _ = self.get_last_hit_position()
+
+        flightLn = Line(Point2D((hit_x, hit_y)), Point2D((lst_x, lst_y)))
+        return flightLn
 
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how).z
@@ -595,6 +604,9 @@ class Shot:
     def get_net_crossing_position(self, net_y = 637):
         return self.shotTraj.get_net_crossing_position(net_y = net_y)
     
+    def get_flight_line(self):
+        return self.shotTraj.get_flight_line()
+
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
     
@@ -718,6 +730,9 @@ class Shot:
     def is_ground(self, prevShot):
         ### prevShot: None or Shot
         return not self.is_volley(prevShot)
+    
+    def is_bounce(self):
+        return self.get_num_bounces() > 0
         
     def is_double_bounce(self):
         return self.get_num_bounces() > 1
@@ -857,7 +872,7 @@ class Shot:
         if cap is None:
             cap = self.get_capture(confs)
 
-        return self.shotTraj.stream_ball(cap, P, how = how)
+        return self.shotTraj.stream_ball(P, how = how, cap = cap, confs = confs)
 
 @dataclass(frozen = True)
 class Shots:
