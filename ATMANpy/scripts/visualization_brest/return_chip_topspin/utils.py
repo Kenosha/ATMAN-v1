@@ -58,6 +58,9 @@ def get_return_spin(myPnt):
 def get_return_pos(myPnt):
     return myPnt.get_serve().get_ball_next_position()
 
+def get_return_flight_time(myPnt, fps = 25):
+    return myPnt.get_return().get_num_frames() / fps
+
 def get_distance_from_flight_line(myPnt):
     srvShot = myPnt.get_serve()
     retPnt = Point2D(srvShot.get_player_rec_position())
@@ -76,6 +79,19 @@ def is_return_bounce_not_none(myPnt):
 def is_return_bounce_in(myPnt):
     return myPnt.get_return().is_fair(None)
 
+def is_serve_from_fore(myPnt):
+    if myPnt.is_serve_deuce():
+        side = 'deuce'
+    elif myPnt.is_serve_ad():
+        side = 'ad'
+
+    hand = myPnt.get_serve().hitPlayer.get_hand()
+
+    if (hand == 'right' and side == 'deuce') or (hand == 'left' and side == 'ad'):
+        return True
+    elif (hand == 'right' and side == 'ad') or (hand == 'left' and side == 'deuce'):
+        return False
+    
 def get_ret_dist_to_bsl(myPnt):
     retShot = myPnt.get_return()
 
@@ -148,6 +164,9 @@ def get_ret_dist_to_opt(myPnt, meters_behind_baseline = 2):
 
     dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
     return dist_in_meters
+
+def get_ret_dist_to_opt_with_points(flight_startPt, flight_endPt, return_playerPt):
+    pass
 
 def return_is_in_net(myPnt):
     return myPnt.get_return().is_in_net()
