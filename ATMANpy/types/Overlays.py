@@ -9,6 +9,7 @@ from ATMANpy.types.MultiFrames import BGRFrames
 
 import ATMANpy.auxil.constants as const
 
+from copy import deepcopy
 from dataclasses import dataclass
 
 from fractions import Fraction
@@ -387,6 +388,9 @@ class FramesRaster:
         row, col = item
         self.raster[row][col] = value
 
+    def deepcopy(self):
+        return deepcopy(self)
+
     def add(self, someFrms, row, col,
             set_size = False): ### added element overwrites the size
         
@@ -442,6 +446,43 @@ class FramesRaster:
 
         return BGRFrames(jointArr)
 
+def frame_cascade(list_of_cascFrms, baseRst):
+    num_rows, num_cols = baseRst.rows, baseRst.cols
+
+    occupied_positions = []
+    for row_idx in range(num_rows):
+        for col_idx in range(num_cols):
+            if baseRst[row_idx, col_idx] is not None:
+                occupied_positions.append((row_idx, col_idx))
+
+    occupied_indices = [row * num_cols + col for row, col in occupied_positions]
+
+    num_frms, num_occ = len(list_of_cascFrms), len(occupied_indices)
+
+    if num_frms + num_occ != num_rows * num_cols:
+        raise Exception(f'Cascade attempted with {num_frms} frames and raster of size {num_rows}x{num_cols} with {num_occ} occupied positions')
+
+    stillFrm_row_col_truples = []
+    list_of_renderedFrms = []
+    for idx in range(num_frms):
+        baseRst_copy = baseRst.deepcopy() ### this is the raster that will be mutated throughout this loop iteration.
+        cascFrms = list_of_cascFrms[idx]
+
+        offset = sum([idx >= occ_idx for occ_idx in occupied_indices])
+        adj_idx = idx + offset
+        row, col = adj_idx // num_cols, adj_idx % num_rows
+        baseRst_copy.add(cascFrms, row, col)    
+
+        for stillFrm, still_row, still_col in stillFrm_row_col_truples:
+            baseRst_copy.add(stillFrm, still_row, still_col)
+
+        renderedFrms = baseRst_copy.render()
+        list_of_renderedFrms.append(renderedFrms)
+
+        stillFrm_row_col_truples.append((cascFrms[-1], row, col))
+
+    jntFrms = BGRFrames.from_frames(list_of_renderedFrms)
+    return jntFrms
 
 if __name__ == '__main__':
     
