@@ -128,6 +128,12 @@ regFrm['weight_len_pred'] = regFrm['len_weight'] * regFrm['weight_topspin']
 regFrm['ret_wins'] = regFrm['winner_code'] == -1
 regFrm['srv_wins'] = regFrm['winner_code'] == 1
 
+### winner vars, weighted with length --> attribution not via weight, but (more intuitively) with length of rally
+    ## -> in essence, by doing this we can also measure the propensity of a return to prolong the point 
+    # ---> ret_wins_weighted tends to 0.5 as the length increases.
+regFrm['ret_wins_weighted'] = (regFrm['ret_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
+regFrm['srv_wins_weighted'] = (regFrm['srv_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
+
 ### figure out bounces
 regFrm['did_bounce'] = retPnts.apply(vis_ut.is_return_bounce_not_none, dtype = bool)
 regFrm['did_bounce_in'] = retPnts.apply(vis_ut.is_return_bounce_in, dtype = bool)
@@ -141,9 +147,13 @@ regFrm['must_have_bounced_out'] = ~regFrm['must_have_bounced_in']
 regFrm['must_have_bounced_in_but_didnt'] = regFrm['must_have_bounced_in'] & regFrm['did_bounce'] & ~regFrm['did_bounce_in']
 ### these cases are weird, but mostly harmless -> ball seen as just out when it's just in.
 
-vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', bounce_col = 'must_have_bounced_in', weight_col = None)
-vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', bounce_col = 'must_have_bounced_in', weight_col = 'weight_topspin')
-vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', bounce_col = 'must_have_bounced_in', weight_col = 'weight_len_pred')
+chips_naive, tops_naive, attrib_naive = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = None)
+chips_smart, tops_smart, attrib_smart = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_topspin')
+
+
+
 
 ### OVERALL DELTA
 ######## NAIVELY, THE WIN PROBABILITY ON A CHIPPED RETURN IS ALMOST HALF THAT OF A TOPSPIN RETURN ... DELTA: 18%
@@ -337,6 +347,9 @@ chipFrm_rect.show()
 #### RETURN DEPTH VS WIN PROB ##
 ################################
 
+WEIGHT_VARIABLE = 'weight_topspin'
+ENDOG_COL = 'ret_wins_weighted'
+
 regFrm_in['ret_dist_to_bh_sq'] = regFrm_in['ret_dist_to_bh'] ** 2
 regFrm_in['ret_dist_to_bsl_sq'] = regFrm_in['ret_dist_to_bsl'] ** 2
 regFrm_in['ret_dist_to_bsl_bh'] = regFrm_in['ret_dist_to_bsl'] * regFrm_in['ret_dist_to_bh']
@@ -347,28 +360,32 @@ save_path = maybe_make_folder(project_results_path, 'regression' + make_timestam
 ### Unweighted for a Base Case
 regDict = {'base': ['is_chipped']}
 for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = None)
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = None)
 
 ### Weighted with topspin odds (weight_topspin)
 regDict = {'base_odds': ['is_chipped'],
            'dist_bsl_odds': ['is_chipped', 'ret_dist_to_bsl']}
 for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_topspin')
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 
 ### Weighted with topspin odds and len weights (weight_len_pred)
 regDict = { 'base_weighted': ['is_chipped'],
             'dist_bsl_weighted': ['is_chipped', 'ret_dist_to_bsl'],
             'dist_bsl_bh_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl'],
-            'dist_bsl_bh_parab_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bsl_bh'],
-            'dist_bsl_bh_parab_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl',  'ret_dist_to_bh_sq', 'ret_dist_to_bsl_bh'],
-            'dist_bsl_bh_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq'],
+            'dist_bsl_bh_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bsl_bh'],
+            'dist_bsl_bh_parab_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl',  'ret_dist_to_bsl_bh'],
+            'dist_bsl_bh_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq', 'ret_dist_to_bsl_bh'],
            } 
 for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 
 ### Get exog, endog data from model
 regressors = ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
 
 ### find average distance to baseline for a topspin ball
@@ -389,9 +406,11 @@ rastArr = chipScn.rastArrs[0]
 rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt)
 
 ones = np.ones((len(rel_rastArr), 1))
-regArr = np.concatenate([ones, rel_rastArr, ones], axis = 1)
+regressor_array = np.concatenate([ones, rel_rastArr], axis = 1)
+regressor_frame = pd.DataFrame(regressor_array, columns = regressors)
+regressor_frame['const'] = 1
 
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regArr, relative_to = avg_topspin_pred)
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_topspin_pred)
 chipScn.colArrs[0] = colArr
 chipScn.alphaArrs[0] = (chipScn.alphaArrs[0] * alArr) ** 0.5
 
@@ -402,7 +421,8 @@ chipFrm.show()
 
 ### Get exog, endog data from model
 regressors = ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
 
 ### find average distance to baseline for a topspin ball
@@ -424,9 +444,11 @@ rastArr = chipScn.rastArrs[0]
 rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt)
 
 ones = np.ones((len(rel_rastArr), 1))
-regArr = np.concatenate([ones, rel_rastArr, rel_rastArr ** 2, ones], axis = 1)
+regressor_array = np.concatenate([ones, rel_rastArr, rel_rastArr ** 2], axis = 1)
+regressor_frame = pd.DataFrame(regressor_array, columns = regressors)
+regressor_frame['const'] = 1
 
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regArr, relative_to = avg_topspin_pred)
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_topspin_pred)
 chipScn.colArrs[0] = colArr
 chipScn.alphaArrs[0] = (chipScn.alphaArrs[0] * alArr) ** 0.5
 
@@ -447,11 +469,11 @@ markScn = vs.scatter_markmap(tops_retShots_rectified, color_func_or_arr = colArr
 markFrm = View.make(myCam, markScn, resolution = 1).snap()
 markFrm.show()
 
-# X, y, w = vis_ut.get_X_y_w(regFrm, [*list(varDict.keys()), 'is_chipped', 'ret_dist_to_bsl'], 'ret_wins', add_constant = True, weight_col = 'weight_len_pred')
+# X, y, w = vis_ut.get_X_y_w(regFrm, [*list(varDict.keys()), 'is_chipped', 'ret_dist_to_bsl'], 'ret_wins', add_constant = True, weight_col = WEIGHT_VARIABLE)
 # glmReg_win = sm.GLM(y, X, family = sm.families.Binomial(), freq_weights = w).fit()
 # glmReg_win.summary()
 
-# X, y, w = vis_ut.get_X_y_w(regFrm, ['is_fore', 'speed', 'dist', 'is_chipped', 'ret_dist_to_bsl'], 'ret_wins', add_constant = True, weight_col = 'weight_len_pred')
+# X, y, w = vis_ut.get_X_y_w(regFrm, ['is_fore', 'speed', 'dist', 'is_chipped', 'ret_dist_to_bsl'], 'ret_wins', add_constant = True, weight_col = WEIGHT_VARIABLE)
 # glmReg_win = sm.GLM(y, X, family = sm.families.Binomial(), freq_weights = w).fit()
 # glmReg_win.summary()
 #### NO NEED TO CONTROL FOR SERVE -> THE ONLY THING THAT COUNTS ONCE THE RETURN IS MADE, IS THE RETURN ITSELF! (SHOT SEQUENCE IS MARKOV OF ORDER 1)
@@ -631,7 +653,8 @@ regDict = { 'dist_bsl_bh_side_weighted': [  'is_chipped',
 
             }
 for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name,
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 
 ### -> not bad! on a serve from the backhand side, the model prefers returns farther from the backhand of the server (to the forehand)
 ### on a serve from the forehand side, the model prefers a serve that is basically hit back at the server directly
@@ -666,7 +689,7 @@ regDict = { 'dist_bsl_bh_launch_weighted': [    'is_chipped', 'ret_dist_to_bh', 
                                                         'launch_angle', 'ret_dist_to_bsl_x_launch_angle'],
             'dist_bsl_bh_halfsq_launch_inter_weighted':  [  'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl',
                                                             'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl', 'ret_dist_to_bsl_x_launch_angle'
+                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle'
                                                             ], 
             'dist_bsl_bh_sq_launch_inter_speed_weighted':  ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 
                                                             'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq',
@@ -680,7 +703,8 @@ regDict = { 'dist_bsl_bh_launch_weighted': [    'is_chipped', 'ret_dist_to_bh', 
           
           }
 for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 
 
 ###################################
@@ -688,7 +712,8 @@ for save_name, regressors in regDict.items():
 ###################################
 
 regressors = regDict['dist_bsl_bh_launch_inter_weighted']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
 
 avg_tops_pred = glmReg_win.predict(X[X.is_chipped == 0].mean()).values[0]
@@ -708,9 +733,11 @@ launch_angle = chip_modes[0]
 angs = launch_angle * ones
 dist_x_angs = rel_rastArr[:, [1]] * launch_angle
 
-regArr = np.concatenate([ones, rel_rastArr, angs, dist_x_angs, ones], axis = 1)
+regressor_array = np.concatenate([ones, rel_rastArr, angs, dist_x_angs], axis = 1)
+regressor_frame = pd.DataFrame(regressor_array, columns = regressors)
+regressor_frame['const'] = 1
 
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regArr, relative_to = avg_topspin_pred)
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_topspin_pred)
 zArr = np.zeros((num_x * num_y, 1))
 rastArr_3D = np.concatenate([rastArr_2D, zArr], axis = 1)
 rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
@@ -757,7 +784,28 @@ regDict = { 'dist_opt_weighted': ['is_chipped', 'ret_dist_to_opt'],
                                                 'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
            } 
 for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
+
+
+### Optimal positioning -> squared specification.
+regDict = { 'dist_opt_sq_weighted': ['is_chipped', 'ret_dist_to_opt', 'ret_dist_to_opt_sq'],
+            'dist_bsl_opt_sq_weighted': ['is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq'],
+            'dist_bsl_bh_opt_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq'],
+            'dist_bsl_bh_opt_sq_inter2_weighted': [ 'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                                    'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
+            }
+for save_name, regressors in regDict.items():
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
+
+
+#### Interact BH with IS_CHIPPED ###############
+regFrm_in['ret_dist_to_bh_x_is_chipped'] = regFrm_in['ret_dist_to_bh'] * regFrm_in['is_chipped']
+regDict = {'dist_bh_inter': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bh_x_is_chipped']}
+for save_name, regressors in regDict.items():
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 
 
 ################################################
@@ -776,73 +824,17 @@ regDict = {'dist_bsl_bh_side_sq_opt_inter2_weighted':  ['is_chipped', 'ret_dist_
                                                             'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
                                                             'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],}
 for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
+    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
 
 ### --> ret_dist_to_opt_x_launch_angle > 0 means a higher launch angle gives time to get in position!!!
     # check this with a small regression --> see below: launch angle and time
-
-###################################
-## CHIP RETURN QUALITY LOCATIONS ##
-###################################
-
-regressors = regDict['dist_bsl_bh_side_sq_opt_inter2_weighted']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, weight_col = 'weight_len_pred')
-X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
-
-avg_tops_pred = glmReg_win.predict(X[X.is_chipped == 0].mean()).values[0]
-avg_chip_pred = glmReg_win.predict(X[X.is_chipped == 1].mean()).values[0]
-print(avg_tops_pred)
-print(avg_chip_pred)
-
-bhPt = vis_ut.botReg['Bottom'].leftPt
-rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
-num_x, num_y, num_coords = rastArr_2D.shape
-rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
-
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
-
-###### A) Deuce-Side, Serve out Wide
-from ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils import is_out_wide, is_down_middle
-def serve_is_out_wide(myPnt):
-    return is_out_wide(myPnt.get_serve())
-def serve_is_down_middle(myPnt):
-    return is_down_middle(myPnt.get_serve())
-
-relPnts = retPnts_in.filter(serve_is_out_wide).filter('is_serve_deuce')
-server_pos = relPnts.get_serves().get_player_hit_position().mean(axis = 0)
-returner_pos = relPnts.get_returns().get_player_hit_position().mean(axis = 0)
-ret_ball_pos = relPnts.get_returns().get_ball_hit_position().mean(axis = 0)
-### TODO: use these to construct a ret_dist_to_opt for every conceivable bounce point.
-
-### make a regressor for each column
-xDict = {}
-xDict['is_chipped'] = np.ones(len(rel_rastArr))
-xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
-xDict['ret_dist_to_opt']
-
-ones = np.ones((len(rel_rastArr), 1))
-launch_angle = chip_modes[0]
-angs = launch_angle * ones
-dist_x_angs = rel_rastArr[:, [1]] * launch_angle
-
-regArr = np.concatenate([ones, rel_rastArr, angs, dist_x_angs, ones], axis = 1)
-
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regArr, relative_to = avg_topspin_pred)
-zArr = np.zeros((num_x * num_y, 1))
-rastArr_3D = np.concatenate([rastArr_2D, zArr], axis = 1)
-rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
-
-kdeView = View.make(myCam, rastScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-
 
 ##################################
 ##### LAUNCH ANGLE AND TIME ######
 ##################################
 player_speed_kph = 15 ### this is taken from https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
-player_speed_mps = 15 * const.KPS_TO_MPS
+player_speed_mps = 15 * const.KPH_TO_MPS
 seconds_needed_to_recover = 0.5 ### can't immediately start running after contact
  
 regressors = ['launch_angle', 'ret_speed', 'ret_spin']
@@ -880,10 +872,199 @@ means_chip_lo = X.mul(weightFrm_norm['chip_lo'], axis = 0).sum()
 means_chip_hi = X.mul(weightFrm_norm['chip_hi'], axis = 0).sum()
 means_tops = X.mul(weightFrm_norm['tops'], axis = 0).sum()
 
-weighted_mean_valFrm = pd.concat([means_chip_lo, means_chip_hi, means_tops], axis = 1).T
+weighted_mean_valFrm = pd.concat([means_chip_lo, means_chip_hi, means_tops], axis = 1)
 weighted_mean_valFrm.columns = ['chip_lo', 'chip_hi', 'tops']
 
-timeSer = olsReg_fit.predict(weighted_mean_valFrm)
+timeSer = olsReg_fit.predict(weighted_mean_valFrm.T)
+timeSer_running = timeSer - seconds_needed_to_recover
+distSer = timeSer_running * player_speed_mps
+
+###################################
+## CHIP RETURN QUALITY LOCATIONS ##
+###################################
+
+regressors = regDict['dist_bsl_bh_side_sq_opt_inter2_weighted']
+glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
+X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
+
+meanFrm = X.groupby(regFrm_in['is_chipped'].values).mean()
+chipSer = meanFrm.loc[True]
+topsSer = meanFrm.loc[False]
+
+avg_tops_pred = glmReg_win.predict(topsSer).values[0]
+avg_chip_pred = glmReg_win.predict(chipSer).values[0]
+print(avg_tops_pred)
+print(avg_chip_pred)
+
+bhPt = vis_ut.botReg['Bottom'].leftPt
+rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
+num_x, num_y, num_coords = rastArr_2D.shape
+rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
+
+rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
+
+###### A) Deuce-Side, Serve out Wide
+# -> TODO: technically, for the average positions, we'd have to take lefty ad serves and flip them, and then calculate positions.
+relPnts = retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_deuce')
+ret_player_pos = relPnts.get_returns().get_player_hit_position().mean(axis = 0)
+ret_ball_pos = relPnts.get_returns().get_ball_hit_position().mean(axis = 0)[:2]
+dist_in_meters = vis_ut.get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos)
+
+### make a regressor for each column
+N = len(rel_rastArr)
+xDict = {}
+xDict['is_chipped'] = np.ones(N)
+xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
+xDict['ret_dist_to_opt'] = dist_in_meters
+xDict['ret_dist_to_bh_serve_fore'] = rel_rastArr[:, 0] ### Deuce side is 'forehand' side
+xDict['ret_dist_to_bh_serve_back'] = np.zeros(N)
+xDict['ret_dist_to_bh_serve_fore_sq'] = rel_rastArr[:, 0] ** 2
+xDict['ret_dist_to_bh_serve_back_sq'] = np.zeros(N)
+xDict['launch_angle'] = np.ones(N) * chip_mode_lo
+xDict['ret_dist_to_bsl_x_launch_angle'] = rel_rastArr[:, 1] * chip_mode_lo
+xDict['ret_dist_to_opt_x_launch_angle'] = dist_in_meters * chip_mode_lo
+xDict['const'] = np.ones(N)
+
+regressor_frame = pd.DataFrame(xDict)
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_tops_pred, 
+                                                                  alpha_exponent = 0.5)
+zArr = np.zeros((num_x * num_y, 1))
+rastArr_3D = np.concatenate([rastArr_2D, zArr], axis = 1)
+rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
+
+kdeView = View.make(myCam, rastScn, resolution = 1)
+chipFrm = backView.combine(kdeView).snap()
+chipFrm.show()
+
+#### WITH SPEED ###
+regressors = regDict['dist_bsl_bh_side_sq_opt_speed_inter2_weighted']
+glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
+                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
+X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
+
+meanFrm = X.groupby(regFrm_in['is_chipped'].values).mean()
+chipSer = meanFrm.loc[True]
+topsSer = meanFrm.loc[False]
+
+avg_tops_pred = glmReg_win.predict(topsSer).values[0]
+avg_chip_pred = glmReg_win.predict(chipSer).values[0]
+print(avg_tops_pred)
+print(avg_chip_pred)
+
+bhPt = vis_ut.botReg['Bottom'].leftPt
+rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
+num_x, num_y, num_coords = rastArr_2D.shape
+rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
+
+rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
+
+tops_speed, tops_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'tops']
+chip_lo_speed, chip_lo_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'chip_lo']
+chip_hi_speed, chip_hi_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'chip_hi']
+
+### do all 8 options in a loop
+# -> TODO: technically, for the average positions, we'd have to take lefty ad serves and flip them, and then calculate positions.
+relPnts_options = {'deuce_wide': retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_deuce'),
+                   'deuce_middle': retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_deuce'),
+                   'ad_middle': retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_ad'),
+                   'ad_wide': retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_ad')}
+angle_options = {'lo': (chip_lo_speed, chip_lo_angle), 
+                 'hi': (chip_hi_speed, chip_hi_angle)}
+
+for rel_opt, relPnts in relPnts_options.items():
+    side, width = rel_opt.split('_')
+    for ang_opt, speed_and_angle in angle_options.items():
+        print(rel_opt, ang_opt)
+        
+        ret_speed, ret_launch_angle = speed_and_angle
+        
+        relPnts = retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_deuce')
+        ret_player_pos = relPnts.get_returns().get_player_hit_position().mean(axis = 0)
+        ret_ball_pos = relPnts.get_returns().get_ball_hit_position().mean(axis = 0)[:2]
+        dist_in_meters = vis_ut.get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos)
+
+        ### make a regressor for each column
+        N = len(rel_rastArr)
+        xDict = {}
+        xDict['ret_speed'] = ret_speed
+        xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
+        xDict['ret_dist_to_opt'] = dist_in_meters
+
+        if side == 'deuce': ### Deuce side is rectified 'forehand' side
+            xDict['ret_dist_to_bh_serve_fore'] = rel_rastArr[:, 0] 
+            xDict['ret_dist_to_bh_serve_back'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_fore_sq'] = rel_rastArr[:, 0] ** 2
+            xDict['ret_dist_to_bh_serve_back_sq'] = np.zeros(N)
+        else: ### Ad side is rectified 'backhand' side
+            xDict['ret_dist_to_bh_serve_fore'] = np.zeros(N) 
+            xDict['ret_dist_to_bh_serve_back'] = rel_rastArr[:, 0]
+            xDict['ret_dist_to_bh_serve_fore_sq'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_sq'] = rel_rastArr[:, 0] ** 2
+
+        xDict['launch_angle'] = np.ones(N) * ret_launch_angle
+        xDict['ret_dist_to_bsl_x_launch_angle'] = rel_rastArr[:, 1] * ret_launch_angle
+        xDict['ret_dist_to_opt_x_launch_angle'] = dist_in_meters * ret_launch_angle
+        xDict['const'] = np.ones(N)
+
+        regressor_frame = pd.DataFrame(xDict)
+        colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_tops_pred, 
+                                                                        alpha_exponent = 0.5)
+        zArr = np.zeros((num_x * num_y, 1))
+        rastArr_3D = np.concatenate([rastArr_2D, zArr], axis = 1)
+        rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
+
+        kdeView = View.make(myCam, rastScn, resolution = 1)
+        chipFrm = backView.combine(kdeView).snap()
+        chipFrm.show()
+
+
+##################################
+##### LAUNCH ANGLE AND TIME ######
+##################################
+player_speed_kph = 15 ### this is taken from https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
+player_speed_mps = 15 * const.KPH_TO_MPS
+seconds_needed_to_recover = 0.5 ### can't immediately start running after contact
+ 
+regressors = ['launch_angle', 'ret_speed', 'ret_spin']
+y, X = regFrm_in['ret_time'], regFrm_in[regressors]
+X['const'] = 1
+X = X.astype(float)
+olsReg_fit = sm.OLS(y, X).fit()
+olsReg_fit.summary()
+
+### margins
+seconds_per_degree = olsReg_fit._results.params[0]
+seconds_per_degree * player_speed_mps
+
+### simple means
+means = X.groupby(regFrm_in['is_chipped'], as_index = False).mean()
+fitSer = olsReg_fit.predict(means) ### simple means
+delta = fitSer[1] - fitSer[0]
+delta * player_speed_mps
+
+### means using launch angle modes
+dist_to_chip_lo = np.abs(regFrm_in['launch_angle'] - chip_mode_lo)
+dist_to_chip_hi = np.abs(regFrm_in['launch_angle'] - chip_mode_hi)
+dist_to_tops = np.abs(regFrm_in['launch_angle'] - tops_mode)
+distFrm = pd.concat([dist_to_chip_lo, dist_to_chip_hi, dist_to_tops], axis = 1)
+distFrm.columns = ['chip_lo', 'chip_hi', 'tops']
+
+weightFrm = 1 / distFrm ** 2
+weightFrm['chip_lo'] = weightFrm['chip_lo'] * regFrm_in['is_chipped']
+weightFrm['chip_hi'] = weightFrm['chip_hi'] * regFrm_in['is_chipped']
+weightFrm['tops'] = weightFrm['tops'] * (1 - regFrm_in['is_chipped'])
+
+weightFrm_norm = weightFrm / weightFrm.sum()
+
+means_chip_lo = X.mul(weightFrm_norm['chip_lo'], axis = 0).sum()
+means_chip_hi = X.mul(weightFrm_norm['chip_hi'], axis = 0).sum()
+means_tops = X.mul(weightFrm_norm['tops'], axis = 0).sum()
+
+weighted_mean_valFrm = pd.concat([means_chip_lo, means_chip_hi, means_tops], axis = 1)
+weighted_mean_valFrm.columns = ['chip_lo', 'chip_hi', 'tops']
+
+timeSer = olsReg_fit.predict(weighted_mean_valFrm.T)
 timeSer_running = timeSer - seconds_needed_to_recover
 distSer = timeSer_running * player_speed_mps
 
