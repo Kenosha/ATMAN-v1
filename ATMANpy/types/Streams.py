@@ -1304,7 +1304,7 @@ class StreamList:
     
     def join(self):
         ### create an NCStream from the StreamList
-        frameList = list(set([frmNum for myStm in self for frmNum in myStm.get_framelist()]))
+        frameList = sorted(set([frmNum for myStm in self for frmNum in myStm.get_framelist()]))
         cap = self[0].cap ### needs generalisation...
         return NCStream(cap, frameList)
     
