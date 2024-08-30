@@ -187,7 +187,7 @@ chips_smart, tops_smart, attrib_smart = vis_ut.calculate_attribution(regFrm, chi
 
 DIMENSIONS = (1920 // 3, 1080 // 3)
 
-columns_rename_dict = {'total': 'Returner Wins', 'make': 'Return is Made', 'cond': 'Returner Wins if Return is Made'}
+columns_rename_dict = {'total': 'Returner Wins the Point', 'make': 'Return is Made', 'cond': 'Returner Wins the Point if Return is Made'}
 columns_rename_dict_signs = {'total': 'Returner Wins =', 'make': 'Return is Made x', 'cond': 'Returner Wins if Return is Made'}
 
 chips_naive_tot = {k: v for k, v in chips_naive.items() if k == 'total'}
@@ -195,47 +195,49 @@ tops_naive_tot = {k: v for k, v in tops_naive.items() if k == 'total'}
 chips_smart_tot = {k: v for k, v in chips_smart.items() if k == 'total'}
 tops_smart_tot = {k: v for k, v in tops_smart.items() if k == 'total'}
 
+chips_smart_make = {k: v for k, v in chips_smart.items() if k != 'cond'}
+tops_smart_make = {k: v for k, v in tops_smart.items() if k != 'cond'}
+
+table_kwargs = {'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
+                'skip_after_how_many_symbols': 13, 'dimensions': DIMENSIONS, 'columns_rename_dict': columns_rename_dict}
+
 ### First, simply compare total win percentage
 table_data = {'Topspin Return': tops_naive_tot, 'Chipped Return': chips_naive_tot}
-myTab = Table(table_data, number_format = '.1%', index_offset = 0.25, index_col_width = 1.25, header_row_height = 0.5,
-              skip_after_how_many_symbols = 20,
-              dimensions = DIMENSIONS, columns_rename_dict = columns_rename_dict)
-myTab.render().show()
+basic_naive_table = Table(table_data, **table_kwargs, null_columns = 2)
+basic_naive_table.render().show()
 
-table_data = {'Topspin Return': tops_naive, 'Chipped Return': chips_naive}
-myTab = Table(table_data, number_format = '.1%', index_offset = 0.25, index_col_width = 1.25, header_row_height = 0.5,
-              skip_after_how_many_symbols = 20,
-              dimensions = DIMENSIONS, columns_rename_dict = columns_rename_dict)
-myTab.render().show()
+table_data = {'Topspin Return': tops_smart_tot, 'Chipped Return': chips_smart_tot}
+basic_smart_table = Table(table_data, **table_kwargs, null_columns = 2)
+basic_smart_table.render().show()
 
-table_data = {'Topspin Return': tops_naive, 'Chipped Return': chips_naive}
-myTab = Table(table_data, number_format = '.1%', index_offset = 0.25, index_col_width = 1.25, header_row_height = 0.5,
-              skip_after_how_many_symbols = 20,
-              dimensions = DIMENSIONS, columns_rename_dict = columns_rename_dict_signs)
-myTab.render().show()
+### Now, add in make data
+table_data = {'Topspin Return': tops_smart_make, 'Chipped Return': chips_smart_make}
+make_smart_table = Table(table_data, **table_kwargs, null_columns = 1)
+make_smart_table.render().show()
 
-table_data = {'Topspin Return': tops_naive, 'Chipped Return - Choice': chips_smart}
-myTab = Table(table_data, number_format = '.1%', index_offset = 0.25, index_col_width = 1.25, header_row_height = 0.5,
-              skip_after_how_many_symbols = 20,
-              dimensions = DIMENSIONS, columns_rename_dict = columns_rename_dict_signs)
-myTab.render().show()
+### finally, add in cond data
+table_data = {'Topspin Return': tops_smart, 'Chipped Return': chips_smart}
+cond_smart_table =  Table(table_data, **table_kwargs, null_columns = 0)
+cond_smart_table.render().show()
 
 ###################################
 #### FRAMES RASTER WITH TABLE #####
 
-tabFrm = myTab.render()
+from ATMANpy.types.Overlays import FramesRaster, frame_cascade, reverse_cascade
 
-from ATMANpy.types.Overlays import FramesRaster, frame_cascade
+### basic raster
 baseRst = FramesRaster(3, 3)
-baseRst.add(tabFrm, 1, 1)
+baseRst.add(basic_naive_table.render(), 1, 1)
+baseRst.render()[0].show()
 
 dirFrm = regFrm[(regFrm['is_top_to_bot'])]
 
 high_pred_exFrm = dirFrm.sort_values('pred_is_chipped').iloc[-8:]
 high_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).decap().frames for idx in high_pred_exFrm.index]
 
-cascFrms = frame_cascade(high_pred_exFrms, baseRst)
-DecapStream(cascFrms, 0, 100).show() 
+finalRst, cascFrms = frame_cascade(high_pred_exFrms, baseRst)
+DecapStream(cascFrms, 0, 100).show()
+cascFrms[-1].show()
 ### all these have three things in common 
 #   -> they're returned off the backhand...
 #   -> ... on the stretch
@@ -244,6 +246,11 @@ DecapStream(cascFrms, 0, 100).show()
 #   -> no choice! forced chip return.
 # we are interested in the opposite: 'choice' chips! 
 # given that the receiver can make a choice to chip, we want to assess whether that choice is worth it.
+revRst, revFrms = reverse_cascade(finalRst, keep_which = [(1, 1)], acceleration = 1.15)
+DecapStream(revFrms, 0, 100).show()
+revFrms[-1].show()
+
+### PSM Model 
 
 ### Propensity Wording:
 # To be able to differentiate between forced chips and choice chips, we employ a technique called PSM
@@ -260,7 +267,7 @@ DecapStream(cascFrms, 0, 100).show()
 low_pred_exFrm = dirFrm[dirFrm.is_chipped].sort_values('pred_is_chipped').iloc[:8]
 low_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).decap().frames for idx in low_pred_exFrm.index]
 
-cascFrms = frame_cascade(low_pred_exFrms, baseRst)
+finalRst, cascFrms = frame_cascade(low_pred_exFrms, baseRst)
 DecapStream(cascFrms, 0, 100).show() 
 
 # on these returns, the PSM believes that the returner could very well have played a topspin return; instead, the returner opted for a chipped return.
