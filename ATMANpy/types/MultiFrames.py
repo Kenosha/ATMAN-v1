@@ -488,6 +488,11 @@ class Frames:
         shiftedArr = shift_array(self.array, shift_by, axis = 0, fill_value = fillArr)
         return framesType(shiftedArr)
         
+    def reverse(self):
+        framesType = self.__class__
+        flippedArr = np.flip(self.arr, axis = 0)
+        return framesType(flippedArr)
+
     def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
         framesType = self.__class__
         self_copy = self.array.copy()
