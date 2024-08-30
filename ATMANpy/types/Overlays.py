@@ -4,7 +4,7 @@ import numpy as np
 from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D, Line3D, Lines3D
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
 
-from ATMANpy.types.Frames import Frame
+from ATMANpy.types.Frames import Frame, BGRFrame
 from ATMANpy.types.MultiFrames import BGRFrames
 
 import ATMANpy.auxil.constants as const
@@ -66,6 +66,8 @@ class TableSkeleton:
                  index_col_width = 1, header_row_height = 1, ### heights relative to the data columns, which are 1 and 1.
                  color = const.BGR['smokey_grey'],
                  vertical_lines = False, horizontal_lines = True,
+                 truncate_vertical_lines_by = 0, truncate_horizontal_lines_by = 0,
+                 index_line_thickness = 0, header_line_thickness = 0, data_line_thickness = 0,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
         self.rows = rows
         self.cols = cols
@@ -102,16 +104,19 @@ class TableSkeleton:
         self.vertLns = []
         self.horiLns = []
 
-        if horizontal_lines:
-            for row in rowRegs[:-1]: ### skip the last, cause we take the bottom points to make the lines, so we don't have line at the bottom
-                skLn = Line3D(row.p3, row.p4, color = color)
-                self.horiLns.append(skLn)
-
-        if vertical_lines:
-            colRegs = tabReg.subdivide(elements = self.cols, how = 'vertical').shapeList
-            for col in colRegs[:-1]:
-                skLn = Line3D(col.p2, col.p4, color = color)
-                self.vertLns.append(skLn)
+        for row_idx, rowRegs in enumerate(tabRegs):
+            for col_idx, tabReg in enumerate(rowRegs):
+                if horizontal_lines:
+                    if row_idx < self.rows - 1 and col_idx < self.cols - truncate_horizontal_lines_by:           
+                        thickness = header_line_thickness if row_idx == 0 else data_line_thickness             
+                        skLn = Line3D(tabReg.p3, tabReg.p4, color = color, thickness = thickness)
+                        self.horiLns.append(skLn)
+                
+                if vertical_lines:
+                    if col_idx < self.cols - 1 and row_idx < self.rows - truncate_vertical_lines_by:        
+                        thickness = index_line_thickness if col_idx == 0 else data_line_thickness
+                        skLn = Line3D(tabReg.p2, tabReg.p4, color = color, thickness = thickness)
+                        self.vertLns.append(skLn)
 
         self.vertLns = Lines3D(self.vertLns)
         self.horiLns = Lines3D(self.horiLns)
@@ -134,7 +139,9 @@ class TableSkeleton:
 class Table:
     def __init__(self, table_data, header_offset = 0, index_offset = 0, data_offset = 0,
                  index_col_width = 1, header_row_height = 1,
+                 index_line_thickness = 0, header_line_thickness = 0, data_line_thickness = 0,
                  index_rename_dict = None, columns_rename_dict = None,
+                 null_rows = 0, null_columns = 0,
                  number_format = '.2f', skip_after_how_many_symbols = None,
                  line_color = const.BGR['smokey_grey'], vertical_lines = False, horizontal_lines = True,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
@@ -151,8 +158,8 @@ class Table:
         if columns_rename_dict is not None:
             columns = [columns_rename_dict[c] for c in columns]
 
-        total_rows = len(index) + 1
-        total_cols = len(columns) + 1       
+        total_rows = len(index) + null_rows + 1
+        total_cols = len(columns) + null_columns + 1       
 
         self.index = index
         self.columns = columns
@@ -160,6 +167,8 @@ class Table:
 
         tabSket = TableSkeleton(total_rows, total_cols, color = line_color, vertical_lines = vertical_lines, horizontal_lines = horizontal_lines,
                                 index_col_width = index_col_width, header_row_height = header_row_height,
+                                index_line_thickness = index_line_thickness, header_line_thickness = header_line_thickness, data_line_thickness = data_line_thickness,
+                                truncate_horizontal_lines_by = null_columns, truncate_vertical_lines_by = null_rows,
                                 render_height = render_height, dimensions = dimensions, resolution = resolution)
         
         self.tabSket = tabSket
@@ -369,7 +378,66 @@ def overlay(baseFrm, legFrm, top_left_point = None):
     else:
         return BGRFrames(combArr)
 
-class FramesRaster:
+class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and columns
+    def __init__(self, rows, cols):
+        self.rows = rows
+        self.cols = cols
+
+        self.raster = np.full((rows, cols), fill_value = None).tolist()
+        self.element_dims = None
+        self.output_dims = None
+
+    def __getitem__(self, item):
+        row, col = item
+        return self.raster[row][col]
+
+    def __setitem__(self, item, value):
+        row, col = item
+        self.raster[row][col] = value    
+    
+    def deepcopy(self):
+        return deepcopy(self)
+
+    def add(self, someFrm, row, col): ### added element overwrites the size
+        dims = someFrm.cols, someFrm.rows ### note the switch here.
+        if self.element_dims is not None:
+            if dims != self.element_dims:
+                raise Exception(f'Raster element dimensions ({self.element_dims}) have to match input frame dimensions ({dims})')
+        else:
+            self.element_dims = dims
+
+        if self.output_dims is None:
+            el_cols, el_rows = self.element_dims
+            self.output_dims = el_cols * self.cols, el_rows * self.rows
+        
+        self[row, col] = someFrm
+        
+    def render(self):
+        ### idea: get all the element MultiFrames to have the target dimensions and the target length
+        ### for None elements, create black 
+        ### then, enlarge them, with padding corresponding to where they are placed in the raster
+        ### then, simply add these new MultiFrames together.
+        el_cols, el_rows = self.element_dims
+        al_cols, al_rows = self.output_dims
+
+        jointArr = np.zeros((al_rows, al_cols, 3), dtype = 'uint8')
+
+        for row_idx, rows in enumerate(self.raster):
+            for col_idx, someFrm in enumerate(rows):
+                if someFrm is None:
+                    continue
+                
+                addArr = someFrm.array.copy()
+                
+                ### find right spot in joint array
+                row_left, row_right = row_idx * el_rows, (row_idx + 1) * el_rows
+                col_left, col_right = col_idx * el_cols, (col_idx + 1) * el_cols
+                jointArr[row_left:row_right, col_left:col_right] = addArr
+
+        return BGRFrame(jointArr)
+    
+
+class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in rows and columns
     ### Create rastered MultiFrames from subframes.
     def __init__(self, rows, cols):
         self.rows = rows
@@ -391,26 +459,56 @@ class FramesRaster:
     def deepcopy(self):
         return deepcopy(self)
 
+    def to_frame_raster(self, t = -1):
+        ### get a specific frame t and return a corresponding FrameRaster
+        frmRst = FrameRaster(self.rows, self.cols)
+
+        if self.length == 0:
+            return frmRst
+
+        for row_idx in range(self.rows):
+            for col_idx in range(self.cols):
+                myFrms = self[row_idx, col_idx]
+
+                if myFrms is not None:
+                    if t < -myFrms.length():
+                        t_adj = 0
+                    elif -myFrms.length() <= t < 0:
+                        t_adj = t
+                    elif 0 <= t < myFrms.length():
+                        t_adj = t
+                    elif myFrms.length() <= t:
+                        t_adj = -1
+                    else:
+                        raise Exception(f'Unhandled case: t = {t}, length of Frames = {myFrms.length()}')
+
+                    myFrm = myFrms[t_adj]
+
+                    frmRst.add(myFrm, row_idx, col_idx)
+
+        return frmRst
+
     def add(self, someFrms, row, col,
             set_size = False): ### added element overwrites the size
         
         if isinstance(someFrms, Frame):
             someFrms = BGRFrames.from_frame(someFrms, 1) 
 
-        self[row, col] = someFrms
+        dims = someFrms.cols(), someFrms.rows() ### note the switch here.
+        if self.element_dims is not None:
+            if dims != self.element_dims:
+                raise Exception(f'Raster element dimensions ({self.element_dims}) have to match input frame dimensions ({dims})')
+        else:
+            self.element_dims = dims
 
         if someFrms.length() > self.length or set_size:
             self.length = someFrms.length()
         
-        dims = someFrms.cols(), someFrms.rows() ### note the switch here.
-        if self.element_dims is not None:
-            assert dims == self.element_dims
-        else:
-            self.element_dims = dims
-
         if self.output_dims is None:
             el_cols, el_rows = self.element_dims
             self.output_dims = el_cols * self.cols, el_rows * self.rows
+
+        self[row, col] = someFrms
         
     def render(self):
         ### idea: get all the element MultiFrames to have the target dimensions and the target length
@@ -481,15 +579,95 @@ def frame_cascade(list_of_cascFrms, baseRst):
 
         stillFrm_row_col_truples.append((cascFrms[-1], row, col))
 
+    ### make the final raster, for returning.
+    outRst = baseRst.deepcopy()
+    for stillFrm, still_row, still_col in stillFrm_row_col_truples:
+        outRst.add(stillFrm, still_row, still_col)
+
+    outRst = outRst.to_frame_raster()
+
+    ### make the rendered frames, for returning
     jntFrms = BGRFrames.from_frames(list_of_renderedFrms)
-    return jntFrms
+    return outRst, jntFrms
+
+def reverse_cascade(finalRst, keep_which = None, 
+                    frames_per_element = 25, acceleration = 1):
+    ### TODO: finalRst has to be a FrameRaster for the moment. Generalize if needed.
+
+    if keep_which is None:
+        keep_which = []
+    
+    myRst = finalRst.deepcopy()
+    num_rows, num_cols = finalRst.rows, finalRst.cols
+
+    accel_index = 0
+    list_of_renderedFrms = []
+    for row in reversed(range(num_rows)):
+        for col in reversed(range(num_cols)):
+            if not (row, col) in keep_which:
+                accelerated_frames_per_element = round((1 / acceleration) ** accel_index * frames_per_element)
+
+                myRst[row, col] = None
+                myFrm = myRst.render()
+                myFrms = BGRFrames.from_frame(myFrm, repetitions = accelerated_frames_per_element)
+                list_of_renderedFrms.append(myFrms)
+
+            accel_index += 1
+
+    jntFrms = BGRFrames.from_frames(list_of_renderedFrms)
+    return myRst, jntFrms
+
 
 if __name__ == '__main__':
     
-    chips_naive = {'total': np.random.random(), 'make': np.random.random(), 'cond': np.random.random()} 
-    chips_smart = {'total': np.random.random(), 'make': np.random.random(), 'cond': np.random.random()}
-    tops_smart = {'total': np.random.random(), 'make': np.random.random(), 'cond': np.random.random()}
+    TEST_TABLES = False
+    TEST_RASTERS = True
 
-    table_data = {'Chipped Return': chips_naive, 'Chipped Return Choice': chips_smart, 'Topspin Return': tops_smart}
+    #####################
+    ### TABLE TESTING ###
+    #####################
+    if TEST_TABLES:
+        chips_naive = {'total': np.random.random(), 'make': np.random.random(), 'cond': np.random.random()} 
+        chips_smart = {'total': np.random.random(), 'make': np.random.random(), 'cond': np.random.random()}
+        tops = {'total': np.random.random(), 'make': np.random.random(), 'cond': np.random.random()}
 
-    Table(table_data, number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 2.5).render().show()
+        table_data = {'Chipped Return': chips_naive, 'Chipped Return Choice': chips_smart, 'Topspin Return': tops}
+
+        myTab = Table(table_data, number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 2.5,
+                    header_line_thickness = 0)
+        myTab.render().show()
+        
+        chips_naive_tot = {k: v for k, v in chips_naive.items() if k == 'total'}
+        chips_smart_tot = {k: v for k, v in chips_smart.items() if k == 'total'}
+        tops_tot = {k: v for k, v in tops.items() if k == 'total'}
+        table_data = {'Topspin Return': tops_tot, 'Chipped Return': chips_naive_tot}
+
+        myTab = Table(table_data, number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 2.5,
+                    null_columns = 2, header_line_thickness = 0.2)
+        myTab.render().show()
+
+    ########################
+    #### RASTER TESTING ####
+    ########################
+    if TEST_RASTERS:
+        from ATMANpy.types.Frames import BGRFrame
+        from ATMANpy.types.MultiFrames import BGRFrames
+        from ATMANpy.types.Streams import DecapStream
+
+        random_arrays = [np.random.randint(0, 256, size = (50, 360, 640, 3), dtype = 'uint8') for _ in range(9)]
+        list_of_randomFrms = [BGRFrames(arr) for arr in random_arrays]
+
+        myRst = FramesRaster(3, 3)
+
+        outRst, cascFrms = frame_cascade(list_of_randomFrms, myRst)
+        DecapStream(cascFrms, 0, 100).show()
+
+        stillRst = outRst.to_frame_raster()
+        stillRst.render().show()
+
+        revRst, revFrms = reverse_cascade(stillRst, frames_per_element = 25, acceleration = 1.1, keep_which = [(1, 1)])
+        DecapStream(revFrms, 0, 100).show()
+
+
+
+
