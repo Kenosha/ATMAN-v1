@@ -1,8 +1,9 @@
 
 import numpy as np
 
-from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D, Line3D, Lines3D
+from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D, Line3D, Lines3D, Point3D
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
+from ATMANpy.types.ShapesTennis3D import Arrow
 
 from ATMANpy.types.Frames import Frame, BGRFrame
 from ATMANpy.types.MultiFrames import BGRFrames
@@ -28,7 +29,7 @@ def make_region_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
 
 def make_text_in(subReg, data_or_string, 
                  size = 1, thickness = 1, color = const.BGR['leafy_green'], 
-                 offset = 0, skip_after_how_many_symbols = None,
+                 horizontal_offset = 0, vertical_offset = 0, skip_after_how_many_symbols = None,
                  number_format = '.2f'):
     textStr = maybe_data_to_text(data_or_string, number_format)
 
@@ -58,7 +59,9 @@ def make_text_in(subReg, data_or_string,
         splitStr = textStr
 
     textPt = subReg['Left'].center_point().annotate(splitStr)
-    textPt = textPt.resize(size).rethicken(thickness).recolor(color).right(offset)
+
+    textPt = textPt.resize(size).rethicken(thickness).recolor(color)
+    textPt = textPt.right(horizontal_offset).down(vertical_offset)
     return textPt
 
 class TableSkeleton:
@@ -197,14 +200,14 @@ class Table:
         for i, text in enumerate(self.index):
             myReg = self.tabSket[i + 1, 0]
             textPt = make_text_in(myReg, text, number_format = self.number_format, skip_after_how_many_symbols = self.skip_after_how_many_symbols,
-                                  offset = self.index_offset)
+                                  horizontal_offset = self.index_offset)
             annPnts.append(textPt)
 
         ### render columns:
         for i, text in enumerate(self.columns):
             myReg = self.tabSket[0, i + 1]
             textPt = make_text_in(myReg, text, number_format = self.number_format, skip_after_how_many_symbols = self.skip_after_how_many_symbols,
-                                  offset = self.header_offset)
+                                  horizontal_offset = self.header_offset)
             annPnts.append(textPt)
 
         ### render data:
@@ -212,12 +215,162 @@ class Table:
             for j, text in enumerate(row):
                 myReg = self.tabSket[i + 1, j + 1]
                 textPt = make_text_in(myReg, text, number_format = self.number_format, skip_after_how_many_symbols = self.skip_after_how_many_symbols,
-                                      offset = self.data_offset)
+                                      horizontal_offset = self.data_offset)
                 annPnts.append(textPt)
 
         tabView = View.make(self.tabCam, tabScn, resolution = self.resolution, annotatedPoints = annPnts)
         tabFrm = tabView.snap()
         return tabFrm
+
+class DiagramShape:
+    def __init__(self, text, contReg, shape_offset = 0.1, shape_color = const.BGR['smokey_grey'],
+                 text_size = 1, text_thickness = 1, text_color = const.BGR['leafy_green'], 
+                 text_horizontal_offset = 0, text_vertical_offset = 0, 
+                 text_skip_after_how_many_symbols = None):
+        self.text = text
+        self.contReg = contReg
+
+        self.shape_offset = shape_offset
+        self.shape_color = shape_color
+
+        self.text_size = text_size
+        self.text_thickness = text_thickness
+        self.text_color = text_color
+        self.text_horizontal_offset = text_horizontal_offset
+        self.text_vertical_offset = text_vertical_offset
+        self.text_skip_after_how_many_symbols = text_skip_after_how_many_symbols
+
+    def render(self):
+        ### returns a region and an annotated point
+        outReg = make_region_in(self.contReg, offset = self.shape_offset, color = self.shape_color)
+        outPnt = make_text_in(outReg, self.text, size = self.text_size, color = self.text_color, 
+                              horizontal_offset = self.text_horizontal_offset, vertical_offset = self.text_vertical_offset,
+                              skip_after_how_many_symbols = self.text_skip_after_how_many_symbols)
+        return outReg, outPnt
+
+class Diagram:
+    def __init__(self, diagram_text_array, shape_offset = 0.1, shape_color = const.BGR['smokey_grey'],
+                 text_size = 1, text_thickness = 1, text_color = const.BGR['leafy_green'], 
+                 text_horizontal_offset = 0, text_vertical_offset = 0,
+                 text_skip_after_how_many_symbols = None,
+                 arrow_gamma = np.pi / 4, arrow_theta = 0, arrow_hat_length = 1, 
+                 arrow_color = const.BGR['strong_blue'], arrow_alpha = 1, arrow_thickness = 0,
+                 render_height = 100, dimensions = (600, 400), resolution = 10):
+        ### diagram text array is an irregular array (an arbitrary list of lists) 
+        # that contains the text that is to be printed in the diagram shapes.
+
+        # determine size of the Table Skeleton needed for the array.
+        self.rows = len(diagram_text_array)
+        self.cols = max([len(row) for row in diagram_text_array])
+
+        self.tabSket = TableSkeleton(self.rows, self.cols, horizontal_lines = False, vertical_lines = False,
+                                     render_height = render_height, dimensions = dimensions, resolution = resolution)
+        self.tabCam = self.tabSket.tabCam
+        self.resolution = resolution
+
+        ### make the shapes
+        self.shapes = []
+        for row_idx in range(self.rows):
+            row_elements = len(diagram_text_array[row_idx])
+            if row_elements == 0:
+                continue
+
+            row_shapes = []
+            for col_idx in range(self.cols):
+                ### for irregular diagram_text_arrays, we need to distinguish
+                if col_idx < row_elements: ### everything to the left is a valid shape ...
+                    text = diagram_text_array[row_idx][col_idx]
+                    contReg = self.tabSket[row_idx, col_idx]
+                    prev_p1, prev_p3 = contReg.p1, contReg.p3
+
+                    myShape = DiagramShape(text, contReg, shape_offset = shape_offset, shape_color = shape_color,
+                                           text_size = text_size, text_thickness = text_thickness, text_color = text_color,
+                                           text_horizontal_offset = text_horizontal_offset, text_vertical_offset = text_vertical_offset, 
+                                           text_skip_after_how_many_symbols = text_skip_after_how_many_symbols)
+                    row_shapes.append(myShape)
+                    
+                else: ### ... whereas for everything to the right, we enlarge the last shape
+                    contReg = self.tabSket[row_idx, col_idx]
+                    next_p2, next_p4 = contReg.p2, contReg.p4
+                    myShape.contReg = Region3D.from_points3D(prev_p1, next_p2, prev_p3, next_p4) ### modify the previous shape.
+
+                    row_shapes.append(myShape)
+
+            self.shapes.append(row_shapes)
+            ### -> we can now assume that the shape array is semi-regular: it contains full size rows or empty rows.
+
+        non_empty_row_idxs = [idx for idx, row in enumerate(self.shapes) if row != []]
+
+        ### make the arrows
+        # arrows go up to down, so we make them column wise
+        self.arrows = []
+        for row_idx in range(self.rows):
+            non_empty_rows_below_idxs = [i for i in non_empty_row_idxs if i > row_idx]
+            row_is_empty = row_idx not in non_empty_row_idxs
+            row_is_last = len(non_empty_rows_below_idxs) == 0
+
+            row_arrows = []
+            for col_idx in range(self.cols):
+                if not row_is_empty and not row_is_last:
+                    origin_region = self.shapes[row_idx][col_idx].contReg
+                    origin_point = origin_region['Bottom'].center_point()
+                    o_x, o_y, o_z = origin_point.coords
+
+                    # find target shape
+                    target_row_idx = non_empty_rows_below_idxs[0]
+                    target_region = self.shapes[target_row_idx][col_idx].contReg
+                    t_y = target_region['Top'].center_point().y
+
+                    target_point = Point3D((o_x, t_y, o_z))
+
+                    if origin_point == target_point:
+                        row_arrows.append(None)
+                    else:
+                        myArrow = Arrow.make(origin_point, target_point, 
+                                             gamma = arrow_gamma, theta = arrow_theta, hat_length = arrow_hat_length,
+                                             color = arrow_color, alpha = arrow_alpha, thickness = arrow_thickness)
+                        row_arrows.append(myArrow)
+                else:
+                    row_arrows.append(None)
+            
+            self.arrows.append(row_arrows)
+
+    def __getitem__(self, item):
+        row, col = item
+        return self.shapes[row][col], self.arrows[row][col]
+
+    def __setitem__(self, item, shape_arrow_pair):
+        shape, arrow = shape_arrow_pair
+        row, col = item
+        self.shapes[row][col] = shape
+        self.arrows[row][col] = arrow
+
+    def render(self):
+        diaRegs = []
+        annPnts = []
+        diagArrows = []
+
+        for row in self.shapes:
+            for diagShape in row:
+                if diagShape is not None:
+                    outReg, outPnt = diagShape.render()
+                    diaRegs.append(outReg)
+                    annPnts.append(outPnt)
+
+        ### technically, we can have the same shape multiple times and the same annPnt multiple times 
+        # because the row_shapes may contain duplicate references to the same shape!
+        # alleviate by filtering duplicate annotated points and shapes
+
+        for row in self.arrows:
+            for arrow in row:
+                if arrow is not None:
+                    diagArrows.append(arrow)
+
+        myScn = Scene(diaRegs).put(diagArrows)
+        myView = View.make(self.tabCam, myScn, annotatedPoints = annPnts, resolution = self.resolution)
+        myFrm = myView.snap()
+
+        return myFrm
 
 @dataclass(frozen = True)
 class Legend:
@@ -279,7 +432,7 @@ class Legend:
         headerPt = make_text_in(headerReg, self.header_text, 
                                 size = self.header_size, 
                                 thickness = self.header_thickness,
-                                offset = self.header_offset,
+                                horizontal_offset = self.header_offset,
                                 color = self.header_color)
 
         legend_shapes, annotated_points = [legLines], [headerPt]
@@ -312,7 +465,7 @@ class Legend:
             else:
                 textPt_left = make_text_in(subReg_left, text_string_shape, 
                                            size = text_size_shape, thickness = text_thickness_shape, 
-                                           color = text_color_shape, offset = text_offset_shape)
+                                           color = text_color_shape, horizontal_offset = text_offset_shape)
                 annotated_points.append(textPt_left)
 
             ### text on the right side of the legend element
@@ -327,7 +480,7 @@ class Legend:
             else:
                 textPt_right = make_text_in(subReg_right, text_string, 
                                             size = text_size, thickness = text_thickness, 
-                                            color = text_color, offset = text_offset)
+                                            color = text_color, horizontal_offset = text_offset)
                 annotated_points.append(textPt_right)
 
         legScn = Scene(legend_shapes)
@@ -436,7 +589,6 @@ class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and colu
 
         return BGRFrame(jointArr)
     
-
 class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in rows and columns
     ### Create rastered MultiFrames from subframes.
     def __init__(self, rows, cols):
@@ -621,7 +773,8 @@ def reverse_cascade(finalRst, keep_which = None,
 if __name__ == '__main__':
     
     TEST_TABLES = False
-    TEST_RASTERS = True
+    TEST_RASTERS = False
+    TEST_DIAGRAMS = True
 
     #####################
     ### TABLE TESTING ###
@@ -659,15 +812,38 @@ if __name__ == '__main__':
 
         myRst = FramesRaster(3, 3)
 
-        outRst, cascFrms = frame_cascade(list_of_randomFrms, myRst)
+        stillRst, cascFrms = frame_cascade(list_of_randomFrms, myRst)
         DecapStream(cascFrms, 0, 100).show()
 
-        stillRst = outRst.to_frame_raster()
         stillRst.render().show()
 
         revRst, revFrms = reverse_cascade(stillRst, frames_per_element = 25, acceleration = 1.1, keep_which = [(1, 1)])
         DecapStream(revFrms, 0, 100).show()
 
 
+    if TEST_DIAGRAMS:
 
+        ### simple        
+        diagram_text_array = [['factor 1', 'factor 2', 'factor 3'], [], ['output']]
+
+        myDiag = Diagram(diagram_text_array)
+
+        shape, arrow = myDiag[1, 0]
+        shape.text_offset = 10
+        shape.text_color = const.BGR['intense_red']
+        myDiag.render().show()
+
+
+        ### more stuff
+        regressor_names = ['Stretch Distance', 'Returner uses Forehand', 'Return Depth', 'Serve Width', 
+                           'Serve Speed', 'Serve Spin', 'Bounce Height']
+        model_name = 'Propensity to Chip'
+        myDiag = Diagram([regressor_names, [], [model_name]], resolution = 100, text_skip_after_how_many_symbols = 3,
+                         shape_offset = 0.05, text_color = const.BGR['marine_blue'], render_height = 500)
+
+        shape, arrow = myDiag[0, 1]
+        remade_arrow = arrow.recolor(const.BGR['leafy_green']).resize(0.1)
+        myDiag[0, 1] = shape, remade_arrow
+
+        myDiag.render().show()
 
