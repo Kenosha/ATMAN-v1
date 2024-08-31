@@ -269,6 +269,8 @@ class Point3D:
         return orthVec
     
     def find_orientation_hori_vert(self):
+        #### https://math.stackexchange.com/questions/2247039/angles-of-a-known-3d-vector, but not really...
+        ### but i am fairly sure it's the same coordinate system.
         x, y, z = self.coords
         r = self.length()
         theta = np.arccos(z / r)
@@ -678,6 +680,11 @@ class Line3D:
 
     def resize(self, new_thickness):
         updDict = {'thickness': new_thickness}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def reverse(self):
+        updDict = {'leftPt': self.rightPt, 'rightPt': self.leftPt}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
     
