@@ -585,8 +585,9 @@ class View:
 
         ### Deal with annotated points
         if annotatedPoints is not None:
+            deduplicated_annotatedPnts = list(set(annotatedPoints))
             text_param_dicts = []
-            for anPnt in annotatedPoints:
+            for anPnt in deduplicated_annotatedPnts:
                 ### get parameters like text body, font size, font color, etc.
                 pnt_params = anPnt.get_parameters()
                 
