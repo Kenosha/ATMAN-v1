@@ -1398,7 +1398,10 @@ class Lines3D(Container3D):
         return Line3D
 
     def resize(self, new_thickness):
-        return Lines3D([ln.resize(new_thickness) for ln in self])
+        shapeList = [ln.resize(new_thickness) for ln in self]
+        paramDict = get_updated_attribute_dictionary(self, {'shapeList': shapeList})
+        outLns = self.__class__(**paramDict)
+        return outLns
 
     def vectorize(self):
         ### since the vectorised object needs a single parameter for each argument fed to .rasterize() ...
