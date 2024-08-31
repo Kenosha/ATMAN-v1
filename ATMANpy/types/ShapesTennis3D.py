@@ -125,6 +125,42 @@ class Mark(Lines3D):
         
         return Mark([aLn, bLn], color = color, alpha = alpha, name = name)
      
+startPt, endPt = Point3D((0, 0, 0)), Point3D((0, 1, 0))
+arrowLn = Line3D(startPt, endPt)
+
+@dataclass(frozen = True, repr = False, eq = False)    
+class Arrow(Lines3D):
+    _ARROW_COLOR = const.BGR['strong_blue']
+    _ARROW_ALPHA = 1
+    _ARROW_NAME = 'Arrow'
+    _ARROW_THICKNESS = 0
+
+    def make(startPt, endPt, gamma = 0, theta = np.pi / 4, hat_length = 1,
+             color = _ARROW_COLOR, alpha = _ARROW_ALPHA, thickness = _ARROW_THICKNESS, name = _ARROW_NAME):
+        arrowLn = Line3D(startPt, endPt, thickness = thickness)
+
+        dir_hori, dir_vert = arrowLn.reverse().find_orientation_hori_vert()
+        line_gamma, line_theta = dir_hori * np.pi, dir_vert * np.pi
+
+        g1, g2 = line_gamma - gamma, line_gamma + gamma
+        t1, t2 = line_theta - theta, line_theta + theta
+        
+        x1 = np.cos(g1) * np.sin(t1)
+        y1 = np.sin(g1) * np.sin(t1)
+        z1 = np.cos(t1)
+
+        x2 = np.cos(g2) * np.sin(t2)
+        y2 = np.sin(g2) * np.sin(t2)
+        z2 = np.cos(t2)
+
+        p1 = Point3D((x1, y1, z1)) * hat_length
+        p2 = Point3D((x2, y2, z2)) * hat_length
+
+        l1 = Line3D(endPt, endPt + p1, thickness = thickness)
+        l2 = Line3D(endPt, endPt + p2, thickness = thickness)
+
+        return Arrow([arrowLn, l1, l2], name = name, color = color, alpha = alpha)
+
     
 @dataclass(frozen = True, repr = False, eq = False)
 class Player(Region3D):
@@ -315,5 +351,75 @@ class Racquet(Region3D):
     def find_orientation_hori_vert(self):
         return self.racquetLine.find_orientation_hori_vert()
         
+if __name__ == '__main__':
+    from ATMANpy.types.Visual3D import Camera, Scene, View
+    from ATMANpy.auxil.court import courtLines
 
-        
+    backCam = Camera.calibrated_AO_behind()
+    sideCam = Camera.mid_lateral()
+    topCam = Camera.birds_eye(cam_height = 1000)
+
+    RESOLUTION = 1
+
+    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
+    endPt = startPt.up(100).front(100).left(10)
+
+    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 4, theta = 0)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+
+
+    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
+    endPt = startPt.up(100).back(100).left(10)
+
+    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 4, theta = 0, thickness = 2)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+
+    
+    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
+    endPt = startPt.up(100).back(100).left(10)
+
+    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 8, theta = 0, thickness = 2)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+
+    
+    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
+    endPt = startPt.up(100).back(100).left(10)
+
+    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = 0, theta = np.pi / 8, thickness = 1)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
