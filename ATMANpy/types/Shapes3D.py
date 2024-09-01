@@ -274,7 +274,8 @@ class Point3D:
         x, y, z = self.coords
         r = self.length()
         theta = np.arccos(z / r)
-        gamma = np.arcsin(y / (r * np.sin(theta)))
+        # gamma = np.arcsin(y / (r * np.sin(theta)))
+        gamma = np.arctan2(y, x)
        
         dir_hori = gamma / np.pi
         dir_vert = theta / np.pi
