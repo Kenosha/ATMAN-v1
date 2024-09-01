@@ -158,6 +158,11 @@ class Arrow(Lines3D):
 
         return Arrow([arrowLn, l1, l2], name = name, color = color, alpha = alpha)
 
+    def start_point(self):
+        return self[0].leftPt
+    def end_point(self):
+        return self[0].rightPt
+
     
 @dataclass(frozen = True, repr = False, eq = False)
 class Player(Region3D):
