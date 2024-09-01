@@ -61,7 +61,7 @@ def make_text_in(subReg, data_or_string,
     textPt = subReg['Left'].center_point().annotate(splitStr)
 
     textPt = textPt.resize(size).rethicken(thickness).recolor(color)
-    textPt = textPt.right(horizontal_offset).down(vertical_offset)
+    textPt = textPt.right(horizontal_offset).back(vertical_offset)
     return textPt
 
 class TableSkeleton:
@@ -243,7 +243,7 @@ class DiagramShape:
     def render(self):
         ### returns a region and an annotated point
         outReg = make_region_in(self.contReg, offset = self.shape_offset, color = self.shape_color)
-        outPnt = make_text_in(outReg, self.text, size = self.text_size, color = self.text_color, 
+        outPnt = make_text_in(outReg, self.text, size = self.text_size, color = self.text_color, thickness = self.text_thickness,
                               horizontal_offset = self.text_horizontal_offset, vertical_offset = self.text_vertical_offset,
                               skip_after_how_many_symbols = self.text_skip_after_how_many_symbols)
         return outReg, outPnt
@@ -344,6 +344,9 @@ class Diagram:
         row, col = item
         self.shapes[row][col] = shape
         self.arrows[row][col] = arrow
+
+    def deepcopy(self):
+        return deepcopy(self)
 
     def render(self):
         diaRegs = []
@@ -667,6 +670,10 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
         ### for None elements, create black 
         ### then, enlarge them, with padding corresponding to where they are placed in the raster
         ### then, simply add these new MultiFrames together.
+        if self.length() == 0:
+            print('Empty Raster, rendering None')
+            return None
+
         el_cols, el_rows = self.element_dims
         al_cols, al_rows = self.output_dims
 
