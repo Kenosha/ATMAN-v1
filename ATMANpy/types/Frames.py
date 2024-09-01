@@ -963,7 +963,7 @@ class BGRFrame(Frame):
                    verbose = verbose)
         
     def zero(self):
-        return BGRFrame(np.zeros(self.shape[:2], dtype = 'uint8'))
+        return BGRFrame(np.zeros(self.shape, dtype = 'uint8'))
     
     def mask(self, boolFrm):
         maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
