@@ -670,7 +670,7 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
         ### for None elements, create black 
         ### then, enlarge them, with padding corresponding to where they are placed in the raster
         ### then, simply add these new MultiFrames together.
-        if self.length() == 0:
+        if self.length == 0:
             print('Empty Raster, rendering None')
             return None
 
