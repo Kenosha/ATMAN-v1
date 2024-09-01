@@ -125,9 +125,6 @@ class Mark(Lines3D):
         
         return Mark([aLn, bLn], color = color, alpha = alpha, name = name)
      
-startPt, endPt = Point3D((0, 0, 0)), Point3D((0, 1, 0))
-arrowLn = Line3D(startPt, endPt)
-
 @dataclass(frozen = True, repr = False, eq = False)    
 class Arrow(Lines3D):
     _ARROW_COLOR = const.BGR['strong_blue']
@@ -135,7 +132,7 @@ class Arrow(Lines3D):
     _ARROW_NAME = 'Arrow'
     _ARROW_THICKNESS = 0
 
-    def make(startPt, endPt, gamma = 0, theta = np.pi / 4, hat_length = 1,
+    def make(startPt, endPt, gamma = np.pi / 4, theta = 0, hat_length = 1,
              color = _ARROW_COLOR, alpha = _ARROW_ALPHA, thickness = _ARROW_THICKNESS, name = _ARROW_NAME):
         arrowLn = Line3D(startPt, endPt, thickness = thickness)
 
@@ -413,6 +410,38 @@ if __name__ == '__main__':
     endPt = startPt.up(100).back(100).left(10)
 
     myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = 0, theta = np.pi / 8, thickness = 1)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+
+    
+    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
+    endPt = startPt.back(100)
+
+    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 8, theta = 0, thickness = 1)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+
+    
+    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 100)
+    endPt = startPt.right(100)
+
+    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 8, theta = 0, thickness = 1)
     myScene = Scene.make_court().put(myArrow)
 
     myView = View.make(backCam, myScene, resolution = RESOLUTION)
