@@ -1305,8 +1305,9 @@ class StreamList:
     def join(self):
         ### create an NCStream from the StreamList
         frameList = sorted(set([frmNum for myStm in self for frmNum in myStm.get_framelist()]))
+        concSF = SFList([myStm.features for myStm in self]).concatenate()
         cap = self[0].cap ### needs generalisation...
-        return NCStream(cap, frameList)
+        return NCStream(cap, frameList, features = concSF)
     
     def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
         for myStm in self:
