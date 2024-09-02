@@ -116,7 +116,11 @@ class PlayerMovement:
             player = Player.make(coords)
             return player 
             
-        plSF = StreamFeatures.from_dataframe(self.playerFrm).apply(applicator)
+        sfFrm = self.playerFrm[['x', 'y']]
+        sfFrm.index = self.playerFrm['frame_num']
+        sfFrm = sfFrm.loc[sfFrm.index[:-1]] ### last element is the next player!
+
+        plSF = StreamFeatures.from_dataframe(sfFrm).apply(applicator)
         plSF = plSF.rename('Player3D')
         return plSF
     
@@ -352,7 +356,8 @@ class Trajectory:
         homArr_2D = np.einsum('ij, nj -> ni', P, homArr)
         pixArr = homArr_2D[:, :2] / homArr_2D[:, 2][:, np.newaxis]
         ballFrm = pd.DataFrame(pixArr, index = self.trajFrm.frame_num, columns = ['x', 'y'])
-        
+        ballFrm = ballFrm.iloc[:-1] ### last ball is duplicated!
+
         ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball2D)
         return Stream.from_SF(ballSF, cap)
         
@@ -406,6 +411,7 @@ class Trajectory:
             # 1: extrapolated -> extend ball flight trajectory by one frame
             # 2: actual -> use actual last entry in trajFrm, which is hit position of next hit (discontinuous with rest of trajectory!) 
             # 3: smooth -> interpolate between extrapolated point and actual point smoothly, so that you arrive at next hit point without great discontinuity.
+            # 4: penultimate -> remove the last frame completely, which is the point at which the ball is hit by the next guy
         if how == 'trajectory':
             coord_cols = ['x_t', 'y_t', 'z_t']
         elif how == 'observed':
@@ -413,6 +419,10 @@ class Trajectory:
            
         if which_endpoint == 'actual':
             ballFrm = self.trajFrm[coord_cols]
+
+        if which_endpoint == 'penultimate':
+            ballFrm = self.trajFrm[coord_cols]
+            ballFrm = ballFrm.loc[ballFrm.index[:-1]]
 
         if which_endpoint == 'extrapolated':
             ballFrm = self.trajFrm[coord_cols]
@@ -442,7 +452,10 @@ class Trajectory:
             ballFrm = ballFrm + itpl_lambda_full[:, np.newaxis] * d[np.newaxis, :]
 
         ballFrm.columns = ['x', 'y', 'z']
-        ballFrm.index = self.trajFrm.frame_num
+        if which_endpoint == 'penultimate':
+            ballFrm.index = self.trajFrm.frame_num[:-1]
+        else:
+            ballFrm.index = self.trajFrm.frame_num
 
         ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball3D)
         return ballSF
@@ -829,8 +842,8 @@ class Shot:
         return self.shotTraj.mean_deviation(dof_correction = dof_correction)
     
     #### FEATURE GETTERS ######
-    def feat_ball(self, how = 'trajectory'):
-        return self.shotTraj.feat_ball(how = how)
+    def feat_ball(self, how = 'trajectory', which_endpoint = 'smooth'):
+        return self.shotTraj.feat_ball(how = how, which_endpoint = which_endpoint)
     
     def feat_hit_player(self):
         return self.hitPlayer.feat_player()
