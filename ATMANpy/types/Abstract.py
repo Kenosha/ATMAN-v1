@@ -317,8 +317,8 @@ class Trajectory:
         speed1 = ser1 - ser0
         accel = speed2 - speed1
 
-        outSer = ser2 + speed2 + accel
-        return outSer.values
+        outArr = ser2 + speed2 + accel
+        return outArr
 
     def get_capture(self, confs):
         idx = self.get_match_index()
