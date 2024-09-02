@@ -74,6 +74,9 @@ def get_distance_from_flight_line(myPnt):
 def is_return_fore(myPnt):
     return myPnt.get_return().is_fore()
 
+def is_return_back(myPnt):
+    return myPnt.get_return().is_back()
+
 def is_return_bounce_not_none(myPnt):
     x, y = myPnt.get_return().get_first_bounce_position()
     return x is not None and y is not None
@@ -289,7 +292,7 @@ def get_psm_var_dict(retPnts):
     distArr = retPnts.apply(get_distance_from_flight_line) / const.SCALE * const.FOOT_TO_METER
 
     # d) Forehand/Backhand
-    foreArr = retPnts.apply(is_return_fore)
+    backArr = retPnts.apply(is_return_back)
 
     # e) spin
     spinArr = retPnts.apply(get_serve_spin)
@@ -302,7 +305,7 @@ def get_psm_var_dict(retPnts):
                 'serve_depth': depthArr,
                 'serve_height': heightArr,
                 'serve_dist': distArr,
-                'ret_is_fore': foreArr}
+                'ret_is_back': backArr}
 
     return varDict
 
