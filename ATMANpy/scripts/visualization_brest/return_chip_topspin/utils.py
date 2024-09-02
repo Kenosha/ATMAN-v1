@@ -1,8 +1,8 @@
 
-import numpy as np
-import matplotlib.pyplot as plt
 import os
-
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
 import ATMANpy.auxil.constants as const
@@ -44,6 +44,15 @@ def is_not_pathological(myPnt, threshold_speed = 140, threshold_frames = 35):
 
 def is_pathological(myPnt, threshold_speed = 140, threshold_frames = 35):
     return not is_not_pathological(myPnt, threshold_speed = threshold_speed, threshold_frames = threshold_frames)
+
+def server_is_right_handed(myPnt):
+    return myPnt.get_server().get_hand() == 'right'
+
+def server_is_left_handed(myPnt):
+    return myPnt.get_server().get_hand() == 'left'
+
+def ret_is_chipped(myPnt):
+    return myPnt.get_return().is_slice_visual()
 
 def get_serve_speed(myPnt):
     return myPnt.get_serve().get_initial_speed()
@@ -290,6 +299,7 @@ def get_psm_var_dict(retPnts):
 
     # c) Distance of Returner from Flight Line
     distArr = retPnts.apply(get_distance_from_flight_line) / const.SCALE * const.FOOT_TO_METER
+    distArr_sq = distArr ** 2
 
     # d) Forehand/Backhand
     backArr = retPnts.apply(is_return_back)
@@ -304,7 +314,7 @@ def get_psm_var_dict(retPnts):
                 'serve_width': widthArr,
                 'serve_depth': depthArr,
                 'serve_height': heightArr,
-                'serve_dist': distArr,
+                'serve_dist_sq': distArr_sq,
                 'ret_is_back': backArr}
 
     return varDict
@@ -374,6 +384,105 @@ def calculate_attribution(myFrm, chip_col = 'is_chipped', outcome_col = 'ret_win
 
     return chipDict, topsDict, attrDict
 
+def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75):
+    
+    xFrm = pd.DataFrame(logReg.model.exog, columns = logReg.model.exog_names)
+    ySer = pd.Series(logReg.model.endog, name = logReg.model.endog_names)
+    predSer = pd.Series(logReg.predict(), name = 'pred_' + logReg.model.endog_names)
+
+    regFrm = pd.concat([xFrm, ySer, winSer, predSer], axis = 1)
+    regFrm['pred_is_topspin'] = 1 - predSer
+
+    ### Add something to help us remember which row we changed the direction of play for.
+    regFrm['is_top_to_bot'] = idxFrm_new['is_top_to_bot']
+
+    ### Return Shot characteristics
+    regFrm['ret_speed'] = retPnts.apply(get_return_speed)
+    regFrm['ret_spin'] = retPnts.apply(get_return_spin)
+    regFrm['ret_time'] = retPnts.apply(get_return_flight_time, fps = 25)
+
+    regFrm['serve_fore'] = retPnts.apply(is_serve_from_fore)
+
+    ### weights
+    regFrm['len'] = retPnts.apply('__len__')
+    regFrm['len_weight'] = decay_rate ** (regFrm['len'] - 2)
+    regFrm['odds_topspin'] = regFrm['pred_is_topspin'] / regFrm['pred_is_chipped']
+    regFrm['weight_topspin'] = np.where(regFrm.is_chipped, regFrm.odds_topspin, 1)
+    regFrm['weight_len_pred'] = regFrm['len_weight'] * regFrm['weight_topspin']
+
+    ### winner vars
+    regFrm['ret_wins'] = regFrm['winner_code'] == -1
+    regFrm['srv_wins'] = regFrm['winner_code'] == 1
+
+    ### winner vars, weighted with length --> attribution not via weight, but (more intuitively) with length of rally
+        ## -> in essence, by doing this we can also measure the propensity of a return to prolong the point 
+        # ---> ret_wins_weighted tends to 0.5 as the length increases.
+    regFrm['ret_wins_weighted'] = (regFrm['ret_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
+    regFrm['srv_wins_weighted'] = (regFrm['srv_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
+
+    ### winner vars, weighted with length --> attribution not via weight, but (more intuitively) with length of rally
+        ## -> in essence, by doing this we can also measure the propensity of a return to prolong the point 
+        # ---> ret_wins_weighted tends to 0.5 as the length increases.
+    regFrm['ret_wins_weighted'] = (regFrm['ret_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
+    regFrm['srv_wins_weighted'] = (regFrm['srv_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
+
+    ### figure out bounces
+    regFrm['did_bounce'] = retPnts.apply(is_return_bounce_not_none, dtype = bool)
+    regFrm['did_bounce_in'] = retPnts.apply(is_return_bounce_in, dtype = bool)
+
+    regFrm['must_have_bounced_in'] = np.where(regFrm['ret_wins'], True, 
+                                            np.where(regFrm['len'] > 3, True, ### why 3? because sometimes a third shot comes even though the ball is out on the second shot.
+                                                    regFrm['did_bounce_in'])).astype(bool)
+
+    regFrm['must_have_bounced_out'] = ~regFrm['must_have_bounced_in']
+
+    regFrm['must_have_bounced_in_but_didnt'] = regFrm['must_have_bounced_in'] & regFrm['did_bounce'] & ~regFrm['did_bounce_in']
+    ### these cases are weird, but mostly harmless -> ball seen as just out when it's just in.
+    
+    ### return distances
+    regFrm['ret_dist_to_bsl'] = retPnts.apply(get_ret_dist_to_bsl)
+    regFrm['ret_dist_to_bh'] = retPnts.apply(get_ret_dist_to_bh)
+    regFrm['ret_dist_to_opt'] = retPnts.apply(get_ret_dist_to_opt)
+
+    ### return distance interactions
+    regFrm['ret_dist_to_bh_sq'] = regFrm['ret_dist_to_bh'] ** 2
+    regFrm['ret_dist_to_bsl_sq'] = regFrm['ret_dist_to_bsl'] ** 2
+    regFrm['ret_dist_to_bsl_bh'] = regFrm['ret_dist_to_bsl'] * regFrm['ret_dist_to_bh']
+
+    regFrm['ret_dist_to_opt_sq'] = regFrm['ret_dist_to_opt'] ** 2
+
+    regFrm['ret_dist_to_bh_serve_fore'] = regFrm['ret_dist_to_bh'] * regFrm['serve_fore']
+    regFrm['ret_dist_to_bh_serve_back'] = regFrm['ret_dist_to_bh'] * (1 - regFrm['serve_fore'])
+
+    regFrm['ret_dist_to_bh_serve_fore_sq'] = regFrm['ret_dist_to_bh_serve_fore'] ** 2
+    regFrm['ret_dist_to_bh_serve_back_sq'] = regFrm['ret_dist_to_bh_serve_back'] ** 2
+
+    regFrm['ret_dist_to_bh_x_is_chipped'] = regFrm['ret_dist_to_bh'] * regFrm['is_chipped']
+
+    ### launch angle
+    regFrm['launch_angle'] = retPnts.get_returns().apply('get_launch_angle')
+
+    ### launch angle interactions
+    regFrm['ret_dist_to_bsl_x_launch_angle'] = regFrm['ret_dist_to_bsl'] * regFrm['launch_angle']
+    regFrm['ret_dist_to_opt_x_launch_angle'] = regFrm['ret_dist_to_opt'] * regFrm['launch_angle']
+
+    ### serve data
+    regFrm['is_serve_ad'] = retPnts.apply('is_serve_ad')
+    regFrm['is_serve_deuce'] = retPnts.apply('is_serve_deuce')
+    regFrm['is_right_handed_server'] = retPnts.apply(server_is_right_handed)
+    regFrm['is_left_handed_server'] = retPnts.apply(server_is_left_handed)
+
+    ### some booleans relating to make%
+    regFrm['bounces_in_own_court'] = regFrm['ret_dist_to_bsl'] > const.SIDE_LENGTH * const.FOOT_TO_METER
+    regFrm['is_in_net'] = retPnts.apply(return_is_in_net, dtype = bool)
+    regFrm['return_is_long'] = regFrm['ret_dist_to_bsl'] < 0
+    regFrm['return_is_wide_bh'] = regFrm['ret_dist_to_bh'] < 0
+    regFrm['return_is_wide_fh'] = regFrm['ret_dist_to_bh'] > const.SINGLES_WIDTH * const.FOOT_TO_METER
+    regFrm['return_is_junk'] = regFrm['bounces_in_own_court'] | ~regFrm['did_bounce']
+
+    regFrm['return_is_fine'] = ~regFrm['return_is_junk']
+
+    return regFrm
 
 def rectify_shots(myShots):
     myShots_lh_receiver = myShots.filter(lambda shot: shot.recPlayer.get_hand() == 'left').flip(across_middle = True, across_net = False)

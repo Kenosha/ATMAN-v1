@@ -111,69 +111,7 @@ logReg = Logit(ySer, xFrm)
 logReg = logReg.fit()
 logReg.summary()
 
-varDict['serve_dist_sq'] = varDict['serve_dist'] ** 2
-varDict.pop('serve_dist')
-y = varDict.pop('is_chipped')
-X = np.stack(list(varDict.values()), axis = 1)
-
-xFrm = pd.DataFrame(X, columns = varDict.keys())
-xFrm['const'] = 1
-ySer = pd.Series(y, name = 'is_chipped').astype(bool)
-
-logReg = Logit(ySer, xFrm)
-logReg = logReg.fit()
-logReg.summary()
-
-predSer = pd.Series(logReg.predict(), name = 'pred_is_chipped')
-
-
-#########################################
-##### CREATE REGRESSORS AND WEIGHTS #####
-#########################################
-
-regFrm = pd.concat([xFrm, ySer, winSer, predSer], axis = 1)
-regFrm['pred_is_topspin'] = 1 - predSer
-
-### Add something to help us remember which row we changed the direction of play for.
-regFrm['is_top_to_bot'] = idxFrm_new['is_top_to_bot']
-
-### Return Shot characteristics
-regFrm['ret_speed'] = retPnts.apply(vis_ut.get_return_speed)
-regFrm['ret_spin'] = retPnts.apply(vis_ut.get_return_spin)
-regFrm['ret_time'] = retPnts.apply(vis_ut.get_return_flight_time, fps = 25)
-
-regFrm['serve_fore'] = retPnts.apply(vis_ut.is_serve_from_fore)
-
-### weights
-DECAY_RATE = 0.75
-regFrm['len'] = retPnts.apply('__len__')
-regFrm['len_weight'] = DECAY_RATE ** (regFrm['len'] - 2)
-regFrm['odds_topspin'] = regFrm['pred_is_topspin'] / regFrm['pred_is_chipped']
-regFrm['weight_topspin'] = np.where(regFrm.is_chipped, regFrm.odds_topspin, 1)
-regFrm['weight_len_pred'] = regFrm['len_weight'] * regFrm['weight_topspin']
-
-### winner vars
-regFrm['ret_wins'] = regFrm['winner_code'] == -1
-regFrm['srv_wins'] = regFrm['winner_code'] == 1
-
-### winner vars, weighted with length --> attribution not via weight, but (more intuitively) with length of rally
-    ## -> in essence, by doing this we can also measure the propensity of a return to prolong the point 
-    # ---> ret_wins_weighted tends to 0.5 as the length increases.
-regFrm['ret_wins_weighted'] = (regFrm['ret_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
-regFrm['srv_wins_weighted'] = (regFrm['srv_wins'] * regFrm['len_weight']) + (0.5 * (1 - regFrm['len_weight']))
-
-### figure out bounces
-regFrm['did_bounce'] = retPnts.apply(vis_ut.is_return_bounce_not_none, dtype = bool)
-regFrm['did_bounce_in'] = retPnts.apply(vis_ut.is_return_bounce_in, dtype = bool)
-
-regFrm['must_have_bounced_in'] = np.where(regFrm['ret_wins'], True, 
-                                          np.where(regFrm['len'] > 3, True, ### why 3? because sometimes a third shot comes even though the ball is out on the second shot.
-                                                   regFrm['did_bounce_in'])).astype(bool)
-
-regFrm['must_have_bounced_out'] = ~regFrm['must_have_bounced_in']
-
-regFrm['must_have_bounced_in_but_didnt'] = regFrm['must_have_bounced_in'] & regFrm['did_bounce'] & ~regFrm['did_bounce_in']
-### these cases are weird, but mostly harmless -> ball seen as just out when it's just in.
+regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new)
 
 #################################
 ###### ATTRIBUTION TABLES #######
@@ -238,7 +176,6 @@ high_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).decap().frames for id
 
 low_pred_exFrm = dirFrm[dirFrm.is_chipped].sort_values('pred_is_chipped').iloc[:8]
 low_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).decap().frames for idx in low_pred_exFrm.index]
-
 
 ###################################
 #### FRAMES RASTER WITH TABLE #####
