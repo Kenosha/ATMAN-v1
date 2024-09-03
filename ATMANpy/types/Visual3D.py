@@ -427,7 +427,6 @@ class Camera:
 
 
     ############ Internal Matrix Changes ##########
-    
     def zoom(self, factor):
         ### factor > 1 -> zoom in; factor < 1 -> zoom out
         M_int_new = self.M_int.copy()
@@ -435,6 +434,14 @@ class Camera:
         M_int_new[1, 1] *= factor
 
         return Camera(M_int_new, self.M_ext, self.sensor_dims)
+
+    def resize(self, factor):
+        ### resize the camera sensor
+        w, h = self.sensor_dims
+        sensor_dims_new = round(w * factor), round(h * factor)
+        M_int_new = self.M_int.copy()
+        M_int_new[:2] *= factor
+        return Camera(M_int_new, self.M_ext, sensor_dims_new)
 
     ############ External Matrix Changes ##########
     def tilt(self, angle_pi):
@@ -682,13 +689,20 @@ class View:
                     text_param_dicts = self.text_param_dicts,
                     sensor_dims = self.sensor_dims)
 
-    def snap(self):
+    def snap(self, over_array = None):
         ### 1) Sort by distance for painters algorithm: far to near
         sortView = self.sort_by_distance(near_to_far = False)
     
         ### 4) Pluck every point onto a frame with the correct value, and show it!
         rows, cols = sortView.sensor_dims[1], sortView.sensor_dims[0] ## note the switch here: u are columns, v are rows, so indexing inverts!
-        snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
+        
+        if over_array is None:
+            snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
+        else:
+            if len(over_array.shape) == 2:
+                snapArr = np.stack([over_array] * 3, axis = 2)
+            else:
+                snapArr = over_array
 
         pixels = sortView.pxArr
         alphas = sortView.alArr
