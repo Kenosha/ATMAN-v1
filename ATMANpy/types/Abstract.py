@@ -992,6 +992,13 @@ class Shots:
         else:
             return StreamList([myShot.stream(cap) for myShot in self]).join()
         
+    
+    def stream_ball(self, P, cap = None, how = 'trajectory', confs = None):
+        if cap is None and confs is None:
+            raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
+
+        return StreamList([myShot.stream_ball(P, how = how, cap = cap, confs = confs) for myShot in self]).join()
+
     ### STAT GETTERS ###
     # -> .get methods of Shot, done with make_method below
         
