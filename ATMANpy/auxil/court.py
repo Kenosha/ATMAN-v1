@@ -10,6 +10,8 @@ courtScn = Scene.make_court()
 
 ### POINTS OF INTEREST ###
 cnt_2D = courtLines.get_center_point()
+top_cnt_2D = courtLines.get_half_region(side = 'Top', width = 'Singles').centroid()
+bot_cnt_2D = courtLines.get_half_region(side = 'Bottom', width = 'Singles').centroid()
 
 top_deu_2D = courtLines.get_service_box(side = 'Top', which = 'Deuce').centroid()
 top_ad_2D = courtLines.get_service_box(side = 'Top', which = 'Ad').centroid()
@@ -42,6 +44,17 @@ bot_srv_deu_cnt_2D = Line(bot_srv_cnt_2D, bot_srv_rgt_2D).center()
 bot_srv_ad_cnt_2D = Line(bot_srv_cnt_2D, bot_srv_lft_2D).center()
 
 ### CAMERAS ###
+def birds_eye_half_court_cam(zoom = 1, side = 'Top'):
+    if side == 'Top':
+        relevantPnt = top_cnt_2D
+    elif side == 'Bot':
+        relevantPnt = bot_cnt_2D
+    
+    c_w = Point3D.from_point2D(relevantPnt, z = 300).left(1) ### why we need to go one left is a mystery...
+    f_w = Point3D.from_point2D(relevantPnt, z = 0)
+    myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom).rotate(-0.5)
+    return myCam
+
 def birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top'):
     if side == 'Top' and which == 'Deuce':
         relevantPnt = top_deu_2D
@@ -89,6 +102,12 @@ def onto_service_box_cam(which = 'Deuce', side = 'Top', z = 100, dist = 350, f =
     return myCam
 
 if __name__ == '__main__':
+    top_cntCam = birds_eye_half_court_cam(zoom = 1, side = 'Top')
+    bot_cntCam = birds_eye_half_court_cam(zoom = 1, side = 'Bot')
+    
+    View.make(top_cntCam, courtScn, resolution = 1).snap().show()
+    View.make(bot_cntCam, courtScn, resolution = 1).snap().show()
+    
     top_deuCam = birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top')
     bot_deuCam = birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Bot')
     top_adCam = birds_eye_service_box_cam(zoom = 1, which = 'Ad', side = 'Top')
