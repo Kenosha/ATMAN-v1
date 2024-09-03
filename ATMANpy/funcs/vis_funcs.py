@@ -12,10 +12,10 @@ from ATMANpy.types.Visual3D import Scene, DummyScene, Camera, View
 import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.util_funcs as ut
 
-from ATMANpy.types.MultiFrames import BGRFrames
+from ATMANpy.types.Frames import Frame
+from ATMANpy.types.MultiFrames import Frames, BGRFrames
 from ATMANpy.types.Shapes3D import Point3D, Line3D, Ellipse3D
 
-from ATMANpy.types.MultiFrames import Frames
 
 def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
     if isinstance(onFrm, Frames):
@@ -109,16 +109,32 @@ def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
 
     return scenes
 
+def interpolate_frames(startFrm, stopFrm, num_frames = 25):
+    frmsList = []
+
+    lambdas = np.linspace(0, 1, endpoint = True, num = num_frames)
+    for lmbd in lambdas:
+        midFrm = startFrm * (1 - lmbd) + stopFrm * lmbd
+        frmsList.append(midFrm)
+
+    outFrms = BGRFrames(np.array([frm.array for frm in frmsList], dtype = 'uint8'))
+    return outFrms
+
 def animate_sequence(animation_sequence_objects, annotated_points = None,
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     argument_luminosity = 1, adaptive_resolution_exponent = 0, 
                     cumulate_argument = False, cumulative_foreground_transparence = None, 
                     argument_blinks_per_second = None,
-                    start_cam = None, stop_cam = None):
+                    start_cam = None, stop_cam = None, animate_over = None):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
     num_frames = len(animation_sequence_objects)
+    
+    ### animate_over allows animating over a non-black background -> good for animating over the actual footage!
+    if animate_over is not None:
+        if isinstance(animate_over, Frames):
+            assert animate_over.length() == num_frames   
 
     ### Create the List of Cameras to be Used
     if start_cam is None:
@@ -179,7 +195,16 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
 
         joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
         
-        myFrm = joint_view.snap()
+        if animate_over is None:
+            over_array = None
+        elif isinstance(animate_over, Frame):
+            over_array = animate_over.array
+        elif isinstance(animate_over, Frames):
+            over_array = animate_over[idx].array
+        else:
+            raise TypeError('animate_over has to be None, Frame, or Frames (of appropriate length)')
+
+        myFrm = joint_view.snap(over_array = over_array)
 
         frameList.append(myFrm)
 
@@ -296,7 +321,7 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     argument_luminosity = 1, adaptive_resolution_exponent = 0,
-                    argument_blinks_per_second = None):
+                    argument_blinks_per_second = None, animate_over = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -346,15 +371,22 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
     dummy_view = View.make(static_cam, previous_dummy_scene, resolution = dummy_resolution)
     base_view = View.make(static_cam, background_scene, resolution = background_resolution)
 
+    if animate_over is None:
+        over_array = None
+    elif isinstance(animate_over, Frame):
+        over_array = animate_over.array
+    else:
+        raise TypeError('animate_over has to be None or Frame')
+
     if argument_blinks_per_second is None:
         joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
-        static_frame = joint_view.snap()
+        static_frame = joint_view.snap(over_array = over_array)
         myFrms = BGRFrames.from_frame(static_frame, repetitions = num_frames)
     else:
         on_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
         off_view = base_view.combine(dummy_view).combine(front_view)
-        onFrm = on_view.snap()
-        offFrm = off_view.snap()
+        onFrm = on_view.snap(over_array = over_array)
+        offFrm = off_view.snap(over_array = over_array)
         
         myFrms = blinking(onFrm, offFrm, blinks_per_second = argument_blinks_per_second, duration_in_frames = num_frames)
 
