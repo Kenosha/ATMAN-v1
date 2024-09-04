@@ -17,6 +17,94 @@ from ATMANpy.types.Lines import CourtLines
 import ATMANpy.auxil.constants as const
 
 @dataclass(frozen = True)
+class Quaternion:
+    w: float
+    x: float
+    y: float
+    z: float
+
+    def __add__(self, other):
+        return Quaternion(self.w + other.w, self.x + other.x, self.y + other.y, self.z + other.z)
+    
+    def __sub__(self, other):
+        return Quaternion(self.w - other.w, self.x - other.x, self.y - other.y, self.z - other.z)
+
+    def __mul__(self, other):
+        if isinstance(other, Quaternion):
+            scalar = self.w * other.w - self.vector() @ other.vector()
+            vector = self.w * other.vector() + other.w * self.vector() + np.cross(self.vector(), other.vector())
+            x, y, z = vector
+            w = scalar
+        else:
+            w, x, y, z = other * self.w, other * self.x, other * self.y, other * self.z
+
+        return Quaternion(w, x, y, z)
+    
+    def __truediv__(self, other):
+        return self * (1 / other)
+
+    def scalar(self):
+        return self.w
+    
+    def vector(self):
+        return np.array([self.x, self.y, self.z])
+    
+    def tuple(self):
+        return self.w, self.x, self.y, self.z
+
+    def norm(self):
+        return (self.w ** 2 + self.x ** 2 + self.y ** 2 + self.z ** 2) ** 0.5
+
+    def unit(self):
+        return self / self.norm()
+    
+    def inv(self):
+        norm_squared = self.norm() ** 2
+        scalar = self.scalar() / norm_squared
+        vector = - self.vector() / norm_squared
+        
+        w = scalar
+        x, y, z = vector
+        return Quaternion(w, x, y, z)
+
+    def to_rotation_matrix(self):
+        w, x, y, z = self.unit().tuple()    
+
+        R = np.array([[1 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x*z + y*w)],
+                      [2*(x*y + z*w), 1 - 2*(x**2 + z**2), 2*(y*z - x*w)],
+                      [2*(x*z - y*w), 2*(y*z + x*w), 1 - 2*(x**2 + y**2)]])
+
+        return R
+    
+    @staticmethod
+    def from_rotation_matrix(R, invert_w = True):
+        ### using Bar-Itzhack (2015): New Method for Extracting the Quaternion from a Rotation Matrix
+        ### version 3 in the paper.
+        ### WEIRDNESS: invert_w: w needs its sign switched. This is weird, but produces correct quaternions
+        ### i have no idea why.
+        d11, d12, d13 = R[0]
+        d21, d22, d23 = R[1]
+        d31, d32, d33 = R[2]
+
+        K_3 = 1/3 * np.array([[d11 - d22 - d33, d21 + d12, d31 + d13, d23 - d32],
+                              [d21 + d12, d22 - d11 - d33, d32 + d23, d31 - d13],
+                              [d31 + d13, d32 + d23, d33 - d11 - d22, d12 - d21],
+                              [d23 - d32, d31 - d13, d12 - d21, d11 + d22 + d33]])
+
+        eig_vals, eig_vecs = np.linalg.eig(K_3)
+        max_idx = eig_vals.argmax()
+        x, y, z, w = eig_vecs[:, max_idx]
+        
+        if invert_w: ### see WEIRDNESS comment above.
+            w = -w
+
+        return Quaternion(w, x, y, z) ### why minus?
+    
+    @staticmethod
+    def from_vector(vec):
+        return Quaternion(0, *vec)
+
+@dataclass(frozen = True)
 class Scene:
     shapes: List ### a collection of various 3D shapes
         
@@ -747,116 +835,166 @@ class View:
         return aView
 
 if __name__ == '__main__':
-    from ATMANpy.types.Shapes3D import Point3D, Ball3D, Lines3D, Region3D, Regions3D, AnnotatedPoint3D
-    from ATMANpy.types.ShapesTennis3D import Player
-    import cv2 as cv
+    CHECK_QUATERNIONS = True
+    CHECK_FONTS = False
 
-    RESOLUTION = 1
-
-    courtLines = CourtLines.make().add_singles_netline()
-
-    c_w_2D = courtLines['Bottom Baseline'].center().left(100)
-    d_w_2D = courtLines.get_center_point()
- 
-    c_w = Point3D.from_point2D(c_w_2D, z = 100)
-    d_w = Point3D.from_point2D(d_w_2D, z = 0)
+    if CHECK_QUATERNIONS:
+        w, x, y, z = 1, 0.5, 1, 2
+        myQuat = Quaternion(w, x, y, z)
+        R = myQuat.to_rotation_matrix()
         
-    botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
-    bot_adReg = courtLines.get_service_box(side = 'Bottom', which = 'Deuce')
-    botReg3D = Region3D.from_region2D(botReg, z = 0).recolor(const.BGR['grass_green'])
-    ad_botReg3D = Region3D.from_region2D(bot_adReg, z = 1).recolor(const.BGR['strong_pink'])
-    courtScn = Scene.make_court(courtLines).put(botReg3D).put(ad_botReg3D)
+        ### construct 5 test case vectors
+        vecs = [np.random.random(size = (3)) for idx in range(5)]
+        print('The following vectors should be the same!')
+        for vec in vecs:
+            p1 = R @ vec
+            p2 = myQuat * Quaternion.from_vector(vec) * myQuat.inv()
+            p2 = p2.vector()
+
+            print(np.stack([p1, p2], axis = 1))
+
+        ### to_rotation_matrix seems to work!
+        print('_______')
+        
+        print('The following two matrices should be the same')
+        print(R)
+        print(Quaternion.from_rotation_matrix(R).to_rotation_matrix())
+        
+        print('The following two quaternions should be the same')
+        print(myQuat.unit())
+        print(Quaternion.from_rotation_matrix(R))
+        ### w has the sign switched!!!
+
+        print('___________')
+
+        R = np.array([[0.395, 0.362, 0.843],
+                      [-0.626, 0.796, -0.056],
+                      [-0.677, -0.498, 0.529]])
+        
+        q_paper = Quaternion.from_rotation_matrix(R, invert_w = False) ### as in the paper!!!
+        q_right = Quaternion.from_rotation_matrix(R, invert_w = True) ### produces correct rotation matrix!
+
+        print('The following two matrices are close transposes of each other (weirdly).')
+        print(q_paper.to_rotation_matrix()) ### transposed versus paper!
+        print(R)
+
+        print('The following two matrices are close enough.')
+        print(q_right.to_rotation_matrix()) ### transposed versus paper!
+        print(R)
+        #### -> but they also premultiply vectors in the paper!
+        
+    if CHECK_FONTS:
+
+        from ATMANpy.types.Shapes3D import Point3D, Ball3D, Lines3D, Region3D, Regions3D, AnnotatedPoint3D
+        from ATMANpy.types.ShapesTennis3D import Player
+        import cv2 as cv
+
+        RESOLUTION = 1
+
+        courtLines = CourtLines.make().add_singles_netline()
+
+        c_w_2D = courtLines['Bottom Baseline'].center().left(100)
+        d_w_2D = courtLines.get_center_point()
     
-    myCam = Camera.from_to(c_w, d_w)
+        c_w = Point3D.from_point2D(c_w_2D, z = 100)
+        d_w = Point3D.from_point2D(d_w_2D, z = 0)
+            
+        botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+        bot_adReg = courtLines.get_service_box(side = 'Bottom', which = 'Deuce')
+        botReg3D = Region3D.from_region2D(botReg, z = 0).recolor(const.BGR['grass_green'])
+        ad_botReg3D = Region3D.from_region2D(bot_adReg, z = 1).recolor(const.BGR['strong_pink'])
+        courtScn = Scene.make_court(courtLines).put(botReg3D).put(ad_botReg3D)
+        
+        myCam = Camera.from_to(c_w, d_w)
 
-    View.make(myCam, courtScn, resolution = RESOLUTION).snap().show()
+        View.make(myCam, courtScn, resolution = RESOLUTION).snap().show()
 
-    ### TESTING ANNOTATED POINTS ###
+        ### TESTING ANNOTATED POINTS ###
+        
+        l_coords, c_coords, r_coords = courtLines.get_3D_net_points()
+        lPt, cPt, rPt = Point3D(l_coords), Point3D(c_coords), Point3D(r_coords)
+
+        cv.FONT_HERSHEY_SIMPLEX
+        cv.FONT_HERSHEY_PLAIN
+        cv.FONT_HERSHEY_DUPLEX
+        cv.FONT_HERSHEY_COMPLEX
+        cv.FONT_HERSHEY_TRIPLEX
+        cv.FONT_HERSHEY_COMPLEX_SMALL
+        cv.FONT_HERSHEY_SCRIPT_SIMPLEX
+        cv.FONT_HERSHEY_SCRIPT_COMPLEX
+        cv.FONT_ITALIC
+
+        #### SERIF FONTS -> THEY LOOK BAD
+        # q4 = rPt.up(30).annotate('FONT_HERSHEY_COMPLEX').refont(cv.FONT_HERSHEY_COMPLEX)
+        # p1 = lPt.up(120).annotate('FONT_HERSHEY_TRIPLEX').refont(cv.FONT_HERSHEY_TRIPLEX)
+        # p2 = lPt.up(90).annotate('FONT_HERSHEY_COMPLEX_SMALL').refont(cv.FONT_HERSHEY_COMPLEX_SMALL)
+
+        ### SCRIPT FONTS -> TERRIBLE
+        # p3 = lPt.up(60).annotate('FONT_HERSHEY_SCRIPT_SIMPLEX').refont(cv.FONT_HERSHEY_SCRIPT_SIMPLEX)
+        # p4 = lPt.up(30).annotate('FONT_HERSHEY_SCRIPT_COMPLEX').refont(cv.FONT_HERSHEY_SCRIPT_COMPLEX)
+
+        ### ITALIC
+        # p1 = rPt.up(30).annotate('FONT_ITALIC').refont(cv.FONT_ITALIC) ## -> doesn't work?
+
+        ### SANS SERIF -> OK
+        # q1 = rPt.up(120).annotate('FONT_HERSHEY_SIMPLEX').refont(cv.FONT_HERSHEY_SIMPLEX) ### ok, but not great
+        q1 = rPt.up(20).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).reline(cv.LINE_AA)
+        q2 = rPt.up(50).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).reline(cv.LINE_AA)
+        q3 = rPt.up(80).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).rethicken(2).reline(cv.LINE_AA)
+
+        # p1 = lPt.up(40).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX) ####### good, but plain is slightly better (and can be smaller!)
+        # p2 = lPt.up(70).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX).rethicken(2)
+        # p3 = lPt.up(100).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX).rethicken(3) 
+        
+        p1 = lPt.up(40).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).reline(cv.FILLED)
+        p2 = lPt.up(70).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).reline(cv.FILLED)
+        p3 = lPt.up(100).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).rethicken(2).reline(cv.FILLED)
+
+        #### RESULTS -> LINE AA is best, FONT_HERSHEY_PLAIN is best
+        View.make(myCam, courtScn, annotatedPoints = [p1, p2, p3, q1, q2, q3], resolution = RESOLUTION).snap().show()
+
+
+        #### TESTING ADAPTIVE RESOLUTION ###
+        
+        c_w_2D = courtLines['Bottom Baseline'].center().down(150).left(100)
+        d_w_2D = courtLines.get_center_point()
     
-    l_coords, c_coords, r_coords = courtLines.get_3D_net_points()
-    lPt, cPt, rPt = Point3D(l_coords), Point3D(c_coords), Point3D(r_coords)
+        c_w = Point3D.from_point2D(c_w_2D, z = 100)
+        d_w = Point3D.from_point2D(d_w_2D, z = 0)
+        
+        myCam = Camera.from_to(c_w, d_w)
 
-    cv.FONT_HERSHEY_SIMPLEX
-    cv.FONT_HERSHEY_PLAIN
-    cv.FONT_HERSHEY_DUPLEX
-    cv.FONT_HERSHEY_COMPLEX
-    cv.FONT_HERSHEY_TRIPLEX
-    cv.FONT_HERSHEY_COMPLEX_SMALL
-    cv.FONT_HERSHEY_SCRIPT_SIMPLEX
-    cv.FONT_HERSHEY_SCRIPT_COMPLEX
-    cv.FONT_ITALIC
+        p1_2D = courtLines['Bottom Baseline'].center().right(100)
+        p2_2D = courtLines['Top Baseline'].center().left(100).up(100)
 
-    #### SERIF FONTS -> THEY LOOK BAD
-    # q4 = rPt.up(30).annotate('FONT_HERSHEY_COMPLEX').refont(cv.FONT_HERSHEY_COMPLEX)
-    # p1 = lPt.up(120).annotate('FONT_HERSHEY_TRIPLEX').refont(cv.FONT_HERSHEY_TRIPLEX)
-    # p2 = lPt.up(90).annotate('FONT_HERSHEY_COMPLEX_SMALL').refont(cv.FONT_HERSHEY_COMPLEX_SMALL)
+        ply1 = Player.make(p1_2D.coords)
+        ply2 = Player.make(p2_2D.coords)
+        courtScn = Scene.make_court(courtLines).put(ply1).put(ply2)
 
-    ### SCRIPT FONTS -> TERRIBLE
-    # p3 = lPt.up(60).annotate('FONT_HERSHEY_SCRIPT_SIMPLEX').refont(cv.FONT_HERSHEY_SCRIPT_SIMPLEX)
-    # p4 = lPt.up(30).annotate('FONT_HERSHEY_SCRIPT_COMPLEX').refont(cv.FONT_HERSHEY_SCRIPT_COMPLEX)
+        
+        View.make(myCam, courtScn, adaptive_resolution_exponent = 0, resolution = RESOLUTION).snap().show()
+        View.make(myCam, courtScn, adaptive_resolution_exponent = 1, resolution = RESOLUTION).snap().show()
+        View.make(myCam, courtScn, adaptive_resolution_exponent = 2, resolution = RESOLUTION).snap().show()
+        View.make(myCam, courtScn, adaptive_resolution_exponent = 3, resolution = RESOLUTION).snap().show()
 
-    ### ITALIC
-    # p1 = rPt.up(30).annotate('FONT_ITALIC').refont(cv.FONT_ITALIC) ## -> doesn't work?
+        # Player.make()
 
-    ### SANS SERIF -> OK
-    # q1 = rPt.up(120).annotate('FONT_HERSHEY_SIMPLEX').refont(cv.FONT_HERSHEY_SIMPLEX) ### ok, but not great
-    q1 = rPt.up(20).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).reline(cv.LINE_AA)
-    q2 = rPt.up(50).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).reline(cv.LINE_AA)
-    q3 = rPt.up(80).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).rethicken(2).reline(cv.LINE_AA)
+        # emptyScn = Scene.empty() 
+        # courtRegions3D = Regions3D.make_court()
+        # myBall = Ball3D((30, 30, 30))
+        # myNet = Regions3D.make_singles_net()
 
-    # p1 = lPt.up(40).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX) ####### good, but plain is slightly better (and can be smaller!)
-    # p2 = lPt.up(70).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX).rethicken(2)
-    # p3 = lPt.up(100).annotate('FONT HERSHEY DUPLEX').refont(cv.FONT_HERSHEY_DUPLEX).rethicken(3) 
-    
-    p1 = lPt.up(40).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).reline(cv.FILLED)
-    p2 = lPt.up(70).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).reline(cv.FILLED)
-    p3 = lPt.up(100).annotate('FONT HERSHEY PLAIN').refont(cv.FONT_HERSHEY_PLAIN).resize(2).rethicken(2).reline(cv.FILLED)
+        # backScn = emptyScn.put(courtRegions3D).put(myNet)
+        # ballScn = emptyScn.put(myBall)
 
-    #### RESULTS -> LINE AA is best, FONT_HERSHEY_PLAIN is best
-    View.make(myCam, courtScn, annotatedPoints = [p1, p2, p3, q1, q2, q3], resolution = RESOLUTION).snap().show()
+        # myCam = Camera.calibrated_AO_behind()
 
+        # backView = View.make(myCam, backScn)
+        # frntView = View.make(myCam, ballScn)
 
-    #### TESTING ADAPTIVE RESOLUTION ###
-    
-    c_w_2D = courtLines['Bottom Baseline'].center().down(150).left(100)
-    d_w_2D = courtLines.get_center_point()
- 
-    c_w = Point3D.from_point2D(c_w_2D, z = 100)
-    d_w = Point3D.from_point2D(d_w_2D, z = 0)
-    
-    myCam = Camera.from_to(c_w, d_w)
+        # backView.snap().show()
+        # frntView.snap().show()
 
-    p1_2D = courtLines['Bottom Baseline'].center().right(100)
-    p2_2D = courtLines['Top Baseline'].center().left(100).up(100)
-
-    ply1 = Player.make(p1_2D.coords)
-    ply2 = Player.make(p2_2D.coords)
-    courtScn = Scene.make_court(courtLines).put(ply1).put(ply2)
-
-    
-    View.make(myCam, courtScn, adaptive_resolution_exponent = 0, resolution = RESOLUTION).snap().show()
-    View.make(myCam, courtScn, adaptive_resolution_exponent = 1, resolution = RESOLUTION).snap().show()
-    View.make(myCam, courtScn, adaptive_resolution_exponent = 2, resolution = RESOLUTION).snap().show()
-    View.make(myCam, courtScn, adaptive_resolution_exponent = 3, resolution = RESOLUTION).snap().show()
-
-    # Player.make()
-
-    # emptyScn = Scene.empty() 
-    # courtRegions3D = Regions3D.make_court()
-    # myBall = Ball3D((30, 30, 30))
-    # myNet = Regions3D.make_singles_net()
-
-    # backScn = emptyScn.put(courtRegions3D).put(myNet)
-    # ballScn = emptyScn.put(myBall)
-
-    # myCam = Camera.calibrated_AO_behind()
-
-    # backView = View.make(myCam, backScn)
-    # frntView = View.make(myCam, ballScn)
-
-    # backView.snap().show()
-    # frntView.snap().show()
-
-    # bothView = backView.combine(frntView)
-    # bothView.show()
+        # bothView = backView.combine(frntView)
+        # bothView.show()
 
