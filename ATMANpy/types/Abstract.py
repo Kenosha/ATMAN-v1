@@ -1572,6 +1572,17 @@ def __make_method_get(myClass, shotMethodStr):
     method.__name__ = shotMethodStr
     setattr(myClass, shotMethodStr, method)
 
+def __make_method_is(myClass, shotMethodStr):
+    def method(self, **kwargs):
+        outList = [getattr(myShot, shotMethodStr)(**kwargs) for myShot in self]
+        try:
+            return np.array(outList, dtype = bool)
+        except: ### sometimes, outList is a list of lists of unequal size
+            return outList
+
+    method.__name__ = shotMethodStr
+    setattr(myClass, shotMethodStr, method)
+
 for methodStr in dir(Shot):
     if methodStr.startswith('feat_'):
         ### feat getters
@@ -1592,6 +1603,11 @@ for methodStr in dir(Shot):
             __make_method_get(Shots, methodStr)
         if not methodStr in dir(Point): ### do not overwrite
             __make_method_get(Point, methodStr)
+    
+    if methodStr.startswith('is_'):
+        ### normal getters
+        if not methodStr in dir(Shots): ### do not overwrite
+            __make_method_is(Shots, methodStr)
 
 def read_in_all_tables(confs):
     ### READ IN DATA
