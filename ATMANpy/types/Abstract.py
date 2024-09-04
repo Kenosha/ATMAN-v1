@@ -268,8 +268,27 @@ class Trajectory:
         flightLn = Line(Point2D((hit_x, hit_y)), Point2D((lst_x, lst_y)))
         return flightLn
 
+    def get_initial_width(self, courtLines = None):
+        hit_x = self.get_initial_position()[0]
+        cnt_x = courtLines.get_center_point().x
+        return np.abs(hit_x - cnt_x)
+    
+    def get_initial_depth(self, courtLines = None):
+        ### depth of hit, measured relative to the baseline.
+        hit_y = self.get_initial_position()[1]
+
+        if courtLines is None:
+            courtLines = CourtLines.make()
+
+        if self.is_top_to_bot():
+            base_y = courtLines['Top Baseline'].center().y
+            return base_y - hit_y
+        elif self.is_bot_to_top():
+            base_y = courtLines['Bottom Baseline'].center().y
+            return hit_y - base_y
+        
     def get_initial_height(self, how = 'trajectory'):
-        return self.get_initial_position(how = how).z
+        return self.get_initial_position(how = how)[2]
     
     def get_initial_horizontal_speed(self, unit = 'km/h'):
         assert unit in ['m/s', 'km/h']
@@ -328,6 +347,12 @@ class Trajectory:
         idx = self.get_match_index()
         return confs[idx]['cap']
 
+    def is_top_to_bot(self):
+        return self.get_hit_event()[1] == 'T'
+    
+    def is_bot_to_top(self):
+        return self.get_hit_event()[1] == 'B'
+    
     def stream(self, cap = None, confs = None):
         if cap is None and confs is None:
             raise Exception('Need either a video capture or a list of configurations passed in as kwargs')
@@ -590,6 +615,12 @@ class Shot:
     def get_ball_hit_height(self):
         return self.shotTraj.get_initial_height()
     
+    def get_ball_hit_depth(self, courtLines = None):
+        return self.shotTraj.get_initial_depth(courtLines = courtLines)
+    
+    def get_ball_hit_width(self, courtLines = None):
+        return self.shotTraj.get_initial_width(courtLines = courtLines)
+
     def get_initial_horizontal_speed(self, unit = 'km/h'):
         return self.shotTraj.get_initial_horizontal_speed(unit = unit)
         
