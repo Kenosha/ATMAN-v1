@@ -290,6 +290,21 @@ class Trajectory:
     def get_initial_height(self, how = 'trajectory'):
         return self.get_initial_position(how = how)[2]
     
+    def get_bounce_distance_from_baseline(self, courtLines = None):
+        _, bnc_y = self.get_first_bounce_position()
+        if bnc_y is None:
+            return None
+        
+        if courtLines is None:
+            courtLines = CourtLines.make()
+        
+        if self.is_top_to_bot():
+            base_y = courtLines['Bottom Baseline'].center().y
+            return base_y - bnc_y ### positive: in front of baseline; negative: behind baseline
+        elif self.is_bot_to_top():
+            base_y = courtLines['Top Baseline'].center().y
+            return bnc_y - base_y
+
     def get_initial_horizontal_speed(self, unit = 'km/h'):
         assert unit in ['m/s', 'km/h']
         speed_ms = self['vx0'].iloc[0]
@@ -620,6 +635,9 @@ class Shot:
     
     def get_ball_hit_width(self, courtLines = None):
         return self.shotTraj.get_initial_width(courtLines = courtLines)
+
+    def get_bounce_distance_from_baseline(self, courtLines = None):
+        return self.shotTraj.get_bounce_distance_from_baseline(courtLines = courtLines)
 
     def get_initial_horizontal_speed(self, unit = 'km/h'):
         return self.shotTraj.get_initial_horizontal_speed(unit = unit)

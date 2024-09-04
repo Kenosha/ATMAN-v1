@@ -120,21 +120,13 @@ def is_serve_out_wide(myPnt):
 def is_serve_down_middle(myPnt):
     return is_down_middle(myPnt.get_serve())
 
-def get_ret_dist_to_bsl(myPnt):
-    retShot = myPnt.get_return()
-
-    botLn = courtLines['Bottom Baseline']
-    bot_y = botLn.leftPt.y
-    if retShot is None:
+def get_ret_dist_to_bsl(myPnt, courtLines = None):
+    dist = myPnt.get_return().get_bounce_distance_from_baseline(courtLines = courtLines)
+    if dist is None:
         return None
-    
-    ret_y = retShot.get_first_bounce_position()[1]
-    if ret_y is None:
-        return None
-
-    dist = bot_y - ret_y
-    dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
-    return dist_in_meters
+    else:
+        dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
+        return dist_in_meters
 
 def get_ret_dist_to_bh(myPnt):
     retShot = myPnt.get_return()
@@ -442,7 +434,7 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     ### these cases are weird, but mostly harmless -> ball seen as just out when it's just in.
     
     ### return distances
-    regFrm['ret_dist_to_bsl'] = retPnts.apply(get_ret_dist_to_bsl)
+    regFrm['ret_dist_to_bsl'] = retPnts.apply(get_ret_dist_to_bsl, courtLines = courtLines)
     regFrm['ret_dist_to_bh'] = retPnts.apply(get_ret_dist_to_bh)
     regFrm['ret_dist_to_opt'] = retPnts.apply(get_ret_dist_to_opt)
 
