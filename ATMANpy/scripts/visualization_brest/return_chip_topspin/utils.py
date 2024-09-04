@@ -69,6 +69,15 @@ def get_return_spin(myPnt):
 def get_return_pos(myPnt):
     return myPnt.get_serve().get_ball_next_position()
 
+def get_return_width(myPnt, courtLines = None):
+    return myPnt.get_return().get_ball_hit_width(courtLines = courtLines)
+
+def get_return_depth(myPnt, courtLines = None):
+    return myPnt.get_return().get_ball_hit_depth(courtLines = courtLines)
+
+def get_return_height(myPnt):
+    return myPnt.get_return().get_ball_hit_height()
+
 def get_return_flight_time(myPnt, fps = 25):
     return myPnt.get_return().get_num_frames() / fps
 
@@ -271,11 +280,8 @@ def get_winners_from_score(retPnts, allPnts):
     return winner_codes
 
 def get_psm_var_dict(retPnts):
-    
     courtLines = CourtLines.make()
-    x, y = courtLines['Top Baseline'].center().coords ### note that direction has been enforced -> Bot to Top
-    x, y = x / const.SCALE * const.FOOT_TO_METER, y / const.SCALE * const.FOOT_TO_METER
-
+    
     ### Dependent Variable: chipped or topspin?
     def is_chipped(myPnt):
         return myPnt.get_return().is_slice_visual()
@@ -283,20 +289,16 @@ def get_psm_var_dict(retPnts):
 
     ### Independent Variables:
     # a) Serve Speed
-    
     speedArr = retPnts.apply(get_serve_speed)
     # speedArr = np.log(speedArr)
 
-    # b) Location of Return
-    locArr = retPnts.apply(get_return_pos) / const.SCALE * const.FOOT_TO_METER
-
     # b1) Width of the return -> relative to center line
-    widthArr = np.abs(locArr[:, 0] - x) ### absolute, because we control for side by looking at forehand/backhand
+    widthArr = retPnts.apply(get_return_width, courtLines = courtLines) / const.SCALE * const.FOOT_TO_METER
     # b2) Depth of return
-    depthArr = -(locArr[:, 1] - y) ### negative -> behind baseline, positive, in front -> so we turn it around!!
+    depthArr = retPnts.apply(get_return_depth, courtLines = courtLines) / const.SCALE * const.FOOT_TO_METER #### TODO: test these with returner depth (positioning, not hit location!)
     # b3) Height of Return
-    heightArr = locArr[:, 2]
-
+    heightArr = retPnts.apply(get_return_height) / const.SCALE * const.FOOT_TO_METER
+    
     # c) Distance of Returner from Flight Line
     distArr = retPnts.apply(get_distance_from_flight_line) / const.SCALE * const.FOOT_TO_METER
     distArr_sq = distArr ** 2
