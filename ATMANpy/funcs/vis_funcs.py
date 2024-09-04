@@ -52,7 +52,11 @@ def interpolate_camera_slerp(startCam, endCam, num_frames):
     from ATMANpy.types.Visual3D import Quaternion
     
     def SLERP(q1, q2, u):
-        theta = np.arccos(q1.vector() @ q2.vector())
+        ### TODO: enforce angle to be the short one?!
+        if q1.vector() @ q2.vector() < 0:
+            q1 = q1 * (-1)
+
+        theta = np.arccos(q1.vector() @ q2.vector()) ### restrict to positive, so theta < pi/2
         
         factor1 = np.sin((1 - u) * theta) / np.sin(theta)
         factor2 = np.sin(u * theta) / np.sin(theta)
@@ -61,15 +65,15 @@ def interpolate_camera_slerp(startCam, endCam, num_frames):
 
     u_space = np.linspace(0, 1, num_frames, endpoint = True)
     
-    startQ = Quaternion.from_rotation_matrix(startCam.get_R())
-    endQ = Quaternion.from_rotation_matrix(endCam.get_R())
+    q1 = Quaternion.from_rotation_matrix(startCam.get_R())
+    q2 = Quaternion.from_rotation_matrix(endCam.get_R())
 
     itplCams = []
     for u in u_space:
         M_int = startCam.M_int * (1 - u) + endCam.M_int * u
         M_ext = startCam.M_ext * (1 - u) + endCam.M_ext * u
 
-        itplQ = SLERP(startQ, endQ, u)
+        itplQ = SLERP(q1, q2, u)
         itplR = itplQ.to_rotation_matrix()
         M_ext[:3, :3] = itplR
 
