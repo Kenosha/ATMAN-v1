@@ -448,7 +448,10 @@ class Camera:
         # -> it is orthogonal to z_w (and thus co-planar with the world ground)
         # -> it is orthogonal to z_c by virtue of being an axis
         x_axis = np.cross(z_axis, np.array([0, 0, 1]))
-        x_axis = x_axis / (x_axis ** 2).sum() ** 0.5
+        if x_axis.sum() == 0: ### this happens if z_axis is colinear with [0, 0, 1]
+            x_axis = np.array([1, 0, 0])
+        else:
+            x_axis = x_axis / (x_axis ** 2).sum() ** 0.5
         x_axis = - x_axis ### invert the direction of x axis (generally correct?)
 
         ### 3) the y-axis is orthogonal to x and z
