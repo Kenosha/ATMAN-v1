@@ -70,14 +70,14 @@ class Quaternion:
     def to_rotation_matrix(self):
         w, x, y, z = self.unit().tuple()    
 
-        R = np.array([[1 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x*z + y*w)],
-                      [2*(x*y + z*w), 1 - 2*(x**2 + z**2), 2*(y*z - x*w)],
-                      [2*(x*z - y*w), 2*(y*z + x*w), 1 - 2*(x**2 + y**2)]])
+        R = np.array([[1 - 2*(y**2 + z**2), 2*(x*y + z*w), 2*(x*z - y*w)],
+                      [2*(x*y - z*w), 1 - 2*(x**2 + z**2), 2*(y*z + x*w)],
+                      [2*(x*z + y*w), 2*(y*z - x*w), 1 - 2*(x**2 + y**2)]])
 
         return R
     
     @staticmethod
-    def from_rotation_matrix(R, invert_w = True):
+    def from_rotation_matrix(R):
         ### using Bar-Itzhack (2015): New Method for Extracting the Quaternion from a Rotation Matrix
         ### version 3 in the paper.
         ### WEIRDNESS: invert_w: w needs its sign switched. This is weird, but produces correct quaternions
@@ -95,9 +95,6 @@ class Quaternion:
         max_idx = eig_vals.argmax()
         x, y, z, w = eig_vecs[:, max_idx]
         
-        if invert_w: ### see WEIRDNESS comment above.
-            w = -w
-
         return Quaternion(w, x, y, z) ### why minus?
     
     @staticmethod
@@ -848,7 +845,7 @@ if __name__ == '__main__':
         print('The following vectors should be the same!')
         for vec in vecs:
             p1 = R @ vec
-            p2 = myQuat * Quaternion.from_vector(vec) * myQuat.inv()
+            p2 = myQuat.inv() * Quaternion.from_vector(vec) * myQuat
             p2 = p2.vector()
 
             print(np.stack([p1, p2], axis = 1))
@@ -863,7 +860,6 @@ if __name__ == '__main__':
         print('The following two quaternions should be the same')
         print(myQuat.unit())
         print(Quaternion.from_rotation_matrix(R))
-        ### w has the sign switched!!!
 
         print('___________')
 
@@ -871,17 +867,11 @@ if __name__ == '__main__':
                       [-0.626, 0.796, -0.056],
                       [-0.677, -0.498, 0.529]])
         
-        q_paper = Quaternion.from_rotation_matrix(R, invert_w = False) ### as in the paper!!!
-        q_right = Quaternion.from_rotation_matrix(R, invert_w = True) ### produces correct rotation matrix!
-
-        print('The following two matrices are close transposes of each other (weirdly).')
-        print(q_paper.to_rotation_matrix()) ### transposed versus paper!
-        print(R)
-
+        q = Quaternion.from_rotation_matrix(R) ### as in the paper!!!
+        
         print('The following two matrices are close enough.')
-        print(q_right.to_rotation_matrix()) ### transposed versus paper!
+        print(q.to_rotation_matrix()) 
         print(R)
-        #### -> but they also premultiply vectors in the paper!
         
     if CHECK_FONTS:
 
