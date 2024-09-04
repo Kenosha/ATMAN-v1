@@ -50,9 +50,9 @@ def birds_eye_half_court_cam(zoom = 1, side = 'Top'):
     elif side == 'Bot':
         relevantPnt = bot_cnt_2D
     
-    c_w = Point3D.from_point2D(relevantPnt, z = 300).left(1) ### why we need to go one left is a mystery...
+    c_w = Point3D.from_point2D(relevantPnt, z = 300) ### why we need to go one left is a mystery...
     f_w = Point3D.from_point2D(relevantPnt, z = 0)
-    myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom).rotate(-0.5)
+    myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom)
     return myCam
 
 def birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top'):
@@ -65,9 +65,9 @@ def birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top'):
     elif side == 'Bot' and which == 'Ad':
         relevantPnt = bot_ad_2D
     
-    c_w = Point3D.from_point2D(relevantPnt, z = 190).left(1) ### why we need to go one left is a mystery...
+    c_w = Point3D.from_point2D(relevantPnt, z = 190) ### why we need to go one left is a mystery...
     f_w = Point3D.from_point2D(relevantPnt, z = 0)
-    myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom).rotate(-0.5)
+    myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom)
     return myCam
 
 def back_view_asymmetric_cam(which = 'Deuce', side = 'Top'):
