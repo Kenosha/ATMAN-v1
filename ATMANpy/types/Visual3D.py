@@ -67,6 +67,10 @@ class Quaternion:
         x, y, z = vector
         return Quaternion(w, x, y, z)
 
+    def rotate(self, vector):
+        rot_q = self.inv() * Quaternion.from_vector(vector) * self
+        return rot_q.vector()
+
     def to_rotation_matrix(self):
         w, x, y, z = self.unit().tuple()    
 
@@ -845,9 +849,7 @@ if __name__ == '__main__':
         print('The following vectors should be the same!')
         for vec in vecs:
             p1 = R @ vec
-            p2 = myQuat.inv() * Quaternion.from_vector(vec) * myQuat
-            p2 = p2.vector()
-
+            p2 = myQuat.rotate(vec)
             print(np.stack([p1, p2], axis = 1))
 
         ### to_rotation_matrix seems to work!
