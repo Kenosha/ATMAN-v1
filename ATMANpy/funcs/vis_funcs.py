@@ -34,7 +34,8 @@ def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
 
     return BGRFrames.from_frames([combFrms] * repeats)[:duration_in_frames]
 
-def interpolate_camera(startCam, endCam, num_frames):
+def interpolate_camera_naive(startCam, endCam, num_frames):
+    ### TODO: this is not super reliable! -> quaternions + slerp?
     assert startCam.sensor_dims == endCam.sensor_dims
     frames = range(0, num_frames)
     num_frames = len(frames)
@@ -46,6 +47,37 @@ def interpolate_camera(startCam, endCam, num_frames):
 
     itplCams = [Camera(M_int, M_ext, startCam.sensor_dims) for (M_int, M_ext) in zip(M_ints, M_exts)]
     return itplCams
+
+def interpolate_camera_slerp(startCam, endCam, num_frames):
+    from ATMANpy.types.Visual3D import Quaternion
+    
+    def SLERP(q1, q2, u):
+        theta = np.arccos(q1.vector() @ q2.vector())
+        
+        factor1 = np.sin((1 - u) * theta) / np.sin(theta)
+        factor2 = np.sin(u * theta) / np.sin(theta)
+
+        return q1 * factor1 + q2 * factor2
+
+    u_space = np.linspace(0, 1, num_frames, endpoint = True)
+    
+    startQ = Quaternion.from_rotation_matrix(startCam.get_R())
+    endQ = Quaternion.from_rotation_matrix(endCam.get_R())
+
+    itplCams = []
+    for u in u_space:
+        M_int = startCam.M_int * (1 - u) + endCam.M_int * u
+        M_ext = startCam.M_ext * (1 - u) + endCam.M_ext * u
+
+        itplQ = SLERP(startQ, endQ, u)
+        itplR = itplQ.to_rotation_matrix()
+        M_ext[:3, :3] = itplR
+
+        itplCam = Camera(M_int, M_ext, startCam.sensor_dims)
+        itplCams.append(itplCam)
+
+    return itplCams
+
 
 def interpolate_shape(fs_shape, ls_shape, itpl_lambda = 0.5):
     assert fs_shape.__class__ == ls_shape.__class__
@@ -125,7 +157,7 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     argument_luminosity = 1, adaptive_resolution_exponent = 0, 
                     cumulate_argument = False, cumulative_foreground_transparence = None, 
-                    argument_blinks_per_second = None,
+                    argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
                     start_cam = None, stop_cam = None, animate_over = None):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
@@ -164,7 +196,7 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
     argument_annotated_points_dimmed = [p.dim(1 / argument_luminosity) for p in annotated_points] ### this passes into the next_animation_dictionary
     annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
 
-    cams = interpolate_camera(start_cam, stop_cam, num_frames) 
+    cams = interpolate_func(start_cam, stop_cam, num_frames) 
 
     frameList = []
     for idx in range(num_frames):
@@ -230,7 +262,7 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
                         background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None, ### these are static/previous scenes that are not animated, but can be faded out/in
                         argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                         argument_luminosity = 1, cumulative_foreground_transparence = None, adaptive_resolution_exponent = 0,
-                        argument_blinks_per_second = None,
+                        argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
                         start_cam = None, stop_cam = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
@@ -278,7 +310,7 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
     annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
 
     ### make cams
-    cams = interpolate_camera(start_cam, stop_cam, num_frames) 
+    cams = interpolate_func(start_cam, stop_cam, num_frames) 
 
     frameList = []
     for idx in range(num_frames):
@@ -1109,3 +1141,22 @@ def kde_angle_distribution(myShots, value_func = 'get_launch_angle', weight_func
         kdeScn = kdeScn.put(x_axis).put(y_axis)
         
     return kdeScn, modes
+
+
+if __name__ == '__main__':
+
+    ### Test Camera Interpolation
+
+    from ATMANpy.auxil.court import birds_eye_half_court_cam
+    from ATMANpy.types.Visual3D import Camera, Scene, View
+    from ATMANpy.types.Streams import DecapStream
+
+    startCam = Camera.calibrated_brest_behind().resize(3)
+    stopCam = birds_eye_half_court_cam(side = 'Top')
+    myScn = Scene.make_court()
+    
+    myFrms, _ = animate_cam_motion(myScn, start_cam = startCam, stop_cam = stopCam, num_frames = 50, interpolate_func = interpolate_camera_naive)
+    DecapStream(myFrms, 0, 100).show(ms_between_frames = 40)
+
+    myFrms, _ = animate_cam_motion(myScn, start_cam = startCam, stop_cam = stopCam, num_frames = 50, interpolate_func = interpolate_camera_slerp)
+    DecapStream(myFrms, 0, 100).show(ms_between_frames = 40)
