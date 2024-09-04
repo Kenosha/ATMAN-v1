@@ -58,6 +58,15 @@ class Quaternion:
     def unit(self):
         return self / self.norm()
     
+    def vector_norm(self):
+        return (self.x ** 2 + self.y ** 2 + self.z ** 2) ** 0.5
+    
+    def unit_vector(self):
+        return self.vector() / self.vector_norm()
+    
+    def gamma(self):
+        return np.arccos(self.w / self.norm())
+    
     def inv(self):
         norm_squared = self.norm() ** 2
         scalar = self.scalar() / norm_squared
@@ -99,7 +108,7 @@ class Quaternion:
         max_idx = eig_vals.argmax()
         x, y, z, w = eig_vecs[:, max_idx]
         
-        return Quaternion(w, x, y, z) ### why minus?
+        return Quaternion(w, x, y, z) 
     
     @staticmethod
     def from_vector(vec):
