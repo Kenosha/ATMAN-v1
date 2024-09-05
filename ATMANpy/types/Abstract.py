@@ -511,6 +511,20 @@ class Trajectory:
                 return spLn
         return ballSF_before.merge(ballSF).apply(make_spline)
     
+    def feat_spline_cumul(self, how = 'trajectory', which_endpoint = 'smooth'):
+        splineSF = self.feat_spline(how = how, which_endpoint = which_endpoint)
+
+        cumulSF = {}
+        for frame in splineSF:
+            spLn = splineSF[frame]
+            try:
+                prev_spline_list = cumulSF[frame - 1]
+            except:
+                cumulSF[frame] = [spLn]
+            else:
+                cumulSF[frame] = [*prev_spline_list, spLn]
+
+        return StreamFeature(cumulSF, name = 'spLn_cumul')
     
 @dataclass(frozen = True)
 class Shot:
@@ -915,6 +929,9 @@ class Shot:
     def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth'):
         return self.shotTraj.feat_spline(how = how, which_endpoint = which_endpoint)
         
+    def feat_spline_cumul(self, how = 'trajectory', which_endpoint = 'smooth'):
+        return self.shotTraj.feat_spline_cumul(how = how, which_endpoint = which_endpoint)
+
     def get_capture(self, confs):
         return self.shotTraj.get_capture(confs)
 
