@@ -375,19 +375,39 @@ class Diagram:
 
         return myFrm
 
-@dataclass(frozen = True)
+class LegendRow:
+    def __init__(self, text = None, shape_color = None,
+                 text_color = const.BGR['bright_grey'], text_size = 1, text_thickness = 1, text_offset = 0,
+                 shape_offset = 0.1):
+        self.text = text
+        self.text_color = text_color
+        self.text_size = text_size
+        self.text_thickness = text_thickness
+        self.text_offset = text_offset
+
+        self.shape_color = shape_color
+        self.shape_offset = shape_offset
+
+        self.is_null = text is None
+
 class Legend:
-    element_parameters: list
-    legend_dimensions: tuple = (600, 400)
-    render_height: int = 100
-    resolution: int = 10
-    split_denominator: int = 4
-    borders: bool = True
-    header_text: str = 'Legend'
-    header_size: int = 2
-    header_thickness: int = 2
-    header_offset: int = 10
-    header_color: tuple = const.BGR['smokey_grey']
+    def __init__(self, legend_rows, legend_dimensions = (600, 400), 
+                 render_height = 100, resolution = 10, split_denominator = 4, borders = True,
+                 header_text = 'Legend', header_size = 2, header_thickness = 2, header_offset = 10, header_color = const.BGR['bright_grey']):
+        self.legend_rows = legend_rows
+
+        self.legend_dimensions = legend_dimensions
+        self.render_height = render_height
+        self.resolution = resolution
+
+        self.split_denominator = split_denominator
+        self.borders = borders
+
+        self.header_text = header_text
+        self.header_size = header_size
+        self.header_thickness = header_thickness
+        self.header_offset = header_offset
+        self.header_color = header_color
 
     @staticmethod
     def make_empty(legend_dimensions = (600, 400), render_height = 100, resolution = 10, split_denominator = 4, borders = True,
@@ -404,8 +424,8 @@ class Legend:
                       header_offset = header_offset,
                       header_color = header_color)
     
-    def add(self, parameter_dict):
-        return Legend([*self.element_parameters, parameter_dict], 
+    def add(self, legend_row):
+        return Legend([*self.legend_rows, legend_row], 
                       legend_dimensions = self.legend_dimensions, 
                       render_height = self.render_height,
                       resolution = self.resolution,
@@ -427,57 +447,62 @@ class Legend:
         if not self.borders:
             legLines = legLines.realpha(0)
 
-        num_els = len(self.element_parameters)
+        num_els = len(self.legend_rows)
 
-        subRegs = legReg.subdivide(elements = num_els + 1, how = 'horizontal')
-        headerReg, otherRegs = subRegs[0], subRegs[1:]
+        if self.header_text != '':
+            subRegs = legReg.subdivide(elements = num_els + 1, how = 'horizontal')
+            headerReg, otherRegs = subRegs[0], subRegs[1:]
 
-        headerPt = make_text_in(headerReg, self.header_text, 
-                                size = self.header_size, 
-                                thickness = self.header_thickness,
-                                horizontal_offset = self.header_offset,
-                                color = self.header_color)
+            headerPt = make_text_in(headerReg, self.header_text, 
+                                    size = self.header_size, 
+                                    thickness = self.header_thickness,
+                                    horizontal_offset = self.header_offset,
+                                    color = self.header_color)
 
-        legend_shapes, annotated_points = [legLines], [headerPt]
-        for params, subReg in zip(self.element_parameters, otherRegs):
+            legend_shapes, annotated_points = [legLines], [headerPt]
+        else:
+            otherRegs = legReg.subdivide(elements = num_els + 1, how = 'horizontal')
+            legend_shapes, annotated_points = [], []
+        
+        for row, subReg in zip(self.legend_rows, otherRegs):
             
-            if params is None: ### this is so we can have a legend of fixed subdivisions with empty elements -> None as a placeholder
+            if row.is_null: ### this is so we can have a legend of fixed subdivisions with empty elements -> None as a placeholder
                 continue
 
             subReg_left, subReg_right = subReg.split(numerator = 1, denominator = self.split_denominator, how = 'vertical')
 
             ### shape on the left side of the legend element
             try:
-                shape_color = params['shape_color']
-                shape_offset = params['shape_offset']
+                shape_color = row.shape_color
+                shape_offset = row.shape_offset
             except KeyError:
                 pass
             else:
                 shapeReg = make_region_in(subReg_left, offset = shape_offset, color = shape_color)
                 legend_shapes.append(shapeReg)
 
-            ### text to add on the left side of the legend element, on top of shape potentially
-            try:
-                text_string_shape = params['text_string_shape']
-                text_color_shape = params['text_color_shape']
-                text_size_shape = params['text_size_shape']
-                text_thickness_shape = params['text_thickness_shape']
-                text_offset_shape = params['text_offset_shape']
-            except KeyError:
-                pass
-            else:
-                textPt_left = make_text_in(subReg_left, text_string_shape, 
-                                           size = text_size_shape, thickness = text_thickness_shape, 
-                                           color = text_color_shape, horizontal_offset = text_offset_shape)
-                annotated_points.append(textPt_left)
+            # ### text to add on the left side of the legend element, on top of shape potentially
+            # try:
+            #     text_string_shape = params['text_string_shape']
+            #     text_color_shape = params['text_color_shape']
+            #     text_size_shape = params['text_size_shape']
+            #     text_thickness_shape = params['text_thickness_shape']
+            #     text_offset_shape = params['text_offset_shape']
+            # except KeyError:
+            #     pass
+            # else:
+            #     textPt_left = make_text_in(subReg_left, text_string_shape, 
+            #                                size = text_size_shape, thickness = text_thickness_shape, 
+            #                                color = text_color_shape, horizontal_offset = text_offset_shape)
+            #     annotated_points.append(textPt_left)
 
             ### text on the right side of the legend element
             try:
-                text_string = params['text_string']
-                text_color = params['text_color']
-                text_size = params['text_size']
-                text_thickness = params['text_thickness']
-                text_offset = params['text_offset']
+                text_string = row.text
+                text_color = row.text_color
+                text_size = row.text_size
+                text_thickness = row.text_thickness
+                text_offset = row.text_offset
             except KeyError:
                 pass
             else:
@@ -778,10 +803,10 @@ def reverse_cascade(finalRst, keep_which = None,
 
 
 if __name__ == '__main__':
-    
     TEST_TABLES = False
     TEST_RASTERS = False
-    TEST_DIAGRAMS = True
+    TEST_DIAGRAMS = False
+    TEST_LEGEND = True
 
     #####################
     ### TABLE TESTING ###
@@ -854,3 +879,16 @@ if __name__ == '__main__':
 
         myDiag.render().show()
 
+    if TEST_LEGEND:
+        rows = [LegendRow('row 1', shape_color = const.BGR['intense_red']),
+                LegendRow('row 2', shape_color = const.BGR['leafy_green'])]
+
+        Legend(rows).render().show()
+
+        rows = [LegendRow('row 1', shape_color = const.BGR['intense_red']),
+                LegendRow(),
+                LegendRow('row 2', shape_color = const.BGR['leafy_green'])]
+
+        Legend(rows).render().show()
+
+        Legend(rows, header_text = '').render().show()
