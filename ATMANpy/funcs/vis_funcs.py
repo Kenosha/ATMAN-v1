@@ -471,6 +471,23 @@ def divide_line(someLn, num_divisions, reverse_direction = False, dashed = False
     else:
         return itpl_lines[::2] ### so simple :)
 
+def uniform1D(values, space, weightArr = None, bandwidth = 10, normalize_density = False):
+    diffArr = space[np.newaxis] - values[:, np.newaxis]
+    norm_diffArr = diffArr / bandwidth
+    
+    kde_values_for_each_kernel = (-1 <= norm_diffArr) & (norm_diffArr < 1) 
+    kde_values_for_each_kernel = kde_values_for_each_kernel / (2 * bandwidth)
+    
+    if weightArr is not None:
+        kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis]
+
+    kde_values = kde_values_for_each_kernel.mean(axis = 0)
+    
+    if normalize_density:
+        kde_values = kde_values / kde_values.max()
+
+    return kde_values
+
 def epanechnikov1D(values, space, weightArr = None, bandwidth = 10, normalize_density = True):
     diffArr = space[np.newaxis] - values[:, np.newaxis]
     norm_diffArr = diffArr / bandwidth
