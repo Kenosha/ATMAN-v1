@@ -9,6 +9,7 @@ from ATMANpy.types.Frames import Frame, BGRFrame
 from ATMANpy.types.MultiFrames import BGRFrames
 
 import ATMANpy.auxil.constants as const
+import ATMANpy.funcs.util_funcs as ut
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -63,6 +64,132 @@ def make_text_in(subReg, data_or_string,
     textPt = textPt.resize(size).rethicken(thickness).recolor(color)
     textPt = textPt.right(horizontal_offset).back(vertical_offset)
     return textPt
+
+class Chart:
+    def __init__(self, xs, ys, scatter = False, color = const.BGR['intense_red']):
+        if len(xs) != len(ys):
+            raise Exception(f'x-values and y-values need to be of same length!')
+        
+        self.xs = np.array(xs)
+        self.ys = np.array(ys)
+        self.scatter = scatter
+        self.color = color
+
+    def __len__(self):
+        return len(self.xs)
+    
+class Graph:
+    def __init__(self, charts,
+                 color = const.BGR['smokey_grey'], offset = 0.2,
+                 ax_label_dist = 0.5,
+                 header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
+                 header_height = 1, graph_height = 9,
+                 render_height = 100, dimensions = (600, 400), resolution = 10):
+        self.charts = charts
+        self.color = color
+        
+        self.header_text = header_text
+        self.header_horizontal_offset = header_horizontal_offset
+        self.header_vertical_offset = header_vertical_offset
+
+        self.ax_label_dist = ax_label_dist
+
+        self.render_height = render_height
+        self.dimensions = dimensions
+        self.resolution = resolution
+
+        ### Rendering Camera
+        cam = Camera.birds_eye(render_height, sensor_dims = dimensions)
+        self.cam = cam
+
+        ### Graph Regions
+        camReg = cam.approximate_fov(render_height)
+        headerReg, otherReg = camReg.split(numerator = header_height, denominator = graph_height, how = 'horizontal')
+        self.headerReg = headerReg
+        self.otherReg = otherReg
+
+        ### Graph Axes
+        graphReg = otherReg.rescale(1 - offset)
+        x_axis, y_axis = graphReg['Bottom'], graphReg['Left']
+        self.x_axis = x_axis.recolor(color)
+        self.y_axis = y_axis.recolor(color)
+
+        self.x_orig, self.y_orig, _ = x_axis.leftPt.coords
+        self.x_len = x_axis.length()
+        self.y_len = y_axis.length()
+
+        self.renorm_axes()
+
+    def renorm_axes(self):
+        if len(self.charts) == 0:
+            max_x = 1
+            max_y = 1
+        else:
+            x_vals = [x_val for chart in self.charts for x_val in chart.xs]
+            y_vals = [y_val for chart in self.charts for y_val in chart.ys]
+
+            max_x = max(x_vals)
+            max_y = max(y_vals)
+
+            ### rounding to nearest integer TODO: make more dynamic?
+            max_x = int(np.ceil(max_x))
+            max_y = int(np.ceil(max_y))
+
+        self.max_x = max_x
+        self.max_y = max_y
+        
+        self.min_x = 0
+        self.min_y = 0
+
+    def add(self, chart):
+        self.charts = [*self.charts, chart]
+        self.renorm_axes()
+
+    def render(self):
+        ### Make Axes
+        myScn = Scene([self.x_axis, self.y_axis])
+
+        ### Make Axis Labels
+        min_x, max_x, min_y, max_y = self.min_x, self.max_x, self.min_y, self.max_y
+        min_x_pt = self.x_axis.leftPt.back(self.ax_label_dist).annotate(str(min_x))
+        max_x_pt = self.x_axis.rightPt.back(self.ax_label_dist).annotate(str(max_x))
+        min_y_pt = self.y_axis.rightPt.left(self.ax_label_dist).annotate(str(min_y))
+        max_y_pt = self.y_axis.leftPt.left(self.ax_label_dist).annotate(str(max_y))
+
+        axPts = [min_x_pt, max_x_pt, min_y_pt, max_y_pt]
+
+        ### Make Header Point
+        headerPt = make_text_in(self.headerReg, self.header_text, color = self.color, 
+                                horizontal_offset = self.header_horizontal_offset,
+                                vertical_offset = self.header_vertical_offset)
+
+        for chart in self.charts:
+            ### re-norm the xs and ys (between 0 and 1)
+            xs_norm = chart.xs / (self.max_x - self.min_x)
+            ys_norm = chart.ys / (self.max_y - self.min_y)
+
+            ### bring normalized values to coordinates
+            xs_rect = self.x_len * xs_norm + self.x_orig
+            ys_rect = -(self.y_len * ys_norm) + self.y_orig ### need minus since y coordinates go up to down
+            zs_zero = np.zeros(len(chart))
+            
+            coordArr = np.array([xs_rect, ys_rect, zs_zero])
+
+            if chart.scatter:
+                coordPt_vectorized = Point3D(coordArr)
+                myScn = myScn.put(coordPt_vectorized, color = chart.color)
+            else:
+                coordArr_prev = coordArr[:, :-1]
+                coordArr_next = ut.shift_array(coordArr, -1, axis = 1)[:, :-1]
+
+                coordPt_vectorized = Point3D(coordArr_prev)
+                coordPt_vectorized_next = Point3D(coordArr_next)
+                coordLn_vectorized = Line3D(coordPt_vectorized, coordPt_vectorized_next, color = chart.color)
+                myScn = myScn.put(coordLn_vectorized)
+
+        axView = View.make(self.cam, myScn, resolution = self.resolution, annotatedPoints = [*axPts, headerPt])
+        axFrm = axView.snap()
+        return axFrm
 
 class TableSkeleton:
     def __init__(self, rows, cols, 
@@ -803,10 +930,26 @@ def reverse_cascade(finalRst, keep_which = None,
 
 
 if __name__ == '__main__':
+    TEST_CHART = True
     TEST_TABLES = False
     TEST_RASTERS = False
     TEST_DIAGRAMS = False
-    TEST_LEGEND = True
+    TEST_LEGEND = False
+
+    #####################
+    ### CHART TESTING ###
+    #####################
+        
+    myGraph = Graph([])
+    myGraph.render().show()
+
+    aChart = Chart([0, 1, 2, 3], [2, 3, 4, 2], scatter = False)
+    myGraph.add(aChart)
+    myGraph.render().show()
+
+    bChart = Chart([0, 1, 2, 3], [3, 0, 1, 1], scatter = False, color = const.BGR['leafy_green'])
+    myGraph.add(bChart)
+    myGraph.render().show()
 
     #####################
     ### TABLE TESTING ###
