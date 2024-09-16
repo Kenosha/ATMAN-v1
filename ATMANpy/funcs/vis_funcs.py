@@ -481,14 +481,14 @@ def uniform1D(values, space, weightArr = None, bandwidth = 10, normalize_density
     if weightArr is not None:
         kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis]
 
-    kde_values = kde_values_for_each_kernel.mean(axis = 0)
+    kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
     
     if normalize_density:
         kde_values = kde_values / kde_values.max()
 
     return kde_values
 
-def epanechnikov1D(values, space, weightArr = None, bandwidth = 10, normalize_density = True):
+def epanechnikov1D(values, space, weightArr = None, bandwidth = 10, normalize_density = False):
     diffArr = space[np.newaxis] - values[:, np.newaxis]
     norm_diffArr = diffArr / bandwidth
     norm_devArr = norm_diffArr ** 2
@@ -498,14 +498,14 @@ def epanechnikov1D(values, space, weightArr = None, bandwidth = 10, normalize_de
     if weightArr is not None:
         kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis]
 
-    kde_values = kde_values_for_each_kernel.mean(axis = 0)
+    kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
     
     if normalize_density:
         kde_values = kde_values / kde_values.max()
 
     return kde_values
 
-def epanechnikov2D(values, space, weightArr = None, bandwidth = 30, normalize_density = True):
+def epanechnikov2D(values, space, weightArr = None, bandwidth = 30, normalize_density = False):
     diffArr = space[np.newaxis] - values[:, np.newaxis, np.newaxis]
     norm_diffArr = diffArr / bandwidth
     norm_devArr = (norm_diffArr ** 2).sum(axis = -1)
@@ -515,7 +515,7 @@ def epanechnikov2D(values, space, weightArr = None, bandwidth = 30, normalize_de
     if weightArr is not None:
         kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis, np.newaxis]
 
-    kde_values = kde_values_for_each_kernel.mean(axis = 0)
+    kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
     
     if normalize_density:
         kde_values = kde_values / kde_values.max()
@@ -1098,9 +1098,9 @@ def gmm_clustering_grid_search(myShots,
     return ellScn, cluster_data
 
 def kde_angle_distribution(myShots, value_func = 'get_launch_angle', weight_func_or_arr = None, 
-                            min_angle = 0, max_angle = 90, resolution = 1,
+                            min_angle = 0, max_angle = 90, resolution = 1, 
                             axis_origin_point = None, axis_length = 100, x_unit_vector = None, y_unit_vector = None, show_axes = True,
-                            bandwidth = 5, color = const.BGR['intense_red'],
+                            bandwidth = 5, color = const.BGR['intense_red'], normalize_density = False,
                             min_rel_mode_height = 0.5):
 
     spaceArr = np.arange(min_angle, max_angle, step = 1 / resolution)
@@ -1130,7 +1130,8 @@ def kde_angle_distribution(myShots, value_func = 'get_launch_angle', weight_func
         kdeArr = np.ones_like(spaceArr)
     else:
         ### get the classic, one dimensional epanechnikov kde on a line
-        kdeArr = epanechnikov1D(angleArr_nonnan, spaceArr, weightArr = weightArr, bandwidth = bandwidth)
+        kdeArr = epanechnikov1D(angleArr_nonnan, spaceArr, weightArr = weightArr, bandwidth = bandwidth, 
+                                normalize_density = normalize_density)
 
     modes = detect_distribution_modes(kdeArr, spaceArr, min_rel_mode_height = min_rel_mode_height)
 
