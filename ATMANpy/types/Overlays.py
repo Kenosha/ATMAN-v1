@@ -79,15 +79,19 @@ class Chart:
         return len(self.xs)
     
 class Graph:
-    def __init__(self, charts,
+    def __init__(self, charts, 
+                 as_density = False, ### if we plot as density, there are no y labels, and we norm y-axis accordingly.
                  color = const.BGR['smokey_grey'], offset = 0.2,
                  ax_label_dist = 0.5,
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
                  header_height = 1, graph_height = 9,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
+        ### TODO: add axis labels (y-axis vertical! how?)
+
         self.charts = charts
         self.color = color
-        
+        self.as_density = as_density
+
         self.header_text = header_text
         self.header_horizontal_offset = header_horizontal_offset
         self.header_vertical_offset = header_vertical_offset
@@ -131,9 +135,13 @@ class Graph:
             max_x = max(x_vals)
             max_y = max(y_vals)
 
-            ### rounding to nearest integer TODO: make more dynamic?
-            max_x = int(np.ceil(max_x))
-            max_y = int(np.ceil(max_y))
+            if self.as_density:
+                max_x = int(np.ceil(max_x))
+                max_y = 1.05 * max_y ### scale up a bit
+            else:
+                ### rounding to nearest integer TODO: make more dynamic?
+                max_x = int(np.ceil(max_x))
+                max_y = int(np.ceil(max_y))
 
         self.max_x = max_x
         self.max_y = max_y
@@ -153,10 +161,14 @@ class Graph:
         min_x, max_x, min_y, max_y = self.min_x, self.max_x, self.min_y, self.max_y
         min_x_pt = self.x_axis.leftPt.back(self.ax_label_dist).annotate(str(min_x))
         max_x_pt = self.x_axis.rightPt.back(self.ax_label_dist).annotate(str(max_x))
-        min_y_pt = self.y_axis.rightPt.left(self.ax_label_dist).annotate(str(min_y))
-        max_y_pt = self.y_axis.leftPt.left(self.ax_label_dist).annotate(str(max_y))
+        x_labels = [min_x_pt, max_x_pt]
 
-        axPts = [min_x_pt, max_x_pt, min_y_pt, max_y_pt]
+        if not self.as_density: 
+            min_y_pt = self.y_axis.rightPt.left(self.ax_label_dist).annotate(str(min_y))
+            max_y_pt = self.y_axis.leftPt.left(self.ax_label_dist).annotate(str(max_y))
+            y_labels = [min_y_pt, max_y_pt]
+        else:
+            y_labels = []
 
         ### Make Header Point
         headerPt = make_text_in(self.headerReg, self.header_text, color = self.color, 
@@ -187,7 +199,8 @@ class Graph:
                 coordLn_vectorized = Line3D(coordPt_vectorized, coordPt_vectorized_next, color = chart.color)
                 myScn = myScn.put(coordLn_vectorized)
 
-        axView = View.make(self.cam, myScn, resolution = self.resolution, annotatedPoints = [*axPts, headerPt])
+        annotatedPoints = [*x_labels, *y_labels, headerPt]
+        axView = View.make(self.cam, myScn, resolution = self.resolution, annotatedPoints = annotatedPoints)
         axFrm = axView.snap()
         return axFrm
 
