@@ -65,38 +65,91 @@ def make_text_in(subReg, data_or_string,
     textPt = textPt.right(horizontal_offset).back(vertical_offset)
     return textPt
 
-class Chart:
-    def __init__(self, xs, ys, scatter = False, color = const.BGR['intense_red']):
+class LineChart:
+    def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
         
         self.xs = np.array(xs)
         self.ys = np.array(ys)
-        self.scatter = scatter
         self.color = color
+        self.x_labels = None ### TODO: labels for Line (and Scatter) don't support non-default x_labels yet.
+        self.dashed = dashed ### TODO: inactive for the moment!
 
     def __len__(self):
         return len(self.xs)
     
+    def get_leftmost_value(self):
+        return min(self.xs)
+    
+    def get_rightmost_value(self):
+        return max(self.xs)
+    
+    def get_highest_value(self):
+        return max(self.ys)
+    
+class ScatterChart(LineChart):
+    pass ### for the moment, ScatterChart is essentially a boolean on LineChart saying: scatter, don't draw lines.
+
+class BarChart:
+    def __init__(self, xs, ys, color = const.BGR['intense_red'], 
+                 x_labels = None,
+                 internal_gap = 0, external_gap = 0.1):
+        if len(xs) != len(ys):
+            raise Exception(f'x-values and y-values need to be of same length!')
+        
+        self.xs = np.array(xs)
+        self.ys = np.array(ys)
+        self.color = color
+        self.x_labels = x_labels
+        self.internal_gap = internal_gap
+        self.external_gap = external_gap
+
+    def __len__(self):
+        return len(self.xs)
+    
+    def get_leftmost_value(self):
+        min_x = self.xs[0]
+        bar_width_unadj = (self.xs[1] - self.xs[0])
+        return min_x - bar_width_unadj / 2
+    
+    def get_rightmost_value(self):
+        max_x = self.xs[-1] ### TODO: ensure xs and ys are sorted!
+        bar_width_unadj = (self.xs[-1] - self.xs[-2]) ### TODO: consider here external and internal gap?!
+        return max_x + bar_width_unadj / 2
+    
+    def get_highest_value(self):
+        return max(self.ys)
+
 class Graph:
     def __init__(self, charts, 
                  as_density = False, ### if we plot as density, there are no y labels, and we norm y-axis accordingly.
                  color = const.BGR['smokey_grey'], offset = 0.2,
-                 ax_label_dist = 0.5,
+                 make_default_x_labels = True, 
+                 x_label_dist = 0.5, y_label_dist = 0.5,
+                 x_label_format = '.0f', y_label_format = '.0f',
+                 x_label = None, y_label = None, 
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
                  header_height = 1, graph_height = 9,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
         ### TODO: add axis labels (y-axis vertical! how?)
-
         self.charts = charts
         self.color = color
+
         self.as_density = as_density
+        self.make_default_x_labels = make_default_x_labels
+        self.x_label_format = x_label_format
+        self.y_label_format = y_label_format
+
+        self.x_label = x_label
+        self.y_label = y_label
 
         self.header_text = header_text
         self.header_horizontal_offset = header_horizontal_offset
         self.header_vertical_offset = header_vertical_offset
 
-        self.ax_label_dist = ax_label_dist
+        self.x_label_dist = x_label_dist
+        self.y_label_dist = y_label_dist
 
         self.render_height = render_height
         self.dimensions = dimensions
@@ -126,28 +179,33 @@ class Graph:
 
     def renorm_axes(self):
         if len(self.charts) == 0:
+            min_x = 0
+            min_y = 0
             max_x = 1
             max_y = 1
         else:
-            x_vals = [x_val for chart in self.charts for x_val in chart.xs]
-            y_vals = [y_val for chart in self.charts for y_val in chart.ys]
+            lfmosts = [chart.get_leftmost_value() for chart in self.charts]
+            rtmosts = [chart.get_rightmost_value() for chart in self.charts]
+            himosts = [chart.get_highest_value() for chart in self.charts]
 
-            max_x = max(x_vals)
-            max_y = max(y_vals)
+            min_x = 0 #min(0, min(lfmosts))    ### never start an x after 0
+            max_x = max(rtmosts)
+            min_y = 0                       ### always start y on 0
+            max_y = max(himosts)
 
+            ### rounding to nearest integer TODO: make more dynamic?
+            min_x = int(np.floor(min_x))
+            max_x = int(np.ceil(max_x))
+            min_y = int(np.floor(min_y))
             if self.as_density:
-                max_x = int(np.ceil(max_x))
                 max_y = 1.05 * max_y ### scale up a bit
             else:
-                ### rounding to nearest integer TODO: make more dynamic?
-                max_x = int(np.ceil(max_x))
                 max_y = int(np.ceil(max_y))
 
+        self.min_x = min_x
         self.max_x = max_x
+        self.min_y = min_y
         self.max_y = max_y
-        
-        self.min_x = 0
-        self.min_y = 0
 
     def add(self, chart):
         self.charts = [*self.charts, chart]
@@ -157,24 +215,44 @@ class Graph:
         ### Make Axes
         myScn = Scene([self.x_axis, self.y_axis])
 
-        ### Make Axis Labels
         min_x, max_x, min_y, max_y = self.min_x, self.max_x, self.min_y, self.max_y
-        min_x_pt = self.x_axis.leftPt.back(self.ax_label_dist).annotate(str(min_x))
-        max_x_pt = self.x_axis.rightPt.back(self.ax_label_dist).annotate(str(max_x))
-        x_labels = [min_x_pt, max_x_pt]
+        
+        ### Make Axis Tick Labels
+        if self.make_default_x_labels:
+            min_x_str = maybe_data_to_text(min_x, self.x_label_format)
+            max_x_str = maybe_data_to_text(max_x, self.x_label_format)
+
+            min_x_pt = self.x_axis.leftPt.back(self.x_label_dist).annotate(min_x_str)
+            max_x_pt = self.x_axis.rightPt.back(self.x_label_dist).annotate(max_x_str)
+            x_labels = [min_x_pt, max_x_pt]
+        else:
+            x_labels = []
 
         if not self.as_density: 
-            min_y_pt = self.y_axis.rightPt.left(self.ax_label_dist).annotate(str(min_y))
-            max_y_pt = self.y_axis.leftPt.left(self.ax_label_dist).annotate(str(max_y))
+            min_y_str = maybe_data_to_text(min_y, self.y_label_format)
+            max_y_str = maybe_data_to_text(max_y, self.y_label_format)
+
+            min_y_pt = self.y_axis.rightPt.left(self.y_label_dist).annotate(min_y_str)
+            max_y_pt = self.y_axis.leftPt.left(self.y_label_dist).annotate(max_y_str)
             y_labels = [min_y_pt, max_y_pt]
         else:
             y_labels = []
+
+        ### Make Axis Labels
+        axis_labels = []
+        if self.x_label is not None:
+            x_label_pt = self.x_axis.center_point().back(self.x_label_dist * 2).annotate(self.x_label)
+            axis_labels.append(x_label_pt)
+        if self.y_label is not None:
+            y_label_pt = self.y_axis.center_point().left(self.y_label_dist * 2).annotate(self.y_label)
+            axis_labels.append(y_label_pt)
 
         ### Make Header Point
         headerPt = make_text_in(self.headerReg, self.header_text, color = self.color, 
                                 horizontal_offset = self.header_horizontal_offset,
                                 vertical_offset = self.header_vertical_offset)
 
+        x_label_pnts = []
         for chart in self.charts:
             ### re-norm the xs and ys (between 0 and 1)
             xs_norm = chart.xs / (self.max_x - self.min_x)
@@ -187,10 +265,10 @@ class Graph:
             
             coordArr = np.array([xs_rect, ys_rect, zs_zero])
 
-            if chart.scatter:
-                coordPt_vectorized = Point3D(coordArr)
-                myScn = myScn.put(coordPt_vectorized, color = chart.color)
-            else:
+            if isinstance(chart, ScatterChart):
+                coordPt_vectorized = Point3D(coordArr, color = chart.color)
+                myScn = myScn.put(coordPt_vectorized)
+            elif isinstance(chart, LineChart):
                 coordArr_prev = coordArr[:, :-1]
                 coordArr_next = ut.shift_array(coordArr, -1, axis = 1)[:, :-1]
 
@@ -198,8 +276,37 @@ class Graph:
                 coordPt_vectorized_next = Point3D(coordArr_next)
                 coordLn_vectorized = Line3D(coordPt_vectorized, coordPt_vectorized_next, color = chart.color)
                 myScn = myScn.put(coordLn_vectorized)
+            elif isinstance(chart, BarChart):
+                xs = coordArr[0, :-1]
+                xs_next = ut.shift_array(coordArr, -1, axis = 1)[0, :-1]
 
-        annotatedPoints = [*x_labels, *y_labels, headerPt]
+                bar_half_width = (xs_next - xs) / 2
+                bar_half_width_adj = bar_half_width * (1 - chart.external_gap)
+                bar_half_width_adj = np.append(bar_half_width_adj, bar_half_width_adj[-1])
+
+                ### Make Regions
+                regions = []
+                for coords, hw in zip(coordArr.T, bar_half_width_adj):
+                    x, y, z = coords
+                    x1, x2 = x - hw, x + hw
+                    y1, y2 = self.y_orig, y
+
+                    p1, p2, p3, p4 = Point3D((x1, y1, z)), Point3D((x1, y2, z)), Point3D((x2, y2, z)), Point3D((x2, y1, z))
+                    barReg = Region3D.from_points3D(p1, p2, p3, p4, color = chart.color)
+
+                    regions.append(barReg)
+                
+                myScn = myScn.put(regions)
+
+                ### Make x-labels for Regions
+                if chart.x_labels is not None:
+                    for coords, label in zip(coordArr.T, chart.x_labels):
+                        x, y, z = coords
+                        coords_base = (x, self.y_orig, z)
+                        annPnt = Point3D(coords_base).back(self.x_label_dist).annotate(str(label))
+                        x_label_pnts.append(annPnt)
+                    
+        annotatedPoints = [*x_labels, *y_labels, headerPt, *x_label_pnts, *axis_labels]
         axView = View.make(self.cam, myScn, resolution = self.resolution, annotatedPoints = annotatedPoints)
         axFrm = axView.snap()
         return axFrm
@@ -952,17 +1059,37 @@ if __name__ == '__main__':
     #####################
     ### CHART TESTING ###
     #####################
+    if TEST_CHART:  
+        # myGraph = Graph([])
+        # myGraph.render().show()
+
+        # aChart = LineChart([0, 1, 2, 3], [2, 3, 4, 2])
+        # myGraph.add(aChart)
+        # myGraph.render().show()
+
+        # bChart = LineChart([0, 1, 2, 3], [3, 0, 1, 1], color = const.BGR['leafy_green'])
+        # myGraph.add(bChart)
+        # myGraph.render().show()
         
-    myGraph = Graph([])
-    myGraph.render().show()
+        # cChart = ScatterChart([0.1, 0.5, 0.9, 1.2, 2.5], [3.5, 1.5, 2.5, 0.5, 2.5], color = const.BGR['ball_yellow'])
+        # myGraph.add(cChart)
+        # myGraph.render().show()
 
-    aChart = Chart([0, 1, 2, 3], [2, 3, 4, 2], scatter = False)
-    myGraph.add(aChart)
-    myGraph.render().show()
+        # ### TEST BAR CHARTS
+        # barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'])
+        # myGraph = Graph([barChart])
+        # myGraph.render().show()
+    
+        # barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'], 
+        #                     x_labels = ['a', 'b', 'c'])
+        # myGraph = Graph([barChart], make_default_x_labels = False)
+        # myGraph.render().show()
 
-    bChart = Chart([0, 1, 2, 3], [3, 0, 1, 1], scatter = False, color = const.BGR['leafy_green'])
-    myGraph.add(bChart)
-    myGraph.render().show()
+        ### TEST NUMBER FORMATS
+        aChart = LineChart([0, 1, 2, 3], [0.1, 0.6, 0.2, 0.3])
+        myGraph = Graph([aChart], y_label_format = '.0%', y_label = 'Ret. Win%', x_label = 'Rally Length', 
+                            y_label_dist = 1.25, offset = 0.4)
+        myGraph.render().show()
 
     #####################
     ### TABLE TESTING ###
