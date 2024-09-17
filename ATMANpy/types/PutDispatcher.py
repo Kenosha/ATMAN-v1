@@ -104,7 +104,7 @@ def put(someFrm, someObj,
         
         text_lines = someObj.split('\n')
         for idx, ln in enumerate(text_lines):
-            ln = ln.strip(' ')
+            # ln = ln.strip(' ')
             x, y = where
             y += idx * line_offset
 
