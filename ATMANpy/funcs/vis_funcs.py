@@ -480,9 +480,10 @@ def uniform1D(values, space, weightArr = None, bandwidth = 10, normalize_density
     
     if weightArr is not None:
         kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis]
+        kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
+    else:
+        kde_values = kde_values_for_each_kernel.mean(axis = 0)
 
-    kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
-    
     if normalize_density:
         kde_values = kde_values / kde_values.max()
 
@@ -497,9 +498,10 @@ def epanechnikov1D(values, space, weightArr = None, bandwidth = 10, normalize_de
 
     if weightArr is not None:
         kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis]
+        kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
+    else:
+        kde_values = kde_values_for_each_kernel.mean(axis = 0)
 
-    kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
-    
     if normalize_density:
         kde_values = kde_values / kde_values.max()
 
@@ -514,9 +516,10 @@ def epanechnikov2D(values, space, weightArr = None, bandwidth = 30, normalize_de
 
     if weightArr is not None:
         kde_values_for_each_kernel = kde_values_for_each_kernel * weightArr[:, np.newaxis, np.newaxis]
+        kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
+    else:
+        kde_values = kde_values_for_each_kernel.mean(axis = 0)
 
-    kde_values = kde_values_for_each_kernel.sum(axis = 0) / weightArr.sum()
-    
     if normalize_density:
         kde_values = kde_values / kde_values.max()
 
