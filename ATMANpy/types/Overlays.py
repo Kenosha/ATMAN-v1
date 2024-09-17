@@ -251,9 +251,13 @@ class Graph:
             axis_labels.append(y_label_pt)
 
         ### Make Header Point
-        headerPt = make_text_in(self.headerReg, self.header_text, color = self.color, 
-                                horizontal_offset = self.header_horizontal_offset,
-                                vertical_offset = self.header_vertical_offset)
+        if self.header_text != '':
+            headerPt = make_text_in(self.headerReg, self.header_text, color = self.color, 
+                                    horizontal_offset = self.header_horizontal_offset,
+                                    vertical_offset = self.header_vertical_offset)
+            header_pnts = [headerPt]
+        else:
+            header_pnts = []
 
         x_label_pnts = []
         for chart in self.charts:
@@ -309,7 +313,7 @@ class Graph:
                         annPnt = Point3D(coords_base).back(self.x_label_dist).left(self.x_tick_label_left_shift).annotate(str(label))
                         x_label_pnts.append(annPnt)
                     
-        annotatedPoints = [*x_labels, *y_labels, headerPt, *x_label_pnts, *axis_labels]
+        annotatedPoints = [*x_labels, *y_labels, *header_pnts, *x_label_pnts, *axis_labels]
         return myScn, annotatedPoints ### by exposing these we can morph and move chart elements.
     
     def render(self):
