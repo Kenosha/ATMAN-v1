@@ -126,7 +126,7 @@ class Graph:
                  as_density = False, ### if we plot as density, there are no y labels, and we norm y-axis accordingly.
                  color = const.BGR['smokey_grey'], offset = 0.2,
                  make_default_x_labels = True, 
-                 x_label_dist = 0.5, y_label_dist = 0.5,
+                 x_label_dist = 0.5, y_label_dist = 0.5, x_label_left_shift = 0, x_tick_label_left_shift = 0,
                  x_label_format = '.0f', y_label_format = '.0f',
                  x_label = None, y_label = None, 
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
@@ -150,6 +150,9 @@ class Graph:
 
         self.x_label_dist = x_label_dist
         self.y_label_dist = y_label_dist
+
+        self.x_label_left_shift = x_label_left_shift
+        self.x_tick_label_left_shift = x_tick_label_left_shift
 
         self.render_height = render_height
         self.dimensions = dimensions
@@ -211,7 +214,7 @@ class Graph:
         self.charts = [*self.charts, chart]
         self.renorm_axes()
 
-    def render(self):
+    def preview(self):
         ### Make Axes
         myScn = Scene([self.x_axis, self.y_axis])
 
@@ -241,7 +244,7 @@ class Graph:
         ### Make Axis Labels
         axis_labels = []
         if self.x_label is not None:
-            x_label_pt = self.x_axis.center_point().back(self.x_label_dist * 2).annotate(self.x_label)
+            x_label_pt = self.x_axis.center_point().back(self.x_label_dist * 2).left(self.x_label_left_shift).annotate(self.x_label)
             axis_labels.append(x_label_pt)
         if self.y_label is not None:
             y_label_pt = self.y_axis.center_point().left(self.y_label_dist * 2).annotate(self.y_label)
@@ -303,10 +306,14 @@ class Graph:
                     for coords, label in zip(coordArr.T, chart.x_labels):
                         x, y, z = coords
                         coords_base = (x, self.y_orig, z)
-                        annPnt = Point3D(coords_base).back(self.x_label_dist).annotate(str(label))
+                        annPnt = Point3D(coords_base).back(self.x_label_dist).left(self.x_tick_label_left_shift).annotate(str(label))
                         x_label_pnts.append(annPnt)
                     
         annotatedPoints = [*x_labels, *y_labels, headerPt, *x_label_pnts, *axis_labels]
+        return myScn, annotatedPoints ### by exposing these we can morph and move chart elements.
+    
+    def render(self):
+        myScn, annotatedPoints = self.preview()
         axView = View.make(self.cam, myScn, resolution = self.resolution, annotatedPoints = annotatedPoints)
         axFrm = axView.snap()
         return axFrm
@@ -1060,35 +1067,35 @@ if __name__ == '__main__':
     ### CHART TESTING ###
     #####################
     if TEST_CHART:  
-        # myGraph = Graph([])
-        # myGraph.render().show()
+        myGraph = Graph([])
+        myGraph.render().show()
 
-        # aChart = LineChart([0, 1, 2, 3], [2, 3, 4, 2])
-        # myGraph.add(aChart)
-        # myGraph.render().show()
+        aChart = LineChart([0, 1, 2, 3], [2, 3, 4, 2])
+        myGraph.add(aChart)
+        myGraph.render().show()
 
-        # bChart = LineChart([0, 1, 2, 3], [3, 0, 1, 1], color = const.BGR['leafy_green'])
-        # myGraph.add(bChart)
-        # myGraph.render().show()
+        bChart = LineChart([0, 1, 2, 3], [3, 0, 1, 1], color = const.BGR['leafy_green'])
+        myGraph.add(bChart)
+        myGraph.render().show()
         
-        # cChart = ScatterChart([0.1, 0.5, 0.9, 1.2, 2.5], [3.5, 1.5, 2.5, 0.5, 2.5], color = const.BGR['ball_yellow'])
-        # myGraph.add(cChart)
-        # myGraph.render().show()
+        cChart = ScatterChart([0.1, 0.5, 0.9, 1.2, 2.5], [3.5, 1.5, 2.5, 0.5, 2.5], color = const.BGR['ball_yellow'])
+        myGraph.add(cChart)
+        myGraph.render().show()
 
-        # ### TEST BAR CHARTS
-        # barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'])
-        # myGraph = Graph([barChart])
-        # myGraph.render().show()
+        ### TEST BAR CHARTS
+        barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'])
+        myGraph = Graph([barChart])
+        myGraph.render().show()
     
-        # barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'], 
-        #                     x_labels = ['a', 'b', 'c'])
-        # myGraph = Graph([barChart], make_default_x_labels = False)
-        # myGraph.render().show()
+        barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'], 
+                            x_labels = ['a', 'b', 'c'])
+        myGraph = Graph([barChart], make_default_x_labels = False)
+        myGraph.render().show()
 
         ### TEST NUMBER FORMATS
         aChart = LineChart([0, 1, 2, 3], [0.1, 0.6, 0.2, 0.3])
         myGraph = Graph([aChart], y_label_format = '.0%', y_label = 'Ret. Win%', x_label = 'Rally Length', 
-                            y_label_dist = 1.25, offset = 0.4)
+                            y_label_dist = 1.25, offset = 0.35, x_label_left_shift = 1.5)
         myGraph.render().show()
 
     #####################
