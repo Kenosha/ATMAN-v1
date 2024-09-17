@@ -93,7 +93,7 @@ class ScatterChart(LineChart):
 
 class BarChart:
     def __init__(self, xs, ys, color = const.BGR['intense_red'], 
-                 x_labels = None,
+                 x_labels = None, annotate_bar_heights = False,
                  internal_gap = 0, external_gap = 0.1):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
@@ -102,6 +102,7 @@ class BarChart:
         self.ys = np.array(ys)
         self.color = color
         self.x_labels = x_labels
+        self.annotate_bar_heights = annotate_bar_heights
         self.internal_gap = internal_gap
         self.external_gap = external_gap
 
@@ -260,6 +261,7 @@ class Graph:
             header_pnts = []
 
         x_label_pnts = []
+        val_label_pnts = []
         for chart in self.charts:
             ### re-norm the xs and ys (between 0 and 1)
             xs_norm = chart.xs / (self.max_x - self.min_x)
@@ -305,15 +307,28 @@ class Graph:
                 
                 myScn = myScn.put(regions)
 
-                ### Make x-labels for Regions
+                ### Make x-labels for Bar Regions
                 if chart.x_labels is not None:
                     for coords, label in zip(coordArr.T, chart.x_labels):
                         x, y, z = coords
                         coords_base = (x, self.y_orig, z)
-                        annPnt = Point3D(coords_base).back(self.x_label_dist).left(self.x_tick_label_left_shift).annotate(str(label))
+
+                        labelStr = maybe_data_to_text(label, '.0f')
+                        anchorPnt = Point3D(coords_base).back(self.x_label_dist).left(self.x_tick_label_left_shift)
+                        annPnt = anchorPnt.annotate(labelStr)
                         x_label_pnts.append(annPnt)
                     
-        annotatedPoints = [*x_labels, *y_labels, *header_pnts, *x_label_pnts, *axis_labels]
+                ### Make annotations for Bar Regions (if necessary)
+                if chart.annotate_bar_heights:
+                    for coords, y_val in zip(coordArr.T, chart.ys):
+                        x, y, z = coords
+
+                        labelStr = maybe_data_to_text(y_val, number_format = self.y_label_format)
+                        anchorPnt = Point3D(coords).front(self.x_label_dist).left(self.x_tick_label_left_shift)
+                        annPnt = anchorPnt.recolor(chart.color).annotate(labelStr)
+                        val_label_pnts.append(annPnt)
+
+        annotatedPoints = [*x_labels, *y_labels, *header_pnts, *x_label_pnts, *val_label_pnts, *axis_labels]
         return myScn, annotatedPoints ### by exposing these we can morph and move chart elements.
     
     def render(self):
@@ -1094,6 +1109,16 @@ if __name__ == '__main__':
         barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'], 
                             x_labels = ['a', 'b', 'c'])
         myGraph = Graph([barChart], make_default_x_labels = False)
+        myGraph.render().show()
+
+        barChart = BarChart([1, 2, 3], [2, 5, 6], external_gap = 0.5, color = const.BGR['minty_green'], 
+                            x_labels = ['a', 'b', 'c'], annotate_bar_heights = True)
+        myGraph = Graph([barChart], make_default_x_labels = False)
+        myGraph.render().show()
+
+        barChart = BarChart([1, 2, 3, 4], [0.1, 0.6, 0.2, 0.3], external_gap = 0.5, color = const.BGR['minty_green'], 
+                            x_labels = ['a', 'b', 'c', 'd'], annotate_bar_heights = True)
+        myGraph = Graph([barChart], make_default_x_labels = False, y_label_format = '.0%')
         myGraph.render().show()
 
         ### TEST NUMBER FORMATS
