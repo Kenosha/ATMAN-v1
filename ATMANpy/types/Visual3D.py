@@ -487,6 +487,19 @@ class Camera:
         return - self.get_R_inv() @ self.get_t()
     def get_center_point(self):
         return Point3D(tuple(self.get_cw()))
+        
+    def world_points_to_camera_points(self, ptArr):
+        num_points, num_dims = ptArr.shape
+        if num_dims == 4: ### --> already in homogenous coordinates!
+            homArr = ptArr
+        elif num_dims == 3: ### --> not in homogenous coordinates!
+            homArr = np.concatenate([ptArr, np.ones((num_points, 1))], axis = 1)
+        else:
+            raise Exception('Points to be projected need to be (homogenous or inhomogenous) 3D')
+        
+        homArr_3D = np.einsum('ij, nj -> ni', self.M_ext, homArr)
+        ptArr_cam = homArr_3D[:, :-1] / homArr_3D[:, [-1]]
+        return ptArr_cam
     
     def project_points(self, ptArr):
         num_points, num_dims = ptArr.shape
@@ -729,11 +742,18 @@ class View:
             if ptArr is None:
                 return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
 
-            ### 2) Suppress negative coordinates
-            all_positive_indices = (ptArr >= 0).all(axis = 1)
-            ptArr = ptArr[all_positive_indices]
-            clArr = clArr[all_positive_indices]
-            alArr = alArr[all_positive_indices]
+            # ### 2) Suppress negative coordinates TODO: why are negative world coordinates not allowed? seems stupid
+            # all_positive_indices = (ptArr >= 0).all(axis = 1)
+            # ptArr = ptArr[all_positive_indices]
+            # clArr = clArr[all_positive_indices]
+            # alArr = alArr[all_positive_indices]
+
+            ### 2A) check if points are in front of camera 
+            ptArr_cam = myCamera.world_points_to_camera_points(ptArr)
+            px_in_front = ptArr_cam[:, 2] < 0 ### z-coordinate goes straight INTO the camera!
+            ptArr = ptArr[px_in_front]
+            clArr = clArr[px_in_front]
+            alArr = alArr[px_in_front]
         
             ### 3) Project Point Cloud in 3D onto 2D Sensor
             pxArr = myCamera.project_points(ptArr).astype(int)
