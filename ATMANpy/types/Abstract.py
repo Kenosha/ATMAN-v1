@@ -422,6 +422,19 @@ class Trajectory:
                                                         'HT': 'HB', 'HB': 'HT'})
             
         return Trajectory(newFrm)
+        
+    def reanchor(self, anchorPt):
+        newFrm = self.trajFrm.copy()
+        obs_cols = ['x_o', 'y_o', 'z_o']
+        trj_cols = ['x_t', 'y_t', 'z_t']
+
+        anchor_coords = anchorPt.coords
+        obs_start_coords = self.get_initial_position(how = 'observed')
+        trj_start_coords = self.get_initial_position(how = 'trajectory')
+
+        newFrm[obs_cols] = newFrm[obs_cols] - obs_start_coords + anchor_coords
+        newFrm[trj_cols] = newFrm[trj_cols] - trj_start_coords + anchor_coords
+        return Trajectory(newFrm)    
     
     ### TRAJECTORY QUALITY MEASURES
     def mean_deviation(self, dof_correction = 0):
