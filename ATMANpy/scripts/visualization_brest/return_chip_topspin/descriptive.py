@@ -164,6 +164,12 @@ prmDict_back['background_resolution'] /= 2 ### reduce the background resolution 
 STATIC_FRAMES = 100 ### does not matter much once we record: the static frames will be fit to the narration
 TRANSITION_FRAMES = 25 
 
+INVISIBLE_ALPHA = 0.05 ### which alpha is accepted as invisible
+FULL_ALPHA = 1 ### which alpha is accepted as fully visible --> FULL_ALPHA as parameter not needed except for FADE_IN, FADE_OUT_FACTOR calculation
+
+FADE_IN_FACTOR = (FULL_ALPHA / INVISIBLE_ALPHA) ** (1 / TRANSITION_FRAMES)
+FADE_OUT_FACTOR = 1 / FADE_IN_FACTOR ### easy to show that this must hold.
+
 BALL_COLOR = const.BGR['ball_yellow']
 CHIP_COLOR = const.BGR['marine_blue']
 TOPS_COLOR = const.BGR['light_brown']
@@ -255,12 +261,13 @@ all_frames.append(myFrms)
 
 ####### MORPH TRAJECTORY TO VIRTUAL 
 lastFrm = myFrms[-1]
-staticScn = courtScn.combine(spline_scenes[-1])
+splnScn = spline_scenes[-1]
+staticScn = courtScn.combine(splnScn)
 virtualFrm = View.make(brestCam_resized, staticScn).snap()
 myFrms = vs.interpolate_frames(lastFrm, virtualFrm, num_frames = 100)
 all_frames.append(myFrms)
 
-myFrms, animDict = vs.animate_cam_motion(spline_scenes[-1], start_cam = brestCam_resized, stop_cam = heatCam, background_scene = courtScn,
+myFrms, animDict = vs.animate_cam_motion(splnScn, start_cam = brestCam_resized, stop_cam = heatCam, background_scene = courtScn,
                                          num_frames = TRANSITION_FRAMES, interpolate_func = vs.interpolate_camera_slerp, **prmDict)
 all_frames.append(myFrms)
 
@@ -276,7 +283,7 @@ bounceMk = Mark.make(bouncePt, size = 3, color = const.BGR['ball_yellow'])
 
 # b) the undifferentiated, unrectified marks
 markScn_mono = vs.scatter_markmap(retShots, one_color = const.BGR['ball_yellow'])
-markScn_mono_trans = markScn_mono.transparify(0.01)
+markScn_mono_trans = markScn_mono.realpha(INVISIBLE_ALPHA)
 
 # c) the undifferentiated, rectified marks
 markScn_mono_rect = vs.scatter_markmap(retShots_rectified, one_color = const.BGR['ball_yellow'])
@@ -291,7 +298,7 @@ tops_markScn = vs.scatter_markmap(tops_retShots_rectified, one_color = const.BGR
 
 ####### FADE OUT FLIGHT LINE
 mark_scenes = [bounceMk for _ in range(TRANSITION_FRAMES)]
-myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, cumulative_foreground_transparence = 0.95,
+myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, cumulative_foreground_transparence = FADE_OUT_FACTOR,
                                        background_scene = courtScn, **animDict, **prmDict)
 all_frames.append(myFrms)
 
@@ -301,7 +308,7 @@ all_frames.append(myFrms)
 ####### FADE IN OTHER MARKS
 animDict['previous_foreground_scene'] = markScn_mono_trans
 myFrms, animDict = vs.animate_sequence(mark_scenes, background_scene = courtScn, cumulate_argument = False,
-                                       cumulative_foreground_transparence = 1.2, start_cam = heatCam, stop_cam = heatCam,
+                                       cumulative_foreground_transparence = FADE_IN_FACTOR, start_cam = heatCam, stop_cam = heatCam,
                                        **animDict, **prmDict)
 all_frames.append(myFrms)
 
@@ -321,7 +328,9 @@ myFrms, animDict = vs.animate_static(markScn_mono_rect, static_cam = heatCam, ba
 all_frames.append(myFrms)
 
 itpl_markScns = vs.interpolate_scenes(markScn_mono_rect, markScn_poly_rect, num_frames = 25)
-myFrms, animDict = vs.animate_sequence(itpl_markScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, annotated_points = [fhPt, bhPt])
+myFrms, animDict = vs.animate_sequence(itpl_markScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, annotated_points = [fhPt, bhPt], 
+                                       **prmDict)
+myFrms = overlay(myFrms, legFrm)
 all_frames.append(myFrms)
 
 myFrm = overlay(myFrms[-1], legFrm)
@@ -331,20 +340,26 @@ all_frames.append(myFrms)
 ### fade out chip marks
 mark_scenes = [tops_markScn for _ in range(TRANSITION_FRAMES)]
 myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn,
-                                       **animDict, cumulative_foreground_transparence = 0.95)
+                                       **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
 myFrms = overlay(myFrms, legFrm)
 all_frames.append(myFrms)
 
+myFrm = overlay(myFrms[-1], legFrm)
+myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
+all_frames.append(myFrms)
+
+
 ### Topspin Heatmaps
-topsScn = vs.kde_heatmap(tops_retShots_rectified, one_color = TOPS_COLOR, 
+topsScn = vs.kde_heatmap(tops_retShots_rectified, 
                          position_func = 'get_first_bounce_position', 
                          normalize_density = True,
-                         bandwidth = BANDWIDTH)
+                         zero_color = TOPS_COLOR, one_color = TOPS_COLOR, 
+                         bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 topsScn_zero = topsScn.realpha(0)
 itplScns = vs.interpolate_dummy_scenes(topsScn_zero, topsScn, STATIC_FRAMES)
 
 myFrms, animDict = vs.animate_sequence(itplScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam,
-                                       **animDict, cumulative_foreground_transparence = 0.95)
+                                       **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
 myFrms = overlay(myFrms, legFrm)
 all_frames.append(myFrms)
 
@@ -355,17 +370,17 @@ all_frames.append(myFrms)
 # Heatmap for Weighted, 'Choice' Chips 
 chipFrm = regFrm_in[regFrm_in.is_chipped == 1]
 topspin_preds = chipFrm.pred_is_topspin.values
-chipScn = vs.kde_heatmap(chip_retShots_rectified,
+chipScn = vs.kde_heatmap(chip_retShots_rectified, 
                         position_func = 'get_first_bounce_position', 
                         weight_func_or_arr = topspin_preds,
-                        one_color = CHIP_COLOR,
                         normalize_density = True,
-                        bandwidth = BANDWIDTH)
+                        zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
+                        bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
 itplScns = vs.interpolate_dummy_scenes(topsScn, chipScn, STATIC_FRAMES)
 
-myFrms, animDict = vs.animate_sequence(itplScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam,
-                                       **animDict)
+myFrms, animDict = vs.animate_sequence(itplScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, annotated_points = [fhPt, bhPt],
+                                        **prmDict)
 myFrms = overlay(myFrms, legFrm)
 all_frames.append(myFrms)
 
@@ -373,958 +388,240 @@ myFrm = overlay(myFrms[-1], legFrm)
 myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
 all_frames.append(myFrms)
 
-
 show(all_frames)
 
-##################################
-##### Heatmap of Returns Made ####
-##################################
-from ATMANpy.types.Visual3D import View, Scene, Camera
-import ATMANpy.funcs.vis_funcs as vs
-from ATMANpy.auxil.court import back_view_asymmetric_cam
-myCam = back_view_asymmetric_cam(which = 'Deuce', side = 'Bot')
-retShots = retPnts_in.get_returns()
-showReg = vis_ut.botReg.scale(1.25)
-courtScn = Scene.make_court()
-backView = View.make(myCam, courtScn, resolution = 1)
+### TODO: try the contourmaps (50% of balls land within...) or even hillmaps. Contourmaps can be superimposed more easily with backhand and forehand.
 
-chipFrm = regFrm_in[regFrm_in.is_chipped == 1]
-topspin_preds = chipFrm.pred_is_topspin.values
-topspin_odds = chipFrm.pred_is_topspin.values / chipFrm.pred_is_chipped.values
+### DIFFERENCE BETWEEN TOPSPIN AND CHIP PLACEMENT
+topsScn_not_norm = vs.kde_heatmap(tops_retShots_rectified, 
+                                    position_func = 'get_first_bounce_position', 
+                                    normalize_density = False,
+                                    zero_color = TOPS_COLOR, one_color = TOPS_COLOR, 
+                                    bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
-retShots_rectified = vis_ut.rectify_shots(retShots) ### left handed server points are mirrored along the middle, so that all returns going to the (bottom) left are to the backhand
+chipScn_not_norm = vs.kde_heatmap(chip_retShots_rectified, 
+                                    position_func = 'get_first_bounce_position', 
+                                    weight_func_or_arr = topspin_preds,
+                                    normalize_density = False,
+                                    zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
+                                    bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
-chip_retShots = retShots.filter('is_slice_visual')
-tops_retShots = retShots.filter('is_slice_visual', negate = True)
+tops_kde = topsScn_not_norm.alphaArrs[0]
+chip_kde = chipScn_not_norm.alphaArrs[0]
 
-chip_retShots_rectified = retShots_rectified.filter('is_slice_visual')
-tops_retShots_rectified = retShots_rectified.filter('is_slice_visual', negate = True)
+diff_kde = tops_kde - chip_kde
 
-BANDWIDTH = 45
+rastArr = topsScn_not_norm.rastArrs[0]
+bgrArr = np.where(diff_kde > 0, TOPS_COLOR, CHIP_COLOR)
 
-### Topspin Heatmaps
-topsScn = vs.kde_heatmap(tops_retShots, 
-                         showReg = showReg, 
-                         position_func = 'get_first_bounce_position', 
-                         bandwidth = BANDWIDTH)
+diff_kde_plus, diff_kde_minus = diff_kde.clip(min = 0), -diff_kde.clip(max = 0)
 
-kdeView = View.make(myCam, topsScn, resolution = 1)
-topsFrm = backView.combine(kdeView).snap()
-topsFrm.show()
+diff_alpha_plus = diff_kde_plus / diff_kde_plus.max()
+diff_alpha_minus = diff_kde_minus / diff_kde_minus.max()
 
-topsScn = vs.kde_heatmap(tops_retShots_rectified, 
-                         showReg = showReg, 
-                         position_func = 'get_first_bounce_position', 
-                         bandwidth = BANDWIDTH)
+alphaArr = np.where(diff_kde > 0, diff_alpha_plus, diff_alpha_minus)
 
-kdeView = View.make(myCam, topsScn, resolution = 1)
-topsFrm_rect = backView.combine(kdeView).snap()
-topsFrm_rect.show()
+diffScn = DummyScene([rastArr], [bgrArr], [alphaArr])
 
-### Chip Heatmaps
-# Heatmap for All Chips
-chipScn = vs.kde_heatmap(chip_retShots,  showReg = showReg,
-                        position_func = 'get_first_bounce_position', 
-                        normalize_density = True,
-                        bandwidth = BANDWIDTH)
+myFrms, animDict = vs.animate_static(diffScn, background_scene = courtScn, static_cam = heatCam, **prmDict, annotated_points = [fhPt, bhPt])
+# myFrms[-1].show() ### BEAUTIFUL!
 
-kdeView = View.make(myCam, chipScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
+### LAUNCH ANGLE
 
-# Heatmap for Weighted, 'Choice' Chips 
-chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
-                        position_func = 'get_first_bounce_position', 
-                        weight_func_or_arr = topspin_preds,
-                        normalize_density = True,
-                        bandwidth = BANDWIDTH)
+# fade trajectory back in
+itplScns = vs.interpolate_scenes(splnScn.realpha(0), splnScn, num_frames = 25)
+myFrms, animDict = vs.animate_sequence(itplScns, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn, 
+                                       **prmDict, **animDict, annotated_points = [fhPt, bhPt], cumulative_foreground_transparence = 0.9)
+DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
 
-kdeView = View.make(myCam, chipScn, resolution = 1)
-chipFrm_rect = backView.combine(kdeView).snap()
-chipFrm_rect.show()
+# make the lateral cam and intermediate cam over net
+bPt = splnScn[0].leftPt ### origin of the shot
+aPt = bPt.left(100)
+sideretCam = Camera.from_to(aPt, bPt, f = 1000)
 
-# Heatmap for 'Forced' Chips
-chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
-                        position_func = 'get_first_bounce_position', 
-                        weight_func_or_arr = 1 - topspin_preds,
-                        zero_color = (0, 0, 0), one_color = const.BGR['intense_red'],
-                        normalize_density = True,
-                        bandwidth = 45)
+from ATMANpy.auxil.court import cnt_2D
+cnt = Point3D.from_point2D(cnt_2D, z = 100)
+intmCam = Camera.from_to(cnt, cnt.right(100).down(20))
 
-kdeView = View.make(myCam, chipScn, resolution = 1)
-chipFrm_rect = backView.combine(kdeView).snap()
-chipFrm_rect.show()
+# player shape
+_, player = myShots[1].feat_top_player().first()
 
-######################################
-####### COMPARING CLUSTERS ###########
-######################################
+# cam motion -> made so that the motion shows also the entire trajectory!
+myFrms1, animDict = vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
+                                         background_scene = courtScn, start_cam = heatCam, stop_cam = intmCam)
 
-# ### Contour Maps with Pseudo-Clusters
-# topsScn, tops_comps = vs.kde_contourmap(tops_retShots_rectified,  showReg = showReg,
-#                                         position_func = 'get_first_bounce_position', 
-#                                         normalize_density = True,
-#                                         bandwidth = 45,
-#                                         display_at_height = False,
-#                                         n_components = 1)
+myFrms2, animDict =  vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
+                                         background_scene = courtScn, start_cam = intmCam, stop_cam = sideretCam)
+myFrms = BGRFrames.from_frames([myFrms1, myFrms2])
 
-# kdeView = View.make(myCam, topsScn, resolution = 1)
-# topsFrm = backView.combine(kdeView).snap()
-# topsFrm.show()
+DecapStream(myFrms, 0, 100).show(ms_between_frames = 50)
+myFrms[-1].show()
 
-# chipScn, chip_comps = vs.kde_contourmap(chip_retShots_rectified,  showReg = showReg,
-#                                         position_func = 'get_first_bounce_position', 
-#                                         weight_func_or_arr = topspin_preds,
-#                                         normalize_density = True,
-#                                         bandwidth = 45, 
-#                                         display_at_height = False,
-#                                         n_components = 2)
-
-# kdeView = View.make(myCam, chipScn, resolution = 1)
-# chipFrm = backView.combine(kdeView).snap()
-# chipFrm.show()
-
-# ellScn = vs.ellipses_from_cluster_data(chip_comps)
-# ellView = View.make(myCam, ellScn, resolution = 1)
-# showFrm = backView.combine(kdeView).combine(ellView).snap()
-# showFrm.show()
-
-# # Heatmap for Weighted, 'Choice' Chips 
-# chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
-#                         position_func = 'get_first_bounce_position', 
-#                         weight_func_or_arr = topspin_preds,
-#                         normalize_density = True,
-#                         bandwidth = BANDWIDTH)
-
-# kdeView = View.make(myCam, chipScn, resolution = 1)
-# chipFrm_rect = backView.combine(kdeView).snap()
-# chipFrm_rect.show()
-
-# #### Cluster the Actual Data
-# ellScn, cluster_data = vs.gmm_clustering_grid_search(chip_retShots_rectified, 
-#                                                      weight_func_or_arr = topspin_preds, weight_sampling_factor = 5)
-# ellView = View.make(myCam, ellScn, resolution = 1)
-# showFrm = backView.combine(kdeView).combine(ellView).snap()
-# showFrm.show()
-
-# ellScn, cluster_data = vs.gmm_clustering_grid_search(chip_retShots_rectified, 
-#                                                      weight_func_or_arr = topspin_preds, weight_sampling_factor = 5,
-#                                                      take_which = 2, score_func = 'bic')
-# ellView = View.make(myCam, ellScn, resolution = 1)
-# showFrm = backView.combine(kdeView).combine(ellView).snap()
-# showFrm.show()
-
-################################
-#### RETURN DEPTH VS WIN PROB ##
-################################
-
-WEIGHT_VARIABLE = 'weight_topspin'
-ENDOG_COL = 'ret_wins_weighted'
-
-regFrm_in['ret_dist_to_bh_sq'] = regFrm_in['ret_dist_to_bh'] ** 2
-regFrm_in['ret_dist_to_bsl_sq'] = regFrm_in['ret_dist_to_bsl'] ** 2
-regFrm_in['ret_dist_to_bsl_bh'] = regFrm_in['ret_dist_to_bsl'] * regFrm_in['ret_dist_to_bh']
-
-project_results_path = get_folder_struct('results_video')['return_chip_topspin']
-save_path = maybe_make_folder(project_results_path, 'regression' + make_timestamp())
-
-### Unweighted for a Base Case
-regDict = {'base': ['is_chipped']}
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = None)
-
-### Weighted with topspin odds (weight_topspin)
-regDict = {'base_odds': ['is_chipped'],
-           'dist_bsl_odds': ['is_chipped', 'ret_dist_to_bsl']}
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-### Weighted with topspin odds and len weights (weight_len_pred)
-regDict = { 'base_weighted': ['is_chipped'],
-            'dist_bsl_weighted': ['is_chipped', 'ret_dist_to_bsl'],
-            'dist_bsl_bh_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl'],
-            'dist_bsl_bh_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bsl_bh'],
-            'dist_bsl_bh_parab_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl',  'ret_dist_to_bsl_bh'],
-            'dist_bsl_bh_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq', 'ret_dist_to_bsl_bh'],
-           } 
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-### Get exog, endog data from model
-regressors = ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
-
-### find average distance to baseline for a topspin ball
-mean_topspin_dist_to_bsl = X.loc[X.is_chipped == 0, 'ret_dist_to_bsl'].mean()
-mean_topspin_dist_to_bh = X.loc[X.is_chipped == 0, 'ret_dist_to_bh'].mean()
-avg_topspin_pred = glmReg_win.predict([0, mean_topspin_dist_to_bsl, mean_topspin_dist_to_bh, 1])
-print(avg_topspin_pred)
-
-### Change the chipScn to reflect win probability over topspin average
-chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
-                        position_func = 'get_first_bounce_position', 
-                        weight_func_or_arr = topspin_preds,
-                        normalize_density = True,
-                        bandwidth = 45)
-
-bhPt = vis_ut.botReg['Bottom'].leftPt
-rastArr = chipScn.rastArrs[0]
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt)
-
-ones = np.ones((len(rel_rastArr), 1))
-regressor_array = np.concatenate([ones, rel_rastArr], axis = 1)
-regressor_frame = pd.DataFrame(regressor_array, columns = regressors)
-regressor_frame['const'] = 1
-
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_topspin_pred)
-chipScn.colArrs[0] = colArr
-chipScn.alphaArrs[0] = (chipScn.alphaArrs[0] * alArr) ** 0.5
-
-kdeView = View.make(myCam, chipScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-
-### Get exog, endog data from model
-regressors = ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
-
-### find average distance to baseline for a topspin ball
-mean_topspin_dist_to_bsl = X.loc[X.is_chipped == 0, 'ret_dist_to_bsl'].mean()
-mean_topspin_dist_to_bh = X.loc[X.is_chipped == 0, 'ret_dist_to_bh'].mean()
-avg_topspin_pred = glmReg_win.predict([0, mean_topspin_dist_to_bsl, mean_topspin_dist_to_bh, 
-                                       mean_topspin_dist_to_bsl ** 2, mean_topspin_dist_to_bh ** 2, 1])
-print(avg_topspin_pred)
-
-### Change the chipScn to reflect win probability over topspin average
-chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
-                        position_func = 'get_first_bounce_position', 
-                        weight_func_or_arr = topspin_preds,
-                        normalize_density = True,
-                        bandwidth = 45)
-
-bhPt = vis_ut.botReg['Bottom'].leftPt
-rastArr = chipScn.rastArrs[0]
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt)
-
-ones = np.ones((len(rel_rastArr), 1))
-regressor_array = np.concatenate([ones, rel_rastArr, rel_rastArr ** 2], axis = 1)
-regressor_frame = pd.DataFrame(regressor_array, columns = regressors)
-regressor_frame['const'] = 1
-
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_topspin_pred)
-chipScn.colArrs[0] = colArr
-chipScn.alphaArrs[0] = (chipScn.alphaArrs[0] * alArr) ** 0.5
-
-kdeView = View.make(myCam, chipScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-#### LOOK AT BOUNCES AND OUTCOMES DESCRIPTIVELY ####
-colArr = (regFrm_in.loc[regFrm_in.is_chipped == 1, 'winner_code'] + 1).values
-markScn = vs.scatter_markmap(chip_retShots_rectified, color_func_or_arr = colArr, 
-                             zero_color = const.BGR['leafy_green'], one_color = const.BGR['intense_red'])
-markFrm = View.make(myCam, markScn, resolution = 1).snap()
-markFrm.show()
-
-colArr = (regFrm_in.loc[regFrm_in.is_chipped == 0, 'winner_code'] + 1).values
-markScn = vs.scatter_markmap(tops_retShots_rectified, color_func_or_arr = colArr, 
-                             zero_color = const.BGR['leafy_green'], one_color = const.BGR['intense_red'])
-markFrm = View.make(myCam, markScn, resolution = 1).snap()
-markFrm.show()
-
-# X, y, w = vis_ut.get_X_y_w(regFrm, [*list(varDict.keys()), 'is_chipped', 'ret_dist_to_bsl'], 'ret_wins', add_constant = True, weight_col = WEIGHT_VARIABLE)
-# glmReg_win = sm.GLM(y, X, family = sm.families.Binomial(), freq_weights = w).fit()
-# glmReg_win.summary()
-
-# X, y, w = vis_ut.get_X_y_w(regFrm, ['is_fore', 'speed', 'dist', 'is_chipped', 'ret_dist_to_bsl'], 'ret_wins', add_constant = True, weight_col = WEIGHT_VARIABLE)
-# glmReg_win = sm.GLM(y, X, family = sm.families.Binomial(), freq_weights = w).fit()
-# glmReg_win.summary()
-#### NO NEED TO CONTROL FOR SERVE -> THE ONLY THING THAT COUNTS ONCE THE RETURN IS MADE, IS THE RETURN ITSELF! (SHOT SEQUENCE IS MARKOV OF ORDER 1)
-
-### TODO: fix outliers in ret_dist_to_bsl -> some have return distances to baseline implying a bounce inside the own court...
-### TODO: find bimodality in ret_dist_to_bsl -> very short returns (preferably shallow) are uncomfortable to exploit, as the server
-### TODO: look at launch angle -> are they bimodally distributed for chips? for topspin? effect on return quality?
-### TODO: look at speed -> does controlling for it reduce the impact of is_chipped?
-
-###########################################
-######## A LOOK AT LAUNCH ANGLES ##########
-###########################################
-
-# import matplotlib.pyplot as plt
-# import os
-# fig, axes = plt.subplots(2, 1)
-
-# pd.Series(chip_retShots_rectified.get_launch_angle()).hist(ax = axes[0])
-# pd.Series(tops_retShots_rectified.get_launch_angle()).hist(ax = axes[1])
-
-# save_where = get_folder_struct('graphs')['chip_returns']
-# fig.savefig(os.path.join(save_where, 'angle.png'))
-from ATMANpy.types.Shapes3D import Point3D, Line3D, Lines3D
-someLn = vis_ut.courtLines['Top Baseline']
-someLn3D = Line3D.from_line2D(someLn, z = 0)
-
-kwargDict = {'bandwidth': 2.5,
-             'resolution': 10,
-             'axis_length': 100,
-             'axis_origin_point': someLn3D.leftPt,
-             'x_unit_vector': Point3D((1, 0, 0)), 
-             'y_unit_vector': Point3D((0, 0, 1))}
+# get topspin and chip dists, with axes
+kwargDict = {'bandwidth': 2,
+             'resolution': 100,
+             'axis_length': 40,
+             'axis_origin_point': bPt,
+             'x_unit_vector': Point3D((0, -1, 0)), 
+             'y_unit_vector': Point3D((0, 0, 1)),
+             'normalize_density': False, 
+             'stretch_density': 4.5}
 
 weightArr = regFrm_in.loc[regFrm_in.is_chipped == 1, 'weight_topspin'].values
 weightArr_preds = 1 - regFrm_in.loc[regFrm_in.is_chipped == 1, 'pred_is_chipped'].values
+
+tops_angleScn, tops_modes = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict, color = TOPS_COLOR)
+chip_angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, weight_func_or_arr = weightArr_preds, color = CHIP_COLOR)
+
+xLn, yLn = tops_angleScn.shapes[1], tops_angleScn.shapes[2]
+
+axScn = Scene([xLn, yLn])
+court_and_axScn = courtScn.combine(axScn)
+
+myFrms, animDict = vs.animate_static(splnScn, static_cam = sideretCam, background_scene = court_and_axScn)
+myFrms[-1].show()
+
+from ATMANpy.types.Shapes3D import Circle3D
+ang = myShots[1].get_launch_angle()
+limit_theta = ((180 - ang) * const.ANGLE_TO_RAD, 180 * const.ANGLE_TO_RAD)
+degCrc = Circle3D.from_point3D(bPt, fixed_dimension = 'x', radius = 25, limit_theta = limit_theta)
+
+myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn)
+myFrms[-1].show()
+
+anglePt = bPt.front(24).up(1).annotate(f'{ang:.1f} Degrees')
+
+myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = [anglePt])
+myFrms[-1].show()
+
+from ATMANpy.types.Abstract import Shots
+
+### build a distribution of launch angles on choice chips.
+sorted_chip_retShots_rectified = chip_retShots_rectified.sort(weightArr_preds, descending = True)
+
+acceleration_rate = 0.1
+initial_frames = 25
+splnScn_curr = splnScn
+prev_kde = None
+shotList = []
+weightList = []
+frms = []
+idx = 0
+for shot, weight in zip(sorted_chip_retShots_rectified[:25], weightArr_preds[:25]):
+    if not 0 < shot.get_launch_angle() <= 75:
+        continue
+
+    ### calculate num_frames
+    num_frames = max(2, int(initial_frames * (1 - acceleration_rate) ** idx)) ### need at least 2 frames to have clean interpolation
+
+    ### build new kde
+    shotList.append(shot)
+    weightList.append(weight)
+    kde, _ = vs.kde_angle_distribution(Shots(shotList), **kwargDict, weight_func_or_arr = np.array(weightList), 
+                                       color = CHIP_COLOR)
+    kde = Scene([kde[0]])
+
+    ### if necessary: create previous KDE
+    if prev_kde is None:
+        els = len(kde[0].coords[0])
+        x, y, z = bPt.coords
+        prev_pt = Point3D((np.full(els, fill_value = x), np.full(els, fill_value = y), np.full(els, fill_value = z)), color = CHIP_COLOR)
+        prev_kde = Scene([prev_pt])
+    
+    ### Animate the current trajectory
+    anchTraj = shot.shotTraj.reanchor(bPt)
+    _, splines_current = anchTraj.feat_spline_cumul().last()
+    splnScn_curr = Scene([spLn.recolor(BALL_COLOR) for spLn in splines_current if spLn is not None])
+
+    myFrms, _ = vs.animate_static(splnScn_curr, background_scene = court_and_axScn, previous_foreground_scene = prev_kde, **prmDict,
+                                  static_cam = sideretCam, num_frames = num_frames)
+    frms.append(myFrms)
+
+    ### Animate the new KDE
+    itpl_kdes = vs.interpolate_scenes(prev_kde, kde, num_frames)
+    myFrms, _ = vs.animate_sequence(itpl_kdes, background_scene = court_and_axScn, previous_foreground_scene = splnScn_curr, **prmDict,
+                                    start_cam = sideretCam, stop_cam = sideretCam, cumulative_foreground_transparence = 1)
+    frms.append(myFrms)
+
+    prev_kde = kde
+    idx += 1
+
+jntFrms = BGRFrames.from_frames(frms)
+DecapStream(jntFrms, 0, 100).show()
+
+### Show entire distribution
+myFrms, _ = vs.animate_static(chip_angleScn, background_scene = court_and_axScn, **prmDict,
+                                static_cam = sideretCam, num_frames = num_frames)
+myFrms[-1].show()
+
+myFrms, _ = vs.animate_static(tops_angleScn, background_scene = court_and_axScn, **prmDict,
+                                static_cam = sideretCam, num_frames = num_frames)
+myFrms[-1].show()
+
+
+shot0 = myShots[1]
+kde1, _ = vs.kde_angle_distribution(Shots([shot0]), **kwargDict)
+
+myFrms, animDict = vs.animate_static(kde1, static_cam = sideretCam, previous_foreground_scene = axScn, background_scene = courtScn)
+myFrms[-1].show()
+
+shot1 = sorted_chip_retShots_rectified[1]
+traj1 = shot1.shotTraj.reanchor(bPt)
+
+_, my_splines = traj1.feat_spline_cumul().last()
+trajScn = Scene([spLn.recolor(BALL_COLOR) for spLn in my_splines if spLn is not None])
+
+myFrms, animDict = vs.animate_static(trajScn, static_cam = sideretCam, **animDict, background_scene = courtScn)
+myFrms[-1].show()
+
+
+
+myFrms[-1].show()
+myShots[1]
+
+
+
+self.shotList[*list(np.argsort(weightArr_preds))]
+
+sorted(self.shotList, key = weightArr_preds)
+
+
+bPt_up = bPt.up(100)
+bPt_in = bPt.front(100)
+
+from ATMANpy.types.Shapes3D import Line3D
+xLn, yLn = Line3D(bPt, bPt_up), Line3D(bPt, bPt_in)
+axScn = itplScns[-1].put(xLn).put(yLn)
+
+myFrms, animDict = vs.animate_static(axScn, static_cam = sideretCam, background_scene = courtScn)
+myFrms[-1].show()
+
+
+# launch KDEs
+kwargDict = {'bandwidth': 2.5,
+             'resolution': 10,
+             'axis_length': 100,
+             'axis_origin_point': bPt,
+             'x_unit_vector': Point3D((0, -1, 0)), 
+             'y_unit_vector': Point3D((0, 0, 1))}
+
 specDicts = [{'value_func': None},
              {'value_func': 'get_launch_angle'},
              {'value_func': 'get_launch_angle', 'weight_func_or_arr': weightArr},
              {'value_func': 'get_launch_angle', 'weight_func_or_arr': weightArr_preds},
                 ]
+backView = View.make(sideretCam, courtScn)
+
+#### TOPSPIN SHOTS IN PLAY
+angleScn, _ = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict)
+angleView = View.make(sideretCam, angleScn)
+angleFrm = backView.combine(angleView).snap()
+angleFrm.show()
+
 
 ##### CHIPPED SHOTS IN PLAY
 for specDict in specDicts:
     angleScn, _ = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, **specDict)
-    angleView = View.make(myCam, angleScn)
+    angleView = View.make(sideretCam, angleScn)
     angleFrm = backView.combine(angleView).snap()
     angleFrm.show()
-
-#### TOPSPIN SHOTS IN PLAY
-angleScn, _ = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict)
-angleView = View.make(myCam, angleScn)
-angleFrm = backView.combine(angleView).snap()
-angleFrm.show()
-
-### VISUALIZE MAPPING OF LAUNCH ANGLE ####
-
-# a) map from unit circle to angle kde
-unitScn, _ = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, **specDicts[0])
-angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, **specDicts[3])
-itplScns = vs.interpolate_scenes(unitScn, angleScn, 25)
-myFrms, _ = vs.animate_sequence(itplScns)
-DecapStream(myFrms, 0, 100).show()
-
-chip_mode_lo, chip_mode_hi = chip_modes[[0, 5]]
-mode_angles = [chip_mode_lo, chip_mode_hi]
-modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict['axis_length'], 
-                                 x_ax = kwargDict['x_unit_vector'], y_ax = kwargDict['y_unit_vector'],
-                                 orig = kwargDict['axis_origin_point'])
-angleScn_with_line = angleScn.put(modeLns)
-angleView = View.make(myCam, angleScn_with_line)
-angleFrm = backView.combine(angleView).snap()
-angleFrm.show()
-
-angleScn, tops_modes = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict)
-itplScns = vs.interpolate_scenes(unitScn, angleScn, 25)
-myFrms, _ = vs.animate_sequence(itplScns)
-DecapStream(myFrms, 0, 100).show()
-
-tops_mode = tops_modes[0]
-mode_angles = [tops_mode]
-modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict['axis_length'], 
-                                 x_ax = kwargDict['x_unit_vector'], y_ax = kwargDict['y_unit_vector'],
-                                 orig = kwargDict['axis_origin_point'])
-
-angleScn_with_line = angleScn.put(modeLns)
-angleView = View.make(myCam, angleScn_with_line)
-angleFrm = backView.combine(angleView).snap()
-angleFrm.show()
-
-# b) map from line to circle 
-pass
-
-##################################################
-### DOES LAUNCH ANGLE CORRELATE WITH PLACEMENT ###
-##################################################
-
-thresh_val = chip_modes[[0, 4]].mean()
-
-regFrm_in['launch_angle'] = retPnts_in.get_returns().apply('get_launch_angle')
-weightArr_preds_hi = 1 - regFrm_in.loc[(regFrm_in.is_chipped == 1) & (regFrm_in.launch_angle > thresh_val) , 'pred_is_chipped'].values
-weightArr_preds_lo = 1 - regFrm_in.loc[(regFrm_in.is_chipped == 1) & (regFrm_in.launch_angle < thresh_val) , 'pred_is_chipped'].values
-
-hi_chip_retShots_rectified = chip_retShots_rectified.filter('get_launch_angle', is_above = thresh_val)
-lo_chip_retShots_rectified = chip_retShots_rectified.filter('get_launch_angle', is_below = thresh_val)
-
-chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
-                            position_func = 'get_first_bounce_position', 
-                            weight_func_or_arr = weightArr_preds,
-                            normalize_density = True,
-                            bandwidth = 45)
-
-kdeView = View.make(myCam, chipScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-### Chip Heatmaps, Hi Launch
-chipScn_hi = vs.kde_heatmap(hi_chip_retShots_rectified,  showReg = showReg,
-                            position_func = 'get_first_bounce_position', 
-                            weight_func_or_arr = weightArr_preds_hi,
-                            normalize_density = True,
-                            bandwidth = 45)
-
-kdeView = View.make(myCam, chipScn_hi, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-### Chip Heatmaps, Low Launch
-chipScn_lo = vs.kde_heatmap(lo_chip_retShots_rectified,  showReg = showReg,
-                            position_func = 'get_first_bounce_position', 
-                            weight_func_or_arr = weightArr_preds_lo,
-                            normalize_density = True,
-                            bandwidth = 45)
-
-kdeView = View.make(myCam, chipScn_lo, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-### Combination
-alpha_delta = chipScn_hi.alphaArrs[0] - chipScn_lo.alphaArrs[0]
-minimum, maximum = alpha_delta.min(), alpha_delta.max()
-
-alpha_renorm = np.where(alpha_delta < 0, - alpha_delta / minimum, alpha_delta / maximum)
-alpha_renorm = (alpha_renorm + 1 / 2)
-alpha_renorm = (alpha_renorm * chipScn.alphaArrs[0]) ** 0.5
-
-colArr = const.BGR['light_brown'] * alpha_renorm + const.BGR['strong_blue'] * (1 - alpha_renorm)
-
-from ATMANpy.types.Visual3D import DummyScene
-deltaScn = DummyScene(chipScn_lo.rastArrs, [colArr], [alpha_renorm])
-kdeView = View.make(myCam, deltaScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-### TODO: a little regression, maybe?
-
-###########################################
-#### BACKHAND INTERACTED /W SERVE SIDE ####
-###########################################
-
-regFrm_in['ret_dist_to_bh_serve_fore'] = regFrm_in['ret_dist_to_bh'] * regFrm_in['serve_fore']
-regFrm_in['ret_dist_to_bh_serve_back'] = regFrm_in['ret_dist_to_bh'] * (1 - regFrm_in['serve_fore'])
-
-regFrm_in['ret_dist_to_bh_serve_fore_sq'] = regFrm_in['ret_dist_to_bh_serve_fore'] ** 2
-regFrm_in['ret_dist_to_bh_serve_back_sq'] = regFrm_in['ret_dist_to_bh_serve_back'] ** 2
-
-### Weighted with topspin odds and len weights (weight_len_pred)
-regDict = { 'dist_bsl_bh_side_weighted': [  'is_chipped', 
-                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                            'ret_dist_to_bsl', 
-                                            'launch_angle'],
-            'dist_bsl_bh_side_sq_weighted': [   'is_chipped', 
-                                                'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                'ret_dist_to_bsl', 
-                                                'launch_angle'],
-            
-
-            }
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name,
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-### -> not bad! on a serve from the backhand side, the model prefers returns farther from the backhand of the server (to the forehand)
-### on a serve from the forehand side, the model prefers a serve that is basically hit back at the server directly
-     ### e.g. in dist_bsl_bh_side_sq_weighted: 0.273 - 2 * 0.0193 * x = 0 <-> x = 7 meters (from the backhand)
-### however, on the aggregate, we still see a bias for the forehand side on the return, which is hard to explain
-
-##########################################
-### LAUNCH ANGLE IN A SPECIFICATION II ###
-##########################################
-regFrm_in['ret_dist_to_bsl'].min(), regFrm_in['ret_dist_to_bsl'].max()
-regFrm_in['ret_dist_to_bh'].min(), regFrm_in['ret_dist_to_bh'].max()
-
-regFrm_in['ret_dist_to_bsl_x_launch_angle'] = regFrm_in['ret_dist_to_bsl'] * regFrm_in['launch_angle']
-
-### Weighted with topspin odds and len weights (weight_len_pred)
-regDict = { 'dist_bsl_bh_launch_weighted': [    'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 
-                                                'launch_angle'],
-            'dist_bsl_bh_launch_inter_weighted': [  'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 
-                                                    'launch_angle', 'ret_dist_to_bsl_x_launch_angle'], 
-            'dist_bsl_bh_launch_inter_speed_weighted':  [   'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle',
-                                                            'ret_speed', 'ret_spin'], 
-            'dist_bsl_bh_parab_launch_inter_speed_weighted':  [ 'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bsl_bh',
-                                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle',
-                                                                'ret_speed', 'ret_spin'], 
-            'dist_bsl_bh_halfsq_parab_launch_inter_speed_weighted':  [  'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 
-                                                                        'ret_dist_to_bsl_bh', 'ret_dist_to_bh_sq',
-                                                                        'launch_angle', 'ret_dist_to_bsl_x_launch_angle',
-                                                                        'ret_speed', 'ret_spin'], 
-            'dist_bsl_bh_sq_launch_inter_weighted': [   'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 
-                                                        'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq',
-                                                        'launch_angle', 'ret_dist_to_bsl_x_launch_angle'],
-            'dist_bsl_bh_halfsq_launch_inter_weighted':  [  'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl',
-                                                            'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle'
-                                                            ], 
-            'dist_bsl_bh_sq_launch_inter_speed_weighted':  ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 
-                                                            'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle',
-                                                            'ret_speed', 'ret_spin'], 
-            'dist_bsl_bh_side_sq_launch_inter_weighted': [  'is_chipped', 
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl', 'ret_dist_to_bsl_x_launch_angle'
-                                                            ],
-          
-          }
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-
-###################################
-## CHIP RETURN QUALITY LOCATIONS ##
-###################################
-
-regressors = regDict['dist_bsl_bh_launch_inter_weighted']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
-
-avg_tops_pred = glmReg_win.predict(X[X.is_chipped == 0].mean()).values[0]
-avg_chip_pred = glmReg_win.predict(X[X.is_chipped == 1].mean()).values[0]
-print(avg_tops_pred)
-print(avg_chip_pred)
-
-bhPt = vis_ut.botReg['Bottom'].leftPt
-rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
-num_x, num_y, num_coords = rastArr_2D.shape
-rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
-
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
-
-ones = np.ones((len(rel_rastArr), 1))
-launch_angle = chip_modes[0]
-angs = launch_angle * ones
-dist_x_angs = rel_rastArr[:, [1]] * launch_angle
-
-regressor_array = np.concatenate([ones, rel_rastArr, angs, dist_x_angs], axis = 1)
-regressor_frame = pd.DataFrame(regressor_array, columns = regressors)
-regressor_frame['const'] = 1
-
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_topspin_pred)
-zArr = np.zeros((num_x * num_y, 1))
-rastArr_3D = np.concatenate([rastArr_2D, zArr], axis = 1)
-rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
-
-kdeView = View.make(myCam, rastScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-######################################
-### RETURNS IN AND OUT OF POSITION ###
-######################################
-regFrm_in['ret_dist_to_opt_sq'] = regFrm_in['ret_dist_to_opt'] ** 2
-
-regFrm_in['ret_dist_to_opt'].min(), regFrm_in['ret_dist_to_opt'].max()
-
-### check out extreme positioning cases
-extreme_data = regFrm_in[regFrm_in['ret_dist_to_opt'] == regFrm_in['ret_dist_to_opt'].max()]
-extreme_idx = int(extreme_data.index[0])
-retPnts_in[extreme_idx].stream(confs = confs).show(ms_between_frames = 100)
-### -> max is very interesting: the return puts the returner way out of position, and he's lucky to win the point.
-### -> min indicates that maybe we should take the position of the receiver not at the return, but a bit later
-    # since he might be carries sideways by the impetus of the shot.
-
-regFrm_in['ret_dist_to_opt_x_launch_angle'] = regFrm_in['ret_dist_to_opt'] * regFrm_in['launch_angle']
-
-### Weighted with topspin odds and len weights (weight_len_pred)
-regDict = { 'dist_opt_weighted': ['is_chipped', 'ret_dist_to_opt'],
-            'dist_bsl_opt_weighted': ['is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt'],
-            'dist_bsl_bh_opt_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt'],
-            'dist_bsl_bh_opt_inter_weighted': [ 'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle'],
-            'dist_bsl_bh_opt_inter2_weighted': [ 'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_opt_halfsq_inter2_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                'ret_dist_to_bh_sq',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_opt_chars_halfsq_inter2_weighted': [ 'ret_speed', 'ret_spin', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                        'ret_dist_to_bh_sq',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_opt_chars_parab_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                            'ret_dist_to_bsl_bh',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_opt_inter2_weighted':  [ 'is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-           } 
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-
-### Optimal positioning -> squared specification.
-regDict = { 'dist_opt_sq_weighted': ['is_chipped', 'ret_dist_to_opt', 'ret_dist_to_opt_sq'],
-            'dist_bsl_opt_sq_weighted': ['is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq'],
-            'dist_bsl_bh_opt_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq'],
-            'dist_bsl_bh_opt_sq_inter2_weighted': [ 'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
-                                                    'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            }
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-
-#### Interact BH with IS_CHIPPED ###############
-regFrm_in['ret_dist_to_bh_x_is_chipped'] = regFrm_in['ret_dist_to_bh'] * regFrm_in['is_chipped']
-regDict = {'dist_bh_inter': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bh_x_is_chipped']}
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-
-################################################
-### RETURNS IN AND OUT OF POSITION WITH SIDE ###
-################################################
-regDict = {'dist_bsl_bh_side_sq_opt_inter2_weighted':  ['is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                        'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                        'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                        'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_side_sq_opt_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_side_sq_opt_speed_inter2_weighted': ['ret_speed', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],}
-for save_name, regressors in regDict.items():
-    vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                               endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-
-### --> ret_dist_to_opt_x_launch_angle > 0 means a higher launch angle gives time to get in position!!!
-    # check this with a small regression --> see below: launch angle and time
-
-##################################
-##### LAUNCH ANGLE AND TIME ######
-##################################
-player_speed_kph = 15 ### this is taken from https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
-player_speed_mps = 15 * const.KPH_TO_MPS
-seconds_needed_to_recover = 0.5 ### can't immediately start running after contact
- 
-regressors = ['launch_angle', 'ret_speed', 'ret_spin']
-y, X = regFrm_in['ret_time'], regFrm_in[regressors]
-X['const'] = 1
-X = X.astype(float)
-olsReg_fit = sm.OLS(y, X).fit()
-olsReg_fit.summary()
-
-### margins
-seconds_per_degree = olsReg_fit._results.params[0]
-seconds_per_degree * player_speed_mps
-
-### simple means
-means = X.groupby(regFrm_in['is_chipped'], as_index = False).mean()
-fitSer = olsReg_fit.predict(means) ### simple means
-delta = fitSer[1] - fitSer[0]
-delta * player_speed_mps
-
-### means using launch angle modes
-dist_to_chip_lo = np.abs(regFrm_in['launch_angle'] - chip_mode_lo)
-dist_to_chip_hi = np.abs(regFrm_in['launch_angle'] - chip_mode_hi)
-dist_to_tops = np.abs(regFrm_in['launch_angle'] - tops_mode)
-distFrm = pd.concat([dist_to_chip_lo, dist_to_chip_hi, dist_to_tops], axis = 1)
-distFrm.columns = ['chip_lo', 'chip_hi', 'tops']
-
-weightFrm = 1 / distFrm ** 2
-weightFrm['chip_lo'] = weightFrm['chip_lo'] * regFrm_in['is_chipped']
-weightFrm['chip_hi'] = weightFrm['chip_hi'] * regFrm_in['is_chipped']
-weightFrm['tops'] = weightFrm['tops'] * (1 - regFrm_in['is_chipped'])
-
-weightFrm_norm = weightFrm / weightFrm.sum()
-
-means_chip_lo = X.mul(weightFrm_norm['chip_lo'], axis = 0).sum()
-means_chip_hi = X.mul(weightFrm_norm['chip_hi'], axis = 0).sum()
-means_tops = X.mul(weightFrm_norm['tops'], axis = 0).sum()
-
-weighted_mean_valFrm = pd.concat([means_chip_lo, means_chip_hi, means_tops], axis = 1)
-weighted_mean_valFrm.columns = ['chip_lo', 'chip_hi', 'tops']
-
-timeSer = olsReg_fit.predict(weighted_mean_valFrm.T)
-timeSer_running = timeSer - seconds_needed_to_recover
-distSer = timeSer_running * player_speed_mps
-
-###################################
-## CHIP RETURN QUALITY LOCATIONS ##
-###################################
-
-regressors = regDict['dist_bsl_bh_side_sq_opt_inter2_weighted']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
-
-meanFrm = X.groupby(regFrm_in['is_chipped'].values).mean()
-chipSer = meanFrm.loc[True]
-topsSer = meanFrm.loc[False]
-
-avg_tops_pred = glmReg_win.predict(topsSer).values[0]
-avg_chip_pred = glmReg_win.predict(chipSer).values[0]
-print(avg_tops_pred)
-print(avg_chip_pred)
-
-bhPt = vis_ut.botReg['Bottom'].leftPt
-rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
-num_x, num_y, num_coords = rastArr_2D.shape
-rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
-
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
-
-###### A) Deuce-Side, Serve out Wide
-# -> TODO: technically, for the average positions, we'd have to take lefty ad serves and flip them, and then calculate positions.
-relPnts = retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_deuce')
-ret_player_pos = relPnts.get_returns().get_player_hit_position().mean(axis = 0)
-ret_ball_pos = relPnts.get_returns().get_ball_hit_position().mean(axis = 0)[:2]
-dist_in_meters = vis_ut.get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos)
-
-### make a regressor for each column
-N = len(rel_rastArr)
-xDict = {}
-xDict['is_chipped'] = np.ones(N)
-xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
-xDict['ret_dist_to_opt'] = dist_in_meters
-xDict['ret_dist_to_bh_serve_fore'] = rel_rastArr[:, 0] ### Deuce side is 'forehand' side
-xDict['ret_dist_to_bh_serve_back'] = np.zeros(N)
-xDict['ret_dist_to_bh_serve_fore_sq'] = rel_rastArr[:, 0] ** 2
-xDict['ret_dist_to_bh_serve_back_sq'] = np.zeros(N)
-xDict['launch_angle'] = np.ones(N) * chip_mode_lo
-xDict['ret_dist_to_bsl_x_launch_angle'] = rel_rastArr[:, 1] * chip_mode_lo
-xDict['ret_dist_to_opt_x_launch_angle'] = dist_in_meters * chip_mode_lo
-xDict['const'] = np.ones(N)
-
-regressor_frame = pd.DataFrame(xDict)
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_tops_pred, 
-                                                                  alpha_exponent = 0.5)
-zArr = np.zeros((num_x * num_y, 1))
-rastArr_3D = np.concatenate([rastArr_2D, zArr], axis = 1)
-rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
-
-kdeView = View.make(myCam, rastScn, resolution = 1)
-chipFrm = backView.combine(kdeView).snap()
-chipFrm.show()
-
-#### WITH SPEED ###
-regressors = regDict['dist_bsl_bh_side_sq_opt_speed_inter2_weighted']
-glmReg_win = vis_ut.make_and_save_model(regFrm_in, regressors, save_path, save_name = save_name, 
-                                        endog_col = ENDOG_COL, weight_col = WEIGHT_VARIABLE)
-X, y = vis_ut.retrieve_X_y(glmReg_win, regressors)
-
-meanFrm = X.groupby(regFrm_in['is_chipped'].values).mean()
-chipSer = meanFrm.loc[True]
-topsSer = meanFrm.loc[False]
-
-avg_tops_pred = glmReg_win.predict(topsSer).values[0]
-avg_chip_pred = glmReg_win.predict(chipSer).values[0]
-print(avg_tops_pred)
-print(avg_chip_pred)
-
-bhPt = vis_ut.botReg['Bottom'].leftPt
-rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
-num_x, num_y, num_coords = rastArr_2D.shape
-rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
-
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
-
-tops_speed, tops_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'tops']
-chip_lo_speed, chip_lo_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'chip_lo']
-chip_hi_speed, chip_hi_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'chip_hi']
-
-### do all 8 options in a loop
-# -> TODO: technically, for the average positions, we'd have to take lefty ad serves and flip them, and then calculate positions.
-relPnts_options = {'deuce_wide': retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_deuce'),
-                   'deuce_middle': retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_deuce'),
-                   'ad_middle': retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_ad'),
-                   'ad_wide': retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_ad')}
-angle_options = {'lo': (chip_lo_speed, chip_lo_angle), 
-                 'hi': (chip_hi_speed, chip_hi_angle)}
-
-for rel_opt, relPnts in relPnts_options.items():
-    side, width = rel_opt.split('_')
-    for ang_opt, speed_and_angle in angle_options.items():
-        print(rel_opt, ang_opt)
-        
-        ret_speed, ret_launch_angle = speed_and_angle
-        
-        relPnts = retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_deuce')
-        ret_player_pos = relPnts.get_returns().get_player_hit_position().mean(axis = 0)
-        ret_ball_pos = relPnts.get_returns().get_ball_hit_position().mean(axis = 0)[:2]
-        dist_in_meters = vis_ut.get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos)
-
-        ### make a regressor for each column
-        N = len(rel_rastArr)
-        xDict = {}
-        xDict['ret_speed'] = ret_speed
-        xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
-        xDict['ret_dist_to_opt'] = dist_in_meters
-
-        if side == 'deuce': ### Deuce side is rectified 'forehand' side
-            xDict['ret_dist_to_bh_serve_fore'] = rel_rastArr[:, 0] 
-            xDict['ret_dist_to_bh_serve_back'] = np.zeros(N)
-            xDict['ret_dist_to_bh_serve_fore_sq'] = rel_rastArr[:, 0] ** 2
-            xDict['ret_dist_to_bh_serve_back_sq'] = np.zeros(N)
-        else: ### Ad side is rectified 'backhand' side
-            xDict['ret_dist_to_bh_serve_fore'] = np.zeros(N) 
-            xDict['ret_dist_to_bh_serve_back'] = rel_rastArr[:, 0]
-            xDict['ret_dist_to_bh_serve_fore_sq'] = np.zeros(N)
-            xDict['ret_dist_to_bh_serve_back_sq'] = rel_rastArr[:, 0] ** 2
-
-        xDict['launch_angle'] = np.ones(N) * ret_launch_angle
-        xDict['ret_dist_to_bsl_x_launch_angle'] = rel_rastArr[:, 1] * ret_launch_angle
-        xDict['ret_dist_to_opt_x_launch_angle'] = dist_in_meters * ret_launch_angle
-        xDict['const'] = np.ones(N)
-
-        regressor_frame = pd.DataFrame(xDict)
-        colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_win, regressor_frame, relative_to = avg_tops_pred, 
-                                                                        alpha_exponent = 0.5)
-        zArr = np.zeros((num_x * num_y, 1))
-        rastArr_3D = np.concatenate([rastArr_2D, zArr], axis = 1)
-        rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
-
-        kdeView = View.make(myCam, rastScn, resolution = 1)
-        chipFrm = backView.combine(kdeView).snap()
-        chipFrm.show()
-
-
-##################################
-##### LAUNCH ANGLE AND TIME ######
-##################################
-player_speed_kph = 15 ### this is taken from https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
-player_speed_mps = 15 * const.KPH_TO_MPS
-seconds_needed_to_recover = 0.5 ### can't immediately start running after contact
- 
-regressors = ['launch_angle', 'ret_speed', 'ret_spin']
-y, X = regFrm_in['ret_time'], regFrm_in[regressors]
-X['const'] = 1
-X = X.astype(float)
-olsReg_fit = sm.OLS(y, X).fit()
-olsReg_fit.summary()
-
-### margins
-seconds_per_degree = olsReg_fit._results.params[0]
-seconds_per_degree * player_speed_mps
-
-### simple means
-means = X.groupby(regFrm_in['is_chipped'], as_index = False).mean()
-fitSer = olsReg_fit.predict(means) ### simple means
-delta = fitSer[1] - fitSer[0]
-delta * player_speed_mps
-
-### means using launch angle modes
-dist_to_chip_lo = np.abs(regFrm_in['launch_angle'] - chip_mode_lo)
-dist_to_chip_hi = np.abs(regFrm_in['launch_angle'] - chip_mode_hi)
-dist_to_tops = np.abs(regFrm_in['launch_angle'] - tops_mode)
-distFrm = pd.concat([dist_to_chip_lo, dist_to_chip_hi, dist_to_tops], axis = 1)
-distFrm.columns = ['chip_lo', 'chip_hi', 'tops']
-
-weightFrm = 1 / distFrm ** 2
-weightFrm['chip_lo'] = weightFrm['chip_lo'] * regFrm_in['is_chipped']
-weightFrm['chip_hi'] = weightFrm['chip_hi'] * regFrm_in['is_chipped']
-weightFrm['tops'] = weightFrm['tops'] * (1 - regFrm_in['is_chipped'])
-
-weightFrm_norm = weightFrm / weightFrm.sum()
-
-means_chip_lo = X.mul(weightFrm_norm['chip_lo'], axis = 0).sum()
-means_chip_hi = X.mul(weightFrm_norm['chip_hi'], axis = 0).sum()
-means_tops = X.mul(weightFrm_norm['tops'], axis = 0).sum()
-
-weighted_mean_valFrm = pd.concat([means_chip_lo, means_chip_hi, means_tops], axis = 1)
-weighted_mean_valFrm.columns = ['chip_lo', 'chip_hi', 'tops']
-
-timeSer = olsReg_fit.predict(weighted_mean_valFrm.T)
-timeSer_running = timeSer - seconds_needed_to_recover
-distSer = timeSer_running * player_speed_mps
-
-
-### TODO: for heatmaps: maybe use topspin_odds, but zero color is also red -> this way, the KDE does not appear so falsely sparse!
-
-################################
-####### A LOOK AT INTENTION ####
-################################
-
-# idea: chip location leans heavily to the backhand side of the server -> harder to attack!
-# --> can we see this when comparing LH servers and righthanded servers?
-regFrm_in['is_right_handed_server'] = retPnts_in.apply(vis_ut.server_is_right_handed)
-regFrm_in['is_left_handed_server'] = retPnts_in.apply(vis_ut.server_is_left_handed)
-
-chipPnts_right = retPnts_in.filter(vis_ut.server_is_right_handed).filter(vis_ut.ret_is_chipped)
-chipPnts_left = retPnts_in.filter(vis_ut.server_is_left_handed).filter(vis_ut.ret_is_chipped)
-
-chipShots_right = chipPnts_right.get_returns()
-chipShots_left = chipPnts_left.get_returns()
-
-chipFrm_left = regFrm_in[(regFrm_in.is_chipped == 1) & (regFrm_in.is_left_handed_server == 1)]
-topspin_preds_left = 1 - chipFrm_left.pred_is_chipped.values
-topspin_odds_left = (1 - chipFrm_left.pred_is_chipped.values) / chipFrm_left.pred_is_chipped.values
-
-chipFrm_right = regFrm_in[(regFrm_in.is_chipped == 1) & (regFrm_in.is_right_handed_server == 1)]
-topspin_preds_right = 1 - chipFrm_right.pred_is_chipped.values
-topspin_odds_right = (1 - chipFrm_right.pred_is_chipped.values) / chipFrm_right.pred_is_chipped.values
-
-chipScn = vs.kde_heatmap(chipShots_right,  showReg = showReg,
-                                  position_func = 'get_first_bounce_position', 
-                                  weight_func_or_arr = topspin_preds_right,
-                                  normalize_density = True,
-                                  bandwidth = BANDWIDTH)
-
-kdeView = View.make(myCam, chipScn, resolution = 1)
-rightFrm = backView.combine(kdeView).snap()
-rightFrm.show()
-
-chipScn = vs.kde_heatmap(chipShots_left,  showReg = showReg,
-                                  position_func = 'get_first_bounce_position', 
-                                  weight_func_or_arr = topspin_preds_left,
-                                  normalize_density = True,
-                                  bandwidth = BANDWIDTH)
-
-kdeView = View.make(myCam, chipScn, resolution = 1)
-leftFrm = backView.combine(kdeView).snap()
-leftFrm.show()
-
-########################################
-#### return dependence on serve side ###
-########################################
-
-adPnts = retPnts_in.filter('is_serve_ad')
-deucePnts = retPnts_in.filter('is_serve_deuce')
-
-regFrm_in['is_serve_ad'] = retPnts_in.apply('is_serve_ad')
-regFrm_in['is_serve_deuce'] = retPnts_in.apply('is_serve_deuce')
-
-chipShots_ad = adPnts.filter(ret_is_chipped).get_returns()
-chipShots_deuce = deucePnts.filter(ret_is_chipped).get_returns()
-
-chipFrm_ad = regFrm_in[(regFrm_in.is_chipped == 1) & (regFrm_in.is_serve_ad == 1)]
-chipFrm_deuce = regFrm_in[(regFrm_in.is_chipped == 1) & (regFrm_in.is_serve_deuce == 1)]
-
-topspin_preds_ad = 1 - chipFrm_ad.pred_is_chipped.values
-topspin_preds_deuce = 1 - chipFrm_deuce.pred_is_chipped.values
-
-chipScn = vs.kde_heatmap(chipShots_ad,  showReg = showReg,
-                                  position_func = 'get_first_bounce_position', 
-                                  weight_func_or_arr = topspin_preds_ad,
-                                  normalize_density = True,
-                                  bandwidth = 45)
-
-backView = View.make(myCam, courtScn, resolution = 1)
-kdeView = View.make(myCam, chipScn, resolution = 1)
-
-backView.combine(kdeView).snap().show()
-
-chipScn = vs.kde_heatmap(chipShots_deuce,  showReg = showReg,
-                                  position_func = 'get_first_bounce_position', 
-                                  weight_func_or_arr = topspin_preds_deuce,
-                                  normalize_density = True,
-                                  bandwidth = 45)
-
-backView = View.make(myCam, courtScn, resolution = 1)
-kdeView = View.make(myCam, chipScn, resolution = 1)
-
-backView.combine(kdeView).snap().show()
-
-
-
-
