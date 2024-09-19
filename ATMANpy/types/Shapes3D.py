@@ -292,6 +292,12 @@ class Point3D:
         else:
             return True
         
+    def num_elements(self):
+        if self.is_vectorized():
+            return len(self.x)
+        else:
+            return 1
+
     def get_ground_point(self):
         return Point2D((self.x, self.y))
         
