@@ -111,17 +111,126 @@ logReg = Logit(ySer, xFrm)
 logReg = logReg.fit()
 logReg.summary()
 
+#########################################
+##### CREATE REGRESSORS AND WEIGHTS #####
+#########################################
 regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new)
 
 #################################
 ###### ATTRIBUTION TABLES #######
 #################################
-from ATMANpy.types.Overlays import Table
+from ATMANpy.types.Overlays import Table, Graph, Chart
 
+### a) unweighted
 chips_naive, tops_naive, attrib_naive = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
                                                                      bounce_col = 'must_have_bounced_in', weight_col = None)
+### b) PSM-weighted
 chips_smart, tops_smart, attrib_smart = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
                                                                      bounce_col = 'must_have_bounced_in', weight_col = 'weight_topspin')
+### c) PSM and Balance-Weighted
+chips_smart, tops_smart, attrib_smart = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_pred')
+
+### d1) PSM and Balance and Len-Weighted
+chips_smart_len, tops_smart_len, attrib_smart_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_len_pred',
+                                                                     assert_digits = 1)
+
+### d2) PSM and Balance and Len-Weighted (outcome method)
+chips_smart_len, tops_smart_len, attrib_smart_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins_weighted', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_pred',
+                                                                     assert_digits = 1)
+
+
+### b) len weighted
+print(f'Topspin Returns:')
+print(f'   No len adj: {tops_smart["cond"]:.2f}; len adj: {tops_smart_len["cond"]:.2f}')
+print(f'Chipped Returns:')
+print(f'   No len adj: {chips_smart["cond"]:.2f}; len adj: {chips_smart_len["cond"]:.2f}')
+
+#################################
+###### LENGTH OF RALLY ##########
+#################################
+
+tops_naive_len, chips_naive_len, chips_smart_len = vis_ut.calculate_rally_lengths(regFrm)
+naiveGraph, smartGraph = vis_ut.uniform_kdes_for_rally_length(regFrm, normalize_density = False, bandwidth = 1.5)
+smartGraph.render().show()
+### if rally length is not affected by chip/tops, 
+# why does the conditional win percentage improve so drastically for chipped returns
+# when introducing the length weight adjustment?
+# (whereas topspin conditional win % does not change much?)
+
+### Make a Graph: Win% returner over Rally Length
+jntFrm, shrFrm, diffFrm_chip, diffFrm_top = vis_ut.chip_topspin_return_avgs_by_length(regFrm)
+diffFrm_chip.sum() 
+### these are the 7.5% we see in overall difference. 
+#If we were to exclude the 2-length rallys (where the return is usually not made)
+# we will get closer to 10%. The analysis could be re-done with just the conditional returns.
+
+### To build an intuition on the improvement -> bucket into <4, 4-8, >8 rallys.
+short_filter = jntFrm.index < 5
+mid_filter = (jntFrm.index >= 5) & (jntFrm.index < 9)
+long_filter = jntFrm.index >= 9
+
+jntFrm[short_filter].sum() / shrFrm[short_filter].sum()
+jntFrm[mid_filter].sum() / shrFrm[mid_filter].sum()
+jntFrm[long_filter].sum() / shrFrm[long_filter].sum()
+
+###### INVESTIGATE SELECTION BIAS #########
+#### TODO: Possible selection bias: the better player typically plays fewer serves (holds fast, hangs in for longer in return games).
+### -> more returns observed by the better player!
+### -> maybe do an importance weight correction?
+f1 = regFrm.len < 5
+f2 = (regFrm.len >= 5) & (regFrm.len < 7)
+f3 = (regFrm.len >= 7) & (regFrm.len < 9)
+f4 = regFrm.len >= 9
+
+m1 = regFrm.loc[f1, 'ret_wins'].mean()
+m2 = regFrm.loc[f2, 'ret_wins'].mean()
+m3 = regFrm.loc[f3, 'ret_wins'].mean()
+m4 = regFrm.loc[f4, 'ret_wins'].mean()
+
+from ATMANpy.types.Overlays import BarChart, ScatterChart, Graph
+half_line_xs = np.arange(0, 5, 0.1)
+half_line_ys = np.full_like(half_line_xs, fill_value = 0.5)
+
+barChart = BarChart([1, 2, 3, 4], [m1, m2, m3, m4], color = const.BGR['ball_yellow'], external_gap = 0.4, x_labels = ['2-4', '5-6', '7-8', '> 8'], 
+                    annotate_bar_heights = True)
+halfChart = ScatterChart(half_line_xs, half_line_ys, color = const.BGR['intense_red'])
+
+label_format = ' >3.0%'
+myGraph = Graph([barChart, halfChart], offset = 0.35,
+                y_label = 'Ret. Win %', y_label_format = label_format, y_label_dist = 1.25, header_text = '', graph_height = 20,
+                make_default_x_labels = False, x_tick_label_left_shift = 0.5, x_label = 'Length of Rally', x_label_left_shift = 1.5, x_label_dist = 0.7)
+myGraph.render().show()
+
+myScn, annotatedPnts = myGraph.preview()
+
+newPnt = annotatedPnts[7]
+newPnt = newPnt.retext('50%').recolor(const.BGR['intense_red']).right(7).back(0.45)
+annotatedPnts.append(newPnt)
+
+from ATMANpy.types.Visual3D import View
+graphView = View.make(myGraph.cam, myScn, resolution = myGraph.resolution, annotatedPoints = annotatedPnts)
+graphView.snap().show()
+
+### TODO: use this to animate the bars -> better to explain while bars appear.
+
+### SCRIPT
+# -> in a perfect world: ask each player to hit 100 serves to each other player in our sample: observe equally many serves and returns for each single player
+# however, our data generating process are actual tennis matches. In these, what happens is that we observe more returns from the better player
+### -> selection bias!
+# why? imagine player A has a great serve and average return; player B has an average return and serve. 
+# We expect player A to hold faster (due to his strong serve), and therefore play rel. fewer points on serve and rel. more on the return.
+# similarly, if A had a great return and an average serve, we'd expect him to hang in for longer in return games, thus playing rel. more points on return, again.
+# yet another way to show this -> what happens to win% if rallys go long? In this case, the impact of the srv/ret are nullified, 
+# if both players were equally matched, we'd expect the win probability on long points to be at 50%.
+# However, what we observe is that the return player has greater win probability in long rallys, 
+# indicating that the better player indeed plays more returns in a match, simply due to the nature of tennis scoring.
+# ---> show graph!
+# to remove this bias, and approximate the experimental setting, 
+# we introduce a balancing factor that gives more weight to returns made by the player that made fewer returns (ostensibly, the weaker player).
+
 ### tops_naive == tops_smart
 
 DIMENSIONS = (1920 // 3, 1080 // 3)
