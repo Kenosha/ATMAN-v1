@@ -1032,10 +1032,17 @@ class Shots:
     def sort(self, sort_by = None, descending = False):
         if sort_by is None:
             keyFunc = lambda el: (el.get_match_index(), el.get_point_index())
+            return Shots(sorted(self.shotList, key = keyFunc, reverse = descending))
         elif isinstance(sort_by, str):
             keyFunc = lambda el: getattr(el, sort_by)()
-        return Shots(sorted(self.shotList, key = keyFunc, reverse = descending))
-    
+            return Shots(sorted(self.shotList, key = keyFunc, reverse = descending))
+        elif isinstance(sort_by, np.ndarray) or isinstance(sort_by, list):
+            sort_idxs = np.argsort(sort_by)
+            if descending:
+                sort_idxs = np.flip(sort_idxs)
+            sorted_shots = [self[int(idx)] for idx in sort_idxs]
+            return Shots(sorted_shots)
+
     def enforce_direction(self, from_where):
         ### TODO: ADD SORT!
         assert from_where in ['Top', 'Bot']
