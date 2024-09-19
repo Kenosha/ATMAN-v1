@@ -1103,7 +1103,8 @@ def gmm_clustering_grid_search(myShots,
 def kde_angle_distribution(myShots, value_func = 'get_launch_angle', weight_func_or_arr = None, 
                             min_angle = 0, max_angle = 90, resolution = 1, 
                             axis_origin_point = None, axis_length = 100, x_unit_vector = None, y_unit_vector = None, show_axes = True,
-                            bandwidth = 5, color = const.BGR['intense_red'], normalize_density = False,
+                            bandwidth = 5, color = const.BGR['intense_red'], 
+                            normalize_density = False, stretch_density = 1,
                             min_rel_mode_height = 0.5):
 
     spaceArr = np.arange(min_angle, max_angle, step = 1 / resolution)
@@ -1134,7 +1135,7 @@ def kde_angle_distribution(myShots, value_func = 'get_launch_angle', weight_func
     else:
         ### get the classic, one dimensional epanechnikov kde on a line
         kdeArr = epanechnikov1D(angleArr_nonnan, spaceArr, weightArr = weightArr, bandwidth = bandwidth, 
-                                normalize_density = normalize_density)
+                                normalize_density = normalize_density) * stretch_density
 
     modes = detect_distribution_modes(kdeArr, spaceArr, min_rel_mode_height = min_rel_mode_height)
 
