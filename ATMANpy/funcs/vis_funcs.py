@@ -234,9 +234,9 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         if animate_over is None:
             over_array = None
         elif isinstance(animate_over, Frame):
-            over_array = animate_over.array
+            over_array = animate_over.array.copy()
         elif isinstance(animate_over, Frames):
-            over_array = animate_over[idx].array
+            over_array = animate_over[idx].array.copy()
         else:
             raise TypeError('animate_over has to be None, Frame, or Frames (of appropriate length)')
 
@@ -410,7 +410,7 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
     if animate_over is None:
         over_array = None
     elif isinstance(animate_over, Frame):
-        over_array = animate_over.array
+        over_array = animate_over.array.copy()
     else:
         raise TypeError('animate_over has to be None or Frame')
 
