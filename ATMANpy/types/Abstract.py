@@ -241,6 +241,22 @@ class Trajectory:
             x, y, z = None, None, None
         return x, y ### z = 0 always!
     
+    def get_virtual_planar_bounce_point(self):
+        from ATMANpy.models.BallTrajectory.flight_bounce_model import calculate_speed_step
+
+        try:
+            bounce_idx =  self.trajFrm[self.trajFrm.event.str.startswith('B')].index[0]
+        except IndexError:
+            return None, None
+        
+        px0, pz0 = self.trajFrm[['px_t', 'pz_t']].iloc[bounce_idx - 2]
+        px1, pz1 = self.trajFrm[['px_t', 'pz_t']].iloc[bounce_idx - 1]
+        rpm = self.get_initial_spin()
+
+        dx, dz, _ = calculate_speed_step((px1 - px0), (pz1 - pz0), rpm)
+        vx, vz = px1 + dx, pz1 + dz
+        return vx, vz
+    
     def get_net_crossing_position(self, net_y = 637):
         coord_cols = ['x_t', 'y_t', 'z_t']
         trajArr = self.trajFrm[coord_cols].dropna()
@@ -310,25 +326,115 @@ class Trajectory:
         speed_ms = self['vx0'].iloc[0]
         if unit == 'km/h':
             return speed_ms * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+        else:
+            return speed_ms
         
     def get_initial_vertical_speed(self, unit = 'km/h'):
         assert unit in ['m/s', 'km/h']
         speed_ms = self['vz0'].iloc[0]
         if unit == 'km/h':
             return speed_ms * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+        else:
+            return speed_ms
+    
+    def get_post_bounce_horizontal_speed(self, unit = 'km/h', how = 'virtual'):
+        assert unit in ['m/s', 'km/h']
+        assert how in ['virtual', 'corrected', 'corrected_next']
+        
+        try:
+            bounce_idx =  self.trajFrm[self.trajFrm.event.str.startswith('B')].index[0]
+        except IndexError:
+            return None
+        
+        if how == 'virtual':
+            px0, _  = self.get_virtual_planar_bounce_point()
+            px1     = self.trajFrm['px_t'].iloc[bounce_idx + 1]
+        elif how == 'corrected':
+            px0     = self.trajFrm['px_t'].iloc[bounce_idx]
+            px1     = self.trajFrm['px_t'].iloc[bounce_idx + 1]
+        elif how == 'corrected_next':
+            px0     = self.trajFrm['px_t'].iloc[bounce_idx + 1]
+            px1     = self.trajFrm['px_t'].iloc[bounce_idx + 2]
+
+        speed_ms = px1 - px0
+        if unit == 'km/h':
+            return speed_ms * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+        else:
+            return speed_ms
+    
+    def get_post_bounce_vertical_speed(self, unit = 'km/h', how = 'virtual'):
+        assert unit in ['m/s', 'km/h']
+        assert how in ['virtual', 'corrected', 'corrected_next']
+        
+        try:
+            bounce_idx =  self.trajFrm[self.trajFrm.event.str.startswith('B')].index[0]
+        except IndexError:
+            return None
+        
+        if how == 'virtual':
+            _, pz0  = self.get_virtual_planar_bounce_point()
+            pz1     = self.trajFrm['pz_t'].iloc[bounce_idx + 1]
+        elif how == 'corrected':
+            pz0     = self.trajFrm['pz_t'].iloc[bounce_idx]
+            pz1     = self.trajFrm['pz_t'].iloc[bounce_idx + 1]
+        elif how == 'corrected_next':
+            pz0     = self.trajFrm['pz_t'].iloc[bounce_idx + 1]
+            pz1     = self.trajFrm['pz_t'].iloc[bounce_idx + 2]
+
+        speed_ms = pz1 - pz0
+        if unit == 'km/h':
+            return speed_ms * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+        else:
+            return speed_ms
 
     def get_launch_angle(self):
         h = self.get_initial_horizontal_speed()
         v = self.get_initial_vertical_speed()
         return np.arctan2(v, h) * const.RAD_TO_ANGLE
         
+    def get_angle_post_bounce(self, how = 'virtual'):
+        assert how in ['virtual', 'corrected', 'corrected_next']
+
+        try:
+            bounce_idx =  self.trajFrm[self.trajFrm.event.str.startswith('B')].index[0]
+        except IndexError:
+            return None
+        
+        if how == 'virtual':
+            px0, pz0 = self.get_virtual_planar_bounce_point()
+            px1, pz1 = self.trajFrm[['px_t', 'pz_t']].iloc[bounce_idx + 1]
+        elif how == 'corrected':
+            px0, pz0 = self.trajFrm[['px_t', 'pz_t']].iloc[bounce_idx]
+            px1, pz1 = self.trajFrm[['px_t', 'pz_t']].iloc[bounce_idx + 1]
+        elif how == 'corrected_next':
+            px0, pz0 = self.trajFrm[['px_t', 'pz_t']].iloc[bounce_idx + 1]
+            px1, pz1 = self.trajFrm[['px_t', 'pz_t']].iloc[bounce_idx + 2]
+
+        rad = np.arctan2(pz1 - pz0, px1 - px0)
+        return rad * const.RAD_TO_ANGLE
+
     def get_initial_speed(self, unit = 'km/h'):
         vx, vz = self.get_initial_horizontal_speed(unit = unit), self.get_initial_vertical_speed(unit = unit) 
         return (vx ** 2 + vz ** 2) ** 0.5
     
     def get_initial_spin(self):
         return self['rpm0'].iloc[0]
-
+    
+    def get_apex(self):
+        tFrm = self.trajFrm[['x_t', 'y_t', 'z_t']]
+        x, y, z = tFrm.iloc[tFrm.z_t.argmax()]
+        return x, y, z
+    
+    def get_apex_post_bounce(self):
+        try:
+            bounce_idx =  self.trajFrm[self.trajFrm.event.str.startswith('B')].index[0]
+        except IndexError:
+            return None, None, None
+        
+        tFrm = self.trajFrm[['x_t', 'y_t', 'z_t']].iloc[bounce_idx:]
+        x, y, z = tFrm.iloc[tFrm.z_t.argmax()]
+        return x, y, z
+    
     def get_obs_ball_array(self):
         coord_cols = ['x_o', 'y_o', 'z_o']
         coordArr = self.trajFrm[coord_cols].values
@@ -672,15 +778,30 @@ class Shot:
     def get_initial_vertical_speed(self, unit = 'km/h'):
         return self.shotTraj.get_initial_vertical_speed(unit = unit)
 
-    def get_launch_angle(self):
-        return self.shotTraj.get_launch_angle()
+    def get_post_bounce_horizontal_speed(self, unit = 'km/h', how = 'virtual'):
+        return self.shotTraj.get_post_bounce_horizontal_speed(unit = unit, how = how)
+
+    def get_post_bounce_vertical_speed(self, unit = 'km/h', how = 'virtual'):
+        return self.shotTraj.get_post_bounce_vertical_speed(unit = unit, how = how)
 
     def get_initial_speed(self, unit = 'km/h'):
         return self.shotTraj.get_initial_speed(unit = unit)
     
     def get_initial_spin(self):
         return self.shotTraj.get_initial_spin()
+
+    def get_launch_angle(self):
+        return self.shotTraj.get_launch_angle()
+
+    def get_angle_post_bounce(self, how = 'virtual'):
+        return self.shotTraj.get_angle_post_bounce(how = how)
+
+    def get_apex(self):
+        return self.shotTraj.get_apex()
     
+    def get_apex_post_bounce(self):
+        return self.shotTraj.get_apex_post_bounce()
+
     def get_bounce_events(self):
         return self.shotTraj.get_bounce_events()
     
