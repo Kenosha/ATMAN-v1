@@ -339,6 +339,7 @@ class Graph:
 
 class TableSkeleton:
     def __init__(self, rows, cols, 
+                 offset = 0,
                  index_col_width = 1, header_row_height = 1, ### heights relative to the data columns, which are 1 and 1.
                  color = const.BGR['smokey_grey'],
                  vertical_lines = False, horizontal_lines = True,
@@ -364,7 +365,7 @@ class TableSkeleton:
         col_frac = Fraction(index_col_width / (index_col_width + cols - 1)).limit_denominator(100)
         
         ### Table Regions
-        tabReg = tabCam.approximate_fov(render_height)
+        tabReg = tabCam.approximate_fov(render_height).rescale(1 - offset)
         headerReg, otherReg = tabReg.split(numerator = row_frac.numerator, denominator = row_frac.denominator, how = 'horizontal')
         rowRegs = [headerReg, *otherReg.subdivide(elements = rows - 1, how = 'horizontal').shapeList]
         
@@ -413,11 +414,17 @@ class TableSkeleton:
         return tabFrm
 
 class Table:
-    def __init__(self, table_data, header_offset = 0, index_offset = 0, data_offset = 0,
+    def __init__(self, table_data, 
+                 title = None, title_size = 2, title_thickness = 1, title_color = const.BGR['leafy_green'],
+                 title_horizontal_offset = 0, title_vertical_offset = 0,
+                 skeleton_offset = 0, header_offset = 0, index_offset = 0, data_offset = 0,
                  index_col_width = 1, header_row_height = 1,
                  index_line_thickness = 0, header_line_thickness = 0, data_line_thickness = 0,
                  index_rename_dict = None, columns_rename_dict = None,
                  null_rows = 0, null_columns = 0,
+                 header_text_size = 1, index_text_size = 1, data_text_size = 1,
+                 header_text_thickness = 1, index_text_thickness = 1, data_text_thickness = 1, 
+                 header_text_color = const.BGR['leafy_green'], index_text_color = const.BGR['leafy_green'], data_text_color = const.BGR['leafy_green'],
                  number_format = '.2f', skip_after_how_many_symbols = None,
                  line_color = const.BGR['smokey_grey'], vertical_lines = False, horizontal_lines = True,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
@@ -441,12 +448,15 @@ class Table:
         self.columns = columns
         self.data = [[col_val for col_val in row.values()] for row in table_data.values()]
 
-        tabSket = TableSkeleton(total_rows, total_cols, color = line_color, vertical_lines = vertical_lines, horizontal_lines = horizontal_lines,
+        tabSket = TableSkeleton(total_rows, total_cols, 
+                                offset = skeleton_offset, color = line_color, 
+                                vertical_lines = vertical_lines, horizontal_lines = horizontal_lines,
                                 index_col_width = index_col_width, header_row_height = header_row_height,
                                 index_line_thickness = index_line_thickness, header_line_thickness = header_line_thickness, data_line_thickness = data_line_thickness,
                                 truncate_horizontal_lines_by = null_columns, truncate_vertical_lines_by = null_rows,
                                 render_height = render_height, dimensions = dimensions, resolution = resolution)
         
+
         self.tabSket = tabSket
         self.tabCam = self.tabSket.tabCam
         self.resolution = resolution
@@ -456,6 +466,31 @@ class Table:
         self.data_offset = data_offset
         self.number_format = number_format
         self.skip_after_how_many_symbols = skip_after_how_many_symbols
+
+        self.header_text_size = header_text_size
+        self.index_text_size = index_text_size
+        self.data_text_size = data_text_size
+
+        self.header_text_thickness = header_text_thickness
+        self.index_text_thickness = index_text_thickness
+        self.data_text_thickness = data_text_thickness
+
+        self.header_text_color = header_text_color
+        self.index_text_color = index_text_color
+        self.data_text_color = data_text_color
+        
+        self.title = title
+        self.title_size = title_size
+        self.title_color = title_color
+        self.title_thickness = title_thickness
+        self.title_horizontal_offset = title_horizontal_offset
+        self.title_vertical_offset = title_vertical_offset
+
+        if title is None:
+            self.headerReg = None
+        else:
+            tabReg = self.tabCam.approximate_fov(render_height)
+            self.headerReg, _ = tabReg.split(numerator = 1, denominator = total_rows, how = 'horizontal')
 
     def get_lines(self):
         return self.tabSket.get_lines()
@@ -469,17 +504,28 @@ class Table:
 
         annPnts = []
 
+        ### render title:
+        if self.title is not None:
+            textPt = make_text_in(self.headerReg, self.title, 
+                                  size = self.title_size, color = self.title_color, thickness = self.title_thickness, 
+                                  horizontal_offset = self.title_horizontal_offset, vertical_offset = self.title_vertical_offset)
+            annPnts.append(textPt)
+
         ### render indices:
         for i, text in enumerate(self.index):
             myReg = self.tabSket[i + 1, 0]
-            textPt = make_text_in(myReg, text, number_format = self.number_format, skip_after_how_many_symbols = self.skip_after_how_many_symbols,
+            textPt = make_text_in(myReg, text, number_format = self.number_format, 
+                                  size = self.index_text_size, thickness = self.index_text_thickness, color = self.index_text_color, 
+                                  skip_after_how_many_symbols = self.skip_after_how_many_symbols,
                                   horizontal_offset = self.index_offset)
             annPnts.append(textPt)
 
         ### render columns:
         for i, text in enumerate(self.columns):
             myReg = self.tabSket[0, i + 1]
-            textPt = make_text_in(myReg, text, number_format = self.number_format, skip_after_how_many_symbols = self.skip_after_how_many_symbols,
+            textPt = make_text_in(myReg, text, number_format = self.number_format, 
+                                  size = self.header_text_size, thickness = self.header_text_thickness, color = self.header_text_color,
+                                  skip_after_how_many_symbols = self.skip_after_how_many_symbols,
                                   horizontal_offset = self.header_offset)
             annPnts.append(textPt)
 
@@ -487,7 +533,9 @@ class Table:
         for i, row in enumerate(self.data):
             for j, text in enumerate(row):
                 myReg = self.tabSket[i + 1, j + 1]
-                textPt = make_text_in(myReg, text, number_format = self.number_format, skip_after_how_many_symbols = self.skip_after_how_many_symbols,
+                textPt = make_text_in(myReg, text, number_format = self.number_format, 
+                                      size = self.data_text_size, thickness = self.data_text_thickness, color = self.data_text_color,
+                                      skip_after_how_many_symbols = self.skip_after_how_many_symbols,
                                       horizontal_offset = self.data_offset)
                 annPnts.append(textPt)
 
@@ -1076,8 +1124,8 @@ def reverse_cascade(finalRst, keep_which = None,
 
 
 if __name__ == '__main__':
-    TEST_CHART = True
-    TEST_TABLES = False
+    TEST_CHART = False
+    TEST_TABLES = True
     TEST_RASTERS = False
     TEST_DIAGRAMS = False
     TEST_LEGEND = False
@@ -1146,7 +1194,14 @@ if __name__ == '__main__':
         tops_tot = {k: v for k, v in tops.items() if k == 'total'}
         table_data = {'Topspin Return': tops_tot, 'Chipped Return': chips_naive_tot}
 
-        myTab = Table(table_data, number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 2.5,
+        myTab = Table(table_data, 
+                      number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 2.5,
+                    null_columns = 2, header_line_thickness = 0.2)
+        myTab.render().show()
+        
+        myTab = Table(table_data, 
+                      skeleton_offset = 0.2, title = 'Some Title', title_horizontal_offset = 5,
+                      number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 2.5,
                     null_columns = 2, header_line_thickness = 0.2)
         myTab.render().show()
 
