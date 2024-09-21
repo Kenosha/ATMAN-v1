@@ -490,7 +490,7 @@ class Frames:
         
     def reverse(self):
         framesType = self.__class__
-        flippedArr = np.flip(self.arr, axis = 0)
+        flippedArr = np.flip(self.array, axis = 0)
         return framesType(flippedArr)
 
     def open(self, kernelSize, kernelType = cv.MORPH_ELLIPSE):
