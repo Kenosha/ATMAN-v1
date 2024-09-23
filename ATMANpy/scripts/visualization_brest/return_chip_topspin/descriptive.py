@@ -9,13 +9,15 @@ import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.vis_funcs as vs
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
-from ATMANpy.types.Abstract import Points, Point, read_in_all_tables
+from ATMANpy.types.Abstract import Points, Point, Shots, read_in_all_tables
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.Lines import CourtLines, Line
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Features import ConstFeature
 from ATMANpy.types.Visual3D import DummyScene
+from ATMANpy.types.Shapes3D import Line3D, Circle3D, Circles3D
+from ATMANpy.types.Overlays import FrameRaster, FramesRaster, Table
 
 from statsmodels.discrete.discrete_model import Logit
 
@@ -161,6 +163,9 @@ prmDict = {'background_resolution': RESOLUTION_BACKGROUND,
 prmDict_back = {**prmDict}
 prmDict_back['background_resolution'] /= 2 ### reduce the background resolution when the full background is in view, to lower the Moiree effect on the net.
 
+prmDict_nolum = {**prmDict}
+prmDict_nolum['argument_luminosity'] = 1
+
 STATIC_FRAMES = 100 ### does not matter much once we record: the static frames will be fit to the narration
 TRANSITION_FRAMES = 25 
 
@@ -232,6 +237,15 @@ myLeg_chip_topspin = Legend(legRows, header_text = '', header_offset = 2, header
 
 legFrm = myLeg_chip_topspin.render()
 
+### Flight Splines
+serveSF = myShots[0].feat_spline_cumul(which_endpoint = 'penultimate')
+returnSF = myShots[1].feat_spline_cumul(which_endpoint = 'penultimate')
+
+serve_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
+return_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
+spline_scenes = [*serve_scenes, *return_scenes]
+splnScn = spline_scenes[-1]
+
 # ballSF = myShots.feat_ball(which_endpoint = 'penultimate')
 # ballSF = myShots.feat_spline(which_endpoint = 'penultimate')
 # topSF = myShots.feat_top_player()
@@ -242,197 +256,204 @@ legFrm = myLeg_chip_topspin.render()
 # _, botPly = botSF.last()
 # plyScn = Scene([topPly, botPly])
 
-all_frames = []
+DO_METHOD_SECTION = False
+DO_HEATMAP_SECTION = False
+DO_LAUNCH_ANGLE_INTRO = False
+DO_LAUNCH_ANGLE_DISTRO = False
+DO_LAUNCH_ANGLE_MODES = False
+DO_LAUNCH_ANGLE_BUILD = False
+DO_LAUNCH_ANGLE_EXAMPLE = True
 
-####### FLIGHT SUPERIMPOSED OVER BALL
-serveSF = myShots[0].feat_spline_cumul(which_endpoint = 'penultimate')
-returnSF = myShots[1].feat_spline_cumul(which_endpoint = 'penultimate')
+###############################
+##### METHODOLOGY SECTION #####
+###############################
+if DO_METHOD_SECTION:
 
-serve_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
-return_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
-spline_scenes = [*serve_scenes, *return_scenes]
+    all_frames = []
+    ####### FLIGHT SUPERIMPOSED OVER BALL
+    myFrms, animDict = vs.animate_sequence(spline_scenes, start_cam = brestCam_resized, stop_cam = brestCam_resized, background_scene = None, 
+                                        cumulate_argument = False, animate_over = scaledFrms, **prmDict)
+    all_frames.append(myFrms)
 
-myFrms, animDict = vs.animate_sequence(spline_scenes, start_cam = brestCam_resized, stop_cam = brestCam_resized, background_scene = None, 
-                                       cumulate_argument = False, animate_over = scaledFrms, **prmDict)
-all_frames.append(myFrms)
+    myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
+    all_frames.append(myFrms)
 
-myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
-all_frames.append(myFrms)
+    ####### MORPH TRAJECTORY TO VIRTUAL 
+    lastFrm = myFrms[-1]
+    staticScn = courtScn.combine(splnScn)
+    virtualFrm = View.make(brestCam_resized, staticScn).snap()
+    myFrms = vs.interpolate_frames(lastFrm, virtualFrm, num_frames = 100)
+    all_frames.append(myFrms)
 
-####### MORPH TRAJECTORY TO VIRTUAL 
-lastFrm = myFrms[-1]
-splnScn = spline_scenes[-1]
-staticScn = courtScn.combine(splnScn)
-virtualFrm = View.make(brestCam_resized, staticScn).snap()
-myFrms = vs.interpolate_frames(lastFrm, virtualFrm, num_frames = 100)
-all_frames.append(myFrms)
+    myFrms, animDict = vs.animate_cam_motion(splnScn, start_cam = brestCam_resized, stop_cam = heatCam, background_scene = courtScn,
+                                            num_frames = TRANSITION_FRAMES, interpolate_func = vs.interpolate_camera_slerp, **prmDict)
+    all_frames.append(myFrms)
 
-myFrms, animDict = vs.animate_cam_motion(splnScn, start_cam = brestCam_resized, stop_cam = heatCam, background_scene = courtScn,
-                                         num_frames = TRANSITION_FRAMES, interpolate_func = vs.interpolate_camera_slerp, **prmDict)
-all_frames.append(myFrms)
+    myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
+    all_frames.append(myFrms)
 
-myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
-all_frames.append(myFrms)
+    ##### MAKE ALL BALL MARKS ####
+    from ATMANpy.types.ShapesTennis3D import Mark
 
-##### MAKE ALL BALL MARKS ####
-from ATMANpy.types.ShapesTennis3D import Mark
+    # a) the visualized mark
+    bouncePt = Point3D.from_point2D(Point2D(myShots[1].get_first_bounce_position()), z = 0)
+    bounceMk = Mark.make(bouncePt, size = 3, color = const.BGR['ball_yellow'])
 
-# a) the visualized mark
-bouncePt = Point3D.from_point2D(Point2D(myShots[1].get_first_bounce_position()), z = 0)
-bounceMk = Mark.make(bouncePt, size = 3, color = const.BGR['ball_yellow'])
+    # b) the undifferentiated, unrectified marks
+    markScn_mono = vs.scatter_markmap(retShots, one_color = const.BGR['ball_yellow'])
+    markScn_mono_trans = markScn_mono.realpha(INVISIBLE_ALPHA)
 
-# b) the undifferentiated, unrectified marks
-markScn_mono = vs.scatter_markmap(retShots, one_color = const.BGR['ball_yellow'])
-markScn_mono_trans = markScn_mono.realpha(INVISIBLE_ALPHA)
+    # c) the undifferentiated, rectified marks
+    markScn_mono_rect = vs.scatter_markmap(retShots_rectified, one_color = const.BGR['ball_yellow'])
 
-# c) the undifferentiated, rectified marks
-markScn_mono_rect = vs.scatter_markmap(retShots_rectified, one_color = const.BGR['ball_yellow'])
+    # d1) the differentiated, rectified marks
+    markScn_poly_rect = vs.scatter_markmap(retShots_rectified, color_func_or_arr = 'is_slice_visual', 
+                                            zero_color = const.BGR['light_brown'], one_color = const.BGR['marine_blue'])
 
-# d1) the differentiated, rectified marks
-markScn_poly_rect = vs.scatter_markmap(retShots_rectified, color_func_or_arr = 'is_slice_visual', 
-                                        zero_color = const.BGR['light_brown'], one_color = const.BGR['marine_blue'])
+    # d2) the differentiated, rectified marks, separated
+    chip_markScn = vs.scatter_markmap(chip_retShots_rectified, one_color = const.BGR['marine_blue'])
+    tops_markScn = vs.scatter_markmap(tops_retShots_rectified, one_color = const.BGR['light_brown'])
 
-# d2) the differentiated, rectified marks, separated
-chip_markScn = vs.scatter_markmap(chip_retShots_rectified, one_color = const.BGR['marine_blue'])
-tops_markScn = vs.scatter_markmap(tops_retShots_rectified, one_color = const.BGR['light_brown'])
+    ####### FADE OUT FLIGHT LINE
+    mark_scenes = [bounceMk for _ in range(TRANSITION_FRAMES)]
+    myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, cumulative_foreground_transparence = FADE_OUT_FACTOR,
+                                        background_scene = courtScn, **animDict, **prmDict)
+    all_frames.append(myFrms)
 
-####### FADE OUT FLIGHT LINE
-mark_scenes = [bounceMk for _ in range(TRANSITION_FRAMES)]
-myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, cumulative_foreground_transparence = FADE_OUT_FACTOR,
-                                       background_scene = courtScn, **animDict, **prmDict)
-all_frames.append(myFrms)
+    myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
+    all_frames.append(myFrms)
 
-myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
-all_frames.append(myFrms)
+    ####### FADE IN OTHER MARKS
+    animDict['previous_foreground_scene'] = markScn_mono_trans
+    myFrms, animDict = vs.animate_sequence(mark_scenes, background_scene = courtScn, cumulate_argument = False,
+                                        cumulative_foreground_transparence = FADE_IN_FACTOR, start_cam = heatCam, stop_cam = heatCam,
+                                        **animDict, **prmDict)
+    all_frames.append(myFrms)
 
-####### FADE IN OTHER MARKS
-animDict['previous_foreground_scene'] = markScn_mono_trans
-myFrms, animDict = vs.animate_sequence(mark_scenes, background_scene = courtScn, cumulate_argument = False,
-                                       cumulative_foreground_transparence = FADE_IN_FACTOR, start_cam = heatCam, stop_cam = heatCam,
-                                       **animDict, **prmDict)
-all_frames.append(myFrms)
+    myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
+    all_frames.append(myFrms)
 
-myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
-all_frames.append(myFrms)
+    #### Switch Over Returns to Lefties so we have forehand/backhand
+    itpl_markScns = vs.interpolate_scenes(markScn_mono, markScn_mono_rect, num_frames = 25)
+    myFrms, animDict = vs.animate_sequence(itpl_markScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, **prmDict)
+    all_frames.append(myFrms)
 
-#### Switch Over Returns to Lefties so we have forehand/backhand
-itpl_markScns = vs.interpolate_scenes(markScn_mono, markScn_mono_rect, num_frames = 25)
-myFrms, animDict = vs.animate_sequence(itpl_markScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, **prmDict)
-all_frames.append(myFrms)
+    from ATMANpy.auxil.court import top_bsl_deu_2D, top_bsl_ad_2D
+    fhPt = Point3D.from_point2D(top_bsl_deu_2D, z = 0).front(10).annotate('Forehand')
+    bhPt = Point3D.from_point2D(top_bsl_ad_2D, z = 0).front(10).left(25).annotate('Backhand')
 
-from ATMANpy.auxil.court import top_bsl_deu_2D, top_bsl_ad_2D
-fhPt = Point3D.from_point2D(top_bsl_deu_2D, z = 0).front(10).annotate('Forehand')
-bhPt = Point3D.from_point2D(top_bsl_ad_2D, z = 0).front(10).left(25).annotate('Backhand')
+    myFrms, animDict = vs.animate_static(markScn_mono_rect, static_cam = heatCam, background_scene = courtScn, annotated_points = [fhPt, bhPt], **prmDict)
+    all_frames.append(myFrms)
 
-myFrms, animDict = vs.animate_static(markScn_mono_rect, static_cam = heatCam, background_scene = courtScn, annotated_points = [fhPt, bhPt], **prmDict)
-all_frames.append(myFrms)
-
-itpl_markScns = vs.interpolate_scenes(markScn_mono_rect, markScn_poly_rect, num_frames = 25)
-myFrms, animDict = vs.animate_sequence(itpl_markScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, annotated_points = [fhPt, bhPt], 
-                                       **prmDict)
-myFrms = overlay(myFrms, legFrm)
-all_frames.append(myFrms)
-
-myFrm = overlay(myFrms[-1], legFrm)
-myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
-all_frames.append(myFrms)
-
-### fade out chip marks
-mark_scenes = [tops_markScn for _ in range(TRANSITION_FRAMES)]
-myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn,
-                                       **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
-myFrms = overlay(myFrms, legFrm)
-all_frames.append(myFrms)
-
-myFrm = overlay(myFrms[-1], legFrm)
-myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
-all_frames.append(myFrms)
-
-
-### Topspin Heatmaps
-topsScn = vs.kde_heatmap(tops_retShots_rectified, 
-                         position_func = 'get_first_bounce_position', 
-                         normalize_density = True,
-                         zero_color = TOPS_COLOR, one_color = TOPS_COLOR, 
-                         bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
-topsScn_zero = topsScn.realpha(0)
-itplScns = vs.interpolate_dummy_scenes(topsScn_zero, topsScn, STATIC_FRAMES)
-
-myFrms, animDict = vs.animate_sequence(itplScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam,
-                                       **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
-myFrms = overlay(myFrms, legFrm)
-all_frames.append(myFrms)
-
-myFrm = overlay(myFrms[-1], legFrm)
-myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
-all_frames.append(myFrms)
-
-# Heatmap for Weighted, 'Choice' Chips 
-chipFrm = regFrm_in[regFrm_in.is_chipped == 1]
-topspin_preds = chipFrm.pred_is_topspin.values
-chipScn = vs.kde_heatmap(chip_retShots_rectified, 
-                        position_func = 'get_first_bounce_position', 
-                        weight_func_or_arr = topspin_preds,
-                        normalize_density = True,
-                        zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
-                        bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
-
-itplScns = vs.interpolate_dummy_scenes(topsScn, chipScn, STATIC_FRAMES)
-
-myFrms, animDict = vs.animate_sequence(itplScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, annotated_points = [fhPt, bhPt],
+    itpl_markScns = vs.interpolate_scenes(markScn_mono_rect, markScn_poly_rect, num_frames = 25)
+    myFrms, animDict = vs.animate_sequence(itpl_markScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, annotated_points = [fhPt, bhPt], 
                                         **prmDict)
-myFrms = overlay(myFrms, legFrm)
-all_frames.append(myFrms)
+    myFrms = overlay(myFrms, legFrm)
+    all_frames.append(myFrms)
 
-myFrm = overlay(myFrms[-1], legFrm)
-myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
-all_frames.append(myFrms)
+    myFrm = overlay(myFrms[-1], legFrm)
+    myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
+    all_frames.append(myFrms)
 
-show(all_frames)
+    ### fade out chip marks
+    mark_scenes = [tops_markScn for _ in range(TRANSITION_FRAMES)]
+    myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn,
+                                        **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
+    myFrms = overlay(myFrms, legFrm)
+    all_frames.append(myFrms)
+
+    myFrm = overlay(myFrms[-1], legFrm)
+    myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
+    all_frames.append(myFrms)
+
+
+    ### Topspin Heatmaps
+    topsScn = vs.kde_heatmap(tops_retShots_rectified, 
+                            position_func = 'get_first_bounce_position', 
+                            normalize_density = True,
+                            zero_color = TOPS_COLOR, one_color = TOPS_COLOR, 
+                            bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
+    topsScn_zero = topsScn.realpha(0)
+    itplScns = vs.interpolate_dummy_scenes(topsScn_zero, topsScn, STATIC_FRAMES)
+
+    myFrms, animDict = vs.animate_sequence(itplScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam,
+                                        **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
+    myFrms = overlay(myFrms, legFrm)
+    all_frames.append(myFrms)
+
+    myFrm = overlay(myFrms[-1], legFrm)
+    myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
+    all_frames.append(myFrms)
+
+    # Heatmap for Weighted, 'Choice' Chips 
+    chipFrm = regFrm_in[regFrm_in.is_chipped == 1]
+    topspin_preds = chipFrm.pred_is_topspin.values
+    chipScn = vs.kde_heatmap(chip_retShots_rectified, 
+                            position_func = 'get_first_bounce_position', 
+                            weight_func_or_arr = topspin_preds,
+                            normalize_density = True,
+                            zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
+                            bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
+
+    itplScns = vs.interpolate_dummy_scenes(topsScn, chipScn, STATIC_FRAMES)
+
+    myFrms, animDict = vs.animate_sequence(itplScns, background_scene = courtScn, start_cam = heatCam, stop_cam = heatCam, annotated_points = [fhPt, bhPt],
+                                            **prmDict)
+    myFrms = overlay(myFrms, legFrm)
+    all_frames.append(myFrms)
+
+    myFrm = overlay(myFrms[-1], legFrm)
+    myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
+    all_frames.append(myFrms)
+
+    show(all_frames)
 
 ### TODO: try the contourmaps (50% of balls land within...) or even hillmaps. Contourmaps can be superimposed more easily with backhand and forehand.
 
-### DIFFERENCE BETWEEN TOPSPIN AND CHIP PLACEMENT
-topsScn_not_norm = vs.kde_heatmap(tops_retShots_rectified, 
-                                    position_func = 'get_first_bounce_position', 
-                                    normalize_density = False,
-                                    zero_color = TOPS_COLOR, one_color = TOPS_COLOR, 
-                                    bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
+####################################
+######### HEATMAP SECTION ##########
+####################################
 
-chipScn_not_norm = vs.kde_heatmap(chip_retShots_rectified, 
-                                    position_func = 'get_first_bounce_position', 
-                                    weight_func_or_arr = topspin_preds,
-                                    normalize_density = False,
-                                    zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
-                                    bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
+if DO_HEATMAP_SECTION:
+        
+    ### DIFFERENCE BETWEEN TOPSPIN AND CHIP PLACEMENT
+    topsScn_not_norm = vs.kde_heatmap(tops_retShots_rectified, 
+                                        position_func = 'get_first_bounce_position', 
+                                        normalize_density = False,
+                                        zero_color = TOPS_COLOR, one_color = TOPS_COLOR, 
+                                        bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
-tops_kde = topsScn_not_norm.alphaArrs[0]
-chip_kde = chipScn_not_norm.alphaArrs[0]
+    chipScn_not_norm = vs.kde_heatmap(chip_retShots_rectified, 
+                                        position_func = 'get_first_bounce_position', 
+                                        weight_func_or_arr = topspin_preds,
+                                        normalize_density = False,
+                                        zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
+                                        bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
-diff_kde = tops_kde - chip_kde
+    tops_kde = topsScn_not_norm.alphaArrs[0]
+    chip_kde = chipScn_not_norm.alphaArrs[0]
 
-rastArr = topsScn_not_norm.rastArrs[0]
-bgrArr = np.where(diff_kde > 0, TOPS_COLOR, CHIP_COLOR)
+    diff_kde = tops_kde - chip_kde
 
-diff_kde_plus, diff_kde_minus = diff_kde.clip(min = 0), -diff_kde.clip(max = 0)
+    rastArr = topsScn_not_norm.rastArrs[0]
+    bgrArr = np.where(diff_kde > 0, TOPS_COLOR, CHIP_COLOR)
 
-diff_alpha_plus = diff_kde_plus / diff_kde_plus.max()
-diff_alpha_minus = diff_kde_minus / diff_kde_minus.max()
+    diff_kde_plus, diff_kde_minus = diff_kde.clip(min = 0), -diff_kde.clip(max = 0)
 
-alphaArr = np.where(diff_kde > 0, diff_alpha_plus, diff_alpha_minus)
+    diff_alpha_plus = diff_kde_plus / diff_kde_plus.max()
+    diff_alpha_minus = diff_kde_minus / diff_kde_minus.max()
 
-diffScn = DummyScene([rastArr], [bgrArr], [alphaArr])
+    alphaArr = np.where(diff_kde > 0, diff_alpha_plus, diff_alpha_minus)
 
-myFrms, animDict = vs.animate_static(diffScn, background_scene = courtScn, static_cam = heatCam, **prmDict, annotated_points = [fhPt, bhPt])
-# myFrms[-1].show() ### BEAUTIFUL!
+    diffScn = DummyScene([rastArr], [bgrArr], [alphaArr])
 
-### LAUNCH ANGLE
+    myFrms, animDict = vs.animate_static(diffScn, background_scene = courtScn, static_cam = heatCam, **prmDict, annotated_points = [fhPt, bhPt])
+    # myFrms[-1].show() ### BEAUTIFUL!
 
-# fade trajectory back in
-itplScns = vs.interpolate_scenes(splnScn.realpha(0), splnScn, num_frames = 25)
-myFrms, animDict = vs.animate_sequence(itplScns, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn, 
-                                       **prmDict, **animDict, annotated_points = [fhPt, bhPt], cumulative_foreground_transparence = 0.9)
-DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
+
+#########################
+#### LAUNCH ANGLE #######
+#########################
 
 # make the lateral cam and intermediate cam over net
 bPt = splnScn[0].leftPt ### origin of the shot
@@ -443,19 +464,13 @@ from ATMANpy.auxil.court import cnt_2D
 cnt = Point3D.from_point2D(cnt_2D, z = 100)
 intmCam = Camera.from_to(cnt, cnt.right(100).down(20))
 
+# a useful null line for interpolation
+from ATMANpy.types.Shapes3D import Line3D
+nullLn = Line3D(bPt, bPt, color = BALL_COLOR)
+nullScn = Scene([nullLn])
+
 # player shape
 _, player = myShots[1].feat_top_player().first()
-
-# cam motion -> made so that the motion shows also the entire trajectory!
-myFrms1, animDict = vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
-                                         background_scene = courtScn, start_cam = heatCam, stop_cam = intmCam)
-
-myFrms2, animDict =  vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
-                                         background_scene = courtScn, start_cam = intmCam, stop_cam = sideretCam)
-myFrms = BGRFrames.from_frames([myFrms1, myFrms2])
-
-DecapStream(myFrms, 0, 100).show(ms_between_frames = 50)
-myFrms[-1].show()
 
 # get topspin and chip dists, with axes
 kwargDict = {'bandwidth': 2,
@@ -473,155 +488,517 @@ weightArr_preds = 1 - regFrm_in.loc[regFrm_in.is_chipped == 1, 'pred_is_chipped'
 tops_angleScn, tops_modes = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict, color = TOPS_COLOR)
 chip_angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, weight_func_or_arr = weightArr_preds, color = CHIP_COLOR)
 
+### make axes
 xLn, yLn = tops_angleScn.shapes[1], tops_angleScn.shapes[2]
-
+# lengthen xLn 
+xLn = Line3D(xLn.leftPt, xLn.rightPt.front(22))
 axScn = Scene([xLn, yLn])
 court_and_axScn = courtScn.combine(axScn)
 
-myFrms, animDict = vs.animate_static(splnScn, static_cam = sideretCam, background_scene = court_and_axScn)
-myFrms[-1].show()
+axPnts = [xLn.center_point().down(2).left(12).annotate('Horizontal Launch Speed'), 
+          yLn.center_point().back(2).annotate('Vertical Launch Speed')]
+axPnts = [] ### not needed because confusing when density is plotted ?!
 
-from ATMANpy.types.Shapes3D import Circle3D
-ang = myShots[1].get_launch_angle()
-limit_theta = ((180 - ang) * const.ANGLE_TO_RAD, 180 * const.ANGLE_TO_RAD)
-degCrc = Circle3D.from_point3D(bPt, fixed_dimension = 'x', radius = 25, limit_theta = limit_theta)
+### drop axes from scene -> we will render them in the background, with court_and_axScn
+tops_angleScn = tops_angleScn.drop(2).drop(1)
+chip_angleScn = chip_angleScn.drop(2).drop(1)
 
-myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn)
-myFrms[-1].show()
+### get modes
+# a) chip
+chip_mode_lo, chip_mode_hi = chip_modes[[2, 10]]
+mode_angles = [chip_mode_lo, chip_mode_hi]
+modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict['axis_length'] * 1.5, 
+                                 x_ax = kwargDict['x_unit_vector'], y_ax = kwargDict['y_unit_vector'],
+                                 orig = kwargDict['axis_origin_point'])
+modeScn0 = Scene([modeLns[0].recolor(CHIP_COLOR)]).dim(1.2)
+modeScn1 = Scene([modeLns[1].recolor(CHIP_COLOR)]).dim(1.2)
 
-anglePt = bPt.front(24).up(1).annotate(f'{ang:.1f} Degrees')
+itpl_lns0 = vs.interpolate_scenes(nullScn, modeScn0, num_frames = 25)
+itpl_lns1 = vs.interpolate_scenes(nullScn, modeScn1, num_frames = 25)
 
-myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = [anglePt])
-myFrms[-1].show()
+# b) topspin
+tops_mode = tops_modes[1]
+mode_angles = [tops_mode]
+modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict['axis_length'] * 1.5,
+                                 x_ax = kwargDict['x_unit_vector'], y_ax = kwargDict['y_unit_vector'],
+                                 orig = kwargDict['axis_origin_point'])
+modeScn2 = Scene([modeLns[0].recolor(TOPS_COLOR)]).dim(1.2)
 
-from ATMANpy.types.Abstract import Shots
+itpl_lns2 = vs.interpolate_scenes(nullScn, modeScn2, num_frames = 25)
 
 ### build a distribution of launch angles on choice chips.
 sorted_chip_retShots_rectified = chip_retShots_rectified.sort(weightArr_preds, descending = True)
 
-acceleration_rate = 0.1
-initial_frames = 25
-splnScn_curr = splnScn
-prev_kde = None
-shotList = []
-weightList = []
-frms = []
-idx = 0
-for shot, weight in zip(sorted_chip_retShots_rectified[:25], weightArr_preds[:25]):
-    if not 0 < shot.get_launch_angle() <= 75:
-        continue
+if DO_LAUNCH_ANGLE_INTRO:
 
-    ### calculate num_frames
-    num_frames = max(2, int(initial_frames * (1 - acceleration_rate) ** idx)) ### need at least 2 frames to have clean interpolation
+    # fade trajectory back in
+    itplScns = vs.interpolate_scenes(splnScn.realpha(0), splnScn, num_frames = 25)
+    myFrms, animDict = vs.animate_sequence(itplScns, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn, 
+                                        **prmDict, **animDict, annotated_points = [fhPt, bhPt], cumulative_foreground_transparence = 0.9)
+    DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
 
-    ### build new kde
-    shotList.append(shot)
-    weightList.append(weight)
-    kde, _ = vs.kde_angle_distribution(Shots(shotList), **kwargDict, weight_func_or_arr = np.array(weightList), 
-                                       color = CHIP_COLOR)
-    kde = Scene([kde[0]])
+    # cam motion -> made so that the motion shows also the entire trajectory!
+    myFrms1, animDict = vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
+                                            background_scene = courtScn, start_cam = heatCam, stop_cam = intmCam)
 
-    ### if necessary: create previous KDE
-    if prev_kde is None:
-        els = len(kde[0].coords[0])
-        x, y, z = bPt.coords
-        prev_pt = Point3D((np.full(els, fill_value = x), np.full(els, fill_value = y), np.full(els, fill_value = z)), color = CHIP_COLOR)
-        prev_kde = Scene([prev_pt])
+    myFrms2, animDict =  vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
+                                            background_scene = courtScn, start_cam = intmCam, stop_cam = sideretCam)
+    myFrms = BGRFrames.from_frames([myFrms1, myFrms2])
+
+    DecapStream(myFrms, 0, 100).show(ms_between_frames = 50)
+    myFrms[-1].show()
+
+    ### TODO: Use null line to animate axes appearing
+    myFrms, animDict = vs.animate_static(splnScn, static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = axPnts)
+    myFrms[-1].show()
+
+    ang = myShots[1].get_launch_angle()
+    limit_theta = ((180 - ang) * const.ANGLE_TO_RAD, 180 * const.ANGLE_TO_RAD)
+    degCrc = Circle3D.from_point3D(bPt, fixed_dimension = 'x', radius = 25, limit_theta = limit_theta)
+
+    myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = axPnts)
+    myFrms[-1].show()
+
+    anglePt = bPt.front(24).up(1).annotate(f'{ang:.1f} Degrees')
+
+    myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = [anglePt, *axPnts])
+    myFrms[-1].show()
+
+if DO_LAUNCH_ANGLE_DISTRO:
+    acceleration_rate = 0.1
+    initial_frames = 25
+    splnScn_curr = splnScn
+    prev_kde = None
+    shotList = []
+    weightList = []
+    frms = []
+    idx = 0
+    for shot, weight in zip(sorted_chip_retShots_rectified[:25], weightArr_preds[:25]):
+        if not 0 < shot.get_launch_angle() <= 75:
+            continue
+
+        ### calculate num_frames
+        num_frames = max(2, int(initial_frames * (1 - acceleration_rate) ** idx)) ### need at least 2 frames to have clean interpolation
+
+        ### build new kde
+        shotList.append(shot)
+        weightList.append(weight)
+        kde, _ = vs.kde_angle_distribution(Shots(shotList), **kwargDict, weight_func_or_arr = np.array(weightList), 
+                                        color = CHIP_COLOR)
+        kde = Scene([kde[0]])
+
+        ### if necessary: create previous KDE
+        if prev_kde is None:
+            els = len(kde[0].coords[0])
+            x, y, z = bPt.coords
+            prev_pt = Point3D((np.full(els, fill_value = x), np.full(els, fill_value = y), np.full(els, fill_value = z)), color = CHIP_COLOR)
+            prev_kde = Scene([prev_pt])
+        
+        ### Animate the current trajectory
+        anchTraj = shot.shotTraj.reanchor(bPt)
+        _, splines_current = anchTraj.feat_spline_cumul().last()
+        splnScn_curr = Scene([spLn.recolor(BALL_COLOR) for spLn in splines_current if spLn is not None])
+
+        myFrms, _ = vs.animate_static(splnScn_curr, background_scene = court_and_axScn, previous_foreground_scene = prev_kde, **prmDict,
+                                    static_cam = sideretCam, num_frames = num_frames)
+        frms.append(myFrms)
+
+        ### Animate the new KDE
+        itpl_kdes = vs.interpolate_scenes(prev_kde, kde, num_frames)
+        myFrms, _ = vs.animate_sequence(itpl_kdes, background_scene = court_and_axScn, previous_foreground_scene = splnScn_curr, **prmDict,
+                                        start_cam = sideretCam, stop_cam = sideretCam, cumulative_foreground_transparence = 1)
+        frms.append(myFrms)
+
+        prev_kde = kde
+        idx += 1
+
+    jntFrms = BGRFrames.from_frames(frms)
+    DecapStream(jntFrms, 0, 100).show()
+
+if DO_LAUNCH_ANGLE_MODES:
+    ### Show entire distribution
+    curr_frames = []
+    # a) Chips
+    #    --> Two modes: low angle chip; most prevalent, higher angle chip, less prevalent but pronounced.
+    myFrms, animDict = vs.animate_static(chip_angleScn, background_scene = court_and_axScn, **prmDict_nolum,
+                                    static_cam = sideretCam, num_frames = STATIC_FRAMES)
+    curr_frames.append(myFrms)
+
+    myFrms, animDict = vs.animate_sequence(itpl_lns0, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    start_cam = sideretCam, stop_cam = sideretCam)
+    curr_frames.append(myFrms)
+
+    myFrms, animDict = vs.animate_sequence(itpl_lns1, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    start_cam = sideretCam, stop_cam = sideretCam)
+    curr_frames.append(myFrms)
+
+    # b) Topspin  
+    #  --> One Mode: low angle topspin
+    animDict['previous_foreground_scene'] = animDict['previous_foreground_scene'].drop(0)
+    itpl_angleScns = vs.interpolate_scenes(chip_angleScn, tops_angleScn, 25)
+    myFrms, animDict = vs.animate_sequence(itpl_angleScns, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    start_cam = sideretCam, stop_cam = sideretCam)
+    curr_frames.append(myFrms)
+
+    myFrms, animDict = vs.animate_static(tops_angleScn, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    static_cam = sideretCam, num_frames = STATIC_FRAMES)
+    curr_frames.append(myFrms)
+
+    myFrms, animDict = vs.animate_sequence(itpl_lns2, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    start_cam = sideretCam, stop_cam = sideretCam)
+    curr_frames.append(myFrms)
+
+    # c) show angles jointly
+    limit_theta = ((180 - tops_mode) * const.ANGLE_TO_RAD, 180 * const.ANGLE_TO_RAD)
+    degCrc0 = Circle3D.from_point3D(bPt, fixed_dimension = 'x', radius = 25, limit_theta = limit_theta)
+    limit_theta = ((180 - chip_mode_lo) * const.ANGLE_TO_RAD, 180 * const.ANGLE_TO_RAD)
+    degCrc1 = Circle3D.from_point3D(bPt, fixed_dimension = 'x', radius = 40, limit_theta = limit_theta)
+    limit_theta = ((180 - chip_mode_hi) * const.ANGLE_TO_RAD, 180 * const.ANGLE_TO_RAD)
+    degCrc2 = Circle3D.from_point3D(bPt, fixed_dimension = 'x', radius = 55, limit_theta = limit_theta)
+
+    angPt0 = bPt.front(22).up(0.5).annotate(f'{tops_mode:.1f} Degrees')
+    angPt1 = bPt.front(38).up(1.5).annotate(f'{chip_mode_lo:.1f} Degrees')
+    angPt2 = bPt.front(53).up(2.5).annotate(f'{chip_mode_hi:.1f} Degrees')
+
+    animDict['previous_foreground_scene'] = animDict['previous_foreground_scene'].drop(2)
+    myFrms, animDict = vs.animate_static(Scene([degCrc0]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0])
+    curr_frames.append(myFrms)
+
+    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1])
+    curr_frames.append(myFrms)
+
+    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+                                    static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1, angPt2])
+    curr_frames.append(myFrms)
+
+    currFrms = BGRFrames.from_frames(curr_frames)
+    DecapStream(currFrms, 0, 100).show()
+    currFrms[-1].show()
+
+    print(ang)
+    print(chip_mode_lo) ### original shot very close to lower mode!
+
+if DO_LAUNCH_ANGLE_EXAMPLE:
+    curr_frames = []
+
+    ### find similar shot of original, with higher launch angle V2 -> trajectory metrics
+    devArr_ang = chip_retShots_rectified.get_launch_angle() - chip_mode_hi
+    devArr_spd = chip_retShots_rectified.get_initial_speed() - myShots[1].get_initial_speed()
+    devArr_hgt = chip_retShots_rectified.get_ball_hit_height() - myShots[1].get_ball_hit_height()
+    devArr_spn = chip_retShots_rectified.get_initial_spin() - myShots[1].get_initial_spin()
+
+    std_ang = (devArr_ang ** 2).mean() ** 0.5
+    std_spd = (devArr_spd ** 2).mean() ** 0.5
+    std_hgt = (devArr_hgt ** 2).mean() ** 0.5
+    std_spn = (devArr_spn ** 2).mean() ** 0.5
+
+    dev_metric = np.abs(devArr_ang / std_ang) + np.abs(devArr_spd / std_spd) + np.abs(devArr_hgt / std_hgt) + np.abs(devArr_spn / std_spn)
+    dev_metric = dev_metric / 4 ### average standard deviations away from original shot
+
+    small_to_large = np.argsort(dev_metric)
+    best_idx = int(small_to_large[3]) #int(np.argmin(dev_metric)) ### not necessarily the smallest since we want a top to bot point!
+    dev_metric[best_idx]
+
+    bestShot = chip_retShots_rectified[best_idx]
+    bestShot.get_launch_angle()
+    bestShot.get_initial_speed()
+    bestShot.get_initial_spin()
+    bestPnt = retPnts.get(bestShot.get_match_index(), bestShot.get_point_index())
+
+    bestShots = bestPnt[:2] ### flip so that we get the original trajectory back
+    # bestShots.stream(confs = confs).rescale(3).show()
+
+    ### Compare points in Raster, with Tables.
+    # kill diagram
+    myFrms, _ = vs.animate_static(None, background_scene = courtScn, **prmDict_nolum, static_cam = sideretCam, num_frames = 10)
+    curr_frames.append(myFrms)
+
+    # prep scaled camera view and frames
+    scale_factor = 1.5
+    brestCam_resized_half = brestCam.resize(scale_factor)
+
+    origDtm = myShots.stream(confs = confs).decap()
+    orig_scaledFrms = myDtm.frames.rescale(scale_factor)
+
+    bestDtm = bestShots.stream(confs = confs).decap()
+    best_scaledFrms = bestDtm.frames.rescale(scale_factor)
+
+    # zoom out of current view, back to the brestCam (already in rasterized view)
+    myFrms, _ = vs.animate_cam_motion(None, background_scene = courtScn, **prmDict_nolum,
+                                    start_cam = sideretCam, stop_cam = brestCam_resized_half,
+                                    num_frames = 100)
+    curr_frames.append(myFrms)
+    lsFrm = myFrms[-1]
+
+    # create spline animation for our original point on new bestCam_resized_half
+    splineFrms_orig, _ = vs.animate_sequence(spline_scenes, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
+                                        cumulate_argument = False, animate_over = orig_scaledFrms, **prmDict)
+    # DecapStream(myFrms, 0, 100).show()
+
+    # create spline animation for our best point on new brestCam_resized_half
+    serveSF = bestShots[0].feat_spline_cumul(which_endpoint = 'penultimate')
+    returnSF = bestShots[1].feat_spline_cumul(which_endpoint = 'penultimate')
+
+    serve_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
+    return_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
+    best_spline_scenes = [*serve_scenes, *return_scenes]
+
+    splineFrms_best, _ = vs.animate_sequence(best_spline_scenes, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
+                                        cumulate_argument = False, animate_over = best_scaledFrms, **prmDict)
+    # DecapStream(splineFrms_best, 0, 100).show(ms_between_frames = 100)
+    # myFrms[-1].show()
+
+    # rasterize frames, and fade in the point being played
+    staticRst = FrameRaster(2, 2)
+    staticRst.add(orig_scaledFrms[0], 0, 0)
+    staticFrm = staticRst.render()
+    itplFrms = vs.interpolate_frames(lsFrm, staticFrm, num_frames = STATIC_FRAMES)
+    curr_frames.append(itplFrms)
+
+    # play out point with spline
+    myRst = FramesRaster(2, 2)
+    myRst.add(splineFrms_orig, 0, 0)
+    playFrms_orig = myRst.render()
+    curr_frames.append(playFrms_orig)
+
+    # freeze, and play best matching point in lower right
+    splineFrms_best_with_freeze = BGRFrames.from_frames([BGRFrames.from_frame(splineFrms_best[0], STATIC_FRAMES), splineFrms_best])
+    myRst = FramesRaster(2, 2)
+    myRst.add(splineFrms_orig[-1], 0, 0)
+    myRst.add(splineFrms_best_with_freeze, 1, 1)
+    playFrms_best = myRst.render()
+    curr_frames.append(playFrms_best)
+
+    # Matching Table
+    lo_name = 'Low Launch Angle'
+    hi_name = 'High Launch Angle'
+
+    lo_ang = myShots[1].get_launch_angle()
+    lo_spd = myShots[1].get_initial_speed()
+    lo_spn = myShots[1].get_initial_spin()
+    lo_hgt = myShots[1].get_ball_hit_height() / const.SCALE * const.FOOT_TO_METER
+
+    hi_ang = bestShots[1].get_launch_angle()
+    hi_spd = bestShots[1].get_initial_speed()
+    hi_spn = bestShots[1].get_initial_spin()
+    hi_hgt = bestShots[1].get_ball_hit_height() / const.SCALE * const.FOOT_TO_METER
+
+    table_data = {  'Launch Angle': {   lo_name: f'{lo_ang:.1f} deg',   hi_name: f'{hi_ang:.1f} deg'},
+                    'Launch Velocity': {lo_name: f'{lo_spd:.0f} km/h',  hi_name: f'{hi_spd:.0f} km/h'},
+                    'Spin': {           lo_name: f'{lo_spn:.0f} rpm',   hi_name: f'{hi_spn:.0f} rpm'},
+                    'Hit Height': {     lo_name: f'{lo_hgt:.1f} m',     hi_name: f'{hi_hgt:.1f} m'}} ### adjust hit height? obviously not correct for lo_name?
     
-    ### Animate the current trajectory
-    anchTraj = shot.shotTraj.reanchor(bPt)
-    _, splines_current = anchTraj.feat_spline_cumul().last()
-    splnScn_curr = Scene([spLn.recolor(BALL_COLOR) for spLn in splines_current if spLn is not None])
+    dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
+    myTab = Table(table_data, dimensions = dims, skeleton_offset = 0.2, index_offset = 0.25, 
+                  title = 'Initial Conditions', title_horizontal_offset = 11,
+                  header_text_size = 1, index_text_size = 1, data_text_size = 1, 
+                  skip_after_how_many_symbols = None)
+    tabFrm_match = myTab.render()
+    # tabFrm_match.show()
 
-    myFrms, _ = vs.animate_static(splnScn_curr, background_scene = court_and_axScn, previous_foreground_scene = prev_kde, **prmDict,
-                                  static_cam = sideretCam, num_frames = num_frames)
-    frms.append(myFrms)
+    myRst = FrameRaster(2, 2)
+    myRst.add(splineFrms_orig[-1], 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(tabFrm_match, 0, 1)
+    tabFrms_match = BGRFrames.from_frame(myRst.render(), STATIC_FRAMES)
+    curr_frames.append(tabFrms_match)
+    
+    lo_apx = myShots[1].get_apex()[2] / const.SCALE * const.FOOT_TO_METER
+    lo_apx_pst = myShots[1].get_apex_post_bounce()[2] / const.SCALE * const.FOOT_TO_METER
+    lo_secs = myShots[1].get_num_frames() / 25
+    lo_hori = myShots[1].get_post_bounce_horizontal_speed(how = 'corrected_next')
+    
+    hi_apx = bestShots[1].get_apex()[2] / const.SCALE * const.FOOT_TO_METER
+    hi_apx_pst = bestShots[1].get_apex_post_bounce()[2] / const.SCALE * const.FOOT_TO_METER
+    hi_secs = bestShots[1].get_num_frames() / 25
+    hi_hori = bestShots[1].get_post_bounce_horizontal_speed(how = 'corrected_next')
+    
+    table_data = {  'Apex':                     {lo_name: f'{lo_apx:.1f} m',        hi_name: f'{hi_apx:.1f} m'},
+                    'Apex post-bounce':         {lo_name: f'{lo_apx_pst:.1f} m',    hi_name: f'{hi_apx_pst:.1f} m'},
+                    'Time Travelled':           {lo_name: f'{lo_secs:.2f} sec',     hi_name: f'{hi_secs:.2f} sec'},
+                    'Ground Speed post-bounce': {lo_name: f'{lo_hori:.1f} km/h',    hi_name: f'{hi_hori:.1f} km/h'}}
+    
+    dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
+    myTab = Table(table_data, dimensions = dims, skeleton_offset = 0.2, index_offset = 0.1, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10,
+                  header_text_size = 1, index_text_size = 1, data_text_size = 1, 
+                  skip_after_how_many_symbols = None)
+    tabFrm_comp = myTab.render()
+    # tabFrm_comp.show()
 
-    ### Animate the new KDE
-    itpl_kdes = vs.interpolate_scenes(prev_kde, kde, num_frames)
-    myFrms, _ = vs.animate_sequence(itpl_kdes, background_scene = court_and_axScn, previous_foreground_scene = splnScn_curr, **prmDict,
-                                    start_cam = sideretCam, stop_cam = sideretCam, cumulative_foreground_transparence = 1)
-    frms.append(myFrms)
+    myRst = FrameRaster(2, 2)
+    myRst.add(splineFrms_orig[-1], 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(tabFrm_match, 0, 1)
+    myRst.add(tabFrm_comp, 1, 0)
+    tabFrms_match = BGRFrames.from_frame(myRst.render(), STATIC_FRAMES)
+    curr_frames.append(tabFrms_match)
 
-    prev_kde = kde
-    idx += 1
+    ### To say about comparison: The high chip...
+        # loses more of its speed along the ground -> server has to generate all the power if he wants to attack
+        # gives returner more time to recuperate, especially if the serve is hit out wide and carries the receiver off the court, this is useful.
+        # However, if it does not bounce close to the server's baseline, its high bounce can allow the server to attack with a flat shot at aggressive angles.
+        # On the other hand, a low chip that lands shallow is not terrible: it stays low and is awkward to attack because it has to be played with aggressive topspin
+        # or lower margins over the net to dip back down into the returner's half in time for it not to sail long.
 
-jntFrms = BGRFrames.from_frames(frms)
-DecapStream(jntFrms, 0, 100).show()
-
-### Show entire distribution
-myFrms, _ = vs.animate_static(chip_angleScn, background_scene = court_and_axScn, **prmDict,
-                                static_cam = sideretCam, num_frames = num_frames)
-myFrms[-1].show()
-
-myFrms, _ = vs.animate_static(tops_angleScn, background_scene = court_and_axScn, **prmDict,
-                                static_cam = sideretCam, num_frames = num_frames)
-myFrms[-1].show()
-
-
-shot0 = myShots[1]
-kde1, _ = vs.kde_angle_distribution(Shots([shot0]), **kwargDict)
-
-myFrms, animDict = vs.animate_static(kde1, static_cam = sideretCam, previous_foreground_scene = axScn, background_scene = courtScn)
-myFrms[-1].show()
-
-shot1 = sorted_chip_retShots_rectified[1]
-traj1 = shot1.shotTraj.reanchor(bPt)
-
-_, my_splines = traj1.feat_spline_cumul().last()
-trajScn = Scene([spLn.recolor(BALL_COLOR) for spLn in my_splines if spLn is not None])
-
-myFrms, animDict = vs.animate_static(trajScn, static_cam = sideretCam, **animDict, background_scene = courtScn)
-myFrms[-1].show()
-
-
-
-myFrms[-1].show()
-myShots[1]
-
-
-
-self.shotList[*list(np.argsort(weightArr_preds))]
-
-sorted(self.shotList, key = weightArr_preds)
+    ### with respect to time to recuperate: let's take a look at the impact of more time on ground covered.
 
 
-bPt_up = bPt.up(100)
-bPt_in = bPt.front(100)
+    player_speed_kph = 15 ### this is taken from https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
+    player_speed_mps = 15 * const.KPH_TO_MPS
+    seconds_needed_to_recover = 0.5 ### can't immediately start running after contact
+    
+    regressors = ['launch_angle', 'ret_speed', 'ret_spin']
+    y, X = regFrm_in['ret_time'], regFrm_in[regressors]
+    X['const'] = 1
+    X = X.astype(float)
+    olsReg_fit = sm.OLS(y, X).fit()
+    olsReg_fit.summary()
 
-from ATMANpy.types.Shapes3D import Line3D
-xLn, yLn = Line3D(bPt, bPt_up), Line3D(bPt, bPt_in)
-axScn = itplScns[-1].put(xLn).put(yLn)
+    ### margins
+    seconds_per_degree = olsReg_fit._results.params[0]
+    seconds_per_degree * player_speed_mps
 
-myFrms, animDict = vs.animate_static(axScn, static_cam = sideretCam, background_scene = courtScn)
-myFrms[-1].show()
+    ### simple means
+    means = X.groupby(regFrm_in['is_chipped'], as_index = False).mean()
+    fitSer = olsReg_fit.predict(means) ### simple means
+    delta = fitSer[1] - fitSer[0]
+    delta * player_speed_mps
 
+    ### means using launch angle modes
+    dist_to_chip_lo = np.abs(regFrm_in['launch_angle'] - chip_mode_lo)
+    dist_to_chip_hi = np.abs(regFrm_in['launch_angle'] - chip_mode_hi)
+    dist_to_tops = np.abs(regFrm_in['launch_angle'] - tops_mode)
+    distFrm = pd.concat([dist_to_chip_lo, dist_to_chip_hi, dist_to_tops], axis = 1)
+    distFrm.columns = ['chip_lo', 'chip_hi', 'tops']
 
-# launch KDEs
-kwargDict = {'bandwidth': 2.5,
-             'resolution': 10,
-             'axis_length': 100,
-             'axis_origin_point': bPt,
-             'x_unit_vector': Point3D((0, -1, 0)), 
-             'y_unit_vector': Point3D((0, 0, 1))}
+    weightFrm = 1 / distFrm ** 2
+    weightFrm['chip_lo'] = weightFrm['chip_lo'] * regFrm_in['is_chipped']
+    weightFrm['chip_hi'] = weightFrm['chip_hi'] * regFrm_in['is_chipped']
+    weightFrm['tops'] = weightFrm['tops'] * (1 - regFrm_in['is_chipped'])
 
-specDicts = [{'value_func': None},
-             {'value_func': 'get_launch_angle'},
-             {'value_func': 'get_launch_angle', 'weight_func_or_arr': weightArr},
-             {'value_func': 'get_launch_angle', 'weight_func_or_arr': weightArr_preds},
-                ]
-backView = View.make(sideretCam, courtScn)
+    weightFrm_norm = weightFrm / weightFrm.sum()
 
-#### TOPSPIN SHOTS IN PLAY
-angleScn, _ = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict)
-angleView = View.make(sideretCam, angleScn)
-angleFrm = backView.combine(angleView).snap()
-angleFrm.show()
+    means_chip_lo = X.mul(weightFrm_norm['chip_lo'], axis = 0).sum()
+    means_chip_hi = X.mul(weightFrm_norm['chip_hi'], axis = 0).sum()
+    means_tops = X.mul(weightFrm_norm['tops'], axis = 0).sum()
 
+    weighted_mean_valFrm = pd.concat([means_chip_lo, means_chip_hi, means_tops], axis = 1)
+    weighted_mean_valFrm.columns = ['chip_lo', 'chip_hi', 'tops']
 
-##### CHIPPED SHOTS IN PLAY
-for specDict in specDicts:
-    angleScn, _ = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, **specDict)
-    angleView = View.make(sideretCam, angleScn)
-    angleFrm = backView.combine(angleView).snap()
-    angleFrm.show()
+    ### Time needed to recover with means
+    timeSer = olsReg_fit.predict(weighted_mean_valFrm.T)
+    timeSer_running = timeSer - seconds_needed_to_recover
+    distSer = timeSer_running * player_speed_mps
+
+    ### Time needed to recover with actual comparison values, predicted (except for tops, where the means is taken)
+    predFrm = weighted_mean_valFrm.copy()
+    predFrm['chip_lo'] = [lo_ang, lo_spd, lo_spn, 1]
+    predFrm['chip_hi'] = [hi_ang, hi_spd, hi_spn, 1]
+
+    timeSer = olsReg_fit.predict(predFrm.T)
+    timeSer_running = timeSer - seconds_needed_to_recover
+    distSer = timeSer_running * player_speed_mps
+    
+    ### Time needed to recover with actual time values for the shots (except for tops, where the means is taken)
+    timeSer = pd.Series({'chip_lo': lo_secs,
+                         'chip_hi': hi_secs,
+                         'tops': olsReg_fit.predict(means_tops.values)[0]})
+    
+    timeSer_running = timeSer - seconds_needed_to_recover
+    distSer = timeSer_running * player_speed_mps
+
+    ### Kill Tables in FrameRaster
+    myRst = FrameRaster(2, 2)
+    myRst.add(splineFrms_orig[-1], 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(tabFrm_match, 0, 1)
+    killFrms_comp = BGRFrames.from_frame(myRst.render(), 25)
+    curr_frames.append(killFrms_comp)
+    
+    myRst = FrameRaster(2, 2)
+    myRst.add(splineFrms_orig[-1], 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    killFrms_match = BGRFrames.from_frame(myRst.render(), 25)
+    curr_frames.append(killFrms_match)
+
+    ### Reverse return, but keep the spline.
+    revFrms_orig = myShots[1].stream(confs = confs).decap().frames.rescale(scale_factor).slow(2).reverse()
+    revFrms_best = bestShots[1].stream(confs = confs).decap().frames.rescale(scale_factor).slow(2).reverse()
+
+    last_spline_scenes_orig = [spline_scenes[-1] for i in range(revFrms_orig.length())]
+    last_spline_scenes_best = [best_spline_scenes[-1] for i in range(revFrms_best.length())]
+
+    splinerevFrms_orig, _ = vs.animate_sequence(last_spline_scenes_orig, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
+                                                cumulate_argument = False, animate_over = revFrms_orig, **prmDict)
+    splinerevFrms_best, _ = vs.animate_sequence(last_spline_scenes_best, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
+                                                cumulate_argument = False, animate_over = revFrms_best, **prmDict)
+
+    myRst = FramesRaster(2, 2)
+    myRst.add(splinerevFrms_orig, 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    myFrms_rev_orig = myRst.render()
+    curr_frames.append(myFrms_rev_orig)
+
+    ### Show distance circles
+    last_origFrm = revFrms_orig[-1]
+    last_bestFrm = revFrms_best[-1]
+
+    lo_dist, hi_dist, tp_dist = distSer * const.METER_TO_FOOT * const.SCALE
+    
+    def make_thick_circle(x, y, radius, theta_lo, theta_hi):
+        cntPt = Point3D((x, y, 0))
+        radii = [0.995 * radius, radius, 1.005 * radius]
+        return Circles3D([Circle3D.from_point3D(cntPt, limit_theta = (theta_lo * np.pi, theta_hi * np.pi), radius = r) for r in radii])
+
+    # a) for the original shot
+    x, y = myShots[1].hitPlayer.get_initial_position()
+
+    loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.15)
+    loCrcs2 = make_thick_circle(x, y, lo_dist, 0.85, 2)
+    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_COLOR)
+
+    hiCrcs = make_thick_circle(x, y, hi_dist, 0.88, 1.8).recolor(CHIP_COLOR)
+    tpCrcs = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
+
+    myFrms, _ = vs.animate_static(Scene([loCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1), **prmDict)
+    myRst = FramesRaster(2, 2)
+    myRst.add(myFrms, 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    crcFrms_orig = myRst.render()
+    curr_frames.append(crcFrms_orig)
+
+    myFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1), **prmDict)
+    myRst.add(myFrms, 0, 0)
+    crcFrms_orig = myRst.render()
+    curr_frames.append(crcFrms_orig)
+
+    myFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, tpCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1), **prmDict)
+    myRst.add(myFrms, 0, 0)
+    crcFrms_orig = myRst.render()
+    curr_frames.append(crcFrms_orig)
+
+    jntFrms = BGRFrames.from_frames(curr_frames)
+    DecapStream(jntFrms, 0, 100).show(ms_between_frames = 25)
+    jntFrms[-1].show()
+
+    # b) for the best match shot
+    x, y = bestShots[1].hitPlayer.get_initial_position()
+
+    hiCrcs = make_thick_circle(x, y, hi_dist, 0.88, 1.8).recolor(CHIP_COLOR)
+    loCrcs = make_thick_circle(x, y, lo_dist, 0, 2).recolor(CHIP_COLOR)
+    tpCrcs = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
+
+    
+    myFrms, _ = vs.animate_static(Scene([hiCrcs]), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), **prmDict)
+    myFrms[-1].show()
+
+    myFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs]), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), **prmDict)
+    myFrms[-1].show()
+
+    myFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, tpCrcs]), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), **prmDict)
+    myFrms[-1].show()
+
+    
