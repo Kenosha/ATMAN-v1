@@ -12,6 +12,10 @@ from ATMANpy.types.Points import Point2D
 
 from ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils import is_out_wide, is_down_middle
 
+BALL_COLOR = const.BGR['ball_yellow']
+CHIP_COLOR = const.BGR['marine_blue']
+TOPS_COLOR = const.BGR['light_brown']
+
 #######################################
 ######### COURT REGIONS ###############
 #######################################
@@ -59,6 +63,12 @@ def get_serve_speed(myPnt):
 
 def get_serve_spin(myPnt):
         return myPnt.get_serve().get_initial_spin()
+
+def get_server_name(myPnt):
+    return myPnt.get_server().get_name()
+
+def get_returner_name(myPnt):
+    return myPnt.get_returner().get_name()
 
 def get_return_speed(myPnt):
     return myPnt.get_return().get_initial_speed()
@@ -314,7 +324,8 @@ def get_psm_var_dict(retPnts):
     return varDict
 
 def calculate_attribution(myFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
-                          bounce_col = 'must_have_bounced_in', weight_col = None):
+                          bounce_col = 'must_have_bounced_in', weight_col = None, 
+                          assert_digits = 3):
     
     if weight_col is None:
         myFrm = myFrm[[chip_col, outcome_col, bounce_col]]
@@ -343,7 +354,7 @@ def calculate_attribution(myFrm, chip_col = 'is_chipped', outcome_col = 'ret_win
     cond_contrib = cond_del * make_avgs[True]
     total_contrib = comb_contrib + make_contrib + cond_contrib
 
-    assert round(total_del, 3) == round(total_contrib, 3)
+    assert round(total_del, assert_digits) == round(total_contrib, assert_digits)
     
     comb_share, make_share, cond_share = comb_contrib / total_contrib, make_contrib / total_contrib, cond_contrib / total_contrib
 
@@ -378,6 +389,97 @@ def calculate_attribution(myFrm, chip_col = 'is_chipped', outcome_col = 'ret_win
 
     return chipDict, topsDict, attrDict
 
+def calculate_rally_lengths(regFrm):
+    grp = regFrm.groupby('is_chipped')
+
+    naive_means = grp['len'].mean()
+    smart_means = grp['weighted_len'].sum() / grp['weight_topspin'].sum()
+
+    tops_naive, chips_naive = naive_means[False], naive_means[True]
+    tops_smart, chips_smart = smart_means[False], smart_means[True]
+    assert tops_naive == tops_smart
+
+    print('Rally Length')
+    print(f'Topspin: {tops_naive}')
+    print(f'Chips: {chips_naive}')
+    print(f'Chips Choice: {chips_smart}')
+
+    return tops_naive, chips_naive, chips_smart
+
+def uniform_kdes_for_rally_length(regFrm, normalize_density = False, bandwidth = 0.5):
+    from ATMANpy.types.Overlays import Graph, Chart
+    import ATMANpy.funcs.vis_funcs as vs
+
+    space = np.arange(2, 21, step = 1)
+    values = regFrm['len'].values
+
+    tops_weight_arr = (regFrm['is_chipped'] == 0).values
+    chip_weight_arr = (regFrm['is_chipped'] == 1).values
+    chip_weight_arr_smart = ((regFrm['is_chipped'] == 1) * regFrm['weight_topspin']).values
+
+    tops_kde = vs.uniform1D(values, space, weightArr = tops_weight_arr, bandwidth = bandwidth, normalize_density = normalize_density)
+    chip_naive_kde = vs.uniform1D(values, space, weightArr = chip_weight_arr, bandwidth = bandwidth, normalize_density = normalize_density)
+    chip_smart_kde = vs.uniform1D(values, space, weightArr = chip_weight_arr_smart, bandwidth = bandwidth, normalize_density = normalize_density)
+
+    topsChart = Chart(space, tops_kde, color = TOPS_COLOR)
+    chipChart_naive =  Chart(space, chip_naive_kde, color = CHIP_COLOR)
+    chipChart_smart =  Chart(space, chip_smart_kde, color = CHIP_COLOR)
+    
+    naiveGraph = Graph([topsChart, chipChart_naive], as_density = True)
+    smartGraph = Graph([topsChart, chipChart_smart], as_density = True)
+    return naiveGraph, smartGraph
+
+def chip_topspin_return_avgs_by_length(regFrm):
+        
+    myFrm = regFrm.copy()
+
+    myFrm['tops_weight'] = myFrm['is_chipped'] == 0
+    myFrm['chip_weight'] = myFrm['is_chipped'] == 1
+    myFrm['chip_weight_smart'] = (myFrm['is_chipped'] == 1) * regFrm['weight_topspin']
+
+    myFrm['ret_wins_tops_weight'] = myFrm['ret_wins'] * myFrm['tops_weight'] 
+    myFrm['ret_wins_chip_naive_weight'] = myFrm['ret_wins'] * myFrm['chip_weight']
+    myFrm['ret_wins_chip_smart_weight'] = myFrm['ret_wins'] * myFrm['chip_weight_smart']
+
+    len_grp = myFrm.groupby('len')
+
+    ### Win Averages
+    topSer = len_grp['ret_wins_tops_weight'].sum() / len_grp['tops_weight'].sum()
+    chipSer_naive = len_grp['ret_wins_chip_naive_weight'].sum() / len_grp['chip_weight'].sum()
+    chipSer_smart = len_grp['ret_wins_chip_smart_weight'].sum() / len_grp['chip_weight_smart'].sum()
+
+    avgFrm = pd.concat([chipSer_naive, chipSer_smart, topSer], axis = 1)
+    avgFrm.columns = ['chip_naive', 'chip_smart', 'tops']
+
+    ### Shares
+    topSer_share = len_grp['tops_weight'].sum() / myFrm['tops_weight'].sum()
+    chipSer_naive_share = len_grp['chip_weight'].sum() / myFrm['chip_weight'].sum()
+    chipSer_smart_share = len_grp['chip_weight_smart'].sum() / myFrm['chip_weight_smart'].sum()
+
+    shrFrm = pd.concat([chipSer_naive_share, chipSer_smart_share, topSer_share], axis = 1)
+    shrFrm.columns = ['chip_naive', 'chip_smart', 'tops']
+
+    ### Decayed Averages
+    decay_lambda = 0.75 ** (avgFrm.index - 2)
+    decay_arr = decay_lambda.values[:, np.newaxis]
+    avgFrm_decayed = avgFrm * decay_arr + 0.5 * (1 - decay_arr)
+
+    ### Calculate Averages
+    jntFrm = avgFrm * shrFrm
+    jntFrm_decayed = avgFrm_decayed * shrFrm
+    jntFrm.sum()
+    jntFrm_decayed.sum()
+
+    diffFrm_chip = pd.concat([jntFrm['chip_smart'], jntFrm_decayed['chip_smart']], axis = 1)
+    diffFrm_chip.columns = ['normal', 'decayed']
+    diffFrm_chip['diff'] = diffFrm_chip['decayed'] - diffFrm_chip['normal']
+
+    diffFrm_top = pd.concat([jntFrm['tops'], jntFrm_decayed['tops']], axis = 1)
+    diffFrm_top.columns = ['normal', 'decayed']
+    diffFrm_top['diff'] = diffFrm_top['decayed'] - diffFrm_top['normal']
+
+    return jntFrm, shrFrm, diffFrm_chip, diffFrm_top
+
 def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75):
     
     xFrm = pd.DataFrame(logReg.model.exog, columns = logReg.model.exog_names)
@@ -397,12 +499,38 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
 
     regFrm['serve_fore'] = retPnts.apply(is_serve_from_fore)
 
+    ### indices
+    regFrm['mtc_idx'] = retPnts.apply('get_match_index')
+    regFrm['pnt_idx'] = retPnts.apply('get_point_index')
+
+    ### names
+    regFrm['srv_name'] = retPnts.apply(get_server_name, dtype = str)
+    regFrm['ret_name'] = retPnts.apply(get_returner_name, dtype = str)
+
     ### weights
+    # a) balance weights
+    player_counts = regFrm.groupby(['mtc_idx', 'ret_name'])['const'].count()
+    total_counts = regFrm.groupby('mtc_idx')['const'].count()
+
+    relative_weights = total_counts / (2 * player_counts)
+    wFrm = relative_weights.rename('balance_weight').reset_index()
+
+    regFrm = regFrm.merge(wFrm, how = 'left', on = ['mtc_idx', 'ret_name'])
+
+    # b) length weights
     regFrm['len'] = retPnts.apply('__len__')
     regFrm['len_weight'] = decay_rate ** (regFrm['len'] - 2)
+
+    # c) choice weights
     regFrm['odds_topspin'] = regFrm['pred_is_topspin'] / regFrm['pred_is_chipped']
     regFrm['weight_topspin'] = np.where(regFrm.is_chipped, regFrm.odds_topspin, 1)
+    regFrm['weighted_len'] = regFrm['len'] * regFrm['weight_topspin']
+
+    # d) combination weights
     regFrm['weight_len_pred'] = regFrm['len_weight'] * regFrm['weight_topspin']
+    regFrm['weight_bal_pred'] = regFrm['balance_weight'] * regFrm['weight_topspin']
+    regFrm['weight_bal_len'] = regFrm['balance_weight'] * regFrm['len_weight']
+    regFrm['weight_bal_len_pred'] = regFrm['balance_weight'] * regFrm['len_weight'] * regFrm['weight_topspin']
 
     ### winner vars
     regFrm['ret_wins'] = regFrm['winner_code'] == -1
@@ -516,6 +644,7 @@ def save_model_summary_as_png(fitted_model, save_path, save_name):
 
     full_path = os.path.join(save_path, save_name + '.png')
     plt.savefig(full_path, dpi=300, bbox_inches='tight')
+    plt.close()
 
 def make_and_save_model(regressor_frame, regressors, save_path, save_name,
                         endog_col = 'ret_wins', weight_col = None, verbose = True):
@@ -536,11 +665,16 @@ def retrieve_X_y(fitted_model, regressors):
     y = pd.Series(fitted_model.model.endog, name = 'ret_win')
     return X, y
 
-def get_relative_raster_array(absolute_raster_array, origin_point):
+def get_relative_raster_array(absolute_raster_array, origin_point, x_flip = False, y_flip = False):
     rel_rastArr = np.copy(absolute_raster_array)
-    rel_rastArr[:, 0] = rel_rastArr[:, 0] - origin_point.x
-    rel_rastArr[:, 1] = origin_point.y - rel_rastArr[:, 1] 
-    rel_rastArr = rel_rastArr[:, :2]
+
+    ### figure out direction
+    rel_rastArr = rel_rastArr - origin_point.coords
+    if x_flip:
+        rel_rastArr[:, 0] = - rel_rastArr[:, 0]
+    if y_flip:
+        rel_rastArr[:, 1] = - rel_rastArr[:, 1]
+
     rel_rastArr = rel_rastArr / const.SCALE * const.FOOT_TO_METER
     return rel_rastArr
 
