@@ -712,10 +712,13 @@ def get_relative_raster_array(absolute_raster_array, origin_point, x_flip = Fals
     rel_rastArr = rel_rastArr / const.SCALE * const.FOOT_TO_METER
     return rel_rastArr
 
-def get_color_and_alpha_array_from_predictions(glm_model, regFrm, relative_to = None,
+def get_color_and_alpha_array_from_predictions(glm_model, regFrm, relative_to = None, factor_array = None,
                                                zero_color = const.BGR['intense_red'], one_color = const.BGR['leafy_green'],
                                                force_zero_to_middle = True, alpha_exponent = 1):
     pred_winSer = glm_model.predict(regFrm)
+    if factor_array is not None:
+        pred_winSer = pred_winSer * factor_array ### this is useful for target quality measure.
+
     pred_winArr = pred_winSer.values[:, np.newaxis]
 
     if relative_to is not None:
@@ -790,3 +793,30 @@ def target_quality_measure(showReg, bandwidth = 30):
 
     shareArr = np.array([share_in_for_single_target(x, y, rastArr_2D_outer) for x, y in rastArr_2D_inner])
     return shareArr
+
+def get_contour_array_from_predictions(glmReg, regressor_frame, relative_to = 0.5, 
+                                        factor_array = None, epsilon = 0.01,
+                                        color = const.BGR['intense_red']):
+    pred_winSer = glmReg.predict(regressor_frame)
+    if factor_array is not None:
+        pred_winSer = pred_winSer * factor_array ### this is useful for target quality measure.
+
+    pred_winArr = pred_winSer.values
+
+    contourArr = (pred_winArr > (relative_to - epsilon)) & (pred_winArr < (relative_to + epsilon))
+
+    colArr = contourArr[:, np.newaxis] * np.array(color)[np.newaxis, :]
+    alArr = contourArr[:, np.newaxis].astype(int)
+    return colArr, alArr
+
+def get_field_array_from_predictions(glmReg, regressor_frame, relative_to = 0.5, 
+                                    factor_array = None, color = const.BGR['intense_red']):
+    pred_winSer = glmReg.predict(regressor_frame)
+    if factor_array is not None:
+        pred_winSer = pred_winSer * factor_array ### this is useful for target quality measure.
+
+    pred_winArr = pred_winSer.values
+    contourArr = pred_winArr > relative_to
+    colArr = contourArr[:, np.newaxis] * np.array(color)[np.newaxis, :]
+    alArr = contourArr[:, np.newaxis].astype(int)
+    return colArr, alArr
