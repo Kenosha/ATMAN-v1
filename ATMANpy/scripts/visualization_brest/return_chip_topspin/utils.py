@@ -139,19 +139,8 @@ def get_ret_dist_to_bsl(myPnt, courtLines = None):
         return dist_in_meters
 
 def get_ret_dist_to_bh(myPnt):
+    srvShot = myPnt.get_serve()
     retShot = myPnt.get_return()
-    botLn = botReg['Bottom']
-
-    server_hand = retShot.recPlayer.get_hand()
-
-    if server_hand == 'right':
-        bhPnt = botLn.leftPt
-    elif server_hand == 'left':
-        bhPnt = botLn.rightPt
-    else:
-        return None
-
-    bh_x = bhPnt.x
 
     if retShot is None:
         return None
@@ -160,11 +149,28 @@ def get_ret_dist_to_bh(myPnt):
     if ret_x is None:
         return None
 
-    if server_hand == 'right':
-        dist = ret_x - bh_x
-    elif server_hand == 'left':
-        dist = bh_x - ret_x
-    
+    botLn = botReg['Bottom']
+    left_x = botLn.leftPt.x
+    right_x = botLn.rightPt.x
+
+    server_side = srvShot.get_hit_side()
+    server_hand = srvShot.hitPlayer.get_hand()
+
+    if server_side == 'Bot':
+        if server_hand == 'right':
+            dist = ret_x - left_x
+        elif server_hand == 'left':
+            dist = right_x - ret_x
+        else:
+            return None
+    elif server_side == 'Top':
+        if server_hand == 'right':
+            dist = right_x - ret_x
+        elif server_hand == 'left':
+            dist = ret_x - left_x
+        else:
+            return None
+
     dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
     return dist_in_meters
 
@@ -173,19 +179,34 @@ def get_ret_dist_to_opt(myPnt, meters_behind_baseline = 2):
     retShot = myPnt.get_return()
     retLn = retShot.get_flight_line()
 
-    botLn = botReg['Bottom']
-    topLn = topReg['Top']
-    cntPt = courtLines.get_center_point()
+    pt_shift = meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
 
+    server_side = myPnt.get_serve().get_hit_side()
+
+    ### The line through which point neatly divides the court to cover into two parts?
+    # using the center of the opposite service line basically assumes that 
+    # the best angle shot the opponent can hit bounces at the intersection of the service line and the side line.
+    if server_side == 'Bot':
+        from ATMANpy.auxil.court import top_srv_cnt_2D
+        cntPt = top_srv_cnt_2D
+    elif server_side == 'Top':
+        from ATMANpy.auxil.court import bot_srv_cnt_2D
+        cntPt = bot_srv_cnt_2D
+
+    if server_side == 'Bot':
+        srvLn = botReg['Bottom']
+        recLn = topReg['Top'].up(pt_shift)
+    elif server_side == 'Top':
+        srvLn = topReg['Top']
+        recLn = botReg['Bottom'].down(pt_shift)
+    
     ### calculate where the server will meet the return. assumption: he meets it on the baseline
-    intPt = retLn.weak_intersect(botLn)
+    intPt = retLn.weak_intersect(srvLn)
 
     ### the optimal point is opposite the intersection of the return's ball flight with the baseline on the server's side
     mirrorLn = Line(intPt, cntPt)
     
     ### the optimal point is meters_behind_baseline -> the returner is not yet in offense, on average.
-    pt_up = meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
-    recLn = topLn.up(pt_up)
     optPt = mirrorLn.weak_intersect(recLn)
 
     ### now, check where the returner actually is, at the time of the return
@@ -230,30 +251,36 @@ def get_ret_dist_to_opt(myPnt, meters_behind_baseline = 2):
 #     dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
 #     return dist_in_meters
 
-def get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos, meters_behind_baseline = 2):
+def get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos, meters_behind_baseline = 2, server_side = 'Bot'):
     ### get_ret_dist_to_opt, but with whole array.
+    from ATMANpy.auxil.court import top_srv_cnt_2D, bot_srv_cnt_2D
+    pt_shift = meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
 
-    meters_behind_baseline = 2
-    pt_up = meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
-    bot_y = botReg['Bottom'].leftPt.y
-    top_y = topReg['Top'].up(pt_up).leftPt.y
-    cnt_x, cnt_y = courtLines.get_center_point().coords
+    ### Get the relevant coordinates
+    if server_side == 'Bot':
+        srv_y = botReg['Bottom'].leftPt.y
+        rec_y = topReg['Top'].up(pt_shift).leftPt.y
+        cnt_x, cnt_y = top_srv_cnt_2D.coords ### dividing line passes through opposite service lines center
+    elif server_side == 'Top':
+        srv_y = topReg['Top'].leftPt.y
+        rec_y = botReg['Bottom'].up(pt_shift).leftPt.y
+        cnt_x, cnt_y = bot_srv_cnt_2D.coords ### dividing line passes through opposite service lines center
 
     ### intersection with bot line
     flightVec = rastArr_2D - ret_ball_pos ### essentially, reset origin to ret_ball_pos
     dVec = flightVec[:, 1] / flightVec[:, 0]  ### then, all we need is the gradient of the flight vector
-    bot_x_unadj = (bot_y - ret_ball_pos[1]) / dVec ### in this coordinate system (with origin at ret_ball_pos), bot_x = ...
-    bot_x = bot_x_unadj + ret_ball_pos[0] ### transform back
-    botArr = np.stack([bot_x, np.full_like(bot_x, fill_value = bot_y)], axis = 1)
+    srv_x_unadj = (srv_y - ret_ball_pos[1]) / dVec ### in this coordinate system (with origin at ret_ball_pos), bot_x = ...
+    srv_x = srv_x_unadj + ret_ball_pos[0] ### transform back
+    srvArr = np.stack([srv_x, np.full_like(srv_x, fill_value = srv_y)], axis = 1)
 
     ### intersection with top line (through center)
-    mirrorVec = botArr - (cnt_x, cnt_y) ### reset origin to center of court
+    mirrorVec = srvArr - (cnt_x, cnt_y) ### reset origin to center of court
     dVec = mirrorVec[:, 1] / mirrorVec[:, 0]
-    top_x_unadj = (top_y - cnt_y) / dVec
-    top_x = top_x_unadj + cnt_x
-    topArr = np.stack([top_x, np.full_like(top_x, fill_value = top_y)], axis = 1)
+    rec_x_unadj = (rec_y - cnt_y) / dVec
+    rec_x = rec_x_unadj + cnt_x
+    recArr = np.stack([rec_x, np.full_like(rec_x, fill_value = rec_y)], axis = 1)
 
-    dist = ((ret_player_pos - topArr) ** 2).sum(axis = 1) ** 0.5
+    dist = ((ret_player_pos - recArr) ** 2).sum(axis = 1) ** 0.5
     dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
     return dist_in_meters
 
@@ -579,6 +606,9 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     regFrm['ret_dist_to_bh_serve_fore_sq'] = regFrm['ret_dist_to_bh_serve_fore'] ** 2
     regFrm['ret_dist_to_bh_serve_back_sq'] = regFrm['ret_dist_to_bh_serve_back'] ** 2
 
+    regFrm['ret_dist_to_bh_serve_fore_bsl'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['ret_dist_to_bsl']
+    regFrm['ret_dist_to_bh_serve_back_bsl'] = regFrm['ret_dist_to_bh_serve_back'] * regFrm['ret_dist_to_bsl']
+
     regFrm['ret_dist_to_bh_x_is_chipped'] = regFrm['ret_dist_to_bh'] * regFrm['is_chipped']
 
     ### launch angle
@@ -587,6 +617,9 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     ### launch angle interactions
     regFrm['ret_dist_to_bsl_x_launch_angle'] = regFrm['ret_dist_to_bsl'] * regFrm['launch_angle']
     regFrm['ret_dist_to_opt_x_launch_angle'] = regFrm['ret_dist_to_opt'] * regFrm['launch_angle']
+
+    regFrm['ret_dist_to_bsl_sq_x_launch_angle'] = (regFrm['ret_dist_to_bsl'] ** 2) * regFrm['launch_angle']
+    regFrm['ret_dist_to_opt_sq_x_launch_angle'] = (regFrm['ret_dist_to_opt'] ** 2) * regFrm['launch_angle']
 
     ### serve data
     regFrm['is_serve_ad'] = retPnts.apply('is_serve_ad')
