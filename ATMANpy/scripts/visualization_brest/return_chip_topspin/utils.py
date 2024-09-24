@@ -746,3 +746,46 @@ def make_mode_lines(mode_angles, line_len = 100, x_ax = Point2D((1, 0, 0)), y_ax
         mode_lines.append(modeLn)
 
     return Lines3D(mode_lines)
+
+
+def target_quality_measure(showReg, bandwidth = 30):    
+    # idea -> for each point in the showReg, assume it is used as a target. 
+    # then, build a kernel around it -> this is the inaccuracy that is factored in
+    # then, calculate how much of that kernel is within the play area, and how much is without.
+    # for each point, the ratio of "within area" over "kernel area" is the target quality metric.
+    # then, weight the win probability with the target quality metric at each point
+    # from this, subtract the probability of winning with an average topspin shot minus the probability of making the topspin shot 
+    # (the above diagrams implicitly assume that this latter probability is 1)
+
+    import ATMANpy.funcs.vis_funcs as vs
+
+    # a) calculate the scaling needed
+    short_len = min(showReg['Top'].length(), showReg['Left'].length())
+    # -> want bandwidth (at least) added to both sides of the shorted length by scaling (at the longer side, there will be some dead space, but no matter)
+    factor = (short_len + bandwidth * 2) / short_len
+
+    # b) create inner and outer regions
+    rastArr_2D_inner = vs.meshgrid_region(showReg, resolution = 1)
+    rastArr_2D_outer = vs.meshgrid_region(showReg.scale(factor), resolution = 1)
+
+    num_x, num_y, _ = rastArr_2D_inner.shape
+    N_inner = num_x * num_y
+
+    num_x, num_y, _ = rastArr_2D_outer.shape
+    N_outer = num_x * num_y
+
+    rastArr_2D_inner = rastArr_2D_inner.reshape((N_inner, 2))
+    rastArr_2D_outer = rastArr_2D_outer.reshape((N_outer, 2))
+
+    # c) check for any point in the outer region (the set out outcomes) if it is in the inner region (i.e, the set of points in the play area)
+    is_in_array = np.array([np.any(np.all(coord == rastArr_2D_inner, axis=1)) for coord in rastArr_2D_outer])
+
+    # d) calculate the weighted mean over the booleans
+    def share_in_for_single_target(target_x, target_y, space):  
+        values = np.array([[target_x, target_y]])  
+        kde_values = vs.epanechnikov2D(values, space)
+        share_in = (kde_values * is_in_array).sum() / kde_values.sum()
+        return share_in
+
+    shareArr = np.array([share_in_for_single_target(x, y, rastArr_2D_outer) for x, y in rastArr_2D_inner])
+    return shareArr
