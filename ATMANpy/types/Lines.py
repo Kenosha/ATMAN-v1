@@ -591,6 +591,14 @@ class CourtLines(Lines):
         p4 = self[f'{side} Singles Ad Line'].weak_intersect(self[f'{side} Service Line'])
         return Region.from_points(p1, p2, p3, p4)
     
+    def get_deep_box(self, side = 'Top'):
+        ### this is the area inside the singles lines behind the service boxes
+        p1 = self[f'{side} Singles Deuce Line'].weak_intersect(self[f'{side} Baseline'])
+        p2 = self[f'{side} Singles Ad Line'].weak_intersect(self[f'{side} Baseline'])
+        p3 = self[f'{side} Singles Deuce Line'].weak_intersect(self[f'{side} Service Line'])
+        p4 = self[f'{side} Singles Ad Line'].weak_intersect(self[f'{side} Service Line'])
+        return Region.from_points(p1, p2, p3, p4)
+    
     def get_half_line(self):
         return Line(self['Top Baseline'].center(), self['Bottom Baseline'].center())
     
