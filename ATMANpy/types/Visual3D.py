@@ -843,8 +843,8 @@ class View:
 
         if self.text_param_dicts is not None:
             for param_dict in self.text_param_dicts:
-                text = param_dict.pop('text')
-                snapFrm = snapFrm.put(text, **param_dict)
+                text = param_dict['text']
+                snapFrm = snapFrm.put(text, **{k: v for k, v in param_dict.items() if k != 'text'})
         
         return snapFrm
         
