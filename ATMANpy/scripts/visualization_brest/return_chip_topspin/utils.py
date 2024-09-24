@@ -679,7 +679,7 @@ def save_model_summary_as_png(fitted_model, save_path, save_name):
     plt.savefig(full_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-def make_and_save_model(regressor_frame, regressors, save_path, save_name = None,
+def make_and_save_model(regressor_frame, regressors, save_path = None, save_name = None,
                         endog_col = 'ret_wins', weight_col = None, verbose = True):
     X, y, w = get_X_y_w(regressor_frame, regressors, endog_col, add_constant = True, weight_col = weight_col)
     glmReg_win = sm.GLM(y, X, family = sm.families.Binomial(), freq_weights = w).fit()
@@ -688,7 +688,7 @@ def make_and_save_model(regressor_frame, regressors, save_path, save_name = None
     if verbose: 
         print(summary)
     
-    if save_name is not None:
+    if save_path is not None:
         save_model_summary_as_png(glmReg_win, save_path = save_path, save_name = save_name)
 
     return glmReg_win
