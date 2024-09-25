@@ -263,7 +263,7 @@ def get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos, me
         cnt_x, cnt_y = top_srv_cnt_2D.coords ### dividing line passes through opposite service lines center
     elif server_side == 'Top':
         srv_y = topReg['Top'].leftPt.y
-        rec_y = botReg['Bottom'].up(pt_shift).leftPt.y
+        rec_y = botReg['Bottom'].down(pt_shift).leftPt.y
         cnt_x, cnt_y = bot_srv_cnt_2D.coords ### dividing line passes through opposite service lines center
 
     ### intersection with bot line
@@ -274,7 +274,7 @@ def get_ret_dist_to_opt_with_points(rastArr_2D, ret_ball_pos, ret_player_pos, me
     srvArr = np.stack([srv_x, np.full_like(srv_x, fill_value = srv_y)], axis = 1)
 
     ### intersection with top line (through center)
-    mirrorVec = srvArr - (cnt_x, cnt_y) ### reset origin to center of court
+    mirrorVec = srvArr - (cnt_x, cnt_y) ### reset origin to center of court (amended: center of the line dividing the serve + 1 into two.)
     dVec = mirrorVec[:, 1] / mirrorVec[:, 0]
     rec_x_unadj = (rec_y - cnt_y) / dVec
     rec_x = rec_x_unadj + cnt_x
@@ -618,8 +618,16 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     regFrm['ret_dist_to_bsl_x_launch_angle'] = regFrm['ret_dist_to_bsl'] * regFrm['launch_angle']
     regFrm['ret_dist_to_opt_x_launch_angle'] = regFrm['ret_dist_to_opt'] * regFrm['launch_angle']
 
-    regFrm['ret_dist_to_bsl_sq_x_launch_angle'] = (regFrm['ret_dist_to_bsl'] ** 2) * regFrm['launch_angle']
-    regFrm['ret_dist_to_opt_sq_x_launch_angle'] = (regFrm['ret_dist_to_opt'] ** 2) * regFrm['launch_angle']
+    regFrm['ret_dist_to_bsl_sq_x_launch_angle'] = regFrm['ret_dist_to_bsl_sq'] * regFrm['launch_angle']
+    regFrm['ret_dist_to_opt_sq_x_launch_angle'] = regFrm['ret_dist_to_opt_sq'] * regFrm['launch_angle']
+
+    regFrm['ret_dist_to_bh_x_launch_angle'] = regFrm['ret_dist_to_bh'] * regFrm['launch_angle']
+    
+    regFrm['ret_dist_to_bh_serve_fore_x_launch_angle'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['launch_angle']
+    regFrm['ret_dist_to_bh_serve_fore_sq_x_launch_angle'] = regFrm['ret_dist_to_bh_serve_fore_sq'] * regFrm['launch_angle']
+    
+    regFrm['ret_dist_to_bh_serve_back_x_launch_angle'] = regFrm['ret_dist_to_bh_serve_back'] * regFrm['launch_angle']
+    regFrm['ret_dist_to_bh_serve_back_sq_x_launch_angle'] = regFrm['ret_dist_to_bh_serve_back_sq'] * regFrm['launch_angle']
 
     ### serve data
     regFrm['is_serve_ad'] = retPnts.apply('is_serve_ad')
