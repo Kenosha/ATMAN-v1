@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-
 import ATMANpy.auxil.constants as const
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
@@ -114,7 +113,8 @@ logReg.summary()
 #########################################
 ##### CREATE REGRESSORS AND WEIGHTS #####
 #########################################
-regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new)
+DECAY_RATE = 0.9
+regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = DECAY_RATE)
 
 #################################
 ###### ATTRIBUTION TABLES #######
@@ -128,25 +128,25 @@ chips_naive, tops_naive, attrib_naive = vis_ut.calculate_attribution(regFrm, chi
 chips_smart, tops_smart, attrib_smart = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
                                                                      bounce_col = 'must_have_bounced_in', weight_col = 'weight_topspin')
 ### c) PSM and Balance-Weighted
-chips_smart, tops_smart, attrib_smart = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+chips_smart_bal, tops_smart_bal, attrib_smart_bal = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
                                                                      bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_pred')
 
 ### d1) PSM and Balance and Len-Weighted
-chips_smart_len, tops_smart_len, attrib_smart_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
-                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_len_pred',
-                                                                     assert_digits = 1)
+# chips_smart_bal_len, tops_smart_bal_len, attrib_smart_bal_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+#                                                                      bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_len_pred',
+#                                                                      assert_digits = 1)
 
 ### d2) PSM and Balance and Len-Weighted (outcome method)
-chips_smart_len, tops_smart_len, attrib_smart_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins_weighted', 
+chips_smart_bal_len, tops_smart_bal_len, attrib_smart_bal_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins_weighted', 
                                                                      bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_pred',
                                                                      assert_digits = 1)
 
 
 ### b) len weighted
 print(f'Topspin Returns:')
-print(f'   No len adj: {tops_smart["cond"]:.2f}; len adj: {tops_smart_len["cond"]:.2f}')
+print(f'   No len adj: {tops_smart["cond"]:.2f}; len adj: {chips_smart_bal_len["cond"]:.2f}')
 print(f'Chipped Returns:')
-print(f'   No len adj: {chips_smart["cond"]:.2f}; len adj: {chips_smart_len["cond"]:.2f}')
+print(f'   No len adj: {chips_smart["cond"]:.2f}; len adj: {chips_smart_bal_len["cond"]:.2f}')
 
 #################################
 ###### LENGTH OF RALLY ##########
@@ -161,20 +161,34 @@ smartGraph.render().show()
 # (whereas topspin conditional win % does not change much?)
 
 ### Make a Graph: Win% returner over Rally Length
-jntFrm, shrFrm, diffFrm_chip, diffFrm_top = vis_ut.chip_topspin_return_avgs_by_length(regFrm)
+jntFrm, jntFrm_decayed, shrFrm, diffFrm_chip, diffFrm_top = vis_ut.chip_topspin_return_avgs_by_length(regFrm, decay_rate = DECAY_RATE)
 diffFrm_chip.sum() 
 ### these are the 7.5% we see in overall difference. 
 #If we were to exclude the 2-length rallys (where the return is usually not made)
 # we will get closer to 10%. The analysis could be re-done with just the conditional returns.
 
 ### To build an intuition on the improvement -> bucket into <4, 4-8, >8 rallys.
-short_filter = jntFrm.index < 5
-mid_filter = (jntFrm.index >= 5) & (jntFrm.index < 9)
-long_filter = jntFrm.index >= 9
+def bucket(frm_or_ser, share_frm_or_ser = None):
+    short_filter = frm_or_ser.index < 5
+    mid_filter = (frm_or_ser.index >= 5) & (frm_or_ser.index < 9)
+    long_filter = frm_or_ser.index >= 9
 
-jntFrm[short_filter].sum() / shrFrm[short_filter].sum()
-jntFrm[mid_filter].sum() / shrFrm[mid_filter].sum()
-jntFrm[long_filter].sum() / shrFrm[long_filter].sum()
+    if share_frm_or_ser is None:
+        print('Short Rally: \n', frm_or_ser[short_filter].sum())
+        print('Medium Rally: \n', frm_or_ser[mid_filter].sum())
+        print('Long Rally: \n', frm_or_ser[long_filter].sum())
+    else:
+        print('Short Rally: \n', frm_or_ser[short_filter].sum() / share_frm_or_ser[short_filter].sum())
+        print('Medium Rally: \n', frm_or_ser[mid_filter].sum() / share_frm_or_ser[mid_filter].sum())
+        print('Long Rally: \n', frm_or_ser[long_filter].sum() / share_frm_or_ser[long_filter].sum())
+
+bucket(jntFrm, shrFrm)
+bucket(jntFrm_decayed, shrFrm)
+bucket(diffFrm_chip['diff'])
+bucket(diffFrm_top['diff'])
+
+jntFrm.sum() / shrFrm.sum()
+jntFrm_decayed.sum() / shrFrm.sum()
 
 ###### INVESTIGATE SELECTION BIAS #########
 #### TODO: Possible selection bias: the better player typically plays fewer serves (holds fast, hangs in for longer in return games).
@@ -204,14 +218,14 @@ myGraph = Graph([barChart, halfChart], offset = 0.35,
                 make_default_x_labels = False, x_tick_label_left_shift = 0.5, x_label = 'Length of Rally', x_label_left_shift = 1.5, x_label_dist = 0.7)
 myGraph.render().show()
 
-myScn, annotatedPnts = myGraph.preview()
+graphScn, annotatedPnts = myGraph.preview()
 
 newPnt = annotatedPnts[7]
 newPnt = newPnt.retext('50%').recolor(const.BGR['intense_red']).right(7).back(0.45)
 annotatedPnts.append(newPnt)
 
 from ATMANpy.types.Visual3D import View
-graphView = View.make(myGraph.cam, myScn, resolution = myGraph.resolution, annotatedPoints = annotatedPnts)
+graphView = View.make(myGraph.cam, graphScn, resolution = myGraph.resolution, annotatedPoints = annotatedPnts)
 graphView.snap().show()
 
 ### TODO: use this to animate the bars -> better to explain while bars appear.
@@ -242,6 +256,10 @@ chips_naive_tot = {k: v for k, v in chips_naive.items() if k == 'total'}
 tops_naive_tot = {k: v for k, v in tops_naive.items() if k == 'total'}
 chips_smart_tot = {k: v for k, v in chips_smart.items() if k == 'total'}
 tops_smart_tot = {k: v for k, v in tops_smart.items() if k == 'total'}
+chips_smart_bal_tot = {k: v for k, v in chips_smart_bal.items() if k == 'total'}
+tops_smart_bal_tot = {k: v for k, v in tops_smart_bal.items() if k == 'total'}
+chips_smart_bal_len_tot = {k: v for k, v in chips_smart_bal_len.items() if k == 'total'}
+tops_smart_bal_len_tot = {k: v for k, v in tops_smart_bal_len.items() if k == 'total'}
 
 chips_smart_make = {k: v for k, v in chips_smart.items() if k != 'cond'}
 tops_smart_make = {k: v for k, v in tops_smart.items() if k != 'cond'}
@@ -275,6 +293,61 @@ table_data = {'Topspin Return': tops_smart, 'Chipped Return (Choice)': chips_sma
 cond_smart_table =  Table(table_data, **table_kwargs, null_columns = 0)
 cond_smart_table.render().show()
 
+###########################################
+### Tables with incremental adjustments ###
+###########################################
+
+x, y = DIMENSIONS
+
+table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
+                        'skip_after_how_many_symbols': 20, 'dimensions': (x, y),
+                        'skeleton_shrinkage': 0.25, 'skeleton_vertical_offset': 1, 
+                        'title_vertical_offset': 0, 'title_horizontal_offset': 3.5,
+                        'title_size': 2, 'title_thickness': 1
+                        }
+
+table_kwargs_large = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
+                        'skip_after_how_many_symbols': 20, 'dimensions': (2 * x, 2 * y),
+                        'skeleton_shrinkage': 0.25, 'skeleton_vertical_offset': 1,
+                        'title_vertical_offset': -0.5, 'title_horizontal_offset': 12,
+                        'title_size': 2, 'title_thickness': 1, 
+                        }
+
+t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
+c0, c1, c2, c3 = chips_naive['total'], chips_smart['total'], chips_smart_bal['total'], chips_smart_bal_len['total']
+
+tdict = {'Unadjusted': t0}
+cdict = {'Unadjusted': c0}
+table_data = {'Topspin Return': tdict, 'Chipped Return': cdict}
+
+initial_naive_table = Table(table_data, **table_kwargs_small, title = 'Returner Wins the Point', header_text_size = 0)
+initial_naive_table.render().show()
+
+naive_table = Table(table_data, **table_kwargs_small, title = 'Returner Wins the Point')
+naive_table.render().show()
+
+tdict = {'Unadjusted': t0, '+ Choice Adj.': t1}
+cdict = {'Unadjusted': c0, '+ Choice Adj.': c1}
+table_data = {'Topspin Return': tdict, 'Chipped Return': cdict}
+
+smart_table = Table(table_data, **table_kwargs_small, title = 'Returner Wins the Point')
+smart_table.render().show()
+
+tdict = {'Unadjusted': t0, '+ Choice Adj.': t1, '+ Balance Adj.': t2}
+cdict = {'Unadjusted': c0, '+ Choice Adj.': c1, '+ Balance Adj.': c2}
+table_data = {'Topspin Return': tdict, 'Chipped Return': cdict}
+
+smart_bal_table = Table(table_data, **table_kwargs_large, title = 'Returner Wins the Point')
+smart_bal_table.render().show()
+
+
+tdict = {'Unadjusted': t0, '+ Choice Adj.': t1, '+ Balance Adj.': t2, '+ Attribution Adj.': t3}
+cdict = {'Unadjusted': c0, '+ Choice Adj.': c1, '+ Balance Adj.': c2, '+ Attribution Adj.': c3}
+table_data = {'Topspin Return': tdict, 'Chipped Return': cdict}
+
+smart_bal_len_table = Table(table_data, **table_kwargs_large, title = 'Returner Wins the Point')
+smart_bal_len_table.render().show()
+
 ###############################################
 ###### GET HIGH AND LOW PROPENSITY CHIPS ######
 ###############################################
@@ -289,34 +362,81 @@ low_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).decap().frames for idx
 ###################################
 #### FRAMES RASTER WITH TABLE #####
 ###################################
+from ATMANpy.types.Overlays import FrameRaster, FramesRaster, frame_cascade, reverse_cascade
+from ATMANpy.types.Frames import BGRFrame
 
-from ATMANpy.types.Overlays import FramesRaster, frame_cascade, reverse_cascade
+STATIC_FRAMES = 25
+TRANSITION_FRAMES = 100
+all_frames = []
+script_lines = []
 
-### basic raster
+script_line =   """
+            The chipped return is a return played with underspin like a slice, but typically (as we will see) with greater net clearance and lower speed
+            than a rally slice. The chipped return is, on average, infrequently employed by choice; however, some highly successful players consistently use it
+            as a tool to either neutralize the rally with a deep, floating chip, or draw the server into the court with a shallow, low-bouncing chip.
+
+            In this analysis, we take a look at these chip return varieties, 
+            and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
+
+            DATASET EXPLANATION?
+                """
+blankFrm = BGRFrame(np.zeros((1080, 1920, 3), dtype = 'uint8'))
+blankFrms = BGRFrames.from_frame(blankFrm, STATIC_FRAMES)
+all_frames.append(blankFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                At first glance, it doesn't look good for the chipped return. 
+                In our sample of 1487 first-serve points in which a return was observed (i.e., non-aces.),
+                the returner wins around 40.3% of points whenever he returns topspin, versus around 21.8% of points when he chips the ball back.
+
+                However, this view is slightly unfair toward the chipped return. To understand why, consider these eight returns, and what they have in common.
+                                """
+baseRst = FrameRaster(3, 3)
+baseRst.add(initial_naive_table.render(), 1, 1)
+baseFrm = baseRst.render()
+# baseFrm.show()
+baseFrms = BGRFrames.from_frame(baseFrm, repetitions = STATIC_FRAMES)
+all_frames.append(baseFrms)
+script_lines.append(script_line)
+
 baseRst = FramesRaster(3, 3)
-baseRst.add(basic_naive_table_nonull.render(), 1, 1)
-baseRst.render()[0].show()
-
+baseRst.add(initial_naive_table.render(), 1, 1)
 finalRst, cascFrms = frame_cascade(high_pred_exFrms, baseRst)
 DecapStream(cascFrms, 0, 100).show()
 cascFrms[-1].show()
-### all these have three things in common 
-#   -> they're returned off the backhand...
-#   -> ... on the stretch
-#   -> ... as a chip!
-# In fact, there is virtually no way to return these as topspin balls!
-#   -> no choice! forced chip return.
-# we are interested in the opposite: 'choice' chips! 
-# given that the receiver can make a choice to chip, we want to assess whether that choice is worth it.
+all_frames.append(cascFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                all these have three things in common. They're returner... 
+                    -> they're returned off the backhand...
+                    -> ... on the stretch
+                    -> ... as a chip!
+                In fact, there is virtually no way to return these as topspin balls!
+                The returner has no choice: he is forced to attempt a chip return. 
+                Conversely, we are interested in the opposite: 'choice' chips! 
+                Given that the returner could either play a topspin or a chip return, we want to assess the quality of said choice.
+                    -> when (and how) should one chip, and when should one play topspin. 
+                    -> the ability to make a choice matters, 
+                over the topspin return, which is counterfactually possible.
+                """
+staticFrms = BGRFrames.from_frame(cascFrms[-1], STATIC_FRAMES)
+all_frames.append(staticFrms)
+script_lines.append(script_line)
+
 revRst, revFrms = reverse_cascade(finalRst, keep_which = [(1, 1)], acceleration = 1.15)
 DecapStream(revFrms, 0, 100).show()
 revFrms[-1].show()
+
+all_frames.append(revFrms)
+script_lines.append(script_line)
 
 #################################
 ##### PROPENSITY SCORE MODEL ####
 #################################
  
-RESOLUTION = 10
+RESOLUTION = 1
 renameDict = {'serve_speed': 'Serve Speed', 'serve_spin': 'Serve Topspin', 'serve_width': 'Serve Width', 
               'serve_depth': 'Return Depth', 'serve_height': 'Bounce Height', 'ret_is_back': 'Returner uses Backhand', 'serve_dist_sq': 'Stretch Distance'}
 fitted_model = logReg
@@ -324,47 +444,9 @@ max_line_thickness = 2.5
 thickness_taper = 0.05
 model_name = 'Propensity to Chip'
 
-from ATMANpy.types.Overlays import Diagram
-from ATMANpy.types.ShapesTennis3D import Arrow
 
-def model_to_diagram(fitted_model, renameDict = None, model_name = 'Propensity to Chip',
-                     max_line_thickness = 5, min_line_thickness = 0.1, resolution = RESOLUTION, render_height = 1500, 
-                     shape_color = const.BGR['strong_blue'], text_color = const.BGR['smokey_grey']):
-    ### collect relevant fitted parameters
-    bSer, pSer = fitted_model.params, fitted_model.pvalues    
-    pSer_sorted = pSer.sort_values()
-    pSer_log = np.log10(1 / pSer_sorted)
-    pSer_normed = (pSer_log / pSer_log.max())
-    thickSer = pSer_normed * max_line_thickness
-    thickSer = thickSer.clip(lower = min_line_thickness)
-    positiveSer = bSer > 0
-
-    ### initialize diagram
-    regressor_keys = pSer_sorted.index.to_list()
-    regressor_names = [renameDict[key] for key in regressor_keys if key in renameDict]
-    myDiag = Diagram([regressor_names, [], [model_name]], resolution = resolution, text_skip_after_how_many_symbols = 3,
-                     shape_color = shape_color, shape_offset = 0.05, text_color = text_color, arrow_hat_length = 10, 
-                     dimensions = (640, 360), render_height = render_height)
-
-    inverted_renameDict = {v: k for k, v in renameDict.items()}
-
-    for idx, name in enumerate(regressor_names):
-        key = inverted_renameDict[name]
-
-        arrow_thickness, is_positive = thickSer[key], positiveSer[key]
-        if is_positive:
-            arrow_color = const.BGR['leafy_green']
-        else:
-            arrow_color = const.BGR['intense_red']
-
-        shape, arrow = myDiag[0, idx]
-        remade_arrow = arrow.recolor(arrow_color).resize(arrow_thickness)
-        myDiag[0, idx] = shape, remade_arrow
-
-    return myDiag
-
-outDiag = model_to_diagram(fitted_model, renameDict = renameDict, model_name = 'Propensity to Chip', 
-                           max_line_thickness = 3, resolution = RESOLUTION, shape_color = const.BGR['marine_blue'], text_color = const.BGR['bright_grey'])
+outDiag = vis_ut.model_to_diagram(fitted_model, renameDict = renameDict, model_name = 'Propensity to Chip', 
+                                    max_line_thickness = 3, resolution = RESOLUTION, shape_color = const.BGR['marine_blue'], text_color = const.BGR['bright_grey'])
 
 for col in range(7):
     outDiag[0, col][0].text_vertical_offset = -8
@@ -385,15 +467,155 @@ outDiag[1, 0][0].text_thickness = 2
 
 ### staggered diagram
 def remove_all_diagram_shapes_after_index(myDiag, idx):
-    myDiag.shapes[0] = [shape for i, shape in enumerate(myDiag.shapes[0]) if i <= idx]
-    myDiag.arrows[0] = [arrow for i, arrow in enumerate(myDiag.arrows[0]) if i <= idx]
+    myDiag.shapes[0] = [shape for i, shape in enumerate(myDiag.shapes[0]) if i < idx]
+    myDiag.arrows[0] = [arrow for i, arrow in enumerate(myDiag.arrows[0]) if i < idx]
     return myDiag
 
-outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for idx in range(7)]
+outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for idx in range(8)]
 
 for myDiag in outDiags:
     diagFrm = myDiag.render()
     diagFrm.show()
+
+### Propensity Wording:
+# To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Modelling, or PSM for short.
+# PSM calculates the propensity to chip a ball given a set of explanatory variables.
+# in our case, these variables pertain to the quality of the serve 
+# (show and discuss table now?)
+# the higher the propensity to chip, the more the model believes a chipped return to be forced.
+# in fact, the eight returns we just saw are the eight highest propensity returns in our sample.
+# on the other hand, on a low propensity chipped return, the model believes that playing a chip in such a situation is very unlikely 
+#   -> in most cases, the returner would have opted for a topspin return
+#   -> therefore, a chipped return in such a low propensity situation expresses the returner's strong choice to chip the ball back.
+# (maybe show a continuum line: low propensity -> choice; high propensity -> forced)
+# To illuminate this, consider the 8 lowest propensity chipped returns.
+
+
+script_line =   """
+                    To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Modelling, or PSM for short.
+                """
+blankFrms = BGRFrames.from_frame(blankFrm, STATIC_FRAMES)
+all_frames.append(blankFrms)
+script_lines.append(script_line)
+
+diagRaster = FrameRaster(3, 3)
+
+script_line = """
+                PSM estimates, from the data at hand, the propensity to chip a ball, given a set of explanatory variables. 
+                In our case, these variables pertain to the quality of the serve.
+                How this Propensity Model is useful for our purposes will become apparent in a moment; 
+                for the moment, imagine the PSM as simply a device that looks at the characteristics of a serve and predicts the probability 
+                that the return will be chipped back, as opposed to returned with topspin.
+            """
+diagFrm = outDiags[0].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm0 = diagRaster.render()
+diagFrm0.show()
+diagFrms0 = BGRFrames.from_frame(diagFrm0, STATIC_FRAMES)
+all_frames.append(diagFrms0)
+script_lines.append(script_line)
+
+script_line =   """
+                    The best predictor of whether a ball is chipped back is how far the returner has to stretch to get to it. 
+                    The green arrow indicates that the relationship is positive: 
+                    The farther the stretch, the likelier the return is to be chipped back; (recall the 8 returns showed just a few moments ago).
+                """
+diagFrm = outDiags[1].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm1 = diagRaster.render()
+diagFrm1.show()
+diagFrms1 = BGRFrames.from_frame(diagFrm1, STATIC_FRAMES)
+all_frames.append(diagFrms1)
+script_lines.append(script_line)
+
+script_line =   """
+                    If the serve goes to the backhand, the return is likelier to be a chip, as opposed to a serve to the returner's forehand, which is more often returned with topspin.
+                """
+diagFrm = outDiags[2].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm2 = diagRaster.render()
+diagFrm2.show()
+diagFrms2 = BGRFrames.from_frame(diagFrm2, STATIC_FRAMES)
+all_frames.append(diagFrms2)
+script_lines.append(script_line)
+
+script_line =   """
+                    A serve that is returned from a deeper position is LESS likely to be a chip; ostensibly, from a deep return position, the returner has more time to set up for a topspin return.
+                """
+diagFrm = outDiags[3].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm3 = diagRaster.render()
+diagFrm3.show()
+diagFrms3 = BGRFrames.from_frame(diagFrm3, STATIC_FRAMES)
+all_frames.append(diagFrms3)
+script_lines.append(script_line)
+
+script_line =   """
+                    A wide serve is MORE likely TO be a chip than a serve down the middle.
+                """
+diagFrm = outDiags[4].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm4 = diagRaster.render()
+diagFrm4.show()
+diagFrms4 = BGRFrames.from_frame(diagFrm4, STATIC_FRAMES)
+all_frames.append(diagFrms4)
+script_lines.append(script_line)
+
+script_line =   """
+                    A fast serve is more likely to be chipped back than a slow serve...
+                """
+diagFrm = outDiags[5].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm5 = diagRaster.render()
+diagFrm5.show()
+diagFrms5 = BGRFrames.from_frame(diagFrm5, STATIC_FRAMES)
+all_frames.append(diagFrms5)
+script_lines.append(script_line)
+
+script_line =   """
+                    A kick serve is more likely to be returned with topspin than a flat serve...
+                """
+diagFrm = outDiags[6].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm6 = diagRaster.render()
+diagFrm6.show()
+diagFrms6 = BGRFrames.from_frame(diagFrm6, STATIC_FRAMES)
+all_frames.append(diagFrms6)
+script_lines.append(script_line)
+
+script_line =   """
+                    And, finally, a low-bouncing serve is more likely to be chipped back than a high-bouncing serve...
+                """
+diagFrm = outDiags[7].render()
+diagRaster.add(diagFrm, 1, 1)
+diagFrm7 = diagRaster.render()
+diagFrm7.show()
+diagFrms7 = BGRFrames.from_frame(diagFrm7, STATIC_FRAMES)
+all_frames.append(diagFrms7)
+script_lines.append(script_line)
+
+script_line =   """
+                    So, how is this propensity model useful in differentiating between chips that are forced and chips that are done by choice?
+                """
+all_frames.append(diagFrms7)
+script_lines.append(script_line)
+
+
+num_frames = 5
+reversed_frame_list = [ diagFrms7[:num_frames], diagFrms6[:num_frames], diagFrms5[:num_frames], diagFrms4[:num_frames], 
+                        diagFrms3[:num_frames], diagFrms2[:num_frames], diagFrms1[:num_frames], diagFrms0[:num_frames]]
+
+for myFrms in reversed_frame_list:
+    all_frames.append(myFrms)
+    script_lines.append("")
+
+script_line = ""
+revFrms = BGRFrames.from_frames(reversed_frame_list)
+
+script_line = "Recall that the propensity score represents the estimated probability of chipping the ball back."
+stillFrms = BGRFrames.from_frame(revFrms[-1], STATIC_FRAMES)
+all_frames.append(stillFrms)
+script_lines.append(script_line)
 
 ##############################
 ### NUMBER LINE PROPENSITY ###
@@ -408,75 +630,59 @@ relative_thickness = 0.1
 resolution = 10
 num_frames = 25
 
-def region_to_line_to_arrow(myReg, annPnt, relative_line_thickness = 0.1, relative_line_length = 1.1,
-                            resolution = 10, num_frames = 25, ann_right_px = 100, ann_left_px = 60, ann_vert_px = 20):
+transFrms, arrFrms0, arrFrms1, arrFrms2 = vis_ut.region_to_line_to_arrow(myReg, annPnt, outDiag, relative_line_thickness = 0.02, relative_line_length = 0.9,
+                                            resolution = 10, num_frames = 25, ann_right_px = -45, ann_left_px = 0, ann_vert_px = 15)
 
-    p1, p2, p3, p4 = myReg.p1, myReg.p2, myReg.p3, myReg.p4
-    h = myReg['Left'].length()
-    w = myReg['Bottom'].length()
 
-    line_thickness = relative_line_thickness * h
-    line_length = relative_line_length * w
+myRst = FramesRaster(3, 3)
+myRst.add(transFrms, 1, 1)
+transFrms_rast = myRst.render()
 
-    vert_px = (h - line_thickness) / 2
-    hori_px = (line_length - w) / 2
+script_line = ""
+all_frames.append(transFrms_rast)
+script_lines.append(script_line)
 
-    q1 = p1.back(vert_px).left(hori_px)
-    q2 = p2.back(vert_px).right(hori_px)
-    q3 = p3.front(vert_px).left(hori_px)
-    q4 = p4.front(vert_px).right(hori_px)
-    thinReg = Region3D.from_points3D(q1, q2, q3, q4, color = myReg.color)
-    thinReg = thinReg.front(h / 2)
+myRst.add(arrFrms0, 1, 1)
+transFrms_rast = myRst.render()
 
-    startScn = Scene([myReg])
-    endScn = Scene([thinReg])
+script_line = ""
+all_frames.append(transFrms_rast)
+script_lines.append(script_line)
 
-    itpl_scenes = vs.interpolate_scenes(startScn, endScn, num_frames)
 
-    myFrms, animDict = vs.animate_sequence(itpl_scenes, annotated_points = [annPnt], start_cam = outDiag.tabCam, stop_cam = outDiag.tabCam,
-                                            argument_resolution = resolution)
-    
-    startFrms = BGRFrames.from_frame(myFrms[0], num_frames)
-        
-    ### turn thinReg into an arrow
-    leftPt = thinReg['Left'].center_point()
-    rightPt = thinReg['Right'].center_point()
+myRst = FrameRaster(3, 3)
+myRst.add(arrFrms1[0], 1, 1)
+staticFrm_rast = myRst.render()
+staticFrms_rast = BGRFrames.from_frame(staticFrm_rast, STATIC_FRAMES)
 
-    thinArr = Arrow.make(leftPt, rightPt, hat_length = 10, color = thinReg.color, alpha = thinReg.alpha, thickness = line_thickness)
-    startPt, endPt = thinArr.start_point(), thinArr.end_point()
-    
-    ### annotation points
-    annPnt_left_text = startPt.annotate('Choice Chip').front(ann_vert_px).left(ann_left_px).recolor(annPnt.color).rethicken(2)
-    annPnt_left_number = startPt.annotate('0').left(10).back(5).recolor(annPnt.color).resize(2).rethicken(2)
+script_line =   """
+                    Take any given return on which a chip was observed. 
+                    If the PSM predicts a high propensity to chip, then it effectively believes that there was no way 
+                    that specific serve could have been returned with topspin; it is a forced chip return.
+                    
+                    In fact, the eight returns we just saw are the eight highest propensity returns in our sample.    
+                """
+all_frames.append(staticFrms_rast)
+script_lines.append(script_line)
 
-    annPnt_right_text = endPt.annotate('Forced Chip').front(ann_vert_px).right(ann_right_px).recolor(annPnt.color).rethicken(2)
-    annPnt_right_number = endPt.annotate('1').right(2).back(5).recolor(annPnt.color).resize(2).rethicken(2)
 
-    ### make the scenes
-    arrScn = Scene([thinArr])
+myRst = FrameRaster(3, 3)
+myRst.add(arrFrms2[0], 1, 1)
+staticFrm_rast = myRst.render()
+staticFrms_rast = BGRFrames.from_frame(staticFrm_rast, STATIC_FRAMES)
 
-    arrView = View.make(outDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number], resolution = resolution)
-    arrFrm = arrView.snap()
-    arrFrms = BGRFrames.from_frame(arrFrm, num_frames)
+script_line =   """
+                    on the other hand, on a low propensity chipped return, the model believes that playing a chip in such a situation is very unlikely 
+                    in most cases, the returner would have opted for a topspin return.
+                    therefore, a chipped return in such a low propensity situation expresses the returner's strong choice to chip the ball back.
+                    To illuminate this, consider the 8 lowest propensity chipped returns.
+                """
+all_frames.append(staticFrms_rast)
+script_lines.append(script_line)
 
-    arrView2 = View.make(outDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number, annPnt_right_text], resolution = resolution)
-    arrFrm2 = arrView2.snap()
-    arrFrms2 = BGRFrames.from_frame(arrFrm2, num_frames)
 
-    ### annotation left -> low propensity
-    arrView3 = View.make(outDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number, annPnt_right_text, annPnt_left_text], resolution = resolution)
-    arrFrm3 = arrView3.snap()
-    arrFrms3 = BGRFrames.from_frame(arrFrm3, num_frames)
-    
-    ### join all
-    jntFrms = BGRFrames.from_frames([startFrms, myFrms, arrFrms, arrFrms2, arrFrms3])
-    return jntFrms
-
-transFrms = region_to_line_to_arrow(myReg, annPnt, relative_line_thickness = 0.02, relative_line_length = 0.9,
-                                    resolution = 10, num_frames = 25, ann_right_px = -45, ann_left_px = 0, ann_vert_px = 15)
-
-DecapStream(transFrms, 0, 100).show()
-transFrms[-1].show()
+jntFrms = BGRFrames.from_frames(all_frames)
+DecapStream(jntFrms, 0, 100).show()
 
 ### Propensity Wording:
 # To be able to differentiate between forced chips and choice chips, we employ a technique called PSM
@@ -491,50 +697,204 @@ transFrms[-1].show()
 # (maybe show a continuum line: low propensity -> choice; high propensity -> forced)
 # To illuminate this, consider the 8 lowest propensity chipped returns.
 
-transFrm = transFrms[-1]
+
+stillFrm = arrFrms2[-1]
 propRst = baseRst.deepcopy()
-propRst.add(transFrm, 1, 1)
+propRst.add(stillFrm, 1, 1)
 
 finalRst, cascFrms = frame_cascade(low_pred_exFrms, propRst)
-DecapStream(cascFrms, 0, 100).show() 
 
-cascFrms[-1].show()
+script_line = ""
+all_frames.append(cascFrms)
+script_lines.append(script_lines)
 
-# on these returns, the PSM believes that the returner could very well have played a topspin return; instead, the returner opted for a chipped return.
-# In this sense, the PSM expresses choice. 
-# We can now use these propensities to focus on chipped returns where the returner actually had a choice, 
-# and thereby attempt to assess the quality of this choice.
+script_line =   """
+                On these returns, it does indeed seem that the returning player did indeed choose to chip the ball back, 
+                where he could very well have played a topspin return.
+
+                We can now use these propensities to focus on chipped returns where the returner actually had a choice, and thereby assess the quality of this choice.
+                """
+cascFrms = BGRFrames.from_frame(cascFrms[-1], STATIC_FRAMES)
+all_frames.append(cascFrms)
+script_lines.append(script_line)
+
 
 # (show table with choice returns)
 
+script_line = ""
 revRst, revFrms = reverse_cascade(finalRst, keep_which = [(1, 1)], acceleration = 1.15)
-DecapStream(revFrms, 0, 100).show()
-revFrms[-1].show()
+all_frames.append(revFrms)
+script_lines.append(script_line)
 
+script_line = ""
 emptyFrm = revFrms[-1].zero()
-emptyFrm.show()
+emptyFrms = BGRFrames.from_frame(emptyFrm, 0)
+all_frames.append(emptyFrms)
+script_lines.append(script_line)
 
-baseRst = FramesRaster(3, 3)
-baseRst.add(basic_naive_table.render(), 1, 1)
-baseRst.render()[0].show()
+jntFrms = BGRFrames.from_frames(all_frames)
+DecapStream(jntFrms, 0, 100).show()
 
-baseRst = FramesRaster(3, 3)
-baseRst.add(basic_smart_table.render(), 1, 1)
-baseRst.render()[0].show()
+tabRst = FrameRaster(3, 3)
 
-### still pretty underwhelming for the chipped return: choice chipped returns fare only moderately better.
-### we try to understand why.
+tabRst.add(initial_naive_table.render(), 1, 1)
+tabFrm = tabRst.render()
+tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
 
-# (split -> make% and cond%)
+script_line =   """
+                    As we saw earlier, the probability to win a point following a chipped return is 21.8%. 
+                    If we concentrate on choice chips, we expect that probability to increase, since we discount
+                    those serves that are returned on the stretch, under great difficulty.
+                """
+all_frames.append(tabFrms)
+script_lines.append(script_line)
 
-baseRst = FramesRaster(3, 3)
-baseRst.add(make_smart_table.render(), 1, 1)
-baseRst.render()[0].show()
+tabRst.add(smart_table.render(), 1, 1)
+tabFrm = tabRst.render()
+tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
 
-baseRst = FramesRaster(3, 3)
-baseRst.add(cond_smart_table.render(), 1, 1)
-baseRst.render()[0].show()
+script_line =   """
+                    When concentrating on choice returns, the probability does indeed increase; 
+                    however, it only increases by less than 3%, to 24.5%.  
+                """
+all_frames.append(tabFrms)
+script_lines.append(script_line)
 
-### TODO: DecapStream(low_pred_exFrms[-1], 0, 100).show(ms_between_frames = 50) ### is this a let?
-### TODO: Staggering model influences.
-### TODO: fix dots at end of arrows
+script_line =   """
+                    However, even after adjusting for choice chips, the data is not yet ready to reveal a true, unbiased picture
+                    of return win probabilities. 
+
+                    Why? Well, in a perfect world, we'd ask each player to hit 100 serves to each other player in our sample.
+                    This way, we'd observe equally many serves and returns for each single player.
+                    However, our data generating process are actual tennis matches. In these, what happens is that we observe more returns from the better player.
+                    
+                    To illuminate why, imagine player A has a great serve and average return; player B has an average return and serve. 
+                    We expect player A to hold faster (due to his strong serve), and therefore play relatively fewer points on serve and relatively more on the return.
+                    
+                    Similarly, if A had a great return and an average serve, we'd expect him to hang in for longer in return games, 
+                    thus playing rel. more points on return, again.
+
+                    Yet another way to show this is to look at what happens to win% if rallys go on for long. 
+                    When a point goes on for a long time, the impact of the serve and return is nullified.
+                    If both players were equally matched, we'd expect the win probability on long points to be at 50%.
+
+                    So let us take a look at the returner's win probability given the length of rallys.
+                """
+all_frames.append(tabFrms)
+script_lines.append(script_line)
+
+from ATMANpy.types.Overlays import BarChart, ScatterChart, Graph
+half_line_xs = np.arange(0, 5, 0.1)
+half_line_ys = np.full_like(half_line_xs, fill_value = 0.5)
+
+barChart = BarChart([1, 2, 3, 4], [m1, m2, m3, m4], color = const.BGR['ball_yellow'], external_gap = 0.4, x_labels = ['2-4', '5-6', '7-8', '> 8'], 
+                    annotate_bar_heights = True)
+halfChart = ScatterChart(half_line_xs, half_line_ys, color = const.BGR['intense_red'])
+
+label_format = ' >3.0%'
+myGraph = Graph([barChart, halfChart], offset = 0.35,
+                y_label = 'Ret. Win %', y_label_format = label_format, y_label_dist = 1.25, header_text = '', graph_height = 20,
+                make_default_x_labels = False, x_tick_label_left_shift = 0.5, x_label = 'Length of Rally', x_label_left_shift = 1.5, x_label_dist = 0.7)
+# myGraph.render().show()
+
+newPnt = annotatedPnts[7]
+newPnt = newPnt.retext('50%').recolor(const.BGR['intense_red']).right(7).back(0.45)
+annotatedPnts.append(newPnt)
+
+for idx, pnt in enumerate(annotatedPnts):
+    print(idx, pnt.text)
+
+annotatedPnts_start = [pnt for idx, pnt in enumerate(annotatedPnts) if idx not in [6, 7, 8, 9]]
+
+graphScn, annotatedPnts = myGraph.preview()
+
+g1, g2, g3, g4 = graphScn[2], graphScn[3], graphScn[4], graphScn[5]
+
+def make_null_region(reg):
+    h = reg['Left'].length()
+    t1, t2 = reg['Top'].leftPt, reg['Top'].rightPt
+    b1, b2 = reg['Bottom'].leftPt, reg['Bottom'].rightPt
+
+    return Region3D.from_points3D(b1, t1.back(h), t2.back(h), b2)
+
+g1_null, g2_null, g3_null, g4_null = make_null_region(g1), make_null_region(g2), make_null_region(g3), make_null_region(g4) 
+
+graphScn_null = Scene([graphScn[0], graphScn[1], g1_null, g2_null, g3_null, g4_null, graphScn[6]])
+
+graphScns_itpl = vs.interpolate_scenes(graphScn_null, graphScn, num_frames = TRANSITION_FRAMES)
+
+myFrms, _ = vs.animate_sequence(graphScns_itpl, start_cam = myGraph.cam, stop_cam = myGraph.cam,
+                                annotated_points = annotatedPnts_start, argument_resolution = 10)
+
+DecapStream(myFrms, 0, 100).show()
+
+script_line = ""
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+myFrms, _ = vs.animate_static(graphScns_itpl[-1], static_cam = myGraph.cam, annotated_points = annotatedPnts, argument_resolution = 10)
+
+script_line =  """
+                    However, what we observe is that the return player has greater win probability in long rallys, 
+                    indicating that the better player indeed plays more returns in a match, simply due to the nature of tennis scoring.
+
+                    to remove this bias, and approximate the experimental setting, 
+                    we introduce a balancing factor that gives more weight to returns made by the player that made fewer returns (ostensibly, the weaker player).
+                """
+
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    The balance adjustment does not greatly impact either win percentage beyond a slight reduction; which is to be expected, since we're
+                    counteracting the impact of the better player being on return more often solely by virtue of the data generating process.
+                """
+
+tabFrm = smart_bal_table.render()
+r_t, c_t = tabFrm.rows, tabFrm.cols
+r_f, c_f = blankFrm.rows, blankFrm.cols
+
+r_d, c_d = (r_f - r_t) // 2, (c_f - c_t) // 2
+
+from ATMANpy.types.Overlays import overlay
+ovrFrm = overlay(blankFrm, tabFrm, top_left_point = Point2D((c_d, r_d)))
+all_frames.append(ovrFrm)
+script_lines.append(script_line)
+
+script_line =   """
+                    Another adjustment we have to undertake is connected to something we have just mentioned. 
+                    The longer a rally goes on, the less the serve and the return matter to the outcome of the point.
+                    Therefore, the longer a rally goes on, the less we ought to attribute whether a point has been won or lost 
+                    to the quality of the serve and the return. 
+                    If the rally goes on for ever, we don't credit the return with winning the rally, 
+                    but only with neutralizing the serve and bringing the probability of winning the point to 50%.
+                """
+all_frames.append(ovrFrm)
+script_lines.append(script_line)
+
+script_line =   """
+                    After the attribution adjustment, chipped returns gain around 5% in win probability, whereas the topspin return is slightly reduced.
+
+                    Why there's an increase for chips and none for topspin returns is unclear to me.
+
+                    A decomposition reveals that the increase in the chip return win rate after attribution adjustment derives mostly from the shorter points,
+                    with rally lengths smaller than 6. 
+                    For these rally lengths, a relatively greater part of the returner's success is attributed to the quality of his return.
+                    
+                    also, the attribution adjustment has less of an impact on all chipped returns, versus choice chips -> maybe an interaction?
+                """
+
+tabFrm = smart_bal_len_table.render()
+r_t, c_t = tabFrm.rows, tabFrm.cols
+r_f, c_f = blankFrm.rows, blankFrm.cols
+
+r_d, c_d = (r_f - r_t) // 2, (c_f - c_t) // 2
+
+from ATMANpy.types.Overlays import overlay
+ovrFrm = overlay(blankFrm, tabFrm, top_left_point = Point2D((c_d, r_d)))
+all_frames.append(ovrFrm)
+script_lines.append(script_line)
+
+
+
