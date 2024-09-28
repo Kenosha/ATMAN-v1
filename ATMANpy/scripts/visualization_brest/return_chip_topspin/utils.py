@@ -434,7 +434,7 @@ def calculate_rally_lengths(regFrm):
     return tops_naive, chips_naive, chips_smart
 
 def uniform_kdes_for_rally_length(regFrm, normalize_density = False, bandwidth = 0.5):
-    from ATMANpy.types.Overlays import Graph, Chart
+    from ATMANpy.types.Overlays import Graph, LineChart
     import ATMANpy.funcs.vis_funcs as vs
 
     space = np.arange(2, 21, step = 1)
@@ -448,15 +448,15 @@ def uniform_kdes_for_rally_length(regFrm, normalize_density = False, bandwidth =
     chip_naive_kde = vs.uniform1D(values, space, weightArr = chip_weight_arr, bandwidth = bandwidth, normalize_density = normalize_density)
     chip_smart_kde = vs.uniform1D(values, space, weightArr = chip_weight_arr_smart, bandwidth = bandwidth, normalize_density = normalize_density)
 
-    topsChart = Chart(space, tops_kde, color = TOPS_COLOR)
-    chipChart_naive =  Chart(space, chip_naive_kde, color = CHIP_COLOR)
-    chipChart_smart =  Chart(space, chip_smart_kde, color = CHIP_COLOR)
+    topsChart = LineChart(space, tops_kde, color = TOPS_COLOR)
+    chipChart_naive =  LineChart(space, chip_naive_kde, color = CHIP_COLOR)
+    chipChart_smart =  LineChart(space, chip_smart_kde, color = CHIP_COLOR)
     
     naiveGraph = Graph([topsChart, chipChart_naive], as_density = True)
     smartGraph = Graph([topsChart, chipChart_smart], as_density = True)
     return naiveGraph, smartGraph
 
-def chip_topspin_return_avgs_by_length(regFrm):
+def chip_topspin_return_avgs_by_length(regFrm, decay_rate = 0.75):
         
     myFrm = regFrm.copy()
 
@@ -487,7 +487,7 @@ def chip_topspin_return_avgs_by_length(regFrm):
     shrFrm.columns = ['chip_naive', 'chip_smart', 'tops']
 
     ### Decayed Averages
-    decay_lambda = 0.75 ** (avgFrm.index - 2)
+    decay_lambda = decay_rate ** (avgFrm.index - 2)
     decay_arr = decay_lambda.values[:, np.newaxis]
     avgFrm_decayed = avgFrm * decay_arr + 0.5 * (1 - decay_arr)
 
@@ -505,7 +505,7 @@ def chip_topspin_return_avgs_by_length(regFrm):
     diffFrm_top.columns = ['normal', 'decayed']
     diffFrm_top['diff'] = diffFrm_top['decayed'] - diffFrm_top['normal']
 
-    return jntFrm, shrFrm, diffFrm_chip, diffFrm_top
+    return jntFrm, jntFrm_decayed, shrFrm, diffFrm_chip, diffFrm_top
 
 def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75):
     
@@ -828,3 +828,113 @@ def get_field_array_from_predictions(glmReg, regressor_frame, relative_to = 0.5,
     colArr = contourArr[:, np.newaxis] * np.array(color)[np.newaxis, :]
     alArr = contourArr[:, np.newaxis].astype(int)
     return colArr, alArr
+
+
+def model_to_diagram(fitted_model, renameDict = None, model_name = 'Propensity to Chip',
+                     max_line_thickness = 5, min_line_thickness = 0.1, resolution = 10, render_height = 1500, 
+                     shape_color = const.BGR['strong_blue'], text_color = const.BGR['smokey_grey']):
+        
+    from ATMANpy.types.Overlays import Diagram
+    from ATMANpy.types.ShapesTennis3D import Arrow
+
+    ### collect relevant fitted parameters
+    bSer, pSer = fitted_model.params, fitted_model.pvalues    
+    pSer_sorted = pSer.sort_values()
+    pSer_log = np.log10(1 / pSer_sorted)
+    pSer_normed = (pSer_log / pSer_log.max())
+    thickSer = pSer_normed * max_line_thickness
+    thickSer = thickSer.clip(lower = min_line_thickness)
+    positiveSer = bSer > 0
+
+    ### initialize diagram
+    regressor_keys = pSer_sorted.index.to_list()
+    regressor_names = [renameDict[key] for key in regressor_keys if key in renameDict]
+    myDiag = Diagram([regressor_names, [], [model_name]], resolution = resolution, text_skip_after_how_many_symbols = 3,
+                     shape_color = shape_color, shape_offset = 0.05, text_color = text_color, arrow_hat_length = 10, 
+                     dimensions = (640, 360), render_height = render_height)
+
+    inverted_renameDict = {v: k for k, v in renameDict.items()}
+
+    for idx, name in enumerate(regressor_names):
+        key = inverted_renameDict[name]
+
+        arrow_thickness, is_positive = thickSer[key], positiveSer[key]
+        if is_positive:
+            arrow_color = const.BGR['leafy_green']
+        else:
+            arrow_color = const.BGR['intense_red']
+
+        shape, arrow = myDiag[0, idx]
+        remade_arrow = arrow.recolor(arrow_color).resize(arrow_thickness)
+        myDiag[0, idx] = shape, remade_arrow
+
+    return myDiag
+
+
+def region_to_line_to_arrow(myReg, annPnt, myDiag, relative_line_thickness = 0.1, relative_line_length = 1.1,
+                            resolution = 10, num_frames = 25, ann_right_px = 100, ann_left_px = 60, ann_vert_px = 20):
+    
+    from ATMANpy.types.Overlays import Diagram
+    from ATMANpy.types.ShapesTennis3D import Arrow
+    from ATMANpy.types.Shapes3D import Region3D
+    from ATMANpy.types.Visual3D import Scene, View
+    from ATMANpy.types.MultiFrames import BGRFrames
+    import ATMANpy.funcs.vis_funcs as vs
+    
+    p1, p2, p3, p4 = myReg.p1, myReg.p2, myReg.p3, myReg.p4
+    h = myReg['Left'].length()
+    w = myReg['Bottom'].length()
+
+    line_thickness = relative_line_thickness * h
+    line_length = relative_line_length * w
+
+    vert_px = (h - line_thickness) / 2
+    hori_px = (line_length - w) / 2
+
+    q1 = p1.back(vert_px).left(hori_px)
+    q2 = p2.back(vert_px).right(hori_px)
+    q3 = p3.front(vert_px).left(hori_px)
+    q4 = p4.front(vert_px).right(hori_px)
+    thinReg = Region3D.from_points3D(q1, q2, q3, q4, color = myReg.color)
+    thinReg = thinReg.front(h / 2)
+
+    startScn = Scene([myReg])
+    endScn = Scene([thinReg])
+
+    itpl_scenes = vs.interpolate_scenes(startScn, endScn, num_frames)
+
+    myFrms, animDict = vs.animate_sequence(itpl_scenes, annotated_points = [annPnt], start_cam = myDiag.tabCam, stop_cam = myDiag.tabCam,
+                                            argument_resolution = resolution)
+        
+    ### turn thinReg into an arrow
+    leftPt = thinReg['Left'].center_point()
+    rightPt = thinReg['Right'].center_point()
+
+    thinArr = Arrow.make(leftPt, rightPt, hat_length = 10, color = thinReg.color, alpha = thinReg.alpha, thickness = line_thickness)
+    startPt, endPt = thinArr.start_point(), thinArr.end_point()
+    
+    ### annotation points
+    annPnt_left_text = startPt.annotate('Choice Chip').front(ann_vert_px).left(ann_left_px).recolor(annPnt.color).rethicken(2)
+    annPnt_left_number = startPt.annotate('0').left(10).back(5).recolor(annPnt.color).resize(2).rethicken(2)
+
+    annPnt_right_text = endPt.annotate('Forced Chip').front(ann_vert_px).right(ann_right_px).recolor(annPnt.color).rethicken(2)
+    annPnt_right_number = endPt.annotate('1').right(2).back(5).recolor(annPnt.color).resize(2).rethicken(2)
+
+    ### make the scenes
+    arrScn = Scene([thinArr])
+
+    arrView = View.make(myDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number], resolution = resolution)
+    arrFrm = arrView.snap()
+    arrFrms = BGRFrames.from_frame(arrFrm, num_frames)
+
+    arrView2 = View.make(myDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number, annPnt_right_text], resolution = resolution)
+    arrFrm2 = arrView2.snap()
+    arrFrms2 = BGRFrames.from_frame(arrFrm2, num_frames)
+
+    ### annotation left -> low propensity
+    arrView3 = View.make(myDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number, annPnt_right_text, annPnt_left_text], resolution = resolution)
+    arrFrm3 = arrView3.snap()
+    arrFrms3 = BGRFrames.from_frame(arrFrm3, num_frames)
+    
+    ### join all
+    return myFrms, arrFrms, arrFrms2, arrFrms3
