@@ -200,7 +200,10 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
     argument_annotated_points_dimmed = [p.dim(1 / argument_luminosity) for p in annotated_points] ### this passes into the next_animation_dictionary
     annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
 
-    cams = interpolate_func(start_cam, stop_cam, num_frames) 
+    if start_cam == stop_cam:
+        cams = [start_cam for _ in range(num_frames)]
+    else:
+        cams = interpolate_func(start_cam, stop_cam, num_frames) 
 
     frameList = []
     for idx in range(num_frames):
