@@ -820,6 +820,48 @@ class Shot:
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
     
+    def get_optimal_repositioning_position(self, courtLines = None,
+                                           reposition_to_meters_behind_baseline = 1, shot_is_met_at_meters_behind_baseline = 1):
+        ### calculate the optimal point for the hitting player to move to after the shot has been made
+
+        ### get two court halves
+        if courtLines is None:
+            courtLines = CourtLines.make().add_singles_netline()
+        botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+        topReg = courtLines.get_half_region(side = 'Top', width = 'Singles')
+
+        flyLn = self.get_flight_line()
+
+        # calculate, in points, how far behind the respective baselines the shots are expected to be made.
+        pt_shift_repos = reposition_to_meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
+        pt_shift_hit = shot_is_met_at_meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
+
+        ### The line through which point neatly divides the court to cover into two parts?
+        # using the center of the opposite service line basically assumes that 
+        # the best angle shot the opponent can hit bounces at the intersection of the service line and the side line.
+        if self.get_hit_side() == 'Top':
+            from ATMANpy.auxil.court import top_srv_cnt_2D
+            cntPt = top_srv_cnt_2D
+        elif self.get_hit_side() == 'Bot':
+            from ATMANpy.auxil.court import bot_srv_cnt_2D
+            cntPt = bot_srv_cnt_2D
+            
+        if self.get_hit_side() == 'Top':
+            ownLn = topReg['Top'].up(pt_shift_repos)
+            metLn = botReg['Bottom'].down(pt_shift_hit)
+        elif self.get_hit_side() == 'Bot':
+            ownLn = botReg['Bottom'].down(pt_shift_repos)
+            metLn = topReg['Top'].up(pt_shift_hit)
+        
+        ### calculate where the opposing player will meet the shot.
+        intPt = flyLn.weak_intersect(metLn)
+
+        ### the optimal point is opposite the intersection of the incoming ball's flight with the shifted baseline, on the original player's side.
+        mirrorLn = Line(intPt, cntPt)
+        optPt = mirrorLn.weak_intersect(ownLn)
+        
+        return optPt
+    
     def get_point_score(self):
         if self.is_by_server():
             return self.hitPlayer.get_point_score(), self.recPlayer.get_point_score()

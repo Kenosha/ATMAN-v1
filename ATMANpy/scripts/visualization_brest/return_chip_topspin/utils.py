@@ -174,40 +174,12 @@ def get_ret_dist_to_bh(myPnt):
     dist_in_meters = dist / const.SCALE * const.FOOT_TO_METER
     return dist_in_meters
 
-def get_ret_dist_to_opt(myPnt, meters_behind_baseline = 2):
+def get_ret_dist_to_opt(myPnt, meter_behind_baseline = 2):
     ### calculate the distance of the returning player to the optimal position to be in for the shot after the return.
+    ### TODO: work this into a bona fide Shot method
     retShot = myPnt.get_return()
-    retLn = retShot.get_flight_line()
-
-    pt_shift = meters_behind_baseline * const.SCALE * const.METER_TO_FOOT
-
-    server_side = myPnt.get_serve().get_hit_side()
-
-    ### The line through which point neatly divides the court to cover into two parts?
-    # using the center of the opposite service line basically assumes that 
-    # the best angle shot the opponent can hit bounces at the intersection of the service line and the side line.
-    if server_side == 'Bot':
-        from ATMANpy.auxil.court import top_srv_cnt_2D
-        cntPt = top_srv_cnt_2D
-    elif server_side == 'Top':
-        from ATMANpy.auxil.court import bot_srv_cnt_2D
-        cntPt = bot_srv_cnt_2D
-
-    if server_side == 'Bot':
-        srvLn = botReg['Bottom']
-        recLn = topReg['Top'].up(pt_shift)
-    elif server_side == 'Top':
-        srvLn = topReg['Top']
-        recLn = botReg['Bottom'].down(pt_shift)
-    
-    ### calculate where the server will meet the return. assumption: he meets it on the baseline
-    intPt = retLn.weak_intersect(srvLn)
-
-    ### the optimal point is opposite the intersection of the return's ball flight with the baseline on the server's side
-    mirrorLn = Line(intPt, cntPt)
-    
-    ### the optimal point is meters_behind_baseline -> the returner is not yet in offense, on average.
-    optPt = mirrorLn.weak_intersect(recLn)
+    optPt = retShot.get_optimal_repositioning_position(reposition_to_meters_behind_baseline = meter_behind_baseline, 
+                                                       shot_is_met_at_meters_behind_baseline = 0)
 
     ### now, check where the returner actually is, at the time of the return
     retPt = Point2D(retShot.get_player_hit_position())
