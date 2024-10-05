@@ -339,7 +339,7 @@ class Graph:
 
 class TableSkeleton:
     def __init__(self, rows, cols, 
-                 offset = 0,
+                 shrinkage = 0, horizontal_offset = 0, vertical_offset = 0, 
                  index_col_width = 1, header_row_height = 1, ### heights relative to the data columns, which are 1 and 1.
                  color = const.BGR['smokey_grey'],
                  vertical_lines = False, horizontal_lines = True,
@@ -365,7 +365,8 @@ class TableSkeleton:
         col_frac = Fraction(index_col_width / (index_col_width + cols - 1)).limit_denominator(100)
         
         ### Table Regions
-        tabReg = tabCam.approximate_fov(render_height).rescale(1 - offset)
+        tabReg = tabCam.approximate_fov(render_height)
+        tabReg = tabReg.rescale(1 - shrinkage).back(vertical_offset).right(horizontal_offset)
         headerReg, otherReg = tabReg.split(numerator = row_frac.numerator, denominator = row_frac.denominator, how = 'horizontal')
         rowRegs = [headerReg, *otherReg.subdivide(elements = rows - 1, how = 'horizontal').shapeList]
         
@@ -417,7 +418,8 @@ class Table:
     def __init__(self, table_data, 
                  title = None, title_size = 2, title_thickness = 1, title_color = const.BGR['leafy_green'],
                  title_horizontal_offset = 0, title_vertical_offset = 0,
-                 skeleton_offset = 0, header_offset = 0, index_offset = 0, data_offset = 0,
+                 skeleton_shrinkage = 0, skeleton_horizontal_offset = 0, skeleton_vertical_offset = 0,
+                 header_offset = 0, index_offset = 0, data_offset = 0,
                  index_col_width = 1, header_row_height = 1,
                  index_line_thickness = 0, header_line_thickness = 0, data_line_thickness = 0,
                  index_rename_dict = None, columns_rename_dict = None,
@@ -448,15 +450,14 @@ class Table:
         self.columns = columns
         self.data = [[col_val for col_val in row.values()] for row in table_data.values()]
 
-        tabSket = TableSkeleton(total_rows, total_cols, 
-                                offset = skeleton_offset, color = line_color, 
+        tabSket = TableSkeleton(total_rows, total_cols, color = line_color, 
+                                shrinkage = skeleton_shrinkage, horizontal_offset = skeleton_horizontal_offset, vertical_offset = skeleton_vertical_offset,
                                 vertical_lines = vertical_lines, horizontal_lines = horizontal_lines,
                                 index_col_width = index_col_width, header_row_height = header_row_height,
                                 index_line_thickness = index_line_thickness, header_line_thickness = header_line_thickness, data_line_thickness = data_line_thickness,
                                 truncate_horizontal_lines_by = null_columns, truncate_vertical_lines_by = null_rows,
                                 render_height = render_height, dimensions = dimensions, resolution = resolution)
         
-
         self.tabSket = tabSket
         self.tabCam = self.tabSket.tabCam
         self.resolution = resolution
