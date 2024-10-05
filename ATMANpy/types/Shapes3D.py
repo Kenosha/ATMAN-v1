@@ -15,7 +15,7 @@ from ATMANpy.types.Lines import Line, Lines, CourtLines
 
 import ATMANpy.auxil.constants as const
 
-from ATMANpy.funcs.util_funcs import get_updated_attribute_dictionary
+from ATMANpy.funcs.util_funcs import get_updated_attribute_dictionary, interpolate_tuples
 
 @dataclass(frozen = True)
 class Point3D:
@@ -143,8 +143,8 @@ class Point3D:
         return self.__class__(**newDict)
     
     def interpolate(self, otherPt, itpl_lambda = 0.5):
-        avg_coords = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.coords, otherPt.coords)])
-        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherPt.color)])
+        avg_coords = interpolate_tuples(self.coords, otherPt.coords, itpl_lambda = itpl_lambda)
+        avg_color = interpolate_tuples(self.color, otherPt.color, itpl_lambda = itpl_lambda)
         avg_alpha = self.alpha * (1 - itpl_lambda) + otherPt.alpha * itpl_lambda
         
         updDict = {'coords': avg_coords,
@@ -388,9 +388,9 @@ class Circle3D(Point3D):
     _DEFAULT_ALPHA = 1
     
     radius: float = 1
-    color: Optional[tuple] = _DEFAULT_COLOR
-    alpha: Optional[float] = _DEFAULT_ALPHA
-    limit_theta: Optional[tuple] = None
+    color: tuple = _DEFAULT_COLOR
+    alpha: float = _DEFAULT_ALPHA
+    limit_theta: tuple = None
     fixed_dimension: str = 'z' ### this is the dimension along which the circle is flat
     
     name: str = 'Circle3D'
@@ -407,6 +407,8 @@ class Circle3D(Point3D):
 
     @staticmethod
     def from_point3D(myPnt, radius = 1, limit_theta = None, fixed_dimension = 'z', name = 'Circle3D'):
+        if limit_theta is None:
+            limit_theta = (0, 2 * np.pi)
         return Circle3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
                         radius = radius, limit_theta = limit_theta, fixed_dimension = fixed_dimension,
                         name = name)
@@ -419,6 +421,21 @@ class Circle3D(Point3D):
     def get_point(self):
         return Point3D(self.coords)
     
+    def interpolate(self, otherCrc, itpl_lambda = 0.5):
+        assert self.fixed_dimension == otherCrc.fixed_dimension
+
+        selfPt, otherPt = self.get_point(), otherCrc.get_point()
+        itplPt = selfPt.interpolate(otherPt, itpl_lambda = 0.5)
+        itpl_coords = itplPt.coords
+
+        itpl_color = interpolate_tuples(self.color, otherCrc.color, itpl_lambda = itpl_lambda)
+        itpl_limit_theta = interpolate_tuples(self.limit_theta, otherCrc.limit_theta, itpl_lambda = itpl_lambda)
+        itpl_alpha = (1 - itpl_lambda) * self.alpha + itpl_lambda * otherCrc.alpha
+        itpl_radius = (1 - itpl_lambda) * self.radius + itpl_lambda * otherCrc.radius
+
+        return Circle3D(coords = itpl_coords, color = itpl_color, alpha = itpl_alpha,
+                        radius = itpl_radius, limit_theta = itpl_limit_theta)
+
     def rasterize(self, resolution):
         ### resolution: number of points on one arc length
         limit_theta = self.limit_theta
@@ -430,12 +447,9 @@ class Circle3D(Point3D):
         theta = np.linspace(0, 2 * np.pi, endpoint = False, num = num_points)
         
         ### filter out points that are outside the angle limits specified
-        ## -> this is how to create semicircles, circle sections, etc.
-        if limit_theta is not None:
-            lo, hi = limit_theta
-            theta_filter = (lo < theta) & (theta < hi)
-        else:
-            theta_filter = np.ones(num_points, dtype = 'bool')
+        ## -> this is how to create semicircles, circle sections, etc.    
+        lo, hi = limit_theta
+        theta_filter = (lo < theta) & (theta < hi)
         
         zeros_filtered = zeros[theta_filter]
         theta_filtered = theta[theta_filter]
@@ -707,7 +721,7 @@ class Line3D:
     def interpolate(self, otherLn, itpl_lambda = 0.5):
         avg_leftPt = self.leftPt.interpolate(otherLn.leftPt, itpl_lambda = itpl_lambda)
         avg_rightPt = self.rightPt.interpolate(otherLn.rightPt, itpl_lambda = itpl_lambda)
-        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherLn.color)])
+        avg_color = interpolate_tuples(self.color, otherLn.color, itpl_lambda = itpl_lambda)
         avg_alpha = self.alpha * (1 - itpl_lambda) + otherLn.alpha * itpl_lambda
         avg_thickness = round(self.thickness * (1 - itpl_lambda) + otherLn.thickness * itpl_lambda)
 
@@ -1065,7 +1079,7 @@ class Region3D():
 
     def interpolate(self, otherReg, itpl_lambda = 0.5):
         avg_lineList = [x.interpolate(y, itpl_lambda = itpl_lambda) for x, y in zip(self.lineList, otherReg.lineList)]
-        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherReg.color)])
+        avg_color = interpolate_tuples(self.color, otherReg.color, itpl_lambda = itpl_lambda)
         avg_alpha = self.alpha * (1 - itpl_lambda) + otherReg.alpha * itpl_lambda
         
         updDict = {'lineList': avg_lineList,
@@ -1277,7 +1291,7 @@ class Container3D:
     def interpolate(self, otherContainer, itpl_lambda = 0.5):
         assert len(self.shapeList) == len(otherContainer.shapeList)
         avg_shapeList = [x.interpolate(y, itpl_lambda = itpl_lambda) for x, y in zip(self, otherContainer)]
-        avg_color = tuple([x * (1 - itpl_lambda) + y * itpl_lambda for x, y in zip(self.color, otherContainer.color)])
+        avg_color = interpolate_tuples(self.color, otherContainer.color, itpl_lambda = itpl_lambda)
         avg_alpha = self.alpha * (1 - itpl_lambda) + otherContainer.alpha * itpl_lambda
         
         updDict = {'shapeList': avg_shapeList,
