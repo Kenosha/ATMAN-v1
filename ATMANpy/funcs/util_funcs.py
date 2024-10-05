@@ -420,3 +420,6 @@ def get_updated_attribute_dictionary(someObj, updDict):
     return {attr: maybe_update(attr) for attr in currDict if not attr.startswith('_')}
 
 
+def interpolate_tuples(aTup, bTup, itpl_lambda = 0.5):
+    itpl_func = lambda a, b: (1 - itpl_lambda) * a + itpl_lambda * b
+    return tuple([itpl_func(a, b) for a, b in zip(aTup, bTup)])
