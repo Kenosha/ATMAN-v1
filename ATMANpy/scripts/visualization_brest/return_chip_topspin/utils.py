@@ -91,6 +91,9 @@ def get_return_height(myPnt):
 def get_return_flight_time(myPnt, fps = 25):
     return myPnt.get_return().get_num_frames() / fps
 
+def get_return_flight_ground_length(myPnt, fps = 25):
+    return myPnt.get_return().get_flight_line().length() / const.SCALE * const.FOOT_TO_METER
+
 def get_distance_from_flight_line(myPnt):
     srvShot = myPnt.get_serve()
     retPnt = Point2D(srvShot.get_player_rec_position())
@@ -477,7 +480,7 @@ def chip_topspin_return_avgs_by_length(regFrm, decay_rate = 0.75):
     diffFrm_top.columns = ['normal', 'decayed']
     diffFrm_top['diff'] = diffFrm_top['decayed'] - diffFrm_top['normal']
 
-    return jntFrm, jntFrm_decayed, shrFrm, diffFrm_chip, diffFrm_top
+    return jntFrm, jntFrm_decayed, shrFrm, diffFrm_chip, diffFrm_top, avgFrm
 
 def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75):
     
@@ -494,6 +497,7 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     ### Return Shot characteristics
     regFrm['ret_speed'] = retPnts.apply(get_return_speed)
     regFrm['ret_spin'] = retPnts.apply(get_return_spin)
+    regFrm['ret_dist'] = retPnts.apply(get_return_flight_ground_length)
     regFrm['ret_time'] = retPnts.apply(get_return_flight_time, fps = 25)
 
     regFrm['serve_fore'] = retPnts.apply(is_serve_from_fore)
