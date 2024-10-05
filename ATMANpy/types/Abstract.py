@@ -170,6 +170,14 @@ class Trajectory:
     def get_num_frames(self):
         return len(self.get_frames())
     
+    def get_num_frames_until_bounce(self):
+        try:
+            first_bounce_idx = self.get_bounce_indices()[0]
+        except IndexError:
+            return None
+        else:
+            return first_bounce_idx
+    
     def get_hit_series(self):
         return self.trajFrm.iloc[0]
         
@@ -717,6 +725,9 @@ class Shot:
     
     def get_num_frames(self):
         return len(self.get_frames())
+    
+    def get_num_frames_until_bounce(self):
+        return self.shotTraj.get_num_frames_until_bounce()
 
     def get_events(self):
         return self.shotTraj.get_events()
