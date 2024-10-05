@@ -283,8 +283,16 @@ checkScn = DummyScene([rastArr_3D], [np.ones_like(rastArr_3D) * 255], [shareArr_
 View.make(myCam, checkScn).snap().show()
 
 ### SOME PARAMETERS
-CHIP_MODE_LO = 11.5
-CHIP_MODE_HI = 18.5 ### adapt these with reference to descriptive
+
+### adapt these with reference to descriptive
+MODE_CHIP_LO = 11.75
+MODE_CHIP_HI = 18.75 
+MODE_TOPS = 7.28
+DIST_CHIP_LO = 6.25
+DIST_CHIP_HI = 8.08
+DIST_TOPS = 3.33
+
+### rendering parameters
 ALPHA_EXPONENT = 0.5
 RENDER_ON_REAL = True
 LENIENCY = 0.05
@@ -357,9 +365,10 @@ regressors_base = pd.DataFrame(xDict)
 
 # these depend on the launch angle
 regressors_angle = {}
-for chip_name, chip_mode in {'lo': CHIP_MODE_LO, 'hi': CHIP_MODE_HI}.items():
+for chip_name, chip_mode in {'lo': MODE_CHIP_LO, 'hi': MODE_CHIP_HI}.items():
     xDict = {}
     xDict['launch_angle'] = np.ones(N) * chip_mode
+    xDict['ret_dist_to_bh_x_launch_angle'] = rel_rastArr[:, 0] * chip_mode
     xDict['ret_dist_to_bsl_x_launch_angle'] = rel_rastArr[:, 1] * chip_mode
     
     regressors_angle[chip_name] = pd.DataFrame(xDict)
@@ -392,12 +401,26 @@ for serve_case, dist in serve_dist_dict.items():
 
 # these depend on serve case AND angle
 regressors_angle_case = {}
-for chip_name, chip_mode in {'lo': CHIP_MODE_LO, 'hi': CHIP_MODE_HI}.items():
+for chip_name, chip_mode in {'lo': MODE_CHIP_LO, 'hi': MODE_CHIP_HI}.items():
     for serve_case, dist in serve_dist_dict.items():
         side, where = serve_case.split('_')
         xDict = {}
+        
         xDict['ret_dist_to_opt_x_launch_angle'] = dist * chip_mode
         xDict['ret_dist_to_opt_sq_x_launch_angle'] = (dist ** 2) * chip_mode
+
+        if side == 'deuce': ### Deuce side is 'forehand' side
+            xDict['ret_dist_to_bh_serve_fore_x_launch_angle'] = rel_rastArr[:, 0] * chip_mode
+            xDict['ret_dist_to_bh_serve_back_x_launch_angle'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_fore_sq_x_launch_angle'] = rel_rastArr[:, 0] ** 2 * chip_mode
+            xDict['ret_dist_to_bh_serve_back_sq_x_launch_angle'] = np.zeros(N)
+
+        if side == 'ad':
+            xDict['ret_dist_to_bh_serve_fore_x_launch_angle'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_x_launch_angle'] = rel_rastArr[:, 0] * chip_mode
+            xDict['ret_dist_to_bh_serve_fore_sq_x_launch_angle'] = np.zeros(N) 
+            xDict['ret_dist_to_bh_serve_back_sq_x_launch_angle'] = rel_rastArr[:, 0] ** 2 * chip_mode
+
         regressors_angle_case[chip_name + '_' + serve_case] = pd.DataFrame(xDict)
 
 ### Models we want to try out
@@ -456,12 +479,48 @@ regDict = {'dist_bsl_bh_side_sq_opt_sq_inter2_weighted':  ['is_chipped', 'ret_di
 regDict = {'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
                                                             'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
                                                             'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle'],
+                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
+                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle'],
         'dist_bsl_bh_side_sq_opt_sq_parab_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
                                                             'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
                                                             'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
                                                             'ret_dist_to_bh_serve_fore_bsl', 'ret_dist_to_bh_serve_back_bsl',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle']}
+                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
+                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle']}
+
+### try with bh_x_launch_angle interactions.
+regDict = {'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
+                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
+                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
+                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle'],
+        'dist_bsl_bh_side_sq_opt_sq_parab_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
+                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
+                                                            'ret_dist_to_bh_serve_fore_bsl', 'ret_dist_to_bh_serve_back_bsl',
+                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
+                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle']}
+
+### all variables, launch_angled
+regDict = {'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
+                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
+                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
+                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle',
+                                                            'ret_dist_to_bh_serve_fore_sq_x_launch_angle', 'ret_dist_to_bh_serve_back_sq_x_launch_angle'],
+        'dist_bsl_bh_side_sq_opt_sq_parab_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
+                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
+                                                            'ret_dist_to_bh_serve_fore_bsl', 'ret_dist_to_bh_serve_back_bsl',
+                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
+                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle',
+                                                            'ret_dist_to_bh_serve_fore_sq_x_launch_angle', 'ret_dist_to_bh_serve_back_sq_x_launch_angle']}
+
+
 
 ### Result Path
 project_results_path = get_folder_struct('results_video')['return_chip_topspin']
@@ -531,8 +590,8 @@ if SAVE_REGS:
                         chipFrm.save_as_png(reg_path, f'{angle}_{side}_{where}_map')
 
                         ### create the target zone
-                        colArr, alArr = vis_ut.get_contour_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
-                                                               factor_array = shareArr, epsilon = 0.001,
+                        colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
+                                                               factor_array = shareArr,
                                                                color = CHIP_COLOR)
 
                         rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
@@ -586,66 +645,142 @@ halfCam = myCam.resize(0.5)
 fhPt_annot_half = fhPt_annot.left(50).front(25)
 bhPt_annot_half = bhPt_annot.left(15).front(25)
 
-### Deuce-Wide
-angle, side, where = 'lo', 'deuce', 'wide'
-i, j = 0, 0
+combinations = [('lo', 'deuce', 'wide'), ('lo', 'deuce', 'middle'), ('lo', 'ad', 'wide'), ('lo', 'ad', 'middle')]
+locations = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
-regressor_frame = get_reg_frame(angle, side, where)
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
-                                                                alpha_exponent = ALPHA_EXPONENT)
-rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
+for combo, loc in zip(combinations, locations):
+    angle, side, where = combo
+    i, j = loc
 
-### Animate
-# a) spline scene
-realFrms = realDict[side + '_' + where]
-realFrms_resc = realFrms.rescale(0.5)
+    regressor_frame = get_reg_frame(angle, side, where)
+    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
+                                                                    alpha_exponent = ALPHA_EXPONENT)
+    rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
 
-myRst.add(realFrms_resc, i, j)
-rastFrms = myRst.render()
-all_frames.append(rastFrms)
+    ### Animate
+    # a) spline scene
+    realFrms = realDict[side + '_' + where]
+    realFrms_resc = realFrms.rescale(0.5)
 
-# b) still scene
-rastFrms = BGRFrames.from_frame(rastFrms[-1], STATIC_FRAMES)
-all_frames.append(rastFrms)
+    myRst.add(realFrms_resc, i, j)
+    rastFrms = myRst.render()
+    all_frames.append(rastFrms)
 
-# c) dim and fade in heatmap
-itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(0.5), num_frames = 50)
-itplScns = vs.interpolate_dummy_scenes(rastScn.transparify(0), rastScn, 50)
+    # b) still scene
+    rastFrms = BGRFrames.from_frame(rastFrms[-1], STATIC_FRAMES)
+    all_frames.append(rastFrms)
 
-myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict, animate_over = itplFrms)
+    # c) dim and fade in heatmap
+    itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(0.5), num_frames = TRANSITION_FRAMES)
+    itplScns = vs.interpolate_dummy_scenes(rastScn.transparify(0), rastScn, TRANSITION_FRAMES)
 
-myRst.add(myFrms, i, j)
-rastFrms = myRst.render()
-all_frames.append(rastFrms)
+    myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict, animate_over = itplFrms)
 
-# d) add in annotation points
-myFrms, _ = vs.animate_static(Scene([]), annotated_points = [fhPt_annot_half, bhPt_annot_half], num_frames = STATIC_FRAMES, static_cam = halfCam,
-                              animate_over = myFrms[-1])
-myRst.add(myFrms, i, j)
-rastFrms = myRst.render()
-all_frames.append(rastFrms)
+    myRst.add(myFrms, i, j)
+    rastFrms = myRst.render()
+    all_frames.append(rastFrms)
+
+    # d) add in annotation points
+    myFrms, _ = vs.animate_static(Scene([]), annotated_points = [fhPt_annot_half, bhPt_annot_half], num_frames = STATIC_FRAMES, static_cam = halfCam,
+                                animate_over = myFrms[-1])
+    myRst.add(myFrms, i, j)
+    rastFrms = myRst.render()
+    all_frames.append(rastFrms)
+
+### Show Reaching Distance for Server --> can he run around?
 
 
+### Fade in Target Areas
+trgRst = FramesRaster(2, 2)
+
+for combo, loc in zip(combinations, locations):
+    angle, side, where = combo
+    i, j = loc
+
+    realFrms = realDict[side + '_' + where]
+    realFrms_resc = realFrms.rescale(0.5)
+
+    regressor_frame = get_reg_frame(angle, side, where)
+    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
+                                                                    alpha_exponent = ALPHA_EXPONENT)
+    rastScn0 = DummyScene([rastArr_3D], [colArr], [alArr])
+
+    colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
+                                                            factor_array = shareArr, color = CHIP_COLOR)
+    rastScn1 = DummyScene([rastArr_3D], [colArr], [alArr])
+
+    itplScns = vs.interpolate_dummy_scenes(rastScn0, rastScn1, TRANSITION_FRAMES)    
+
+    myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict, animate_over = realFrms_resc[-1].dim(DIM_FACTOR),
+                                    annotated_points = [fhPt_annot_half, bhPt_annot_half])
+
+    trgRst.add(myFrms, i, j)
+
+trgFrms = trgRst.render()
+all_frames.append(trgFrms)
 
 jntFrms = BGRFrames.from_frames(all_frames)
 DecapStream(jntFrms, 0, 100).show()
 jntFrms[-1].show()
 
+########### TESTING ############
+
+distArr = regressors_case['ad_wide']['ret_dist_to_opt']
+realFrm = realDict['ad_wide'][-1]
+
+distArr_norm = (distArr - distArr.min()) / (distArr.max() - distArr.min())
+distArr_norm_brdcst = distArr_norm.values[:, np.newaxis]
+red, green = np.array(const.BGR['intense_red'])[np.newaxis, :], np.array(const.BGR['leafy_green'])[np.newaxis, :]
+
+colArr = distArr_norm_brdcst * red + (1 - distArr_norm_brdcst) * green
+alArr = np.ones_like(colArr[:, [0]])
+
+dummyScn = DummyScene([rastArr_3D], [colArr], [alArr])
+
+View.make(myCam, dummyScn).snap().show()
+
+distArr.min()
 
 
+srvArr_norm = (srvArr[:, 0] - srvArr[:, 0].min()) / (srvArr[:, 0].max() - srvArr[:, 0].min())
+srvArr_norm_brdcst = srvArr_norm[:, np.newaxis]
+colArr = srvArr_norm_brdcst * red + (1 - srvArr_norm_brdcst) * green
+alArr = np.ones_like(colArr[:, [0]])
 
-if RENDER_ON_REAL:
-    realFrm = realDict[side + '_' + where].dim(DIM_FACTOR)
-    chipFrm = kdeView.snap(over_array = realFrm.array.copy())
-else:
-    chipFrm = backView.combine(kdeView).combine(plyView).snap()
+dummyScn_srv_heat = DummyScene([rastArr_3D], [colArr], [alArr])
+
+View.make(myCam, dummyScn_srv_heat).snap().show()
+
+colArr = srvArr_norm_brdcst * red + (1 - srvArr_norm_brdcst) * green
+alArr = np.ones_like(colArr[:, [0]]) * ((srvArr_norm_brdcst > 0.49) & (srvArr_norm_brdcst < 0.51))
+
+dummyScn_srv_line = DummyScene([rastArr_3D], [colArr], [alArr])
+
+lineView_srv = View.make(myCam, dummyScn_srv_line)
+lineView_srv.snap(over_array = realFrm.array.copy()).show()
 
 
+recArr_norm = (recArr[:, 0] - recArr[:, 0].min()) / (recArr[:, 0].max() - recArr[:, 0].min())
+recArr_norm_brdcst = recArr_norm[:, np.newaxis]
+colArr = recArr_norm_brdcst * red + (1 - recArr_norm_brdcst) * green
+alArr = np.ones_like(colArr[:, [0]])
 
+dummyScn_rec_heat = DummyScene([rastArr_3D], [colArr], [alArr])
 
+View.make(myCam, dummyScn_rec_heat).snap().show()
 
+colArr = recArr_norm_brdcst * red + (1 - recArr_norm_brdcst) * green
+alArr = np.ones_like(colArr[:, [0]]) * ((recArr_norm_brdcst > 0.49) & (recArr_norm_brdcst < 0.51))
 
+dummyScn_rec_line = DummyScene([rastArr_3D], [colArr], [alArr])
 
+lineView_rec = View.make(myCam, dummyScn_rec_line)
+lineView_rec.snap(over_array = realFrm.array.copy()).show()
 
+ptArr = recArr[((recArr_norm_brdcst > 0.49) & (recArr_norm_brdcst < 0.51))[:, 0]]
+x, y = ptArr.mean(axis = 0)
+pt = Point3D((x, y, 0))
 
+ptView = View.make(myCam, Scene([pt]))
 
+lineView_rec.combine(ptView).snap(over_array = realFrm.array.copy()).show()
