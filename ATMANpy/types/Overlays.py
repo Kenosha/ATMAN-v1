@@ -16,11 +16,16 @@ from dataclasses import dataclass
 
 from fractions import Fraction
 
-def maybe_data_to_text(data_or_string, number_format):
+def maybe_data_to_text(data_or_string, number_format, target_len = None):
     if isinstance(data_or_string, str):
-        return data_or_string
+        myStr = data_or_string
     else:
-        return f'{data_or_string:{number_format}}'
+        myStr = f'{data_or_string:{number_format}}'
+
+    if target_len is None:
+        return myStr
+    else:
+        return f'{myStr:>{target_len}}'
 
 def make_region_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
     assert offset < 0.5
@@ -28,11 +33,11 @@ def make_region_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
     myReg = myReg.recolor(color)
     return myReg
 
-def make_text_in(subReg, data_or_string, 
+def make_text_in(subReg, data_or_string, target_len = None,
                  size = 1, thickness = 1, color = const.BGR['leafy_green'], 
                  horizontal_offset = 0, vertical_offset = 0, skip_after_how_many_symbols = None,
                  number_format = '.2f'):
-    textStr = maybe_data_to_text(data_or_string, number_format)
+    textStr = maybe_data_to_text(data_or_string, number_format, target_len = target_len)
 
     ### make word splits
     if skip_after_how_many_symbols is not None:
@@ -424,6 +429,7 @@ class Table:
                  index_line_thickness = 0, header_line_thickness = 0, data_line_thickness = 0,
                  index_rename_dict = None, columns_rename_dict = None,
                  null_rows = 0, null_columns = 0,
+                 data_right_adjust = False, ### only works if there are no lineskips in columns...
                  header_text_size = 1, index_text_size = 1, data_text_size = 1,
                  header_text_thickness = 1, index_text_thickness = 1, data_text_thickness = 1, 
                  header_text_color = const.BGR['leafy_green'], index_text_color = const.BGR['leafy_green'], data_text_color = const.BGR['leafy_green'],
@@ -465,6 +471,7 @@ class Table:
         self.header_offset = header_offset
         self.index_offset = index_offset
         self.data_offset = data_offset
+        self.data_right_adjust = data_right_adjust
         self.number_format = number_format
         self.skip_after_how_many_symbols = skip_after_how_many_symbols
 
@@ -533,8 +540,13 @@ class Table:
         ### render data:
         for i, row in enumerate(self.data):
             for j, text in enumerate(row):
+                if self.data_right_adjust:
+                    target_len = len(self.columns[j])
+                else:
+                    target_len = None
+
                 myReg = self.tabSket[i + 1, j + 1]
-                textPt = make_text_in(myReg, text, number_format = self.number_format, 
+                textPt = make_text_in(myReg, text, number_format = self.number_format, target_len = target_len,
                                       size = self.data_text_size, thickness = self.data_text_thickness, color = self.data_text_color,
                                       skip_after_how_many_symbols = self.skip_after_how_many_symbols,
                                       horizontal_offset = self.data_offset)
@@ -1201,10 +1213,29 @@ if __name__ == '__main__':
         myTab.render().show()
         
         myTab = Table(table_data, 
-                      skeleton_offset = 0.2, title = 'Some Title', title_horizontal_offset = 5,
+                      skeleton_shrinkage = 0.2, title = 'Some Title', title_horizontal_offset = 5,
                       number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 2.5,
                     null_columns = 2, header_line_thickness = 0.2)
         myTab.render().show()
+
+        chips_naive = {'Total Walala': np.random.random(), 'Make Waskdjh': np.random.random(), 'asd': np.random.random()} 
+        chips_smart = {'Total Walala': np.random.random(), 'Make Waskdjh': np.random.random(), 'asd': np.random.random()}
+        tops = {'Total Walala': np.random.random(), 'Make Waskdjh': np.random.random(), 'asd': np.random.random()}
+
+        table_data = {'Chipped Return': chips_naive, 'Chipped Return Choice': chips_smart, 'Topspin Return': tops}
+        myTab = Table(table_data, data_right_adjust = False,
+                      skeleton_shrinkage = 0.1, title = 'Some Title', title_horizontal_offset = 5,
+                      number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 1.5,
+                    null_columns = 0, header_line_thickness = 0.2)
+        myTab.render().show()
+        
+        table_data = {'Chipped Return': chips_naive, 'Chipped Return Choice': chips_smart, 'Topspin Return': tops}
+        myTab = Table(table_data, data_right_adjust = True,
+                      skeleton_shrinkage = 0.1, title = 'Some Title', title_horizontal_offset = 5,
+                      number_format = '.1%', skip_after_how_many_symbols = 15, index_offset = 0.25, index_col_width = 1.5,
+                    null_columns = 0, header_line_thickness = 0.2)
+        myTab.render().show()
+
 
     ########################
     #### RASTER TESTING ####
