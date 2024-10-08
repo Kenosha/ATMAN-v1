@@ -896,21 +896,12 @@ def region_to_line_to_arrow(myReg, annPnt, myDiag, relative_line_thickness = 0.1
     annPnt_right_text = endPt.annotate('Forced Chip').front(ann_vert_px).right(ann_right_px).recolor(annPnt.color).rethicken(2)
     annPnt_right_number = endPt.annotate('1').right(2).back(5).recolor(annPnt.color).resize(2).rethicken(2)
 
-    ### make the scenes
+    ### gather the return objects
     arrScn = Scene([thinArr])
-
-    arrView = View.make(myDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number], resolution = resolution)
-    arrFrm = arrView.snap()
-    arrFrms = BGRFrames.from_frame(arrFrm, num_frames)
-
-    arrView2 = View.make(myDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number, annPnt_right_text], resolution = resolution)
-    arrFrm2 = arrView2.snap()
-    arrFrms2 = BGRFrames.from_frame(arrFrm2, num_frames)
-
-    ### annotation left -> low propensity
-    arrView3 = View.make(myDiag.tabCam, arrScn, annotatedPoints = [annPnt, annPnt_left_number, annPnt_right_number, annPnt_right_text, annPnt_left_text], resolution = resolution)
-    arrFrm3 = arrView3.snap()
-    arrFrms3 = BGRFrames.from_frame(arrFrm3, num_frames)
-    
-    ### join all
-    return myFrms, arrFrms, arrFrms2, arrFrms3
+    arrCam = myDiag.tabCam
+    ptDict = {  'm_text': annPnt,
+                'l_num': annPnt_left_number,
+                'r_num': annPnt_right_number,
+                'l_text': annPnt_left_text,
+                'r_text': annPnt_right_text}
+    return myFrms, arrScn, arrCam, ptDict
