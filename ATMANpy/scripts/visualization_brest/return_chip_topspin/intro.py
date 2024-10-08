@@ -384,9 +384,12 @@ all_frames = []
 script_lines = []
 
 script_line =    """
-                    The chipped return is a return played with underspin like a slice, but typically (as we will see) with greater net clearance and lower speed
-                    than a slice employed in a rally. The chipped return is, on average, infrequently employed by choice; however, some highly successful players consistently use it
-                    as a tool to either neutralize the rally with a deep, floating chip, or draw the server into the court with a shallow, low-bouncing chip.
+                    The chipped return is a return played with underspin like a slice, 
+                    but typically (as we will see) with greater net clearance and lower speed than a slice employed in a rally. 
+                    
+                    The chipped return is, on average, infrequently employed by choice; 
+                    however, some highly successful players consistently use it as a tool 
+                    to either neutralize the rally with a deep, floating chip, or draw the server into the court with a shallow, low-bouncing chip.
 
                     In this analysis, we take a look at these chip return varieties, 
                     and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
@@ -401,7 +404,8 @@ script_line =   """
                     In our sample of 1487 first-serve points in which a return was observed (that is, on points that didn't end in an ace),
                     the returner wins around 40.3% of points whenever he returns topspin, versus around 21.8% of points when he chips the ball back.
 
-                    However, this view is slightly unfair toward the chipped return. To understand why, carefully consider these eight returns, and what they have in common.
+                    However, this view is slightly unfair toward the chipped return. 
+                    To understand why, carefully consider these eight returns, and what they have in common.
                 """
 baseRst = FrameRaster(3, 3)
 baseRst.add(initial_naive_table.render(), 1, 1)
@@ -666,8 +670,9 @@ staticFrms_rast = BGRFrames.from_frame(staticFrm_rast, STATIC_FRAMES)
 
 script_line =   """
                     Take any given return on which a chip was observed. 
-                    If the PSM predicts a high propensity to chip, then it effectively believes that there was no way 
-                    that specific serve could have been returned with topspin; it is a forced chip return.
+                    If the PSM predicts a high propensity to chip, 
+                    then it effectively believes that there was no way that specific serve could have been returned with topspin; 
+                    it is a forced chip return.
                     
                     In fact, the eight returns we just saw are the eight highest propensity returns in our sample.    
                 """
@@ -681,9 +686,9 @@ staticFrm_rast = myRst.render()
 staticFrms_rast = BGRFrames.from_frame(staticFrm_rast, STATIC_FRAMES)
 
 script_line =   """
-                    On the other hand, on a low propensity chipped return, the model believes that playing a chip in such a situation is very unlikely 
+                    On the other hand, on a low propensity chipped return, the model believes that playing a chip in such a situation is very unlikely;
                     in most cases, the returner would have opted for a topspin return.
-                    Therefore, a chipped return in such a low propensity situation expresses the returner's strong choice to chip the ball back.
+                    Therefore, observing a chipped return in such a low propensity situation expresses the returner's strong choice to chip the ball back.
                     To illuminate this, consider the 8 lowest propensity chipped returns.
                 """
 all_frames.append(staticFrms_rast)
@@ -722,7 +727,7 @@ script_line =   """
                 where he could very well have played a topspin return.
 
                 We can now use these propensities to focus on chipped returns where the returner actually had a choice, 
-                and thereby assess the quality of this choice. In the following, we will refer to these returns as choice chips.
+                and thereby assess the quality of this choice.
                 """
 cascFrms = BGRFrames.from_frame(cascFrms[-1], STATIC_FRAMES)
 all_frames.append(cascFrms)
@@ -775,12 +780,14 @@ all_frames.append(ovrFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    However, even after adjusting for choice chips, the data is not yet ready to reveal a true, unbiased picture
+                    Unfortunately, even after adjusting for choice chips, the data is not yet ready to reveal a true, unbiased picture
                     of return win probabilities. 
 
                     Why? Well, in a perfect world, we'd ask each player to hit 100 serves to each other player in our sample.
                     This way, we'd observe equally many serves and returns for each single player.
-                    However, our data generating process are actual tennis matches. In these, what happens is that we observe more returns from the better player.
+                    However, our data is generated not by experiment, but in the course of actual tennis matches. 
+                    In a tennis match, the amount of returns observed by player is systematically biased: 
+                    what happens is that we observe more returns from the better player.
                     
                     To illuminate why, imagine player A has a great serve and average return; player B has an average return and serve. 
                     We expect player A to hold faster (due to his strong serve), and therefore play relatively fewer points on serve and relatively more on the return.
@@ -851,7 +858,7 @@ script_line =  """
                     We observe that the return player has greater win probability in long rallys, 
                     indicating that the better player indeed plays more returns in a match, simply due to the nature of tennis scoring.
 
-                    to remove this bias, and approximate the experimental setting, 
+                    To remove this bias, and approximate the experimental setting, 
                     we introduce a balancing factor that gives more weight to returns made by the player for whom we observe fewer returns, overall. 
                     Ostensibly, this is the weaker player.
                 """
@@ -878,12 +885,14 @@ script_line =   """
                     The longer a rally goes on, the less the serve and the return matter to the outcome of the point.
                     Therefore, the longer a rally goes on, the less we ought to attribute whether a point has been won or lost 
                     to the quality of the serve and the return. 
-                    Theoretically, if the rally were to go on for ever, we don't credit the return with winning (or losing) the rally, 
+                    Theoretically, if the rally were to go on for ever, we shouldn't credit the return with winning (or losing) the rally, 
                     but only with neutralizing the serve and bringing the probability of winning the point to 50%.
+                    This is exactly what we do with our attribution adjustment. 
+                    If the point is over fast, the return is credited for winning or losing the point to a greater extent;
+                    if the point ends only after a long rally, the return is only credited with neutralizing the serve.
                 """
 all_frames.append(ovrFrms)
 script_lines.append(script_line)
-
 
 
 cond_shrFrm = shrFrm.loc[3:] / (1 - shrFrm.loc[2])
@@ -897,17 +906,22 @@ script_line =   """
                     After the attribution adjustment, chipped returns gain around 4% in win probability, whereas the topspin return's success rate is slightly reduced.
 
                     Why there's an increase for chips and none for topspin returns is somewhat unclear to me, but it seems to be a combination of many factors, 
-                    the most intuitively accesible of which is as follows:
+                    the most intuitively accessible of which is as follows:
 
-                    If a chipped return is made, 27% of rallys will end on the next shot; in most cases because the server attempts a (serve + 1) winner.
+                    If a chipped return is made, 27% of rallys will end on the next shot; in most cases because the server attempts a winner.
+                    This is commonly known as a serve + 1.
                     However, on a chipped return, the server's probability to make the (serve + 1) winner is "only" 60%. 
                     On aggregate, on a chipped return, the server's patience would pay off: if he were to play a set-up shot instead of an immediate winner, 
-                    let the returner scramble, and attempt a winner on the fifth shot of the rally (a sort of serve + 2), his success rate would rise to 80%.
-                    However, on a chipped return, the more promising serve + 2 pattern is attempted only about half as often as the serve + 1. 
+                    let the returner scramble, and attempt a winner on the fifth shot of the rally, his success rate would rise to 80%.
+                    In other words, on a chipped return, a serve + 2 is more successful on average than a serve + 1. 
+                    We will illuminate some of the causes for this later.
+                    The bad news for the server is that, on a chipped return, the more promising serve + 2 pattern is attempted only about half as often as the serve + 1. 
+                    The typical server is, in a way, too impatient on chipped returns.
                     Since the attribution adjustment correctly values the return's impact on the outcome of short rallyes higher than on long rallyes, 
                     the server's "impatience" is reflected in an increase in the success rate of the chip return after the attribution adjustment.
                     
-                    So then this is our bottom line: chipped returns are 10% worse than topspin returns in terms of winning percentage.
+                    So then, alright: This is our bottom line:
+                    After all adjustments are made, chipped returns are still 10% worse than topspin returns in terms of winning percentage.
                     The question then is: how good must a chip return be to overcome those 10%? Where should it be placed; how should it be played?
                     Is it better to play a high-arcing chip or a low-bouncing chip? 
                     
