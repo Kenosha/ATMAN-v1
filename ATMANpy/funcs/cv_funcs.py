@@ -15,10 +15,10 @@ import ATMANpy.funcs.util_funcs as atu
 
 def show(frame, name = 'frame', num_seconds = None):
     cv.imshow(name, frame)
-    cv.waitKey(0 if num_seconds is None else round(num_seconds * 1000))
-    #closing all open windows  
+    keypress = cv.waitKey(0 if num_seconds is None else round(num_seconds * 1000))
     cv.destroyAllWindows()  
-    
+    return keypress
+
 def show_continuous(frame, name = 'frame', ms_between_frames = 30):
     cv.imshow('frame', frame)
     if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
@@ -515,11 +515,9 @@ def replay(cap, stream_features,
             break 
             
         
-        
-        
-        
-        
-        
-        
+if __name__ == '__main__':
+    array = np.random.randint(256, size = (400, 400, 3)).astype('uint8')
+    keypress = show(array)
+    print(keypress)
         
         

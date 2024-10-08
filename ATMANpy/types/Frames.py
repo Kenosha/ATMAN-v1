@@ -178,7 +178,6 @@ class Frame:
         else:
             return BoolFrame(outArr)
        
-    
     def __iter__(self):
         return FrameIterator(self)
     
@@ -203,7 +202,8 @@ class Frame:
     
     ### SHOW METHODS ###
     def show(self, num_seconds = None):
-        show(self.array, name = self.name, num_seconds = num_seconds)
+        keypress = show(self.array, name = self.name, num_seconds = num_seconds)
+        return keypress
 
     def show_continuous(self, ms_between_frames = 30, name = 'frame'):
         still_showing = show_continuous(self.array, ms_between_frames = ms_between_frames, name = name)
