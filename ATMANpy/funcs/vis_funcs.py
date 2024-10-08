@@ -23,14 +23,14 @@ def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
     if isinstance(offFrm, Frames):
         offFrm = offFrm[-1]
 
-    hold_frames = 25 // blinks_per_second
+    hold_frames = int(25 // blinks_per_second)
     assert hold_frames > 0
 
     onFrms = BGRFrames.from_frame(onFrm, hold_frames)
     offFrms = BGRFrames.from_frame(offFrm, hold_frames)
     combFrms = BGRFrames.from_frames([onFrms, offFrms])
 
-    repeats = duration_in_frames // (hold_frames * 2) + 1
+    repeats = int(duration_in_frames // (hold_frames * 2)) + 1
 
     return BGRFrames.from_frames([combFrms] * repeats)[:duration_in_frames]
 
