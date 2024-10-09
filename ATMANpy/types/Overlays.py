@@ -71,14 +71,14 @@ def make_text_in(subReg, data_or_string, target_len = None,
     return textPt
 
 class LineChart:
-    def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False):
+    def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False, x_labels = None):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
         
         self.xs = np.array(xs)
         self.ys = np.array(ys)
         self.color = color
-        self.x_labels = None ### TODO: labels for Line (and Scatter) don't support non-default x_labels yet.
+        self.x_labels = x_labels ### TODO: labels for Line (and Scatter) don't support non-default x_labels yet.
         self.dashed = dashed ### TODO: inactive for the moment!
 
     def __len__(self):
@@ -135,6 +135,7 @@ class Graph:
                  x_label_dist = 0.5, y_label_dist = 0.5, x_label_left_shift = 0, x_tick_label_left_shift = 0,
                  x_label_format = '.0f', y_label_format = '.0f',
                  x_label = None, y_label = None, 
+                 label_size = 1, tick_label_size = 1,
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
                  header_height = 1, graph_height = 9,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
@@ -159,6 +160,9 @@ class Graph:
 
         self.x_label_left_shift = x_label_left_shift
         self.x_tick_label_left_shift = x_tick_label_left_shift
+
+        self.label_size = label_size
+        self.tick_label_size = tick_label_size
 
         self.render_height = render_height
         self.dimensions = dimensions
@@ -231,8 +235,8 @@ class Graph:
             min_x_str = maybe_data_to_text(min_x, self.x_label_format)
             max_x_str = maybe_data_to_text(max_x, self.x_label_format)
 
-            min_x_pt = self.x_axis.leftPt.back(self.x_label_dist).annotate(min_x_str)
-            max_x_pt = self.x_axis.rightPt.back(self.x_label_dist).annotate(max_x_str)
+            min_x_pt = self.x_axis.leftPt.back(self.x_label_dist).annotate(min_x_str).resize(self.tick_label_size)
+            max_x_pt = self.x_axis.rightPt.back(self.x_label_dist).annotate(max_x_str).resize(self.tick_label_size)
             x_labels = [min_x_pt, max_x_pt]
         else:
             x_labels = []
@@ -241,8 +245,8 @@ class Graph:
             min_y_str = maybe_data_to_text(min_y, self.y_label_format)
             max_y_str = maybe_data_to_text(max_y, self.y_label_format)
 
-            min_y_pt = self.y_axis.rightPt.left(self.y_label_dist).annotate(min_y_str)
-            max_y_pt = self.y_axis.leftPt.left(self.y_label_dist).annotate(max_y_str)
+            min_y_pt = self.y_axis.rightPt.left(self.y_label_dist).annotate(min_y_str).resize(self.tick_label_size)
+            max_y_pt = self.y_axis.leftPt.left(self.y_label_dist).annotate(max_y_str).resize(self.tick_label_size)
             y_labels = [min_y_pt, max_y_pt]
         else:
             y_labels = []
@@ -250,10 +254,10 @@ class Graph:
         ### Make Axis Labels
         axis_labels = []
         if self.x_label is not None:
-            x_label_pt = self.x_axis.center_point().back(self.x_label_dist * 2).left(self.x_label_left_shift).annotate(self.x_label)
+            x_label_pt = self.x_axis.center_point().back(self.x_label_dist * 2).left(self.x_label_left_shift).annotate(self.x_label).resize(self.label_size)
             axis_labels.append(x_label_pt)
         if self.y_label is not None:
-            y_label_pt = self.y_axis.center_point().left(self.y_label_dist * 2).annotate(self.y_label)
+            y_label_pt = self.y_axis.center_point().left(self.y_label_dist * 2).annotate(self.y_label).resize(self.label_size)
             axis_labels.append(y_label_pt)
 
         ### Make Header Point
@@ -290,6 +294,18 @@ class Graph:
                 coordPt_vectorized_next = Point3D(coordArr_next)
                 coordLn_vectorized = Line3D(coordPt_vectorized, coordPt_vectorized_next, color = chart.color)
                 myScn = myScn.put(coordLn_vectorized)
+                
+                ### Make x-labels
+                if chart.x_labels is not None:
+                    for coords, label in zip(coordArr.T, chart.x_labels):
+                        x, y, z = coords
+                        coords_base = (x, self.y_orig, z)
+
+                        labelStr = maybe_data_to_text(label, '.0f')
+                        anchorPnt = Point3D(coords_base).back(self.x_label_dist).left(self.x_tick_label_left_shift)
+                        annPnt = anchorPnt.annotate(labelStr).resize(self.tick_label_size)
+                        x_label_pnts.append(annPnt)
+
             elif isinstance(chart, BarChart):
                 xs = coordArr[0, :-1]
                 xs_next = ut.shift_array(coordArr, -1, axis = 1)[0, :-1]
