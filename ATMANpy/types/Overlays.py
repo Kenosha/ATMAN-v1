@@ -71,16 +71,18 @@ def make_text_in(subReg, data_or_string, target_len = None,
     return textPt
 
 class LineChart:
-    def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False, x_labels = None):
+    def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False, x_labels = None,
+                 annotate_line_heights = False):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
         
         self.xs = np.array(xs)
         self.ys = np.array(ys)
         self.color = color
-        self.x_labels = x_labels ### TODO: labels for Line (and Scatter) don't support non-default x_labels yet.
         self.dashed = dashed ### TODO: inactive for the moment!
-
+        self.x_labels = x_labels
+        self.annotate_line_heights = annotate_line_heights
+        
     def __len__(self):
         return len(self.xs)
     
@@ -305,6 +307,16 @@ class Graph:
                         anchorPnt = Point3D(coords_base).back(self.x_label_dist).left(self.x_tick_label_left_shift)
                         annPnt = anchorPnt.annotate(labelStr).resize(self.tick_label_size)
                         x_label_pnts.append(annPnt)
+
+                ### Make annotations for values
+                if chart.annotate_line_heights:
+                    for coords, y_val in zip(coordArr.T, chart.ys):
+                        x, y, z = coords
+
+                        labelStr = maybe_data_to_text(y_val, number_format = self.y_label_format)
+                        anchorPnt = Point3D(coords).front(self.x_label_dist).left(self.x_tick_label_left_shift)
+                        annPnt = anchorPnt.recolor(chart.color).annotate(labelStr)
+                        val_label_pnts.append(annPnt)
 
             elif isinstance(chart, BarChart):
                 xs = coordArr[0, :-1]
@@ -727,13 +739,15 @@ class Diagram:
 
 class LegendRow:
     def __init__(self, text = None, shape_color = None,
-                 text_color = const.BGR['bright_grey'], text_size = 1, text_thickness = 1, text_offset = 0,
+                 text_color = const.BGR['bright_grey'], text_size = 1, text_thickness = 1, 
+                 text_horizontal_offset = 0, text_vertical_offset = 0,
                  shape_offset = 0.1):
         self.text = text
         self.text_color = text_color
         self.text_size = text_size
         self.text_thickness = text_thickness
-        self.text_offset = text_offset
+        self.text_horizontal_offset = text_horizontal_offset
+        self.text_vertical_offset = text_vertical_offset
 
         self.shape_color = shape_color
         self.shape_offset = shape_offset
@@ -852,13 +866,14 @@ class Legend:
                 text_color = row.text_color
                 text_size = row.text_size
                 text_thickness = row.text_thickness
-                text_offset = row.text_offset
+                text_horizontal_offset = row.text_horizontal_offset
+                text_vertical_offset = row.text_vertical_offset
             except KeyError:
                 pass
             else:
                 textPt_right = make_text_in(subReg_right, text_string, 
-                                            size = text_size, thickness = text_thickness, 
-                                            color = text_color, horizontal_offset = text_offset)
+                                            size = text_size, thickness = text_thickness, color = text_color, 
+                                            horizontal_offset = text_horizontal_offset, vertical_offset = text_vertical_offset)
                 annotated_points.append(textPt_right)
 
         legScn = Scene(legend_shapes)
