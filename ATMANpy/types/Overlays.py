@@ -139,7 +139,7 @@ class Graph:
                  x_label = None, y_label = None, 
                  label_size = 1, tick_label_size = 1,
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
-                 header_height = 1, graph_height = 9,
+                 header_size = 1, header_height = 1, graph_height = 9,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
         ### TODO: add axis labels (y-axis vertical! how?)
         self.charts = charts
@@ -156,6 +156,7 @@ class Graph:
         self.header_text = header_text
         self.header_horizontal_offset = header_horizontal_offset
         self.header_vertical_offset = header_vertical_offset
+        self.header_size = header_size
 
         self.x_label_dist = x_label_dist
         self.y_label_dist = y_label_dist
@@ -264,7 +265,7 @@ class Graph:
 
         ### Make Header Point
         if self.header_text != '':
-            headerPt = make_text_in(self.headerReg, self.header_text, color = self.color, 
+            headerPt = make_text_in(self.headerReg, self.header_text, color = self.color, size = self.header_size,
                                     horizontal_offset = self.header_horizontal_offset,
                                     vertical_offset = self.header_vertical_offset)
             header_pnts = [headerPt]
@@ -348,7 +349,7 @@ class Graph:
 
                         labelStr = maybe_data_to_text(label, '.0f')
                         anchorPnt = Point3D(coords_base).back(self.x_label_dist).left(self.x_tick_label_left_shift)
-                        annPnt = anchorPnt.annotate(labelStr)
+                        annPnt = anchorPnt.annotate(labelStr).resize(self.tick_label_size)
                         x_label_pnts.append(annPnt)
                     
                 ### Make annotations for Bar Regions (if necessary)
