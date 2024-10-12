@@ -9,6 +9,7 @@ import ATMANpy.auxil.constants as const
 
 from ATMANpy.types.Lines import CourtLines, Line
 from ATMANpy.types.Points import Point2D
+from ATMANpy.types.Shapes3D import Point3D
 
 from ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils import is_out_wide, is_down_middle
 
@@ -107,6 +108,22 @@ def is_return_fore(myPnt):
 
 def is_return_back(myPnt):
     return myPnt.get_return().is_back()
+
+def is_third_shot_fore(myPnt):
+    try:
+        thirdShot = myPnt[2]
+    except IndexError:
+        return None
+    else:
+        return thirdShot.is_fore()
+    
+def is_third_shot_back(myPnt):
+    try:
+        thirdShot = myPnt[2]
+    except IndexError:
+        return None
+    else:
+        return thirdShot.is_fore()
 
 def is_return_bounce_not_none(myPnt):
     x, y = myPnt.get_return().get_first_bounce_position()
@@ -905,3 +922,52 @@ def region_to_line_to_arrow(myReg, annPnt, myDiag, relative_line_thickness = 0.1
                 'l_text': annPnt_left_text,
                 'r_text': annPnt_right_text}
     return myFrms, arrScn, arrCam, ptDict
+
+def get_court_sectors(side = 'Top'):
+    dc = courtLines.get_service_box(side = side, which = 'Deuce')
+    ad = courtLines.get_service_box(side = side, which = 'Ad')
+    dp = courtLines.get_deep_box(side = side)
+
+    if side == 'Top':
+        a, b, c, d = dp.subdivide(4, how = 'vertical')
+    elif side == 'Bottom':
+        d, c, b, a = dp.subdivide(4, how = 'vertical')
+
+    return a, b, c, d, dc, ad
+
+def shares_in_sector(myShots, side = 'Top'):
+    bounceArr = myShots.get_first_bounce_position()
+    
+    a, b, c, d, dc, ad = get_court_sectors(side = side)
+
+    totDict = {'a': 0, 'b': 0, 'c': 0, 'd': 0, 'dc': 0, 'ad': 0}
+
+    for x, y in bounceArr:
+        bouncePt = Point2D((x, y))
+        
+        if bouncePt.within(a):
+            totDict['a'] += 1
+        if bouncePt.within(b):
+            totDict['b'] += 1
+        if bouncePt.within(c):
+            totDict['c'] += 1
+        if bouncePt.within(d):
+            totDict['d'] += 1
+        if bouncePt.within(dc):
+            totDict['dc'] += 1
+        if bouncePt.within(ad):
+            totDict['ad'] += 1
+
+    totSer = pd.Series(totDict)
+    shrSer = totSer / totSer.sum()
+
+    return shrSer
+
+def find_center_of_mass(raster_array, density_array):
+    x, y, z = (raster_array * density_array).sum(axis = 0) / density_array.sum()
+    return Point3D((x, y, z))
+
+def find_mode(raster_array, density_array):
+    max_idx = np.argmax(density_array)
+    x, y, z = raster_array[max_idx]
+    return Point3D((x, y, z))
