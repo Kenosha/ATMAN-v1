@@ -126,6 +126,11 @@ DECAY_RATE = 0.9
 regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = DECAY_RATE)
 
 #################################
+####### PARAMETERS ##############
+#################################
+SKELETON_COLOR = const.BGR['leafy_green']
+
+#################################
 ###### ATTRIBUTION TABLES #######
 #################################
 from ATMANpy.types.Overlays import Table, Graph
@@ -252,7 +257,8 @@ x_labels = ['2', '3', '4', '5', '6', '7+']
 
 from ATMANpy.types.Overlays import LineChart, ScatterChart, Graph, Legend, LegendRow
 
-graph_kwargs = {'y_label_format': '>4.0%', 'y_label': None, 'offset': 0.3, 'make_default_x_labels': False,
+graph_kwargs = {'color': const.BGR['bright_grey'], 'y_label_format': '>4.0%', 'y_label': None, 'offset': 0.3, 
+                'make_default_x_labels': False,
                 'y_label_dist': 2.5, 'dimensions': (x2, y2), 'x_label_dist': 1.15, 'x_label_left_shift': 3.75, 
                 'x_tick_label_left_shift': 0.3,
                 'label_size': 2, 'tick_label_size': 2, 
@@ -260,11 +266,11 @@ graph_kwargs = {'y_label_format': '>4.0%', 'y_label': None, 'offset': 0.3, 'make
                 'x_label': 'Shots in Rally'}
 
 avg_color = const.BGR['leafy_green']
-shr_color = const.BGR['smokey_grey']
+shr_color = const.BGR['bright_blue']
 
-nullChart = LineChart([0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0], color = const.BGR['smokey_grey'])
-shrChart = LineChart(xs, shr_ys, color = const.BGR['smokey_grey'], x_labels = x_labels, annotate_line_heights = True)
-avgChart = LineChart(xs, avg_ys, color = const.BGR['leafy_green'], x_labels = x_labels, annotate_line_heights = True)
+nullChart = LineChart([0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0], color = const.BGR['bright_grey'])
+shrChart = LineChart(xs, shr_ys, color = shr_color, x_labels = x_labels, annotate_line_heights = True)
+avgChart = LineChart(xs, avg_ys, color = avg_color, x_labels = x_labels, annotate_line_heights = True)
 
 n = 30
 x_idx = 1
@@ -324,7 +330,7 @@ table_kwargs_examples = {   'number_format': '.1%', 'data_right_adjust': False,
                             'skip_after_how_many_symbols': 20, 'dimensions': (1920 // 2, 1080 // 2),
                             'skeleton_shrinkage': 0.35, 'skeleton_vertical_offset': 1,
                             'title_vertical_offset': 0, 'title_horizontal_offset': 11.2,
-                            'skeleton_vertical_offset': 1,
+                            'skeleton_vertical_offset': 1, 'title_color': const.BGR['bright_grey'],
                             'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
                             'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2
                         }
@@ -347,10 +353,10 @@ ex2Frm.show()
 
 myStr = '-> Player A playes more points on return!'
 
-ex1Frm_with_text = ex1Frm.put(myStr, where = (118, 500), size = 2)
+ex1Frm_with_text = ex1Frm.put(myStr, where = (118, 500), size = 2, color = const.BGR['bright_grey'])
 ex1Frm_with_text.show()
 
-ex2Frm_with_text = ex2Frm.put(myStr, where = (118, 500), size = 2)
+ex2Frm_with_text = ex2Frm.put(myStr, where = (118, 500), size = 2, color = const.BGR['bright_grey'])
 ex2Frm_with_text.show()
 
 
@@ -368,7 +374,8 @@ m2 = regFrm.loc[f2, 'ret_wins'].mean()
 m3 = regFrm.loc[f3, 'ret_wins'].mean()
 m4 = regFrm.loc[f4, 'ret_wins'].mean()
 
-graph_kwargs = {'y_label_format': '>4.0%', 'y_label': None, 'offset': 0.3, 'make_default_x_labels': False,
+graph_kwargs = {'color': const.BGR['bright_grey'], 'y_label_format': '>4.0%', 'y_label': None, 'offset': 0.3, 
+                'make_default_x_labels': False,
                 'y_label_dist': 2.5, 'dimensions': (x2, y2), 'x_label_dist': 1.15, 'x_label_left_shift': 3.0, 
                 'x_tick_label_left_shift': 0.8,
                 'label_size': 2, 'tick_label_size': 2, 
@@ -379,7 +386,7 @@ from ATMANpy.types.Overlays import BarChart, ScatterChart, Graph
 half_line_xs = np.arange(0, 5, 0.1)
 half_line_ys = np.full_like(half_line_xs, fill_value = 0.5)
 
-barChart = BarChart([1, 2, 3, 4], [m1, m2, m3, m4], color = const.BGR['ball_yellow'], external_gap = 0.4, 
+barChart = BarChart([1, 2, 3, 4], [m1, m2, m3, m4], color = const.BGR['leafy_green'], external_gap = 0.4, 
                     x_labels = ['2-4', '5-6', '7-8', '> 8'], annotate_bar_heights = True)
 halfChart = ScatterChart(half_line_xs, half_line_ys, color = const.BGR['intense_red'])
 
@@ -492,6 +499,7 @@ x, y = DIMENSIONS
 index_name_t = 'Topspin Returns'
 index_name_c = 'Chipped Returns'
 index_name_a = '      All Returns' ### weirdly, need two extra spaces...
+title = 'Returner Point Win%'
 
 table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
                         'skip_after_how_many_symbols': 20, 'dimensions': (x, y),
@@ -504,9 +512,10 @@ table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False,
                         'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
                         'skip_after_how_many_symbols': 20, 'dimensions': (int(2.7 * x), int(2.7 * y)),
                         'skeleton_shrinkage': 0.15, 'skeleton_vertical_offset': 1,
-                        'title_vertical_offset': -2, 'title_horizontal_offset': 25,
+                        'title_vertical_offset': -2, 'title_horizontal_offset': 19,
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
-                        'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2
+                        'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2,
+                        'title_color': const.BGR['bright_grey']
                         }
 
 t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
@@ -516,33 +525,31 @@ tdict = {'Unadjusted': t0}
 cdict = {'Unadjusted': c0}
 table_data = {index_name_t: tdict, index_name_c: cdict}
 
-initial_naive_table = Table(table_data, **table_kwargs_small, title = 'Returner Wins the Point', header_text_size = 0)
+initial_naive_table = Table(table_data, **table_kwargs_small, title = title, header_text_size = 0)
 # initial_naive_table.render().show()
 
-naive_table = Table(table_data, **{k: v for k, v in table_kwargs_large.items() if k != 'title_horizontal_offset'},
-                    title_horizontal_offset = 25.85,
-                    title = 'Returner Wins the Point')
+naive_table = Table(table_data, **table_kwargs_large, title = title)
 naive_table.render().show()
 
 tdict = {'Unadjusted': t0, '+Choice Adj.': t1}
 cdict = {'Unadjusted': c0, '+Choice Adj.': c1}
 table_data = {index_name_t: tdict, index_name_c: cdict}
 
-smart_table = Table(table_data, **table_kwargs_large, title = 'Returner Wins the Point')
+smart_table = Table(table_data, **table_kwargs_large, title = title)
 smart_table.render().show()
 
 tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2}
 cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2}
 table_data = {index_name_t: tdict, index_name_c: cdict}
 
-smart_bal_table = Table(table_data, **table_kwargs_large, title = 'Returner Wins the Point')
+smart_bal_table = Table(table_data, **table_kwargs_large, title = title)
 smart_bal_table.render().show()
 
 tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2, '+Attrib. Adj.': t3}
 cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2, '+Attrib. Adj.': c3}
 table_data = {index_name_t: tdict, index_name_c: cdict}
 
-smart_bal_len_table = Table(table_data, **table_kwargs_large, title = 'Returner Wins the Point')
+smart_bal_len_table = Table(table_data, **table_kwargs_large, title = title)
 smart_bal_len_table.render().show()
 
 r_f, c_f = 1080, 1920
@@ -1096,6 +1103,10 @@ script_line =   """
                     So let us take a look at the returner's win probability given the length of rallys.
                 """
 
+all_frames.append(rstFrms)
+script_lines.append(script_line)
+
+
 graphScns_itpl = vs.interpolate_scenes(bar_graphScn_null, bar_graphScn, num_frames = TRANSITION_FRAMES)
 myFrms, _ = vs.animate_sequence(graphScns_itpl, start_cam = myGraph.cam, stop_cam = myGraph.cam,
                                 annotated_points = bar_annotatedPnts_start, argument_resolution = 10)
@@ -1161,8 +1172,8 @@ script_lines.append(script_line)
 
 
 script_line =   """
-                    If a chipped return is made, 27% of rallys will end on the next shot; in most cases because the server attempts a winner.
-                    This is commonly known as a serve + 1.
+                    For the aggressively minded tennis player, there are a variety of ways to end the point on the third shot,
+                    either by serve and volley, or by baseline winner; these patterns can be subsumed under the term serve + 1.
                 """
 
 graphFrms = BGRFrames.from_frame(avg_graphFrm0, STATIC_FRAMES)
@@ -1171,9 +1182,9 @@ all_frames.append(ovrFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    However, on a chipped return, the server's probability to make the (serve + 1) winner is "only" 60%. 
-                    On aggregate, on a chipped return, the server's patience would pay off: if he were to play a set-up shot instead of an immediate winner, 
-                    let the returner scramble, and attempt a winner on the fifth shot of the rally, his success rate would rise to 80%.
+                    On a chipped return, the server's probability to make the (serve + 1) winner is "only" 60%. 
+                    On aggregate, the server's patience would pay off: if he were to play a set-up shot instead of an immediate winner, 
+                    let the returner scramble, and attempt a winner on the fifth shot of the rally, his success rate would rise to 81%.
                 """
 
 graphFrms = BGRFrames.from_frame(avg_graphFrm1, STATIC_FRAMES)
@@ -1192,8 +1203,8 @@ all_frames.append(ovrFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The bad news for the server is that, on a chipped return, the more promising serve + 2 pattern is attempted only about half as often as the serve + 1. 
-                    The typical server is, in a way, too impatient on chipped returns.
+                    The bad news for the server is that the more promising serve + 2 pattern is attempted only about half as often as the serve + 1. 
+                    The typical server is, in a way, slightly too impatient on chipped returns.
                     Since the attribution adjustment correctly values the return's impact on the outcome of short rallyes higher than on long rallyes, 
                     the server's "impatience" is reflected in an increase in the success rate of the chip return after the attribution adjustment.
                 """
