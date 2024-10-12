@@ -6,9 +6,9 @@ import subprocess
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder
 
 PROJECT_NAME = 'return_chip_topspin'
-VIDEOS = ['intro_20241006_135157']
+VIDEOS = ['intro_20241010_175050', 'descriptive_20241011_173710']
 
-IDX = 0
+IDX = 1
 VIDEO = VIDEOS[IDX]
 
 ### Paths

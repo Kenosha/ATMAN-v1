@@ -18,12 +18,11 @@ from matplotlib import pyplot as plt
 
 SAMPLE_RATE = 44100
 PROJECT_NAME = 'return_chip_topspin'
-VIDEOS = ['intro_20241006_135157']
+VIDEOS = ['intro_20241010_175050', 'descriptive_20241011_173710']
 
 from ATMANpy.funcs.rec_funcs import countdown, amplitude_envelope, time_needed
 
-
-IDX = 0
+IDX = 1
 VIDEO = VIDEOS[IDX]
 
 ### Paths
@@ -36,6 +35,9 @@ take_folders = [f for f in folders if f.startswith('take_')]
 num_takes = len(take_folders)
 
 take_path = maybe_make_folder(audio_path, f'take_{num_takes + 1}')
+
+seg_files = [f for f in os.listdir(result_path) if f.startswith('seg_')]
+seg_nums = sorted([int(f.replace('.mp4', '').split('_')[1]) for f in seg_files])
 
 ### Check for which segment we already have some quality 1 elements
 
@@ -53,19 +55,16 @@ def get_take_tups(take):
 ### Get all segments from all takes, with their respective quality
 take_dicts = [{num: qual for num, qual in get_take_tups(take)} for take in take_folders]
 
-current_best_idx = {k: 0 for k in take_dicts[0]}
-current_best_qual = take_dicts[0]
+current_best_idx = {k: None for k in seg_nums}
+current_best_qual = {k: 4 for k in seg_nums}
 
-for take_idx, take_qual in enumerate(take_dicts[1:]):
-    take_idx += 1 ### since we start from 1
+for take_idx, take_qual in enumerate(take_dicts):
     for k in take_qual:
         if take_qual[k] < current_best_qual[k]: ### if the quality in the take we are looping over is better (= lower) for the segment in question...
             current_best_idx[k] = take_idx
             current_best_qual[k] = take_qual[k]
 
 ### Read in Video Segments
-seg_files = [f for f in os.listdir(result_path) if f.startswith('seg')]
-
 ordered_dStms = []
 for idx in range(len(seg_files)):
     seg = f'seg_{idx}.mp4'
@@ -114,13 +113,10 @@ for idx in range(num_stms):
     if script_line == '':
         continue
 
-    try:
-        qual = current_best_qual[idx]
-    except KeyError:
+    qual = current_best_qual[idx]
+
+    if qual == 1:
         continue
-    else:
-        if qual == 1:
-            continue
 
     time.sleep(1)
     

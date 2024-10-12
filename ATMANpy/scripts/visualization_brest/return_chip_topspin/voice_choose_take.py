@@ -20,9 +20,9 @@ from shutil import copyfile
 
 SAMPLE_RATE = 44100
 PROJECT_NAME = 'return_chip_topspin'
-VIDEOS = ['intro_20241006_135157']
+VIDEOS = ['intro_20241010_175050', 'descriptive_20241011_173710']
 
-IDX = 0
+IDX = 1
 VIDEO = VIDEOS[IDX]
 
 ### Paths
@@ -30,10 +30,16 @@ result_path = os.path.join(get_folder_struct('results_video')[PROJECT_NAME], VID
 audio_path = os.path.join(result_path, 'audio')
 best_path = maybe_make_folder(audio_path, 'best')
 
+
 folders = os.listdir(audio_path)
 take_folders = [f for f in folders if f.startswith('take_')]
 take_nums = [int(f.replace('take_', '')) for f in take_folders]
 num_takes = len(take_folders)
+
+
+seg_files = [f for f in os.listdir(result_path) if f.startswith('seg_')]
+seg_nums = sorted([int(f.replace('.mp4', '').split('_')[1]) for f in seg_files])
+
 
 def get_take_tups(take):
     take_files = os.listdir(os.path.join(audio_path, take))
@@ -49,11 +55,10 @@ def get_take_tups(take):
 ### Get all segments from all takes, with their respective quality
 take_dicts = [{num: qual for num, qual in get_take_tups(take)} for take in take_folders]
 
-current_best_idx = {k: 0 for k in take_dicts[0]}
-current_best_qual = take_dicts[0]
+current_best_idx = {k: None for k in seg_nums}
+current_best_qual = {k: 4 for k in seg_nums}
 
-for take_idx, take_qual in enumerate(take_dicts[1:]):
-    take_idx += 1 ### since we start from 1
+for take_idx, take_qual in enumerate(take_dicts):
     for k in take_qual:
         if take_qual[k] < current_best_qual[k]: ### if the quality in the take we are looping over is better (= lower) for the segment in question...
             current_best_idx[k] = take_idx
@@ -63,6 +68,9 @@ for take_idx, take_qual in enumerate(take_dicts[1:]):
 for k in current_best_idx:
     best_qual = current_best_qual[k]
     best_idx = current_best_idx[k]
+
+    if best_idx is None:
+        continue
 
     take_folder = take_folders[best_idx]
 
