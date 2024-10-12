@@ -8,18 +8,31 @@ from ATMANpy.types.Visual3D import Camera, Scene, View
 courtLines = CourtLines.make().add_singles_netline()
 courtScn = Scene.make_court()
 
+### REGIONS OF INTEREST
+topReg = courtLines.get_half_region(side = 'Top', width = 'Singles')
+botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+
+topReg_deu = courtLines.get_service_box(side = 'Top', which = 'Deuce')
+topReg_ad = courtLines.get_service_box(side = 'Top', which = 'Ad')
+botReg_deu = courtLines.get_service_box(side = 'Bottom', which = 'Deuce')
+botReg_ad = courtLines.get_service_box(side = 'Bottom', which = 'Ad')
+
+top_a, top_b, top_c, top_d = topReg.subdivide(4, how = 'vertical')
+bot_d, bot_c, bot_b, bot_a = botReg.subdivide(4, how = 'vertical')
+
 ### POINTS OF INTEREST ###
+top_cnt_2D = topReg.centroid()
+bot_cnt_2D = botReg.centroid()
+
+top_deu_2D = topReg_deu.centroid()
+top_ad_2D = topReg_ad.centroid()
+top_srv_2D = topReg_deu['Top'].rightPt ### center of court, at service lines
+
+bot_deu_2D = botReg_deu.centroid()
+bot_ad_2D = botReg_ad.centroid()
+bot_srv_2D = botReg_deu['Bottom'].leftPt ### center of court, at service lines
+
 cnt_2D = courtLines.get_center_point()
-top_cnt_2D = courtLines.get_half_region(side = 'Top', width = 'Singles').centroid()
-bot_cnt_2D = courtLines.get_half_region(side = 'Bottom', width = 'Singles').centroid()
-
-top_deu_2D = courtLines.get_service_box(side = 'Top', which = 'Deuce').centroid()
-top_ad_2D = courtLines.get_service_box(side = 'Top', which = 'Ad').centroid()
-top_srv_2D = courtLines.get_service_box(side = 'Top', which = 'Deuce')['Top'].rightPt ### center of court, at service lines
-
-bot_deu_2D = courtLines.get_service_box(side = 'Bottom', which = 'Deuce').centroid()
-bot_ad_2D = courtLines.get_service_box(side = 'Bottom', which = 'Ad').centroid()
-bot_srv_2D = courtLines.get_service_box(side = 'Bottom', which = 'Deuce')['Bottom'].leftPt ### center of court, at service lines
 
 top_bsl_deu_2D = courtLines['Top Baseline'].leftPt
 top_bsl_ad_2D = courtLines['Top Baseline'].rightPt
