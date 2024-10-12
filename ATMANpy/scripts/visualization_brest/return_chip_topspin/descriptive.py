@@ -16,7 +16,7 @@ from ATMANpy.types.Lines import CourtLines, Line
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Features import ConstFeature
 from ATMANpy.types.Visual3D import DummyScene
-from ATMANpy.types.Shapes3D import Line3D, Circle3D, Circles3D
+from ATMANpy.types.Shapes3D import Line3D, Circle3D, Circles3D, Region3D, Regions3D
 from ATMANpy.types.Overlays import FrameRaster, FramesRaster, Table
 from ATMANpy.types.Frames import BGRFrame
 
@@ -289,8 +289,8 @@ if DO_METHOD_SECTION:
     script_lines = []
 
     script_line =   """
-                        We build up to our understanding of a good chip by looking at some characteristics of chipped returns in general. 
-                        First up, let's look at placement. To build a heatmap, consider first an example return:
+                        We build up our understanding of a good chip by looking at some characteristics of chipped returns in general. 
+                        First up: placement.
                     """
     blankFrm = BGRFrame(np.zeros((1080, 1920, 3), dtype = 'uint8'))
     blankFrms = BGRFrames.from_frame(blankFrm, STATIC_FRAMES)
@@ -328,7 +328,7 @@ if DO_METHOD_SECTION:
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    script_line = "We collect the bounce position..."
+    script_line = "As in the case of this example return, we collect the bounce position of all returns in our sample."
     myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
     all_frames.append(myFrms)
     script_lines.append(script_line)
@@ -363,8 +363,8 @@ if DO_METHOD_SECTION:
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    script_line = "... and do the same for all other shots in our sample."
-    myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
+    script_line = ""
+    myFrms = BGRFrames.from_frame(myFrms[-1], TRANSITION_FRAMES)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -379,7 +379,7 @@ if DO_METHOD_SECTION:
 
     script_line =   """
                         We then flip returns hit back to lefty servers, so that the server's forehand side is always at deuce. 
-                        This way, we can check whether returns are hit to the backhand side, with preference.
+                        This way, we can check whether returns are hit to the backhand side preferentially.
                     """
     myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
     all_frames.append(myFrms)
@@ -393,7 +393,8 @@ if DO_METHOD_SECTION:
     script_lines.append(script_line)
 
     script_line =   """
-                        Now, differentiate between chipped returns and topspin returns. Chipped returns are marked in blue, topspin returns in brown.
+                        Now, differentiate between chipped returns and topspin returns. 
+                        Chipped returns are marked in blue, topspin returns in orange.
                     """
 
     from ATMANpy.auxil.court import top_bsl_deu_2D, top_bsl_ad_2D
@@ -412,43 +413,35 @@ if DO_METHOD_SECTION:
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    script_line = "Consider only the set of all topspin return bounce positions."
+    script_line = "First, consider the empirical distribution of topspin returns."
     myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
     myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    ### fade out chip marks
-    script_line = ""
-    mark_scenes = [tops_markScn for _ in range(TRANSITION_FRAMES)]
-    myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn,
-                                        **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
-    all_frames.append(myFrms)
-    script_lines.append(script_line)
+    # ### fade out chip marks
+    # script_line = ""
+    # mark_scenes = [tops_markScn for _ in range(TRANSITION_FRAMES)]
+    # myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn,
+    #                                     **animDict, **prmDict, cumulative_foreground_transparence = FADE_OUT_FACTOR)
+    # myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    # all_frames.append(myFrms)
+    # script_lines.append(script_line)
 
-    script_line = "From these, we construct a heatmap."
-    myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
-    myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
-    all_frames.append(myFrms)
-    script_lines.append(script_line)
+    # script_line = "From these, we construct a heatmap."
+    # myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
+    # myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
+    # all_frames.append(myFrms)
+    # script_lines.append(script_line)
 
     ### Topspin Heatmaps
-    def find_center_of_mass(raster_array, density_array):
-        x, y, z = (raster_array * density_array).sum(axis = 0) / density_array.sum()
-        return Point3D((x, y, z))
-    
-    def find_mode(raster_array, density_array):
-        max_idx = np.argmax(density_array)
-        x, y, z = raster_array[max_idx]
-        return Point3D((x, y, z))
-
     script_line = ""
     topsScn = vs.kde_heatmap(tops_retShots_rectified, 
                             position_func = 'get_first_bounce_position', 
                             normalize_density = True,
                             zero_color = TOPS_COLOR, one_color = TOPS_COLOR, 
                             bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
+
     topsScn_zero = topsScn.realpha(0)
     itplScns = vs.interpolate_dummy_scenes(topsScn_zero, topsScn, STATIC_FRAMES)
 
@@ -458,16 +451,27 @@ if DO_METHOD_SECTION:
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    script_line = "Topspin returns are symmetrically clustered around the center of the court, with a slight preference for the server's backhand"
-    comPt = find_center_of_mass(topsScn.rastArrs[0], topsScn.alphaArrs[0])
-    comMk = Mark.make(comPt, color = const.BGR['bright_grey'], size = 10)
-    annPt = comPt.annotate('Average Topspin\nBounce Location').right(7).front(2)
+    script_line = "Topspin returns are symmetrically clustered around the center of the court..."
+    myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
+    myFrms = BGRFrames.from_frame(myFrm, TRANSITION_FRAMES)
+    all_frames.append(myFrms)
+    script_lines.append(script_line)
 
-    myFrms, _ = vs.animate_static(comMk, background_scene = courtScn, static_cam = heatCam, **prmDict_nolum, **animDict,
-                                         annotated_points = [annPt])
-    
-    # myFrms, _ = vs.animate_static(comMk, background_scene = courtScn, static_cam = heatCam, **{k: v for k, v in prmDict.items() if k != 'argument_resolution'}, **animDict,
-    #                                      annotated_points = [annPt], argument_resolution = 100)
+    ### shares in sector
+    a, b, c, d, dc, ad = vis_ut.get_court_sectors(side = 'Top')
+    shrSer = vis_ut.shares_in_sector(tops_retShots_rectified, side = 'Top')
+    shrStrs = [f'{share:>3.0%}' for share in shrSer.values]
+
+    myRegs = [  Region3D.from_region2D(a, z = 0), Region3D.from_region2D(b, z = 0), 
+                Region3D.from_region2D(c, z = 0), Region3D.from_region2D(d, z = 0), 
+                Region3D.from_region2D(dc, z = 0), Region3D.from_region2D(ad, z = 0)]
+    myLns = [regLn.recolor(const.BGR['leafy_green']).resize(3) for reg in myRegs for regLn in reg.lineList]
+
+    centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(const.BGR['leafy_green']).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
+
+    script_line = "... with a slight preference for the server's backhand."
+    myFrms, _ = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam, **prmDict_nolum, **animDict,
+                                         annotated_points = centerPts)
 
     myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
     myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
@@ -493,20 +497,27 @@ if DO_METHOD_SECTION:
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    script_line =   """
-                        On the other hand, for choice chipped returns, we see a more irregular heatmap; 
-                        some are chipped shallow, others deeper.
-                        As with topspin returns, chipped returns are hit predominantly to the backhand side.
-                    """
-    comPt = find_center_of_mass(chipScn.rastArrs[0], chipScn.alphaArrs[0])
-    comMk = Mark.make(comPt, color = const.BGR['bright_grey'], size = 10)
-    annPt = comPt.annotate('Average Choice Chip\nBounce Location').right(7).front(2)
+    script_line = "On the other hand, for choice chipped returns, we see a more irregular heatmap; some land shallow, others deeper."
+    myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
+    myFrms = BGRFrames.from_frame(myFrm, TRANSITION_FRAMES)
+    all_frames.append(myFrms)
+    script_lines.append(script_line)
 
-    myFrms, _ = vs.animate_static(comMk, background_scene = courtScn, static_cam = heatCam, **prmDict_nolum, **animDict,
-                                         annotated_points = [annPt])
-    
-    # myFrms, _ = vs.animate_static(comMk, background_scene = courtScn, static_cam = heatCam, **{k: v for k, v in prmDict.items() if k != 'argument_resolution'}, **animDict,
-    #                                      annotated_points = [annPt], argument_resolution = 100)
+    ### shares in sector
+    a, b, c, d, dc, ad = vis_ut.get_court_sectors(side = 'Top')
+    shrSer = vis_ut.shares_in_sector(chip_retShots_rectified, side = 'Top')
+    shrStrs = [f'{share:>3.0%}' for share in shrSer.values]
+
+    myRegs = [  Region3D.from_region2D(a, z = 0), Region3D.from_region2D(b, z = 0), 
+                Region3D.from_region2D(c, z = 0), Region3D.from_region2D(d, z = 0), 
+                Region3D.from_region2D(dc, z = 0), Region3D.from_region2D(ad, z = 0)]
+    myLns = [regLn.recolor(const.BGR['leafy_green']).resize(3) for reg in myRegs for regLn in reg.lineList]
+
+    centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(const.BGR['leafy_green']).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
+
+    script_line = "As with topspin returns, chipped returns are hit predominantly to the backhand side."
+    myFrms, _ = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam, **prmDict_nolum, **animDict,
+                                         annotated_points = centerPts)
 
     myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
     myFrms = BGRFrames.from_frame(myFrm, STATIC_FRAMES)
@@ -519,14 +530,15 @@ if DO_METHOD_SECTION:
     show(all_frames)
 
     # b) Save segments
-    for idx, subFrms in enumerate(all_frames):
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
         running_idx = current_idx + idx
         subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
         
         with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
             f.write(script_line)
 
-        current_idx += 1
+    current_idx = current_idx + len(all_frames)
 
 
 
@@ -628,11 +640,10 @@ if DO_HEATMAP_SECTION:
 
     script_line =   """
                         We construct a difference heatmap that highlights the areas 
-                        in which choice chipped returns are more prevalent than topspin returns in blue, and 
-                        areas in which more topspin returns in red.
+                        in which choice chip and topspin returns are more prevalent in their respective colors.
 
-                        Indeed, chipped returns tend to be targeted at the corners of the court, with another cluster landing shallower.
-                        Topspin returns are relatively most frequent in the center of the court.
+                        Chipped returns are overrepresented at the corners of the court and the shallower areas along the center service line,
+                        whereas topspin returns are relatively most frequent in the center of the court.
                     """
     myFrms, animDict = vs.animate_static(diffScn, background_scene = courtScn, static_cam = heatCam, **prmDict, annotated_points = [fhPt, bhPt])
     myFrm = overlay(myFrms[-1], legFrm, top_left_point = anchorPt)
@@ -654,14 +665,15 @@ if DO_HEATMAP_SECTION:
     show(all_frames)
 
     # b) Save segments
-    for idx, subFrms in enumerate(all_frames):
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
         running_idx = current_idx + idx
         subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
         
         with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
             f.write(script_line)
-
-        current_idx += 1
+    
+    current_idx = current_idx + len(all_frames)
 
 
 #########################
@@ -793,8 +805,8 @@ if DO_LAUNCH_ANGLE_INTRO:
     anglePt = bPt.front(24).up(1).annotate(f'{ang:.1f} Degrees')
 
     script_line =   """
-                        The example return in question departs the racket at an angle 11.9 degrees. 
-                        Let us see how launch angles in general are distributed for chipped returns made by choice. 
+                        The example return is chipped back at an angle of 11.9 degrees. 
+                        Let's see how launch angles are distributed for choice chipped returns in general. 
                     """
     myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = [anglePt, *axPnts],
                                          **prmDict_nolum)
@@ -807,34 +819,35 @@ if DO_LAUNCH_ANGLE_INTRO:
     show(all_frames)
 
     # b) Save segments
-    for idx, subFrms in enumerate(all_frames):
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
         running_idx = current_idx + idx
         subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
         
         with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
             f.write(script_line)
-
-        current_idx += 1
+    
+    current_idx = current_idx + len(all_frames)
 
 
 if DO_LAUNCH_ANGLE_DISTRO:
     all_frames = []
     script_lines = []
 
-    acceleration_rate = 0.1
-    initial_frames = 25
+    acceleration_rate = 0.2
+    initial_frames = 20
     splnScn_curr = splnScn
     prev_kde = None
     shotList = []
     weightList = []
     frms = []
     idx = 0
-    for shot, weight in zip(sorted_chip_retShots_rectified[:25], weightArr_preds[:25]):
+    for shot, weight in zip(sorted_chip_retShots_rectified[:], weightArr_preds[:]):
         if not 0 < shot.get_launch_angle() <= 75:
             continue
 
         ### calculate num_frames
-        num_frames = max(2, int(initial_frames * (1 - acceleration_rate) ** idx)) ### need at least 2 frames to have clean interpolation
+        num_frames = max(1, int(initial_frames * (1 - acceleration_rate) ** idx))
 
         ### build new kde
         shotList.append(shot)
@@ -860,7 +873,10 @@ if DO_LAUNCH_ANGLE_DISTRO:
         frms.append(myFrms)
 
         ### Animate the new KDE
-        itpl_kdes = vs.interpolate_scenes(prev_kde, kde, num_frames)
+        if num_frames > 1:
+            itpl_kdes = vs.interpolate_scenes(prev_kde, kde, num_frames)
+        else:
+            itpl_kdes = Scene([kde])
         myFrms, _ = vs.animate_sequence(itpl_kdes, background_scene = court_and_axScn, previous_foreground_scene = splnScn_curr, **prmDict,
                                         start_cam = sideretCam, stop_cam = sideretCam, cumulative_foreground_transparence = 1)
         frms.append(myFrms)
@@ -880,14 +896,16 @@ if DO_LAUNCH_ANGLE_DISTRO:
     show(all_frames)
 
     # b) Save segments
-    for idx, subFrms in enumerate(all_frames):
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
         running_idx = current_idx + idx
         subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
         
         with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
             f.write(script_line)
+    
+    current_idx = current_idx + len(all_frames)
 
-        current_idx += 1
 
 if DO_LAUNCH_ANGLE_MODES:
     ### Show entire distribution
@@ -897,9 +915,9 @@ if DO_LAUNCH_ANGLE_MODES:
     # a) Chips
     #    --> Two modes: low angle chip; most prevalent, higher angle chip, less prevalent but pronounced.
     script_line =   """
-                        Within the choice chips, we observe two modes at two different launch angles.
+                        Within choice chips, we observe two modes at two different launch angles.
                         It does seem to be the case empirically that when a player opts for a chipped return, 
-                        he really opts for either a low, shallow-bouncing chip, and a high-arcing chip. 
+                        he really opts for either a low, shallow-bouncing chip, or a high-arcing chip. 
                     """
     myFrms, animDict = vs.animate_static(chip_angleScn, background_scene = court_and_axScn, **prmDict_nolum,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES)
@@ -922,7 +940,7 @@ if DO_LAUNCH_ANGLE_MODES:
     script_lines.append(script_line)
 
     script_line =   """
-                        On the other hand, for topspin returns, we observe only a single mode.
+                        On the other hand, for topspin returns, the distribution is more uniform: we observe only a single mode.
                     """
     staticFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
     staticFrms = overlay(staticFrms, legFrm, top_left_point = anchorPt)
@@ -941,9 +959,9 @@ if DO_LAUNCH_ANGLE_MODES:
     script_lines.append(script_line)
 
     script_line =   """
-                        The topspin mode is lower than either chipped return 
-                        (which is why we differentiate between a slice and a chip: 
-                        a rally slice would depart at a launch angle lower than, or similar to, a topspin shot. VERIFY!)
+                        The topspin mode angle is lower than both chip return modes, 
+                        which is why we differentiate between a slice and a chip: 
+                        a typical rally slice would depart at a launch angle lower than, or similar to, a typical topspin shot.
                     """
     myFrms, animDict = vs.animate_static(tops_angleScn, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES)
@@ -991,7 +1009,7 @@ if DO_LAUNCH_ANGLE_MODES:
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    script_line = f"... the high_angle choice chip return at {chip_mode_hi:.1f} Degrees."
+    script_line = f"... and the high_angle choice chip return at {chip_mode_hi:.1f} Degrees."
     myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1, angPt2])
     myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
@@ -1000,7 +1018,7 @@ if DO_LAUNCH_ANGLE_MODES:
 
     ang = myShots[1].get_launch_angle()
     script_line =   f"""
-                        Note that our example chip return departed the racket at a launch angle of {ang:.1f} degrees, 
+                        Note that our example chip return left the racket at a launch angle of {ang:.1f} degrees, 
                         making it a good representative of the low-angle chip mode. 
                         Let's watch it again, in this light.
                     """
@@ -1019,14 +1037,16 @@ if DO_LAUNCH_ANGLE_MODES:
     show(all_frames)
 
     # b) Save segments
-    for idx, subFrms in enumerate(all_frames):
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
         running_idx = current_idx + idx
         subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
         
         with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
             f.write(script_line)
 
-        current_idx += 1
+    current_idx = current_idx + len(all_frames)
+
 
 if DO_LAUNCH_ANGLE_EXAMPLE:
     all_frames = []
@@ -1072,11 +1092,25 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     scale_factor = 1.5
     brestCam_resized_half = brestCam.resize(scale_factor)
 
-    origDtm = myShots.stream(confs = confs).decap()
+    origStm = myShots.stream(confs = confs)
+    origDtm = origStm.decap()
     orig_scaledFrms = myDtm.frames.rescale(scale_factor)
 
-    bestDtm = bestShots.stream(confs = confs).decap()
+    bestStm = bestShots.stream(confs = confs)
+    bestDtm = bestStm.decap()
     best_scaledFrms = bestDtm.frames.rescale(scale_factor)
+
+    frames = origStm.frmNums
+    new_frames = list(range(min(frames) - STATIC_FRAMES, min(frames)))
+    early_origStm = origStm.conform(new_frames)
+    early_origDtm = early_origStm.decap()
+    early_orig_scaledFrms = early_origDtm.frames.rescale(scale_factor)
+
+    frames = bestStm.frmNums
+    new_frames = list(range(min(frames) - STATIC_FRAMES, min(frames)))
+    early_bestStm = bestStm.conform(new_frames)
+    early_bestDtm = early_bestStm.decap()
+    early_best_scaledFrms = early_bestDtm.frames.rescale(scale_factor)
 
     # zoom out of current view, back to the brestCam (already in rasterized view)
     script_line = ""
@@ -1086,6 +1120,21 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     lsFrm = myFrms[-1]
     all_frames.append(myFrms)
     script_lines.append(script_line)
+
+    ### experiment: fade-in with movement
+    lsFrm_resc = View.make(brestCam_resized_half, courtScn).snap()
+    blankFrm_resc = View.make(brestCam_resized_half, Scene([])).snap()
+
+    def mean_two_frames(aFrm, bFrm, my_lambda):
+        aArr, bArr = aFrm.array.astype(float), bFrm.array.astype(float)
+        itplArr = aArr * (1 - my_lambda) + bArr * my_lambda
+        return itplArr.astype(np.uint8)
+
+    orig_itplArrs = np.stack([mean_two_frames(lsFrm_resc, f, idx / STATIC_FRAMES) for idx, f in enumerate(early_orig_scaledFrms)], axis = 0)
+    orig_itplFrms = BGRFrames(orig_itplArrs)
+
+    best_itplArrs = np.stack([mean_two_frames(blankFrm_resc, f, idx / STATIC_FRAMES) for idx, f in enumerate(early_best_scaledFrms)], axis = 0)
+    best_itplFrms = BGRFrames(best_itplArrs)
 
     # create spline animation for our original point on new bestCam_resized_half
     splineFrms_orig, _ = vs.animate_sequence(spline_scenes, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
@@ -1107,11 +1156,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     # rasterize frames, and fade in the point being played
     script_line = ""
-    staticRst = FrameRaster(2, 2)
-    staticRst.add(orig_scaledFrms[0], 0, 0)
-    staticFrm = staticRst.render()
-    itplFrms = vs.interpolate_frames(lsFrm, staticFrm, num_frames = STATIC_FRAMES)
-    all_frames.append(itplFrms)
+    fadeinRst = FramesRaster(2, 2)
+    fadeinRst.add(orig_itplFrms, 0, 0)
+    fadeinFrms = fadeinRst.render()
+    all_frames.append(fadeinFrms)
     script_lines.append(script_line)
     
     # play out point with spline
@@ -1122,18 +1170,30 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     all_frames.append(playFrms_orig)
     script_lines.append(script_line)
 
+    # freeze, and play best matching point in lower right
     script_line =   """
                         We now compare the low chip to a representative of high-angle chip returns, in the lower right.
                     """
+    staticFrms = BGRFrames.from_frame(playFrms_orig[-1], STATIC_FRAMES)
+    all_frames.append(staticFrms)
+    script_lines.append(script_line)
 
-    # freeze, and play best matching point in lower right
+    # fade in best comparison in lower right
     script_line = ""
-    splineFrms_best_with_freeze = BGRFrames.from_frames([BGRFrames.from_frame(splineFrms_best[0], STATIC_FRAMES), splineFrms_best])
-    myRst = FramesRaster(2, 2)
-    myRst.add(splineFrms_orig[-1], 0, 0)
-    myRst.add(splineFrms_best_with_freeze, 1, 1)
-    playFrms_best = myRst.render()
-    all_frames.append(playFrms_best)
+    fadeinRst = FramesRaster(2, 2)
+    fadeinRst.add(splineFrms_orig[-1], 0, 0)
+    fadeinRst.add(best_itplFrms, 1, 1)
+    fadeinFrms = fadeinRst.render()
+    all_frames.append(fadeinFrms)
+    script_lines.append(script_line)
+
+    # play out point with spline
+    script_line = ""
+    fadeinRst = FramesRaster(2, 2)
+    fadeinRst.add(splineFrms_orig[-1], 0, 0)
+    fadeinRst.add(splineFrms_best, 1, 1)
+    fadeinFrms = fadeinRst.render()
+    all_frames.append(fadeinFrms)
     script_lines.append(script_line)
 
     # Matching Table
@@ -1167,7 +1227,9 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     script_line =   """
                         The return-of-comparison is chosen to be maximally similar to the low-angle chip in all respects except the launch angle,
-                        so that we can cleanly see the effects of a higher launch angle on ball trajectory and bounce.
+                        so that we can cleanly see the effects of a higher launch angle on ball trajectory and bounce. 
+                        As the table shows, both returns are made at almost the same speed, spin, and height.
+                        We therefore isolate the effect of launch angle on trajectory characteristics, which we will look at now.
                     """
     myRst = FrameRaster(2, 2)
     myRst.add(splineFrms_orig[-1], 0, 0)
@@ -1189,8 +1251,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     table_data = {  'Apex':                     {lo_name: f'{lo_apx:.1f} m',        hi_name: f'{hi_apx:.1f} m'},
                     'Apex post-bounce':         {lo_name: f'{lo_apx_pst:.1f} m',    hi_name: f'{hi_apx_pst:.1f} m'},
-                    'Time until bounce':           {lo_name: f'{lo_secs:.2f} sec',     hi_name: f'{hi_secs:.2f} sec'},
-                    'Ground Speed post-bounce': {lo_name: f'{lo_hori:.1f} km/h',    hi_name: f'{hi_hori:.1f} km/h'}}
+                    'Ground Speed post-bounce': {lo_name: f'{lo_hori:.1f} km/h',    hi_name: f'{hi_hori:.1f} km/h'},
+                    'Time until bounce':        {lo_name: f'{lo_secs:.2f} sec',     hi_name: f'{hi_secs:.2f} sec'},}
     
     dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
@@ -1200,14 +1262,15 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     tabFrm_comp = myTab.render()
     # tabFrm_comp.show()
 
-    ## TODO: Time travelled has to be until bounce! "Time until bounce"
-
     script_line =   """
-                        The high chip loses more of its speed along the ground -> server has to generate all the power if he wants to attack
-                        gives returner more time to recuperate, especially if the serve is hit out wide and carries the receiver off the court, this is useful.
-                        However, if it does not bounce close to the server's baseline, its high bounce can allow the server to attack with a flat shot at aggressive angles.
-                        On the other hand, a low chip that lands shallow is not terrible: it stays low and is awkward to attack because it has to be played with aggressive topspin
-                        or lower margins over the net to dip back down into the returner's half in time for it not to sail long.
+                        The high-arcing chip bounces 70 cm higher than the low chip. 
+                        If the arcing chip does not bounce close to the server's baseline, its high bounce can allow the server to attack with a flat shot at aggressive angles,
+                        whereas a low-angle chip that bounces shallow in the court is not so exploitable: it stays low and is awkward to attack because it has to be played with aggressive topspin
+                        or lower margins over the net to dip back down into the returner's half.
+                        On the other hand, the high chip loses more of its speed along the ground, which means that the server has to generate all the power if he wants to attack;
+                        in this sense, a high-arcing chip can neutralize a serve if hit with sufficient depth.
+                        The arcing chip also gives the returner more time to recuperate, which may be especially useful if the serve is hit out wide and carries the returner off the court.
+                        With respect to this latter point, let's visualize the impact of a ball's time in flight on the receiving player's ability to reposition on the court.
                     """
     myRst = FrameRaster(2, 2)
     myRst.add(splineFrms_orig[-1], 0, 0)
@@ -1329,8 +1392,6 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_lines.append(script_line)
     
     script_line =   """
-                        The high-arcing chip return spends almost half a second longer in flight. 
-                        Let's take a look at the impact this has on the receiving player's ability to reposition on the court.
                         First, consider the original example in the top left...
                     """
     myRst = FrameRaster(2, 2)
@@ -1422,9 +1483,9 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     script_line =   """
                         The low-angled chip shot gives him enough time to recover to the optimal spot. 
-                        The range of motion implied by the two seconds of travel time is indicated in blue.
-                        It assumes half a second of recovery time after the return has been made, and a running speed of 15 km/h,
-                        which is roughly in line with the ATP average for short distance sprints.
+                        The range of motion implied by the return's time until bounce is indicated in blue.
+                        It assumes a third of a second of recovery time after the return has been made, and a running speed of 15 km/h,
+                        which is roughly in line with the ATP average for short distance sprints from a standing start.
                     """
     myFrms, _ = vs.animate_static(Scene([loCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1), 
                                   previous_foreground_scene = Scene([origMark, origMark_repos]),
@@ -1437,7 +1498,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_lines.append(script_line)
 
     script_line =   """
-                        Had he played a high angle return, the additional half second of travel time would have given him more range of motion, 
+                        Had he played a high angle return, the additional .25 seconds of time-until-bounce would have given him more range of motion, 
                         which, in this case, would not have been necessary to reach the optimal point.
                     """
     myFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
@@ -1449,7 +1510,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_lines.append(script_line)
 
     script_line =   f"""
-                        A topspin shot down the line, however, travels on average {time_dist_frame.loc['orig_tp', 'time']:.1f} seconds, 
+                        A comparable topspin shot down the line would travel {time_dist_frame.loc['orig_tp', 'time']:.1f} seconds, 
                         which does not afford the returning player with enough time to recover to the optimal spot. 
                         In this sense, the topspin return down-the-line is a forcing shot: it must be so good as to end the rally
                         on the spot, or at least force a weak ball or even an error from the serving player; 
@@ -1490,8 +1551,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     ### add in the position mark
     script_line =   """
-                        Since the return goes cross-court, the returner is not required to recover to the other half of the baseline, so has
-                        less distance to cover.
+                        Since the return goes cross-court, the returner is not required to recover to the other half of the baseline, 
+                        so he has less distance to cover.
                     """
     staticFrms_best, _ = vs.animate_static(bestMark_repos, static_cam = brestCam_resized_half, background_scene = None, animate_over = last_bestFrm.dim(1), 
                                             previous_foreground_scene = Scene([bestMark]), **prmDict)
@@ -1507,9 +1568,13 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     best_markScn = Scene([bestMark, bestMark_repos])
 
     script_line =   f"""
-                        ...
+                        Again, the low-angled chip's flight time would have been more than enough to recover to the optimal spot.
+                        Even the topspin return cross-court would have afforded the returning player with enough time to make it to an adequate position on court; 
+                        he can not quite reach the optimal position, but he is not far away.
 
-                        However, notice that the returner is pulled out wide for this serve. If he were to play a return down-the-line...
+                        However, notice that the returner is pulled out wide for this serve. 
+                        If, in this situation, he were to play a return down-the-line, the returner would have more ground to cover to the optimal spot. 
+                        At the same time, the reduced flight-time of a return down the line affords the returner with less time to make up that distance.
                     """
     staticFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, tpCrcs]), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1),
                                   previous_foreground_scene = best_markScn,
@@ -1554,11 +1619,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_lines.append(script_line)
 
     script_line =   """
-                        Now that the returner has to cover more ground, 
-                        and since the ground he can cover shrinks because his chipped return down the line has less airtime,
-                        only the high-arcing chip affords enough time to get into the optimal position at the time of bounce.
+                        In this situation, where the returner is pulled somewhat out wide and attempts a return down the line, 
+                        only the high-arcing chip buys him enough time to get into the optimal position at the time of bounce.
                     """
-    staticFrms = BGRFrames.from_frame(itplFrms[-1], STATIC_FRAMES)
+    staticFrms = BGRFrames.from_frame(crcFrms_cntr[-1], STATIC_FRAMES)
     all_frames.append(staticFrms)
     script_lines.append(script_line)
 
@@ -1568,11 +1632,12 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     show(all_frames)
 
     # b) Save segments
-    for idx, subFrms in enumerate(all_frames):
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
         running_idx = current_idx + idx
         subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
         
         with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
             f.write(script_line)
 
-        current_idx += 1
+    current_idx = current_idx + len(all_frames)
