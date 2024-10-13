@@ -23,6 +23,9 @@ from ATMANpy.types.Overlays import FrameRaster, FramesRaster, Table
 
 from statsmodels.discrete.discrete_model import Logit
 
+def show(all_frames, ms_between_frames = 25):
+    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
+
 #############################
 #### READ IN CONFIGS ########
 #############################
@@ -382,6 +385,7 @@ for serve_case, dist in serve_dist_dict.items():
     xDict['ret_dist_to_opt_sq'] = dist ** 2
 
     if side == 'deuce': ### Deuce side is 'forehand' side
+        xDict['serve_fore'] = np.ones(N)
         xDict['ret_dist_to_bh_serve_fore'] = rel_rastArr[:, 0] 
         xDict['ret_dist_to_bh_serve_back'] = np.zeros(N)
         xDict['ret_dist_to_bh_serve_fore_sq'] = rel_rastArr[:, 0] ** 2
@@ -390,6 +394,7 @@ for serve_case, dist in serve_dist_dict.items():
         xDict['ret_dist_to_bh_serve_back_bsl'] = np.zeros(N)
 
     if side == 'ad':
+        xDict['serve_fore'] = np.zeros(N)
         xDict['ret_dist_to_bh_serve_fore'] = np.zeros(N) 
         xDict['ret_dist_to_bh_serve_back'] = rel_rastArr[:, 0]
         xDict['ret_dist_to_bh_serve_fore_sq'] = np.zeros(N)
@@ -687,9 +692,6 @@ for combo, loc in zip(combinations, locations):
     rastFrms = myRst.render()
     all_frames.append(rastFrms)
 
-### Show Reaching Distance for Server --> can he run around?
-
-
 ### Fade in Target Areas
 trgRst = FramesRaster(2, 2)
 
@@ -722,6 +724,288 @@ all_frames.append(trgFrms)
 jntFrms = BGRFrames.from_frames(all_frames)
 DecapStream(jntFrms, 0, 100).show()
 jntFrms[-1].show()
+
+show(all_frames)
+
+### Show Reaching Distance for Server --> can he run around?
+
+### empirical run around check.
+third_is_foreArr = retPnts_in.apply(vis_ut.is_third_shot_fore, dtype = bool)
+ySer = pd.Series(third_is_foreArr, name = 'is_forehand')
+
+# regressors = ['ret_dist_to_bh', 'ret_dist_to_bsl_bh', 'is_chipped', 'launch_angle', 'serve_fore']
+# regressors = ['ret_dist_to_bh', 'ret_dist_to_bsl_bh', 'is_chipped', 'launch_angle', 'serve_fore', 'ret_speed']
+regressors = ['ret_dist_to_bh', 'is_chipped', 'launch_angle', 'serve_fore']
+xFrm = regFrm_in[regressors].astype('float')
+xFrm['const'] = 1
+xFrm = xFrm.reset_index(drop = True)
+
+glmReg_fore = sm.GLM(ySer, xFrm, family = sm.families.Binomial()).fit()
+summary = glmReg_fore.summary()
+print(summary)
+
+### Construct Meshgridded regressor dataframe for each case in question
+# These are always the same!
+
+def get_reg_frame_fore(angle, is_chipped, side):
+    xDict = {}
+    xDict['const'] = np.ones(N)
+
+    if is_chipped:
+        xDict['is_chipped'] = np.ones(N)
+    else:
+        xDict['is_chipped'] = np.zeros(N)
+
+    xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
+    xDict['ret_dist_to_bh'] = rel_rastArr[:, 0]
+    xDict['ret_dist_to_bsl_bh'] = rel_rastArr[:, 1] * rel_rastArr[:, 0]
+    
+    xDict['launch_angle'] = np.ones(N) * angle
+
+    if side == 'deuce':
+        xDict['serve_fore'] = np.ones(N)
+    elif side == 'ad':
+        xDict['serve_fore'] = np.zeros(N)
+
+    regressor_frame = pd.DataFrame(xDict)
+    regressor_frame = regressor_frame[[*regressors, 'const']]
+    return regressor_frame
+
+regressor_frame = get_reg_frame_fore(MODE_TOPS, False, 'deuce')
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
+                                                                alpha_exponent = ALPHA_EXPONENT)
+rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
+View.make(myCam, rastScn_fore).snap().show()
+
+regressor_frame = get_reg_frame_fore(MODE_CHIP_LO, True, 'deuce')
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
+                                                                alpha_exponent = ALPHA_EXPONENT)
+rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
+View.make(myCam, rastScn_fore).snap().show()
+
+regressor_frame = get_reg_frame_fore(MODE_CHIP_HI, True, 'deuce')
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
+                                                                alpha_exponent = ALPHA_EXPONENT)
+rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
+View.make(myCam, rastScn_fore).snap().show()
+
+
+regressor_frame = get_reg_frame_fore(MODE_TOPS, False, 'ad')
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
+                                                                alpha_exponent = ALPHA_EXPONENT)
+rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
+View.make(myCam, rastScn_fore).snap().show()
+
+regressor_frame = get_reg_frame_fore(MODE_CHIP_LO, True, 'ad')
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
+                                                                alpha_exponent = ALPHA_EXPONENT)
+rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
+View.make(myCam, rastScn_fore).snap().show()
+
+regressor_frame = get_reg_frame_fore(MODE_CHIP_HI, True, 'ad')
+colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
+                                                                alpha_exponent = ALPHA_EXPONENT)
+rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
+View.make(myCam, rastScn_fore).snap().show()
+
+
+### Success Rates for Balls within
+
+from ATMANpy.auxil.court import top_a, top_b, top_c, top_d, bot_a, bot_b, bot_c, bot_d
+
+retPnts_in_left = retPnts_in.filter(regFrm_in['is_left_handed_server'].values)
+retPnts_in_right = retPnts_in.filter(regFrm_in['is_right_handed_server'].values)
+retPnts_in_rect = retPnts_in_right.join(retPnts_in_left.flip(across_middle = True, across_net = False)).sort()
+
+
+from ATMANpy.auxil.court import topReg, botReg
+top_a, top_b, top_c = topReg.subdivide(3, how = 'vertical')
+
+def shot_lands_in_or_near_area(myPnt, shot_idx = 0, num_subdivisions = 4):
+    from ATMANpy.auxil.court import topReg, botReg
+
+    try:
+        myShot = myPnt[shot_idx]
+    except IndexError:
+        return None
+    else:
+        x, y = myShot.get_first_bounce_position()
+        if x is None and y is None:
+            return None
+        else:
+            bncPt = Point2D((x, y))
+
+            if myShot.get_hit_side() == 'Top':
+                myRegs = reversed(botReg.subdivide(num_subdivisions, how = 'vertical').regList)
+            else:
+                myRegs = list(topReg.subdivide(num_subdivisions, how = 'vertical').regList)
+
+            center_points = [myReg.centroid() for myReg in myRegs]
+            voronoi_dists = [bncPt.distance_to(myPt) for myPt in center_points]
+
+            min_idx = np.argmin(voronoi_dists)
+            area_nums = list(range(1, num_subdivisions + 1))
+            return area_nums[min_idx]
+
+third_is_foreArr = retPnts_in_rect.apply(vis_ut.is_third_shot_fore, dtype = bool)
+return_areaArr = retPnts_in_rect.apply(shot_lands_in_or_near_area, dtype = str, shot_idx = 1, num_subdivisions = 3)
+third_areaArr = retPnts_in_rect.apply(shot_lands_in_or_near_area, dtype = str, shot_idx = 2, num_subdivisions = 3)
+        
+assert all(retPnts_in_rect.apply(vis_ut.is_third_shot_fore, dtype = bool) == retPnts_in.apply(vis_ut.is_third_shot_fore, dtype = bool))
+
+serve_foreArr = regFrm_in['serve_fore'].values.astype(bool)
+is_chipArr = regFrm_in['is_chipped'].values
+server_wins = regFrm_in['srv_wins'].values.astype(bool)
+server_wins_weighted = regFrm_in['srv_wins_weighted'].values.astype(float)
+# weight_pred = regFrm_in['weight_topspin'].values.astype(float)
+weight_pred = regFrm_in['pred_is_topspin'].values.astype(float)
+weight_bal = regFrm_in['balance_weight'].values.astype(float)
+weight_len = regFrm_in['len_weight'].values.astype(float)
+
+allArr = np.stack([ serve_foreArr, return_areaArr, is_chipArr, third_is_foreArr, third_areaArr, 
+                    server_wins, server_wins_weighted,
+                    weight_pred, weight_bal, weight_len], axis = 1)
+
+allFrm = pd.DataFrame(allArr, columns = [   'serve_is_fore', 'return_area', 'return_is_chipped', 'third_fore', 'third_area', 
+                                            'server_wins', 'server_wins_weighted',
+                                            'weight_prd', 'weight_bal', 'weight_len'])
+
+allFrm['serve_is_fore'] = allFrm['serve_is_fore'] == 'True'
+allFrm['return_is_chipped'] = allFrm['return_is_chipped'] == 'True'
+allFrm['third_fore'] = allFrm['third_fore'] == 'True'
+allFrm['server_wins'] = allFrm['server_wins'] == 'True'
+allFrm['server_wins_weighted'] = allFrm['server_wins_weighted'].astype(float)
+allFrm['weight_prd'] = allFrm['weight_prd'].astype(float)
+allFrm['weight_bal'] = allFrm['weight_bal'].astype(float)
+allFrm['weight_len'] = allFrm['weight_len'].astype(float)
+
+subFrm = allFrm[allFrm.third_area != 'None']
+
+def weighted_win_percentage_old(myFrm):
+    if myFrm['return_is_chipped'].unique()[0]: ### only for chipped returns do we apply the pred weight
+        jnt_weight = myFrm['weight_prd'] * myFrm['weight_bal'] * myFrm['weight_len']
+    else:
+        jnt_weight = myFrm['weight_bal'] * myFrm['weight_len']
+    
+    return (myFrm['server_wins'] * jnt_weight).sum() / jnt_weight.sum()
+
+# def weighted_win_percentage(myFrm):
+#     if myFrm['return_is_chipped'].unique()[0]: ### only for chipped returns do we apply the pred weight
+#         jnt_weight = myFrm['weight_prd'] * myFrm['weight_bal']
+#     else:
+#         jnt_weight = myFrm['weight_bal']
+    
+#     return (myFrm['server_wins_weighted'] * jnt_weight).sum() / jnt_weight.sum()
+   
+# def weighted_win_percentage(myFrm):
+#     if myFrm['return_is_chipped'].unique()[0]: ### only for chipped returns do we apply the pred weight
+#         jnt_weight = myFrm['weight_prd'] * myFrm['weight_bal']
+#     else:
+#         jnt_weight = myFrm['weight_bal']
+    
+#     return (myFrm['server_wins'] * jnt_weight).sum() / jnt_weight.sum()
+   
+
+def weighted_fore_percentage(myFrm):
+    jnt_weight = myFrm['weight_bal'] ### no need for the length adjustment! only in 
+    return (myFrm['third_fore'] * jnt_weight).sum() / jnt_weight.sum()
+   
+
+### Simple Win% by Area
+grpFrm = subFrm.groupby(['return_area', 'return_is_chipped'])['server_wins'].mean()
+grpFrm = grpFrm.unstack('return_is_chipped')
+print(grpFrm)
+# -> Win Percentage Diff between Chip and Tops is greatest in 3, lowest in 1. (TODO: how about for choice chips?)
+
+### Weighted Win% by Area
+grpFrm = subFrm.groupby(['return_area', 'return_is_chipped']).apply(weighted_win_percentage)
+grpFrm = grpFrm.unstack('return_is_chipped')
+print(grpFrm)
+# -> Win Percentage Diff between Chip and Tops is greatest in 3, lowest in 1.
+# -> for choice chips, with all weights: area 1 is almost exactly equal.
+
+### What Percent Shots are Hit Forehand?
+grpFrm = subFrm.groupby(['return_is_chipped', 'return_area'])['third_fore'].mean()
+grpFrm = grpFrm.unstack('return_is_chipped')
+print(grpFrm)
+# -> all shots forehand in 1, most in 2. for 3: very few if tops, 2/3 if chip.
+
+### Weighted: What Percent Shots are Hit Forehand?
+grpFrm = subFrm.groupby(['return_is_chipped', 'return_area']).apply(weighted_fore_percentage, over = 'third_fore')
+grpFrm = grpFrm.unstack('return_is_chipped')
+print(grpFrm)
+# -> all shots forehand in 1, most in 2. for 3: very few if tops, 2/3 if chip.
+
+grpFrm = subFrm.groupby(['return_is_chipped', 'return_area', 'serve_is_fore'])['third_fore'].mean()
+grpFrm = grpFrm.unstack('return_is_chipped')
+print(grpFrm)
+# -> if serve is made from the backhand side, higher likelihood of running around (because less distance!)
+
+### Win% if server runs around 
+grpFrm = subFrm.groupby(['return_area', 'third_fore'])['server_wins'].mean()
+grpFrm = grpFrm.unstack('third_fore')
+print(grpFrm)
+# -> if the ball is hit with forehand, small difference in 2, huge difference in 3.
+
+### Where are balls hit given shot area
+grpFrm = subFrm.groupby(['return_area', 'third_fore'])['third_area'].value_counts(normalize = True)
+grpFrm = grpFrm.unstack('third_fore')
+print(grpFrm)
+# -> central ball and wide ball are played with more decisive angles on the forehand! (less goes to the middle)
+
+grpFrm = subFrm.groupby(['return_area', 'third_area', 'third_fore'])['server_wins'].mean()
+grpFrm = grpFrm.unstack('third_fore')
+print(grpFrm)
+# -> not necessary to show? For 3, every option is better when run around, for 2, only to 2 and 3; but: low sample size here (for 2, backhand)
+
+
+
+
+# a -> a --> down the line
+# a -> b --> to the middle
+# a -> c/d --> cross-court
+### and equiv for d
+
+# b -> a --> down the line
+# b -> b/c --> to the middle
+# b -> d --> cross-court
+### and equiv for c
+
+
+regFrm_in['srv_wins']
+
+
+### Factors:
+# server position (deuce/ad (i.e. fore/back))
+# return is chipped
+# return landing (a, b, c, d) --> a has to be the forehand side!
+# serve + 1 forehand/backhand (is it run around?)
+# serve + 1 landing (cross court, middle, dtl)
+
+### Values of Interest
+### conditional on factors server position and return landing and return is chipped...
+# ... run-around-rate ---> do we run around?
+# ... serve + 1 landing frequency --> where do we aim?
+
+### conditional on all factors (? do we need server position here?)
+# ... win%
+
+
+
+
+
+myPnt = retPnts_in[0]
+def is_third_shot_cross(myPnt):
+    try:
+        thirdShot = myPnt[2]
+    except IndexError:
+        return None
+    else:
+        return thirdShot.is_cross_court()
+
+retPnts_in.get_
+
+
 
 ########### TESTING ############
 
