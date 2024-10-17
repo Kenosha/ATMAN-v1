@@ -827,7 +827,7 @@ class Legend:
             legend_shapes, annotated_points = [legLines], [headerPt]
         else:
             otherRegs = legReg.subdivide(elements = num_els + 1, how = 'horizontal')
-            legend_shapes, annotated_points = [], []
+            legend_shapes, annotated_points = [legLines], []
         
         for row, subReg in zip(self.legend_rows, otherRegs):
             
@@ -958,7 +958,7 @@ class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and colu
             self.output_dims = el_cols * self.cols, el_rows * self.rows
         
         self[row, col] = someFrm
-        
+
     def render(self):
         ### idea: get all the element MultiFrames to have the target dimensions and the target length
         ### for None elements, create black 
@@ -1046,7 +1046,7 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
                 raise Exception(f'Raster element dimensions ({self.element_dims}) have to match input frame dimensions ({dims})')
         else:
             self.element_dims = dims
-
+        
         if someFrms.length() > self.length or set_size:
             self.length = someFrms.length()
         
