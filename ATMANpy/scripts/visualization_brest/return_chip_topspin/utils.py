@@ -602,7 +602,45 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     regFrm['ret_dist_to_bh_serve_fore_bsl'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['ret_dist_to_bsl']
     regFrm['ret_dist_to_bh_serve_back_bsl'] = regFrm['ret_dist_to_bh_serve_back'] * regFrm['ret_dist_to_bsl']
 
+    ### chip interactions
+    regFrm['ret_dist_to_bsl_x_is_chipped'] = regFrm['ret_dist_to_bsl'] * regFrm['is_chipped']
+    regFrm['ret_dist_to_opt_x_is_chipped'] = regFrm['ret_dist_to_opt'] * regFrm['is_chipped']
     regFrm['ret_dist_to_bh_x_is_chipped'] = regFrm['ret_dist_to_bh'] * regFrm['is_chipped']
+
+    regFrm['ret_dist_to_bsl_bh_x_is_chipped'] = regFrm['ret_dist_to_bsl'] * regFrm['ret_dist_to_bh'] * regFrm['is_chipped']
+
+    regFrm['ret_dist_to_bsl_sq_x_is_chipped'] = regFrm['ret_dist_to_bsl_sq'] * regFrm['is_chipped']
+    regFrm['ret_dist_to_opt_sq_x_is_chipped'] = regFrm['ret_dist_to_opt_sq'] * regFrm['is_chipped']
+    regFrm['ret_dist_to_bh_sq_x_is_chipped'] = regFrm['ret_dist_to_bh_sq'] * regFrm['is_chipped']
+
+    regFrm['ret_dist_to_bh_serve_fore_x_is_chipped'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['is_chipped']
+    regFrm['ret_dist_to_bh_serve_fore_sq_x_is_chipped'] = regFrm['ret_dist_to_bh_serve_fore_sq'] * regFrm['is_chipped']
+    
+    regFrm['ret_dist_to_bh_serve_back_x_is_chipped'] = regFrm['ret_dist_to_bh_serve_back'] * regFrm['is_chipped']
+    regFrm['ret_dist_to_bh_serve_back_sq_x_is_chipped'] = regFrm['ret_dist_to_bh_serve_back_sq'] * regFrm['is_chipped']
+    
+    regFrm['ret_dist_to_bh_serve_fore_bsl_x_is_chipped'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['ret_dist_to_bsl'] * regFrm['is_chipped']
+    regFrm['ret_dist_to_bh_serve_back_bsl_x_is_chipped'] = regFrm['ret_dist_to_bh_serve_back'] * regFrm['ret_dist_to_bsl'] * regFrm['is_chipped']
+
+    ### speed interactions
+    regFrm['ret_dist_to_bsl_x_ret_speed'] = regFrm['ret_dist_to_bsl'] * regFrm['ret_speed']
+    regFrm['ret_dist_to_opt_x_ret_speed'] = regFrm['ret_dist_to_opt'] * regFrm['ret_speed']
+    regFrm['ret_dist_to_bh_x_ret_speed'] = regFrm['ret_dist_to_bh'] * regFrm['ret_speed']
+
+    regFrm['ret_dist_to_bsl_bh_x_ret_speed'] = regFrm['ret_dist_to_bsl'] * regFrm['ret_dist_to_bh'] * regFrm['ret_speed']
+
+    regFrm['ret_dist_to_bsl_sq_x_ret_speed'] = regFrm['ret_dist_to_bsl_sq'] * regFrm['ret_speed']
+    regFrm['ret_dist_to_opt_sq_x_ret_speed'] = regFrm['ret_dist_to_opt_sq'] * regFrm['ret_speed']
+    regFrm['ret_dist_to_bh_sq_x_ret_speed'] = regFrm['ret_dist_to_bh_sq'] * regFrm['ret_speed']
+
+    regFrm['ret_dist_to_bh_serve_fore_x_ret_speed'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['ret_speed']
+    regFrm['ret_dist_to_bh_serve_fore_sq_x_ret_speed'] = regFrm['ret_dist_to_bh_serve_fore_sq'] * regFrm['ret_speed']
+    
+    regFrm['ret_dist_to_bh_serve_back_x_ret_speed'] = regFrm['ret_dist_to_bh_serve_back'] * regFrm['ret_speed']
+    regFrm['ret_dist_to_bh_serve_back_sq_x_ret_speed'] = regFrm['ret_dist_to_bh_serve_back_sq'] * regFrm['ret_speed']
+    
+    regFrm['ret_dist_to_bh_serve_fore_bsl_x_ret_speed'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['ret_dist_to_bsl'] * regFrm['ret_speed']
+    regFrm['ret_dist_to_bh_serve_back_bsl_x_ret_speed'] = regFrm['ret_dist_to_bh_serve_back'] * regFrm['ret_dist_to_bsl'] * regFrm['ret_speed']
 
     ### launch angle
     regFrm['launch_angle'] = retPnts.get_returns().apply('get_launch_angle')
@@ -615,7 +653,8 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     regFrm['ret_dist_to_opt_sq_x_launch_angle'] = regFrm['ret_dist_to_opt_sq'] * regFrm['launch_angle']
 
     regFrm['ret_dist_to_bh_x_launch_angle'] = regFrm['ret_dist_to_bh'] * regFrm['launch_angle']
-    
+    regFrm['ret_dist_to_bh_sq_x_launch_angle'] = regFrm['ret_dist_to_bh_sq'] * regFrm['launch_angle']
+
     regFrm['ret_dist_to_bh_serve_fore_x_launch_angle'] = regFrm['ret_dist_to_bh_serve_fore'] * regFrm['launch_angle']
     regFrm['ret_dist_to_bh_serve_fore_sq_x_launch_angle'] = regFrm['ret_dist_to_bh_serve_fore_sq'] * regFrm['launch_angle']
     
@@ -821,7 +860,6 @@ def get_field_array_from_predictions(glmReg, regressor_frame, relative_to = 0.5,
     colArr = contourArr[:, np.newaxis] * np.array(color)[np.newaxis, :]
     alArr = contourArr[:, np.newaxis].astype(int)
     return colArr, alArr
-
 
 def model_to_diagram(fitted_model, renameDict = None, model_name = 'Propensity to Chip',
                      max_line_thickness = 5, min_line_thickness = 0.1, resolution = 10, render_height = 1500, 
