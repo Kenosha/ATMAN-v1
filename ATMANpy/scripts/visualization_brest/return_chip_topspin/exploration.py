@@ -403,7 +403,7 @@ chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
 
 bhPt = vis_ut.botReg['Bottom'].leftPt
 rastArr = chipScn.rastArrs[0]
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt)
+rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt, y_flip = True)
 
 ones = np.ones((len(rel_rastArr), 1))
 regressor_array = np.concatenate([ones, rel_rastArr], axis = 1)
@@ -441,7 +441,7 @@ chipScn = vs.kde_heatmap(chip_retShots_rectified,  showReg = showReg,
 
 bhPt = vis_ut.botReg['Bottom'].leftPt
 rastArr = chipScn.rastArrs[0]
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt)
+rel_rastArr = vis_ut.get_relative_raster_array(rastArr, bhPt, y_flip = True)
 
 ones = np.ones((len(rel_rastArr), 1))
 regressor_array = np.concatenate([ones, rel_rastArr, rel_rastArr ** 2], axis = 1)
@@ -726,7 +726,7 @@ rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
 num_x, num_y, num_coords = rastArr_2D.shape
 rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
 
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
+rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt, y_flip = True)
 
 ones = np.ones((len(rel_rastArr), 1))
 launch_angle = chip_modes[0]
@@ -902,7 +902,7 @@ rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
 num_x, num_y, num_coords = rastArr_2D.shape
 rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
 
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
+rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt, y_flip = True)
 
 ###### A) Deuce-Side, Serve out Wide
 # -> TODO: technically, for the average positions, we'd have to take lefty ad serves and flip them, and then calculate positions.
@@ -957,7 +957,7 @@ rastArr_2D = vs.meshgrid_region(vis_ut.botReg, resolution = 1)
 num_x, num_y, num_coords = rastArr_2D.shape
 rastArr_2D = rastArr_2D.reshape((num_x * num_y, num_coords))
 
-rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt)
+rel_rastArr = vis_ut.get_relative_raster_array(rastArr_2D, bhPt, y_flip = True)
 
 tops_speed, tops_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'tops']
 chip_lo_speed, chip_lo_angle = weighted_mean_valFrm.loc[['ret_speed', 'launch_angle'], 'chip_lo']

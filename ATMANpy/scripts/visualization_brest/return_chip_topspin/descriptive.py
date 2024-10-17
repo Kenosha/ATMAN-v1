@@ -118,7 +118,8 @@ logReg.summary()
 #########################################
 ##### CREATE REGRESSORS AND WEIGHTS #####
 #########################################
-regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new)
+DECAY_RATE = 0.9
+regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = DECAY_RATE)
 
 #### From here on out, we look at returns made
 # -> filter!
@@ -1526,6 +1527,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     all_frames.append(crcFrms_orig)
     script_lines.append(script_line)
 
+    orig_markScn = Scene([origMark, origMark_repos]) ### save for later
+    orig_circScn = Scene([loCrcs, hiCrcs, tpCrcs]) ### save for later
     ls_staticFrm_orig = staticFrms_orig[-1]
 
     # b) for the best match shot
@@ -1626,9 +1629,144 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     all_frames.append(staticFrms)
     script_lines.append(script_line)
 
+    ### SEGUE TO INFERENCE
+    # given all of this -> where SHOULD a chipped ball go to improve the returners chances of winning?
+    # -> what chip is more promising than an average topspin return?
+
+    # de-render the shapes in the top left
+    script_line =   """
+                        Up until this point, we have tackled the chip return entirely descriptively, 
+                        having made note of the distributions of placement and launch angles, 
+                        and their impact on court positioning. 
+                        We know, roughly, what an average challenger-level player does 
+                        with respect to the chipped return versus the topspin return,
+                        what we are lacking is an answer to the question: what should he do.
+                        Where should the chip return be placed to overcome the 10% win-rate deficit over the topspin return?
+                        At what angle should the ball be played? 
+
+                        We will now attempt an answer to these questions, with the following caveat: To the extent that
+                        these normative kinds of questions are the more interesting to answer, they are also more difficult to answer
+                        statistically, for the lack of a counterfactual. 
+                        In any specific situation, we only ever observe the return that was actually hit,
+                        not the set of all other possible returns. Had we observed that set and had we recorded the outcome 
+                        of the point for each of the possible returns, we could easily give an answer to what the returner should do,
+                        especially if we had observed the whole set a bunch of times over to average out the randomness that 
+                        a tennis point is heir to.
+                        However, we do not inhabit the world of hypotheticals, and must make do with just the one outcome. 
+                        
+                        Though imperfect, an adequate attempt can still be made to answer the question: what should the returner do, here.
+
+                        To this end, we estimate a model that takes into account a variety of factors, 
+                        such as return placement, launch angle, speed, spin and on-court positioning of the returner and server
+                        and calculates the returner's win probability. 
+                        We can then let the model evaluate all kinds of hypothetical returns, and let it calculate their win probability.
+                        For a few different example situations, the best chip and topspin returns emerge naturally as the best
+                        hypothetical return among all.
+                    """
+    myRst = FramesRaster(2, 2)
+    myRst.add(itplFrms[-1], 1, 1)
+
+    num_frames = 10
+    staticFrms_derender, _ = vs.animate_static(orig_circScn, static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
+                                        previous_foreground_scene = orig_markScn, num_frames = num_frames,
+                                        **prmDict)
+    myRst.add(staticFrms_derender, 0, 0)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(orig_circScn, static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
+                                        previous_foreground_scene = orig_markScn.drop(0), num_frames = num_frames,
+                                        **prmDict)
+    myRst.add(staticFrms_derender, 0, 0)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+    
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(orig_circScn, static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
+                                        previous_foreground_scene = None, num_frames = num_frames,
+                                        **prmDict)
+    myRst.add(staticFrms_derender, 0, 0)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(orig_circScn.drop(1), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
+                                        previous_foreground_scene = None, num_frames = num_frames,
+                                        **prmDict)
+    myRst.add(staticFrms_derender, 0, 0)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+    
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(orig_circScn.drop(1).drop(0), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
+                                        previous_foreground_scene = None, num_frames = num_frames,
+                                        **prmDict)
+    myRst.add(staticFrms_derender, 0, 0)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(Scene([]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
+                                        previous_foreground_scene = None, num_frames = num_frames,
+                                        **prmDict)
+    myRst.add(staticFrms_derender, 0, 0)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    ### derender also other frame
+    myRst = FramesRaster(2, 2)
+    
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(endScn, static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), num_frames = num_frames, **prmDict)
+    myRst.add(staticFrms_derender, 1, 1)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(endScn.drop(0), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), num_frames = num_frames, **prmDict)
+    myRst.add(staticFrms_derender, 1, 1)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+    
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(endScn.drop(0).drop(0), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), num_frames = num_frames, **prmDict)
+    myRst.add(staticFrms_derender, 1, 1)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(endScn.drop(0).drop(0).drop(0), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), num_frames = num_frames, **prmDict)
+    myRst.add(staticFrms_derender, 1, 1)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+    
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(endScn.drop(0).drop(0).drop(0).drop(0), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), num_frames = num_frames, **prmDict)
+    myRst.add(staticFrms_derender, 1, 1)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line = ""
+    staticFrms_derender, _ = vs.animate_static(Scene([]), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), num_frames = num_frames, **prmDict)
+    myRst.add(staticFrms_derender, 1, 1)
+    crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)
-
     show(all_frames)
 
     # b) Save segments

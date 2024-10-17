@@ -122,7 +122,8 @@ logReg.summary()
 #########################################
 ##### CREATE REGRESSORS AND WEIGHTS #####
 #########################################
-regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new)
+DECAY_RATE = 0.9
+regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = DECAY_RATE)
 
 #### From here on out, we look at returns made
 # -> filter!
@@ -186,7 +187,8 @@ FADE_IN_FACTOR = (FULL_ALPHA / INVISIBLE_ALPHA) ** (1 / TRANSITION_FRAMES)
 FADE_OUT_FACTOR = 1 / FADE_IN_FACTOR ### easy to show that this must hold.
 
 BALL_COLOR = const.BGR['ball_yellow']
-CHIP_COLOR = const.BGR['marine_blue']
+CHIP_LO_COLOR = const.BGR['marine_blue']
+CHIP_HI_COLOR = const.BGR['bright_blue']
 TOPS_COLOR = const.BGR['light_brown']
 
 ### Cam and View
@@ -196,10 +198,23 @@ myCam = back_view_asymmetric_cam(which = 'Deuce', side = 'Bot')
 myCam = Camera.calibrated_brest_behind().resize(3)
 courtScn = Scene.make_court()
 
+from ATMANpy.auxil.court import cnt_2D, top_cnt_2D
+from ATMANpy.types.Shapes3D import Point3D
+p_orig, p_target = Point3D.from_point2D(cnt_2D, z = 100), Point3D.from_point2D(top_cnt_2D, z = 0)
+heatCam = Camera.from_to(p_orig, p_target, f = 1000, sensor_dims = (960, 540)).zoom(0.5)
+
+halfCam = myCam.resize(0.5)
+
 # annotated points
 from ATMANpy.auxil.court import top_bsl_deu_2D, top_bsl_ad_2D
 fhPt_annot = Point3D.from_point2D(top_bsl_deu_2D, z = 0).front(10).annotate('Forehand')
 bhPt_annot = Point3D.from_point2D(top_bsl_ad_2D, z = 0).front(10).left(35).annotate('Backhand')
+
+fhPt_annot_half = fhPt_annot.left(50).front(25)
+bhPt_annot_half = bhPt_annot.left(15).front(25)
+
+prmDict_annot = {**prmDict}
+prmDict_annot['annotated_points'] = [fhPt_annot_half, bhPt_annot_half]
 
 backView = View.make(myCam, courtScn, resolution = 1, annotatedPoints = [fhPt_annot, bhPt_annot])
 
@@ -217,39 +232,59 @@ def get_spline_frames(myPnt):
     myFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = realFrms.rescale(3), **prmDict)
     return myFrms
 
+def get_wide_frames(myPnt, pre_frames = 150):
+    preDtm = myPnt.stream(confs = confs).widen(pre_frames).decap()
+    preFrms = preDtm.frames[:pre_frames]
+    preArr_dimmed = np.stack([f.dim((idx / pre_frames) ** 2).array for idx, f in enumerate(preFrms)], axis = 0)
+    preFrms_dimmed = BGRFrames(preArr_dimmed).rescale(3)
+    return preFrms_dimmed
+
 def is_return_topspin(myPnt):
     ### filter for topspin returns so that we can introduce counterfactual.
     return myPnt.get_return().is_topspin_visual()
 
 realDict = {}
+wideDict = {}
+
+pre_frames = 150
 
 # a) deuce, out wide
 myFrms = get_spline_frames(bPnt)
-# DecapStream(myFrms, 0, 100).show()
+preFrms = get_wide_frames(bPnt, pre_frames = pre_frames)
+# DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
+# myFrms[-1].show()
 realDict['deuce_wide'] = myFrms
+wideDict['deuce_wide'] = preFrms
 
 # b) deuce, down middle
 relPnts = retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_deuce').filter(is_return_topspin)
 myFrms = get_spline_frames(relPnts[0])
-DecapStream(myFrms, 0, 100).show()
-myFrms[-1].show()
+preFrms = get_wide_frames(relPnts[0], pre_frames = pre_frames)
+# DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
+# myFrms[-1].show()
 realDict['deuce_middle'] = myFrms
+wideDict['deuce_middle'] = preFrms
 
 # c) ad, down middle
 relPnts = retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_ad').filter(is_return_topspin)
 myFrms = get_spline_frames(relPnts[41]) ### not nakashima again.
-DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
+preFrms = get_wide_frames(relPnts[41], pre_frames = pre_frames) 
+# DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
+# myFrms[-1].show()
 realDict['ad_middle'] = myFrms
+wideDict['ad_middle'] = preFrms
 
 # d) ad, out wide
 relPnts =  retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_ad').filter(is_return_topspin)
 myFrms = get_spline_frames(relPnts[100])
-DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
-myFrms[-1].show()
+preFrms = get_wide_frames(relPnts[100], pre_frames = pre_frames) 
+# DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
+# myFrms[-1].show()
 realDict['ad_wide'] = myFrms
+wideDict['ad_wide'] = preFrms
 
 ### Get area of confidence for prediction
-kdeScn = vs.kde_heatmap(retPnts_in.get_returns(), showReg = vis_ut.topReg, resolution = RESOLUTION_KDE, normalize_density = True, bandwidth = BANDWIDTH_KDE)
+# kdeScn = vs.kde_heatmap(retPnts_in.get_returns(), showReg = vis_ut.topReg, resolution = RESOLUTION_KDE, normalize_density = True, bandwidth = BANDWIDTH_KDE)
 # backView.combine(View.make(myCam, kdeScn)).snap().show()
 # -> just simply use everything behind the service line.
 showReg = CourtLines.make().get_deep_box(side = 'Top')
@@ -283,7 +318,7 @@ shareArr = vis_ut.target_quality_measure(showReg, bandwidth = 30)
 
 shareArr_norm = (shareArr - shareArr.min()) / (shareArr.max() - shareArr.min())
 checkScn = DummyScene([rastArr_3D], [np.ones_like(rastArr_3D) * 255], [shareArr_norm[:, np.newaxis]])
-View.make(myCam, checkScn).snap().show()
+# View.make(myCam, checkScn).snap().show()
 
 ### SOME PARAMETERS
 
@@ -291,14 +326,25 @@ View.make(myCam, checkScn).snap().show()
 MODE_CHIP_LO = 11.75
 MODE_CHIP_HI = 18.75 
 MODE_TOPS = 7.28
-DIST_CHIP_LO = 6.25
-DIST_CHIP_HI = 8.08
-DIST_TOPS = 3.33
+# DIST_CHIP_LO = 6.25
+# DIST_CHIP_HI = 8.08
+# DIST_TOPS = 3.33
+
+angle_filter = np.abs(regFrm_in['launch_angle'] - MODE_CHIP_LO) < np.abs(regFrm_in['launch_angle'] - MODE_CHIP_HI) 
+closest_mode = np.where(~regFrm_in.is_chipped, 'tp', np.where(angle_filter, 'lo', 'hi'))
+
+SPEED_CHIP_HI, SPEED_CHIP_LO, SPEED_TOPS = regFrm_in.groupby(closest_mode).ret_speed.median()
+assert SPEED_TOPS > SPEED_CHIP_LO > SPEED_CHIP_HI
+
+RPM_CHIP_HI, RPM_CHIP_LO, RPM_TOPS = regFrm_in.groupby(closest_mode).ret_spin.median()
+
+modeDict = {'lo': MODE_CHIP_LO, 'hi': MODE_CHIP_HI, 'tp': MODE_TOPS}
+speedDict = {'lo': SPEED_CHIP_LO, 'hi': SPEED_CHIP_HI, 'tp': SPEED_TOPS}
+rpmDict = {'lo': RPM_CHIP_LO, 'hi': RPM_CHIP_HI, 'tp': RPM_TOPS}
 
 ### rendering parameters
 ALPHA_EXPONENT = 0.5
 RENDER_ON_REAL = True
-LENIENCY = 0.05
 DIM_FACTOR = 0.5
 
 #### Make return player positions for each serve case
@@ -352,28 +398,50 @@ return_pos_dict['ad_wide'] = ret_player_pos
 # These are always the same!
 xDict = {}
 xDict['const'] = np.ones(N)
-xDict['is_chipped'] = np.ones(N)
 xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
 xDict['ret_dist_to_bh'] = rel_rastArr[:, 0]
 xDict['ret_dist_to_bsl_bh'] = xDict['ret_dist_to_bsl'] * xDict['ret_dist_to_bh']
 xDict['ret_dist_to_bsl_sq'] = xDict['ret_dist_to_bsl'] ** 2
 xDict['ret_dist_to_bh_sq'] = xDict['ret_dist_to_bh'] ** 2
 
-traj_means = regFrm_in.groupby('is_chipped')[['ret_speed', 'ret_spin']].mean()
-chip_speed, chip_spin = traj_means.loc[True]
-xDict['ret_speed'] = np.ones(N) * chip_speed
-xDict['ret_spin'] = np.ones(N) * chip_spin
-
 regressors_base = pd.DataFrame(xDict)
 
 # these depend on the launch angle
 regressors_angle = {}
-for chip_name, chip_mode in {'lo': MODE_CHIP_LO, 'hi': MODE_CHIP_HI}.items():
+for chip_name in ['tp', 'lo', 'hi']:
+    is_chipped = chip_name != 'tp'
+
+    angle = modeDict[chip_name]
+    speed = speedDict[chip_name]
+    rpm = rpmDict[chip_name]
+
     xDict = {}
-    xDict['launch_angle'] = np.ones(N) * chip_mode
-    xDict['ret_dist_to_bh_x_launch_angle'] = rel_rastArr[:, 0] * chip_mode
-    xDict['ret_dist_to_bsl_x_launch_angle'] = rel_rastArr[:, 1] * chip_mode
     
+    xDict['launch_angle'] = np.ones(N) * angle
+    xDict['ret_dist_to_bh_x_launch_angle'] = rel_rastArr[:, 0] * angle
+    xDict['ret_dist_to_bsl_x_launch_angle'] = rel_rastArr[:, 1] * angle
+    xDict['ret_dist_to_bh_sq_x_launch_angle'] = rel_rastArr[:, 0] ** 2 * angle
+    xDict['ret_dist_to_bsl_sq_x_launch_angle'] = rel_rastArr[:, 1] ** 2 * angle
+
+    xDict['is_chipped'] = np.ones(N) * is_chipped
+    xDict['ret_dist_to_bh_x_is_chipped'] = rel_rastArr[:, 0] * is_chipped    
+    xDict['ret_dist_to_bsl_x_is_chipped'] =  rel_rastArr[:, 1] * is_chipped
+    xDict['ret_dist_to_bh_sq_x_is_chipped'] = rel_rastArr[:, 0] ** 2 * is_chipped
+    xDict['ret_dist_to_bsl_sq_x_is_chipped'] = rel_rastArr[:, 1] ** 2 * is_chipped
+    xDict['ret_dist_to_bsl_bh_x_is_chipped'] = rel_rastArr[:, 1] * rel_rastArr[:, 0] * is_chipped
+
+    xDict['ret_speed'] = np.ones(N) * speed
+    xDict['ret_dist_to_bh_x_ret_speed'] = rel_rastArr[:, 0] * speed    
+    xDict['ret_dist_to_bsl_x_ret_speed'] =  rel_rastArr[:, 1] * speed
+    xDict['ret_dist_to_bh_sq_x_ret_speed'] = rel_rastArr[:, 0] ** 2 * speed
+    xDict['ret_dist_to_bsl_sq_x_ret_speed'] = rel_rastArr[:, 1] ** 2 * speed
+
+    xDict['ret_spin'] = np.ones(N) * rpm
+    xDict['ret_dist_to_bh_x_ret_spin'] = rel_rastArr[:, 0] * rpm    
+    xDict['ret_dist_to_bsl_x_ret_spin'] =  rel_rastArr[:, 1] * rpm
+    xDict['ret_dist_to_bh_sq_x_ret_spin'] = rel_rastArr[:, 0] ** 2 * rpm
+    xDict['ret_dist_to_bsl_sq_x_ret_spin'] = rel_rastArr[:, 1] ** 2 * rpm
+
     regressors_angle[chip_name] = pd.DataFrame(xDict)
 
 # these depend on the serve case
@@ -406,231 +474,76 @@ for serve_case, dist in serve_dist_dict.items():
 
 # these depend on serve case AND angle
 regressors_angle_case = {}
-for chip_name, chip_mode in {'lo': MODE_CHIP_LO, 'hi': MODE_CHIP_HI}.items():
+for chip_name in ['tp', 'lo', 'hi']:
+    is_chipped = chip_name != 'tp'
+
+    angle = modeDict[chip_name]
+    speed = speedDict[chip_name]
+    rpm = rpmDict[chip_name]
+
     for serve_case, dist in serve_dist_dict.items():
         side, where = serve_case.split('_')
         xDict = {}
         
-        xDict['ret_dist_to_opt_x_launch_angle'] = dist * chip_mode
-        xDict['ret_dist_to_opt_sq_x_launch_angle'] = (dist ** 2) * chip_mode
+        xDict['ret_dist_to_opt_x_launch_angle'] = dist * angle
+        xDict['ret_dist_to_opt_sq_x_launch_angle'] = (dist ** 2) * angle
 
+        xDict['ret_dist_to_opt_x_is_chipped'] = dist * is_chipped
+        xDict['ret_dist_to_opt_sq_x_is_chipped'] = dist ** 2 * is_chipped
+
+        xDict['ret_dist_to_opt_x_ret_speed'] = dist * speed
+        xDict['ret_dist_to_opt_sq_x_ret_speed'] = dist ** 2 * speed
+
+        xDict['ret_dist_to_opt_x_ret_spin'] = dist * rpm
+        xDict['ret_dist_to_opt_sq_x_ret_spin'] = dist ** 2 * rpm
+
+        
         if side == 'deuce': ### Deuce side is 'forehand' side
-            xDict['ret_dist_to_bh_serve_fore_x_launch_angle'] = rel_rastArr[:, 0] * chip_mode
+            xDict['ret_dist_to_bh_serve_fore_x_launch_angle'] = rel_rastArr[:, 0] * angle
             xDict['ret_dist_to_bh_serve_back_x_launch_angle'] = np.zeros(N)
-            xDict['ret_dist_to_bh_serve_fore_sq_x_launch_angle'] = rel_rastArr[:, 0] ** 2 * chip_mode
+            xDict['ret_dist_to_bh_serve_fore_sq_x_launch_angle'] = rel_rastArr[:, 0] ** 2 * angle
             xDict['ret_dist_to_bh_serve_back_sq_x_launch_angle'] = np.zeros(N)
+            
+            xDict['ret_dist_to_bh_serve_fore_x_is_chipped'] = rel_rastArr[:, 0] * is_chipped
+            xDict['ret_dist_to_bh_serve_back_x_is_chipped'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_fore_sq_x_is_chipped'] = rel_rastArr[:, 0] ** 2 * is_chipped
+            xDict['ret_dist_to_bh_serve_back_sq_x_is_chipped'] = np.zeros(N) 
 
+            xDict['ret_dist_to_bh_serve_fore_bsl_x_is_chipped'] = rel_rastArr[:, 0] * rel_rastArr[:, 1] * is_chipped
+            xDict['ret_dist_to_bh_serve_back_bsl_x_is_chipped'] = np.zeros(N)
+            
+            xDict['ret_dist_to_bh_serve_fore_x_ret_speed'] = rel_rastArr[:, 0] * speed
+            xDict['ret_dist_to_bh_serve_back_x_ret_speed'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_fore_sq_x_ret_speed'] = rel_rastArr[:, 0] ** 2 * speed
+            xDict['ret_dist_to_bh_serve_back_sq_x_ret_speed'] = np.zeros(N) 
+
+            xDict['ret_dist_to_bh_serve_fore_bsl_x_ret_speed'] = rel_rastArr[:, 0] * rel_rastArr[:, 1] * speed
+            xDict['ret_dist_to_bh_serve_back_bsl_x_ret_speed'] = np.zeros(N)
+            
         if side == 'ad':
             xDict['ret_dist_to_bh_serve_fore_x_launch_angle'] = np.zeros(N)
-            xDict['ret_dist_to_bh_serve_back_x_launch_angle'] = rel_rastArr[:, 0] * chip_mode
+            xDict['ret_dist_to_bh_serve_back_x_launch_angle'] = rel_rastArr[:, 0] * angle
             xDict['ret_dist_to_bh_serve_fore_sq_x_launch_angle'] = np.zeros(N) 
-            xDict['ret_dist_to_bh_serve_back_sq_x_launch_angle'] = rel_rastArr[:, 0] ** 2 * chip_mode
+            xDict['ret_dist_to_bh_serve_back_sq_x_launch_angle'] = rel_rastArr[:, 0] ** 2 * angle
+
+            xDict['ret_dist_to_bh_serve_fore_x_is_chipped'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_x_is_chipped'] = rel_rastArr[:, 0] * is_chipped
+            xDict['ret_dist_to_bh_serve_fore_sq_x_is_chipped'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_sq_x_is_chipped'] = rel_rastArr[:, 0] ** 2 * is_chipped
+
+            xDict['ret_dist_to_bh_serve_fore_bsl_x_is_chipped'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_bsl_x_is_chipped'] = rel_rastArr[:, 0] * rel_rastArr[:, 1] * is_chipped
+        
+            xDict['ret_dist_to_bh_serve_fore_x_ret_speed'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_x_ret_speed'] = rel_rastArr[:, 0] * speed
+            xDict['ret_dist_to_bh_serve_fore_sq_x_ret_speed'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_sq_x_ret_speed'] = rel_rastArr[:, 0] ** 2 * speed
+
+            xDict['ret_dist_to_bh_serve_fore_bsl_x_ret_speed'] = np.zeros(N)
+            xDict['ret_dist_to_bh_serve_back_bsl_x_ret_speed'] = rel_rastArr[:, 0] * rel_rastArr[:, 1] * speed
+        
 
         regressors_angle_case[chip_name + '_' + serve_case] = pd.DataFrame(xDict)
-
-### Models we want to try out
-regDict = { 'base_weighted': ['is_chipped'],
-            'dist_bsl_weighted': ['is_chipped', 'ret_dist_to_bsl'],
-            'dist_bsl_bh_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl'],
-            'dist_bsl_bh_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bsl_sq'],
-            'dist_bsl_bh_parab_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl',  'ret_dist_to_bsl_bh'],
-            'dist_bsl_bh_sq_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_sq', 'ret_dist_to_bsl_bh'],
-
-            'dist_bsl_bh_opt_weighted': ['is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt'],
-            'dist_bsl_bh_opt_inter_weighted': [ 'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle'],
-            'dist_bsl_bh_opt_inter2_weighted': [ 'is_chipped', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_opt_chars_halfsq_inter2_weighted': [ 'ret_speed', 'ret_spin', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                                'ret_dist_to_bh_sq',
-                                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_opt_chars_parab_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bh', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                            'ret_dist_to_bsl_bh',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_opt_inter2_weighted':  [ 'is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            
-           } 
-
-regDict = {'dist_bsl_bh_side_sq_opt_inter2_weighted':  ['is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                        'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                        'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                        'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_side_sq_opt_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],
-            'dist_bsl_bh_side_sq_opt_speed_inter2_weighted': ['ret_speed', 'ret_dist_to_bsl', 'ret_dist_to_opt',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_x_launch_angle'],}
-# needed here: opt_sq; bsl_bh
-
-
-regDict = {'dist_bsl_bh_side_sq_opt_sq_inter2_weighted':  ['is_chipped', 'ret_dist_to_bsl', 'ret_dist_to_opt_sq',
-                                                        'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                        'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                        'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle'],
-            'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle'],
-            'dist_bsl_bh_side_sq_opt_sq_speed_inter2_weighted': ['ret_speed', 'ret_dist_to_bsl', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle'],}
-
-### only speed and spin (highest R**2)
-regDict = {'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
-                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle'],
-        'dist_bsl_bh_side_sq_opt_sq_parab_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'ret_dist_to_bh_serve_fore_bsl', 'ret_dist_to_bh_serve_back_bsl',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
-                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle']}
-
-### try with bh_x_launch_angle interactions.
-regDict = {'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
-                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
-                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle'],
-        'dist_bsl_bh_side_sq_opt_sq_parab_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'ret_dist_to_bh_serve_fore_bsl', 'ret_dist_to_bh_serve_back_bsl',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
-                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
-                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle']}
-
-### all variables, launch_angled
-regDict = {'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
-                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
-                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle',
-                                                            'ret_dist_to_bh_serve_fore_sq_x_launch_angle', 'ret_dist_to_bh_serve_back_sq_x_launch_angle'],
-        'dist_bsl_bh_side_sq_opt_sq_parab_chars_inter2_weighted': ['ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
-                                                            'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
-                                                            'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
-                                                            'ret_dist_to_bh_serve_fore_bsl', 'ret_dist_to_bh_serve_back_bsl',
-                                                            'launch_angle', 'ret_dist_to_bsl_x_launch_angle', 
-                                                            'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
-                                                            'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle',
-                                                            'ret_dist_to_bh_serve_fore_sq_x_launch_angle', 'ret_dist_to_bh_serve_back_sq_x_launch_angle']}
-
-
-
-### Result Path
-project_results_path = get_folder_struct('results_video')['return_chip_topspin']
-current_results_path = maybe_make_folder(project_results_path, f'regressions_' + make_timestamp())
-
-if SAVE_REGS:
-    #########################################
-    ### REGRESSION FOR LOCATION OPTIMALITY ##
-    #########################################
-    endog = 'ret_wins_weighted'
-    for weight in [None, 'weight_topspin', 'weight_bal_pred']:
-        if weight is None:
-            var_folder = maybe_make_folder(current_results_path, f'{endog}_none')
-        else:
-            var_folder = maybe_make_folder(current_results_path, f'{endog}_{weight}')
-
-        for save_name, regressors in regDict.items():
-            reg_path = maybe_make_folder(var_folder, save_name)
-
-            glmReg = vis_ut.make_and_save_model(regFrm_in, regressors, save_path = reg_path, save_name = save_name, 
-                                                endog_col = endog, weight_col = weight)
-
-            ### get the chip and top predicted average
-            X, y = vis_ut.retrieve_X_y(glmReg, regressors)
-            meanFrm = X.groupby(regFrm_in['is_chipped'].values).mean()
-            chipSer = meanFrm.loc[True]
-            topsSer = meanFrm.loc[False]
-                
-            avg_tops_pred = glmReg.predict(topsSer).values[0]
-            avg_chip_pred = glmReg.predict(chipSer).values[0]
-
-            avg_tops_pred = avg_tops_pred - LENIENCY
-            
-            for angle in ['lo', 'hi']:
-                for side in ['ad', 'deuce']:
-                    for where in ['wide', 'middle']:
-                        ### make players
-                        srv_x, srv_y = server_pos_dict[side + '_' + where]
-                        ret_x, ret_y = return_pos_dict[side + '_' + where]
-                        srvPly = Player.make((srv_x, srv_y))
-                        retPly = Player.make((ret_x, ret_y))
-                        plyScn = Scene([srvPly, retPly])
-                        plyView = View.make(myCam, plyScn, resolution = RESOLUTION_OBJECTS)
-
-                        ### make regressor frame
-                        regFrm_base = regressors_base
-                        regFrm_angle = regressors_angle[angle]
-                        regFrm_case = regressors_case[side + '_' + where]
-                        regFrm_angle_case = regressors_angle_case[angle + '_' + side + '_' + where]
-
-                        regressor_frame = pd.concat([regFrm_base, regFrm_angle, regFrm_case, regFrm_angle_case], axis = 1)
-                        regressor_frame = regressor_frame[[*regressors, 'const']]
-
-                        ### create the frame
-                        colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
-                                                                                        alpha_exponent = ALPHA_EXPONENT)
-                        rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
-                        kdeView = View.make(myCam, rastScn, resolution = RESOLUTION_KDE, annotatedPoints = [fhPt_annot, bhPt_annot])
-
-                        if RENDER_ON_REAL:
-                            realFrm = realDict[side + '_' + where][-1].dim(DIM_FACTOR)
-                            chipFrm = kdeView.snap(over_array = realFrm.array.copy())
-                        else:
-                            chipFrm = backView.combine(kdeView).combine(plyView).snap()
-                                                
-                        # chipFrm.show()
-                        chipFrm.save_as_png(reg_path, f'{angle}_{side}_{where}_map')
-
-                        ### create the target zone
-                        colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
-                                                               factor_array = shareArr,
-                                                               color = CHIP_COLOR)
-
-                        rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
-                        kdeView = View.make(myCam, rastScn, resolution = RESOLUTION_KDE, annotatedPoints = [fhPt_annot, bhPt_annot])
-
-                        if RENDER_ON_REAL:
-                            realFrm = realDict[side + '_' + where][-1].dim(DIM_FACTOR)
-                            chipFrm = kdeView.snap(over_array = realFrm.array.copy())
-                        else:
-                            chipFrm = backView.combine(kdeView).combine(plyView).snap()
-
-                        # chipFrm.show()
-                        chipFrm.save_as_png(reg_path, f'{angle}_{side}_{where}_target')
-
-
-reg_name = 'dist_bsl_bh_side_sq_opt_sq_chars_inter2_weighted'
-regressors = regDict[reg_name]
-
-endog = 'ret_wins_weighted'
-weight = 'weight_bal_pred'
-
-glmReg = vis_ut.make_and_save_model(regFrm_in, regressors, save_path = None, save_name = None, 
-                                                endog_col = endog, weight_col = weight)
-
-### get the chip and top predicted average
-X, y = vis_ut.retrieve_X_y(glmReg, regressors)
-meanFrm = X.groupby(regFrm_in['is_chipped'].values).mean()
-chipSer = meanFrm.loc[True]
-topsSer = meanFrm.loc[False]
-    
-avg_tops_pred = glmReg.predict(topsSer).values[0]
-avg_chip_pred = glmReg.predict(chipSer).values[0]
-
-avg_tops_pred = avg_tops_pred - LENIENCY
 
 def get_reg_frame(angle, side, where):
     ### make regressor frame
@@ -638,433 +551,501 @@ def get_reg_frame(angle, side, where):
     regFrm_angle = regressors_angle[angle]
     regFrm_case = regressors_case[side + '_' + where]
     regFrm_angle_case = regressors_angle_case[angle + '_' + side + '_' + where]
-
+    
     regressor_frame = pd.concat([regFrm_base, regFrm_angle, regFrm_case, regFrm_angle_case], axis = 1)
     regressor_frame = regressor_frame[[*regressors, 'const']]
     return regressor_frame
 
-### Setup
+regDict = {'chip_inter_opt_launch_even_more': ['is_chipped', 'launch_angle', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                    'ret_dist_to_bh_serve_fore', 'ret_dist_to_bh_serve_back',
+                                    'ret_dist_to_bh_serve_fore_sq', 'ret_dist_to_bh_serve_back_sq',
+                                    'ret_dist_to_bh_serve_fore_bsl', 'ret_dist_to_bh_serve_back_bsl',
+                                    'ret_dist_to_bh_serve_fore_x_is_chipped', 'ret_dist_to_bh_serve_back_x_is_chipped',
+                                    'ret_dist_to_bh_serve_fore_sq_x_is_chipped', 'ret_dist_to_bh_serve_back_sq_x_is_chipped',
+                                    'ret_dist_to_opt_x_is_chipped', 'ret_dist_to_opt_sq_x_is_chipped',
+                                    'ret_dist_to_bh_serve_fore_bsl_x_is_chipped', 'ret_dist_to_bh_serve_back_bsl_x_is_chipped',
+                                    'ret_dist_to_bsl_x_launch_angle', 
+                                    'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                    'ret_dist_to_bh_serve_fore_x_launch_angle', 'ret_dist_to_bh_serve_back_x_launch_angle',
+                                    'ret_dist_to_bh_serve_fore_sq_x_launch_angle', 'ret_dist_to_bh_serve_back_sq_x_launch_angle'],}
+
+###### ESTIMATE MODEL ######
+reg_name = 'chip_inter_opt_launch_even_more'
+regressors = regDict[reg_name]
+
+endog = 'ret_wins_weighted'
+weight = 'weight_bal_pred'
+
+glmReg = vis_ut.make_and_save_model(regFrm_in, regressors, save_path = None, save_name = None, 
+                                                endog_col = endog, weight_col = weight)
+    
+########## SETUP #########
 myRst = FramesRaster(2, 2)
 all_frames = []
-halfCam = myCam.resize(0.5)
-fhPt_annot_half = fhPt_annot.left(50).front(25)
-bhPt_annot_half = bhPt_annot.left(15).front(25)
+script_lines = []
+dim_factor = 0.25
 
-combinations = [('lo', 'deuce', 'wide'), ('lo', 'deuce', 'middle'), ('lo', 'ad', 'wide'), ('lo', 'ad', 'middle')]
-locations = [(0, 0), (0, 1), (1, 0), (1, 1)]
+postRst = FramesRaster(2, 2)
+backFrm = View.make(halfCam, courtScn).snap()
 
-for combo, loc in zip(combinations, locations):
-    angle, side, where = combo
-    i, j = loc
 
-    regressor_frame = get_reg_frame(angle, side, where)
-    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
-                                                                    alpha_exponent = ALPHA_EXPONENT)
-    rastScn = DummyScene([rastArr_3D], [colArr], [alArr])
+comparison_prob_dict = {'tp': 0.535, ### this way, target areas will have roughly the same size:
+                        'lo': 0.57,      ### we then annotate their quality with annotation point
+                        'hi': 0.57}
 
-    ### Animate
-    # a) spline scene
-    realFrms = realDict[side + '_' + where]
-    realFrms_resc = realFrms.rescale(0.5)
+color_dict = {'tp': TOPS_COLOR,
+              'lo': CHIP_LO_COLOR,
+              'hi': CHIP_HI_COLOR}
 
-    myRst.add(realFrms_resc, i, j)
-    rastFrms = myRst.render()
-    all_frames.append(rastFrms)
+from ATMANpy.types.Overlays import Legend, LegendRow, overlay
+tpRow = LegendRow('Topspin', shape_color = TOPS_COLOR, text_size = 2)
+loRow = LegendRow('Low Chip', shape_color = CHIP_LO_COLOR, text_size = 2)
+hiRow = LegendRow('High Chip', shape_color = CHIP_HI_COLOR, text_size = 2)
 
-    # b) still scene
-    rastFrms = BGRFrames.from_frame(rastFrms[-1], STATIC_FRAMES)
-    all_frames.append(rastFrms)
+leg_dims = (250, 250)
+leg_params = {'borders': True, 'header_text': ' ', 'resolution': 100, 'legend_dimensions': leg_dims}
 
-    # c) dim and fade in heatmap
-    itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(0.5), num_frames = TRANSITION_FRAMES)
-    itplScns = vs.interpolate_dummy_scenes(rastScn.transparify(0), rastScn, TRANSITION_FRAMES)
+leg1 = Legend([tpRow, LegendRow(None), LegendRow(None), LegendRow(None)], **leg_params)
+leg1Frm = leg1.render()
+# leg1Frm.show()
 
-    myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict, animate_over = itplFrms)
+leg2 = Legend([tpRow, loRow, LegendRow(None), LegendRow(None)], **leg_params)
+leg2Frm = leg2.render()
+# leg2Frm.show()
 
-    myRst.add(myFrms, i, j)
-    rastFrms = myRst.render()
-    all_frames.append(rastFrms)
+leg3 = Legend([tpRow, loRow, hiRow, LegendRow(None)], **leg_params)
+leg3Frm = leg3.render()
+# leg3Frm.show()
 
-    # d) add in annotation points
-    myFrms, _ = vs.animate_static(Scene([]), annotated_points = [fhPt_annot_half, bhPt_annot_half], num_frames = STATIC_FRAMES, static_cam = halfCam,
-                                animate_over = myFrms[-1])
-    myRst.add(myFrms, i, j)
-    rastFrms = myRst.render()
-    all_frames.append(rastFrms)
+top_left_coords = (1920 - leg_dims[0]) // 2, (1080 - leg_dims[1]) // 2
+tlPt = Point2D(top_left_coords)
 
-### Fade in Target Areas
-trgRst = FramesRaster(2, 2)
+###### DEUCE WIDE ######
+side, where = 'deuce', 'wide'
+i, j = 1, 1
 
-for combo, loc in zip(combinations, locations):
-    angle, side, where = combo
-    i, j = loc
+# frames to render on
+realFrms = realDict[side + '_' + where]
+realFrms_resc = realFrms.rescale(0.5)
+realFrms_resc_last = BGRFrames.from_frame(realFrms_resc[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
 
-    realFrms = realDict[side + '_' + where]
-    realFrms_resc = realFrms.rescale(0.5)
+# heatmap and zone dictionary
+heatDict = {}
+zoneDict = {}
+for angle in ['tp', 'lo', 'hi']:
+    comparison_prob = comparison_prob_dict[angle]
+    color = color_dict[angle]
 
     regressor_frame = get_reg_frame(angle, side, where)
-    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
+    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
                                                                     alpha_exponent = ALPHA_EXPONENT)
     rastScn0 = DummyScene([rastArr_3D], [colArr], [alArr])
+    heatDict[angle] = rastScn0
 
-    colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = avg_tops_pred, 
-                                                            factor_array = shareArr, color = CHIP_COLOR)
+    colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
+                                                            factor_array = shareArr, color = color)
     rastScn1 = DummyScene([rastArr_3D], [colArr], [alArr])
+    zoneDict[angle] = rastScn1
 
-    itplScns = vs.interpolate_dummy_scenes(rastScn0, rastScn1, TRANSITION_FRAMES)    
 
-    myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict, animate_over = realFrms_resc[-1].dim(DIM_FACTOR),
-                                    annotated_points = [fhPt_annot_half, bhPt_annot_half])
+script_line =   """
+                    Take for example this very situation here: Alexandre Mueller is pulled slightly out wide by 
+                    Luca van Assche's serve from the deuce side.
+                """
 
-    trgRst.add(myFrms, i, j)
+myRst.add(realFrms_resc_last, i, j)
+rastFrms = myRst.render()
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+# rastFrms[-1].show()
 
-trgFrms = trgRst.render()
-all_frames.append(trgFrms)
+script_line = ""
+# c) dim and fade in target area
+itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
 
-jntFrms = BGRFrames.from_frames(all_frames)
-DecapStream(jntFrms, 0, 100).show()
-jntFrms[-1].show()
+myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg1Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp']
+script_line =   """
+                    The best topspin return is hit cross-court, according to the model.
+                    MAKE A NOTE ABOUT FOREHAND RECTIFICATION!
+                """
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg1Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo'])
+script_line = "As for the low chip, the model likes a shallower chip that lands inside the court at an acute cross-court angle."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg2Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi'])
+script_line = "The model does not recommend playing a high chip in this situation."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+lsFrm = myFrms[-1]
+myRst.add(lsFrm, i, j)
+
+### storing the movement frames in a separate raster.
+itplFrms = vs.interpolate_frames(realFrms_resc[-1].dim(dim_factor), backFrm, num_frames = STATIC_FRAMES)
+zoneScns = [zoneScn for _ in range(STATIC_FRAMES)]
+
+transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = halfCam, 
+                                    **prmDict_annot, animate_over = itplFrms)
+moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = courtScn, 
+                                    num_frames = TRANSITION_FRAMES, **prmDict_annot)
+
+postFrms = BGRFrames.from_frames([transFrms, moveFrms])
+postRst.add(postFrms, i, j)
+
+
+###### DEUCE MIDDLE ######
+side, where = 'deuce', 'middle'
+i, j = 0, 1
+
+# frames to render on
+realFrms = realDict[side + '_' + where]
+realFrms_resc = realFrms.rescale(0.5)
+realFrms_resc_last = BGRFrames.from_frame(realFrms_resc[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
+
+preFrms = wideDict[side + '_' + where]
+preFrms_resc = preFrms.rescale(0.5)
+
+# heatmap and zone dictionary
+heatDict = {}
+zoneDict = {}
+for angle in ['tp', 'lo', 'hi']:
+    comparison_prob = comparison_prob_dict[angle]
+    color = color_dict[angle]
+
+    regressor_frame = get_reg_frame(angle, side, where)
+    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
+                                                                    alpha_exponent = ALPHA_EXPONENT)
+    rastScn0 = DummyScene([rastArr_3D], [colArr], [alArr])
+    heatDict[angle] = rastScn0
+
+    colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
+                                                            factor_array = shareArr, color = color)
+    rastScn1 = DummyScene([rastArr_3D], [colArr], [alArr])
+    zoneDict[angle] = rastScn1
+
+
+script_line =   """
+                    Consider now a serve down the middle, on the deuce side.
+                """
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myRst.add(preFrms_resc, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myRst.add(realFrms_resc, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+# c) dim and fade in target area
+script_line = ""
+itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
+
+myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp']
+script_line = "On serves down the middle, the model prefers that the returner targets the backhand of the server with a topspin serve"
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo'])
+script_line = "As for the low chip, the model likes a shallower chip that lands inside the court at an acute cross-court angle."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi'])
+script_line = "The model does not recommend playing a high chip in this situation."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+lsFrm = myFrms[-1]
+myRst.add(lsFrm, i, j)
+
+### storing the movement frames in a separate raster.
+itplFrms = vs.interpolate_frames(realFrms_resc[-1].dim(dim_factor), backFrm, num_frames = STATIC_FRAMES)
+zoneScns = [zoneScn for _ in range(STATIC_FRAMES)]
+
+transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = halfCam, 
+                                    **prmDict_annot, animate_over = itplFrms)
+moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = courtScn, 
+                                    num_frames = TRANSITION_FRAMES, **prmDict_annot)
+
+postFrms = BGRFrames.from_frames([transFrms, moveFrms])
+postRst.add(postFrms, i, j)
+
+
+
+###### AD MIDDLE ######
+side, where = 'ad', 'middle'
+i, j = 0, 0
+
+# frames to render on
+realFrms = realDict[side + '_' + where]
+realFrms_resc = realFrms.rescale(0.5)
+realFrms_resc_last = BGRFrames.from_frame(realFrms_resc[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
+
+preFrms = wideDict[side + '_' + where]
+preFrms_resc = preFrms.rescale(0.5)
+
+# heatmap and zone dictionary
+heatDict = {}
+zoneDict = {}
+for angle in ['tp', 'lo', 'hi']:
+    comparison_prob = comparison_prob_dict[angle]
+    color = color_dict[angle]
+
+    regressor_frame = get_reg_frame(angle, side, where)
+    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
+                                                                    alpha_exponent = ALPHA_EXPONENT)
+    rastScn0 = DummyScene([rastArr_3D], [colArr], [alArr])
+    heatDict[angle] = rastScn0
+
+    colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
+                                                            factor_array = shareArr, color = color)
+    rastScn1 = DummyScene([rastArr_3D], [colArr], [alArr])
+    zoneDict[angle] = rastScn1
+
+
+script_line =   """
+                    Consider now a serve down the middle, on the ad side.
+                """
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myRst.add(preFrms_resc, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myRst.add(realFrms_resc, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+# c) dim and fade in target area
+script_line = ""
+itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
+
+myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp']
+script_line = "On serves down the middle, the model prefers that the returner targets the backhand of the server with a topspin serve"
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo'])
+script_line = "As for the low chip, the model likes a shallower chip that lands inside the court at an acute cross-court angle."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi'])
+script_line = "The model does not recommend playing a high chip in this situation."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+lsFrm = myFrms[-1]
+myRst.add(lsFrm, i, j)
+
+### storing the movement frames in a separate raster.
+itplFrms = vs.interpolate_frames(realFrms_resc[-1].dim(dim_factor), backFrm, num_frames = STATIC_FRAMES)
+zoneScns = [zoneScn for _ in range(STATIC_FRAMES)]
+
+transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = halfCam, 
+                                    **prmDict_annot, animate_over = itplFrms)
+moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = courtScn, 
+                                    num_frames = TRANSITION_FRAMES, **prmDict_annot)
+
+postFrms = BGRFrames.from_frames([transFrms, moveFrms])
+postRst.add(postFrms, i, j)
+
+
+###### AD WIDE ######
+side, where = 'ad', 'wide'
+i, j = 1, 0
+
+# frames to render on
+realFrms = realDict[side + '_' + where]
+realFrms_resc = realFrms.rescale(0.5)
+realFrms_resc_last = BGRFrames.from_frame(realFrms_resc[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
+
+preFrms = wideDict[side + '_' + where]
+preFrms_resc = preFrms.rescale(0.5)
+
+# heatmap and zone dictionary
+heatDict = {}
+zoneDict = {}
+for angle in ['tp', 'lo', 'hi']:
+    comparison_prob = comparison_prob_dict[angle]
+    color = color_dict[angle]
+
+    regressor_frame = get_reg_frame(angle, side, where)
+    colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
+                                                                    alpha_exponent = ALPHA_EXPONENT)
+    rastScn0 = DummyScene([rastArr_3D], [colArr], [alArr])
+    heatDict[angle] = rastScn0
+
+    colArr, alArr = vis_ut.get_field_array_from_predictions(glmReg, regressor_frame, relative_to = comparison_prob, 
+                                                            factor_array = shareArr, color = color)
+    rastScn1 = DummyScene([rastArr_3D], [colArr], [alArr])
+    zoneDict[angle] = rastScn1
+
+
+script_line =   """
+                    Consider now a serve down the middle, on the ad side.
+                """
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myRst.add(preFrms_resc, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myRst.add(realFrms_resc, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+# c) dim and fade in target area
+script_line = ""
+itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
+
+myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp']
+script_line = "On serves down the middle, the model prefers that the returner targets the backhand of the server with a topspin serve"
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo'])
+script_line = "As for the low chip, the model likes a shallower chip that lands inside the court at an acute cross-court angle."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+zoneScn = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi'])
+script_line = "The model does not recommend playing a high chip in this situation."
+myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
+myRst.add(myFrms, i, j)
+rastFrms = myRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
+lsFrm = myFrms[-1]
+myRst.add(lsFrm, i, j)
+
+### storing the movement frames in a separate raster.
+itplFrms = vs.interpolate_frames(realFrms_resc[-1].dim(dim_factor), backFrm, num_frames = STATIC_FRAMES)
+zoneScns = [zoneScn for _ in range(STATIC_FRAMES)]
+
+transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = halfCam, 
+                                    **prmDict_annot, animate_over = itplFrms)
+moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = courtScn, 
+                                    num_frames = TRANSITION_FRAMES, **prmDict_annot)
+
+postFrms = BGRFrames.from_frames([transFrms, moveFrms])
+postRst.add(postFrms, i, j)
+
+####### POST-STUFF #######
+
+script_line = ""
+postFrms = postRst.render()
+all_frames.append(postFrms)
+script_lines.append(script_line)
 
 show(all_frames)
-
-### Show Reaching Distance for Server --> can he run around?
-
-### empirical run around check.
-third_is_foreArr = retPnts_in.apply(vis_ut.is_third_shot_fore, dtype = bool)
-ySer = pd.Series(third_is_foreArr, name = 'is_forehand')
-
-# regressors = ['ret_dist_to_bh', 'ret_dist_to_bsl_bh', 'is_chipped', 'launch_angle', 'serve_fore']
-# regressors = ['ret_dist_to_bh', 'ret_dist_to_bsl_bh', 'is_chipped', 'launch_angle', 'serve_fore', 'ret_speed']
-regressors = ['ret_dist_to_bh', 'is_chipped', 'launch_angle', 'serve_fore']
-xFrm = regFrm_in[regressors].astype('float')
-xFrm['const'] = 1
-xFrm = xFrm.reset_index(drop = True)
-
-glmReg_fore = sm.GLM(ySer, xFrm, family = sm.families.Binomial()).fit()
-summary = glmReg_fore.summary()
-print(summary)
-
-### Construct Meshgridded regressor dataframe for each case in question
-# These are always the same!
-
-def get_reg_frame_fore(angle, is_chipped, side):
-    xDict = {}
-    xDict['const'] = np.ones(N)
-
-    if is_chipped:
-        xDict['is_chipped'] = np.ones(N)
-    else:
-        xDict['is_chipped'] = np.zeros(N)
-
-    xDict['ret_dist_to_bsl'] = rel_rastArr[:, 1]
-    xDict['ret_dist_to_bh'] = rel_rastArr[:, 0]
-    xDict['ret_dist_to_bsl_bh'] = rel_rastArr[:, 1] * rel_rastArr[:, 0]
-    
-    xDict['launch_angle'] = np.ones(N) * angle
-
-    if side == 'deuce':
-        xDict['serve_fore'] = np.ones(N)
-    elif side == 'ad':
-        xDict['serve_fore'] = np.zeros(N)
-
-    regressor_frame = pd.DataFrame(xDict)
-    regressor_frame = regressor_frame[[*regressors, 'const']]
-    return regressor_frame
-
-regressor_frame = get_reg_frame_fore(MODE_TOPS, False, 'deuce')
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
-                                                                alpha_exponent = ALPHA_EXPONENT)
-rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
-View.make(myCam, rastScn_fore).snap().show()
-
-regressor_frame = get_reg_frame_fore(MODE_CHIP_LO, True, 'deuce')
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
-                                                                alpha_exponent = ALPHA_EXPONENT)
-rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
-View.make(myCam, rastScn_fore).snap().show()
-
-regressor_frame = get_reg_frame_fore(MODE_CHIP_HI, True, 'deuce')
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
-                                                                alpha_exponent = ALPHA_EXPONENT)
-rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
-View.make(myCam, rastScn_fore).snap().show()
-
-
-regressor_frame = get_reg_frame_fore(MODE_TOPS, False, 'ad')
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
-                                                                alpha_exponent = ALPHA_EXPONENT)
-rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
-View.make(myCam, rastScn_fore).snap().show()
-
-regressor_frame = get_reg_frame_fore(MODE_CHIP_LO, True, 'ad')
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
-                                                                alpha_exponent = ALPHA_EXPONENT)
-rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
-View.make(myCam, rastScn_fore).snap().show()
-
-regressor_frame = get_reg_frame_fore(MODE_CHIP_HI, True, 'ad')
-colArr, alArr = vis_ut.get_color_and_alpha_array_from_predictions(glmReg_fore, regressor_frame, relative_to = 0.5, 
-                                                                alpha_exponent = ALPHA_EXPONENT)
-rastScn_fore = DummyScene([rastArr_3D], [colArr], [alArr])
-View.make(myCam, rastScn_fore).snap().show()
-
-
-### Success Rates for Balls within
-
-from ATMANpy.auxil.court import top_a, top_b, top_c, top_d, bot_a, bot_b, bot_c, bot_d
-
-retPnts_in_left = retPnts_in.filter(regFrm_in['is_left_handed_server'].values)
-retPnts_in_right = retPnts_in.filter(regFrm_in['is_right_handed_server'].values)
-retPnts_in_rect = retPnts_in_right.join(retPnts_in_left.flip(across_middle = True, across_net = False)).sort()
-
-
-from ATMANpy.auxil.court import topReg, botReg
-top_a, top_b, top_c = topReg.subdivide(3, how = 'vertical')
-
-def shot_lands_in_or_near_area(myPnt, shot_idx = 0, num_subdivisions = 4):
-    from ATMANpy.auxil.court import topReg, botReg
-
-    try:
-        myShot = myPnt[shot_idx]
-    except IndexError:
-        return None
-    else:
-        x, y = myShot.get_first_bounce_position()
-        if x is None and y is None:
-            return None
-        else:
-            bncPt = Point2D((x, y))
-
-            if myShot.get_hit_side() == 'Top':
-                myRegs = reversed(botReg.subdivide(num_subdivisions, how = 'vertical').regList)
-            else:
-                myRegs = list(topReg.subdivide(num_subdivisions, how = 'vertical').regList)
-
-            center_points = [myReg.centroid() for myReg in myRegs]
-            voronoi_dists = [bncPt.distance_to(myPt) for myPt in center_points]
-
-            min_idx = np.argmin(voronoi_dists)
-            area_nums = list(range(1, num_subdivisions + 1))
-            return area_nums[min_idx]
-
-third_is_foreArr = retPnts_in_rect.apply(vis_ut.is_third_shot_fore, dtype = bool)
-return_areaArr = retPnts_in_rect.apply(shot_lands_in_or_near_area, dtype = str, shot_idx = 1, num_subdivisions = 3)
-third_areaArr = retPnts_in_rect.apply(shot_lands_in_or_near_area, dtype = str, shot_idx = 2, num_subdivisions = 3)
-        
-assert all(retPnts_in_rect.apply(vis_ut.is_third_shot_fore, dtype = bool) == retPnts_in.apply(vis_ut.is_third_shot_fore, dtype = bool))
-
-serve_foreArr = regFrm_in['serve_fore'].values.astype(bool)
-is_chipArr = regFrm_in['is_chipped'].values
-server_wins = regFrm_in['srv_wins'].values.astype(bool)
-server_wins_weighted = regFrm_in['srv_wins_weighted'].values.astype(float)
-# weight_pred = regFrm_in['weight_topspin'].values.astype(float)
-weight_pred = regFrm_in['pred_is_topspin'].values.astype(float)
-weight_bal = regFrm_in['balance_weight'].values.astype(float)
-weight_len = regFrm_in['len_weight'].values.astype(float)
-
-allArr = np.stack([ serve_foreArr, return_areaArr, is_chipArr, third_is_foreArr, third_areaArr, 
-                    server_wins, server_wins_weighted,
-                    weight_pred, weight_bal, weight_len], axis = 1)
-
-allFrm = pd.DataFrame(allArr, columns = [   'serve_is_fore', 'return_area', 'return_is_chipped', 'third_fore', 'third_area', 
-                                            'server_wins', 'server_wins_weighted',
-                                            'weight_prd', 'weight_bal', 'weight_len'])
-
-allFrm['serve_is_fore'] = allFrm['serve_is_fore'] == 'True'
-allFrm['return_is_chipped'] = allFrm['return_is_chipped'] == 'True'
-allFrm['third_fore'] = allFrm['third_fore'] == 'True'
-allFrm['server_wins'] = allFrm['server_wins'] == 'True'
-allFrm['server_wins_weighted'] = allFrm['server_wins_weighted'].astype(float)
-allFrm['weight_prd'] = allFrm['weight_prd'].astype(float)
-allFrm['weight_bal'] = allFrm['weight_bal'].astype(float)
-allFrm['weight_len'] = allFrm['weight_len'].astype(float)
-
-subFrm = allFrm[allFrm.third_area != 'None']
-
-def weighted_win_percentage_old(myFrm):
-    if myFrm['return_is_chipped'].unique()[0]: ### only for chipped returns do we apply the pred weight
-        jnt_weight = myFrm['weight_prd'] * myFrm['weight_bal'] * myFrm['weight_len']
-    else:
-        jnt_weight = myFrm['weight_bal'] * myFrm['weight_len']
-    
-    return (myFrm['server_wins'] * jnt_weight).sum() / jnt_weight.sum()
-
-# def weighted_win_percentage(myFrm):
-#     if myFrm['return_is_chipped'].unique()[0]: ### only for chipped returns do we apply the pred weight
-#         jnt_weight = myFrm['weight_prd'] * myFrm['weight_bal']
-#     else:
-#         jnt_weight = myFrm['weight_bal']
-    
-#     return (myFrm['server_wins_weighted'] * jnt_weight).sum() / jnt_weight.sum()
-   
-# def weighted_win_percentage(myFrm):
-#     if myFrm['return_is_chipped'].unique()[0]: ### only for chipped returns do we apply the pred weight
-#         jnt_weight = myFrm['weight_prd'] * myFrm['weight_bal']
-#     else:
-#         jnt_weight = myFrm['weight_bal']
-    
-#     return (myFrm['server_wins'] * jnt_weight).sum() / jnt_weight.sum()
-   
-
-def weighted_fore_percentage(myFrm):
-    jnt_weight = myFrm['weight_bal'] ### no need for the length adjustment! only in 
-    return (myFrm['third_fore'] * jnt_weight).sum() / jnt_weight.sum()
-   
-
-### Simple Win% by Area
-grpFrm = subFrm.groupby(['return_area', 'return_is_chipped'])['server_wins'].mean()
-grpFrm = grpFrm.unstack('return_is_chipped')
-print(grpFrm)
-# -> Win Percentage Diff between Chip and Tops is greatest in 3, lowest in 1. (TODO: how about for choice chips?)
-
-### Weighted Win% by Area
-grpFrm = subFrm.groupby(['return_area', 'return_is_chipped']).apply(weighted_win_percentage)
-grpFrm = grpFrm.unstack('return_is_chipped')
-print(grpFrm)
-# -> Win Percentage Diff between Chip and Tops is greatest in 3, lowest in 1.
-# -> for choice chips, with all weights: area 1 is almost exactly equal.
-
-### What Percent Shots are Hit Forehand?
-grpFrm = subFrm.groupby(['return_is_chipped', 'return_area'])['third_fore'].mean()
-grpFrm = grpFrm.unstack('return_is_chipped')
-print(grpFrm)
-# -> all shots forehand in 1, most in 2. for 3: very few if tops, 2/3 if chip.
-
-### Weighted: What Percent Shots are Hit Forehand?
-grpFrm = subFrm.groupby(['return_is_chipped', 'return_area']).apply(weighted_fore_percentage, over = 'third_fore')
-grpFrm = grpFrm.unstack('return_is_chipped')
-print(grpFrm)
-# -> all shots forehand in 1, most in 2. for 3: very few if tops, 2/3 if chip.
-
-grpFrm = subFrm.groupby(['return_is_chipped', 'return_area', 'serve_is_fore'])['third_fore'].mean()
-grpFrm = grpFrm.unstack('return_is_chipped')
-print(grpFrm)
-# -> if serve is made from the backhand side, higher likelihood of running around (because less distance!)
-
-### Win% if server runs around 
-grpFrm = subFrm.groupby(['return_area', 'third_fore'])['server_wins'].mean()
-grpFrm = grpFrm.unstack('third_fore')
-print(grpFrm)
-# -> if the ball is hit with forehand, small difference in 2, huge difference in 3.
-
-### Where are balls hit given shot area
-grpFrm = subFrm.groupby(['return_area', 'third_fore'])['third_area'].value_counts(normalize = True)
-grpFrm = grpFrm.unstack('third_fore')
-print(grpFrm)
-# -> central ball and wide ball are played with more decisive angles on the forehand! (less goes to the middle)
-
-grpFrm = subFrm.groupby(['return_area', 'third_area', 'third_fore'])['server_wins'].mean()
-grpFrm = grpFrm.unstack('third_fore')
-print(grpFrm)
-# -> not necessary to show? For 3, every option is better when run around, for 2, only to 2 and 3; but: low sample size here (for 2, backhand)
-
-
-
-
-# a -> a --> down the line
-# a -> b --> to the middle
-# a -> c/d --> cross-court
-### and equiv for d
-
-# b -> a --> down the line
-# b -> b/c --> to the middle
-# b -> d --> cross-court
-### and equiv for c
-
-
-regFrm_in['srv_wins']
-
-
-### Factors:
-# server position (deuce/ad (i.e. fore/back))
-# return is chipped
-# return landing (a, b, c, d) --> a has to be the forehand side!
-# serve + 1 forehand/backhand (is it run around?)
-# serve + 1 landing (cross court, middle, dtl)
-
-### Values of Interest
-### conditional on factors server position and return landing and return is chipped...
-# ... run-around-rate ---> do we run around?
-# ... serve + 1 landing frequency --> where do we aim?
-
-### conditional on all factors (? do we need server position here?)
-# ... win%
-
-
-
-
-
-myPnt = retPnts_in[0]
-def is_third_shot_cross(myPnt):
-    try:
-        thirdShot = myPnt[2]
-    except IndexError:
-        return None
-    else:
-        return thirdShot.is_cross_court()
-
-retPnts_in.get_
-
-
-
-########### TESTING ############
-
-distArr = regressors_case['ad_wide']['ret_dist_to_opt']
-realFrm = realDict['ad_wide'][-1]
-
-distArr_norm = (distArr - distArr.min()) / (distArr.max() - distArr.min())
-distArr_norm_brdcst = distArr_norm.values[:, np.newaxis]
-red, green = np.array(const.BGR['intense_red'])[np.newaxis, :], np.array(const.BGR['leafy_green'])[np.newaxis, :]
-
-colArr = distArr_norm_brdcst * red + (1 - distArr_norm_brdcst) * green
-alArr = np.ones_like(colArr[:, [0]])
-
-dummyScn = DummyScene([rastArr_3D], [colArr], [alArr])
-
-View.make(myCam, dummyScn).snap().show()
-
-distArr.min()
-
-
-srvArr_norm = (srvArr[:, 0] - srvArr[:, 0].min()) / (srvArr[:, 0].max() - srvArr[:, 0].min())
-srvArr_norm_brdcst = srvArr_norm[:, np.newaxis]
-colArr = srvArr_norm_brdcst * red + (1 - srvArr_norm_brdcst) * green
-alArr = np.ones_like(colArr[:, [0]])
-
-dummyScn_srv_heat = DummyScene([rastArr_3D], [colArr], [alArr])
-
-View.make(myCam, dummyScn_srv_heat).snap().show()
-
-colArr = srvArr_norm_brdcst * red + (1 - srvArr_norm_brdcst) * green
-alArr = np.ones_like(colArr[:, [0]]) * ((srvArr_norm_brdcst > 0.49) & (srvArr_norm_brdcst < 0.51))
-
-dummyScn_srv_line = DummyScene([rastArr_3D], [colArr], [alArr])
-
-lineView_srv = View.make(myCam, dummyScn_srv_line)
-lineView_srv.snap(over_array = realFrm.array.copy()).show()
-
-
-recArr_norm = (recArr[:, 0] - recArr[:, 0].min()) / (recArr[:, 0].max() - recArr[:, 0].min())
-recArr_norm_brdcst = recArr_norm[:, np.newaxis]
-colArr = recArr_norm_brdcst * red + (1 - recArr_norm_brdcst) * green
-alArr = np.ones_like(colArr[:, [0]])
-
-dummyScn_rec_heat = DummyScene([rastArr_3D], [colArr], [alArr])
-
-View.make(myCam, dummyScn_rec_heat).snap().show()
-
-colArr = recArr_norm_brdcst * red + (1 - recArr_norm_brdcst) * green
-alArr = np.ones_like(colArr[:, [0]]) * ((recArr_norm_brdcst > 0.49) & (recArr_norm_brdcst < 0.51))
-
-dummyScn_rec_line = DummyScene([rastArr_3D], [colArr], [alArr])
-
-lineView_rec = View.make(myCam, dummyScn_rec_line)
-lineView_rec.snap(over_array = realFrm.array.copy()).show()
-
-ptArr = recArr[((recArr_norm_brdcst > 0.49) & (recArr_norm_brdcst < 0.51))[:, 0]]
-x, y = ptArr.mean(axis = 0)
-pt = Point3D((x, y, 0))
-
-ptView = View.make(myCam, Scene([pt]))
-
-lineView_rec.combine(ptView).snap(over_array = realFrm.array.copy()).show()
