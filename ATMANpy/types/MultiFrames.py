@@ -55,6 +55,13 @@ class Frames:
         return cls(jntArr, name = name)
 
     @classmethod
+    def from_single_frames(cls, list_of_frames, name = None):
+        if name is None:
+            name = list_of_frames[0].name
+        jntArr = np.concatenate([frm.array[np.newaxis] for frm in list_of_frames], axis = 0)
+        return cls(jntArr, name = name)
+
+    @classmethod
     def from_video(cls, cap, start_frame, stop_frame, 
                    cap_color_space = 'bgr', 
                    scale_factor = 1,
