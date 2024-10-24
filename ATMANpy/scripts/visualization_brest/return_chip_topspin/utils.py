@@ -861,6 +861,55 @@ def get_field_array_from_predictions(glmReg, regressor_frame, relative_to = 0.5,
     alArr = contourArr[:, np.newaxis].astype(int)
     return colArr, alArr
 
+def field_array_kernelized(glmReg, regressor_frame, showReg = None, relative_to = 0.5, bandwidth = 30,
+                            factor_array = None, color = const.BGR['intense_red'], 
+                            downscale_factor = 10, upscale_factor = 1):
+    import ATMANpy.funcs.vis_funcs as vs
+    from scipy.interpolate import griddata
+
+    pred_winSer = glmReg.predict(regressor_frame)
+    
+    # b) create regions
+    rastArr_2D_unit = vs.meshgrid_region(showReg, resolution = 1)
+    rastArr_2D_upscaled = vs.meshgrid_region(showReg, resolution = upscale_factor)
+
+    num_x, num_y, _ = rastArr_2D_unit.shape
+    num_x_up, num_y_up, _ = rastArr_2D_upscaled.shape
+
+    N = num_x * num_y
+    N_up = num_x_up * num_y_up
+
+    rastArr_2D_unit = rastArr_2D_unit.reshape((N, 2))
+    rastArr_2D_upscaled = rastArr_2D_upscaled.reshape((N_up, 2))
+
+    # downscale
+    downscale_idx = np.arange(N, step = downscale_factor)
+    rastArr_2D_downscaled = rastArr_2D_unit[downscale_idx]
+    predArr_downscaled = pred_winSer[downscale_idx].values
+    factor_array_downscaled = factor_array[downscale_idx]
+
+    # calculate relative distances
+    rel_distArr = (rastArr_2D_downscaled[np.newaxis, :, :] - rastArr_2D_downscaled[:, np.newaxis, :]) ** 2
+    rel_distArr = rel_distArr.sum(axis = -1) ** 0.5
+    
+    norm_devArr = rel_distArr / bandwidth
+    kde_values_for_each_kernel = (1 - norm_devArr) * (norm_devArr < 1)
+    kde_values = (kde_values_for_each_kernel * predArr_downscaled).sum(axis = 1) / kde_values_for_each_kernel.sum(axis = 1)
+    
+    factored_kde_values = kde_values * factor_array_downscaled
+    max_idx = factored_kde_values.argmax()
+    max_coords = rastArr_2D_downscaled[max_idx]
+    max_val = factored_kde_values[max_idx]
+
+    factored_kde_values_upscaled = griddata(rastArr_2D_downscaled, factored_kde_values, rastArr_2D_upscaled, fill_value = 0)
+
+    contourArr = factored_kde_values_upscaled > relative_to
+    colArr = contourArr[:, np.newaxis] * np.array(color)[np.newaxis, :]
+    alArr = contourArr[:, np.newaxis].astype(int)
+
+    return rastArr_2D_upscaled, colArr, alArr, max_coords, max_val
+
+
 def model_to_diagram(fitted_model, renameDict = None, model_name = 'Propensity to Chip',
                      max_line_thickness = 5, min_line_thickness = 0.1, resolution = 10, render_height = 1500, 
                      shape_color = const.BGR['strong_blue'], text_color = const.BGR['smokey_grey']):
