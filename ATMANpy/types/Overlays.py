@@ -1,6 +1,9 @@
 
 import numpy as np
 
+from ATMANpy.types.Points import Point2D
+from ATMANpy.types.Lines import Region
+
 from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D, Line3D, Lines3D, Point3D
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
 from ATMANpy.types.ShapesTennis3D import Arrow
@@ -926,9 +929,10 @@ def overlay(baseFrm, legFrm, top_left_point = None):
         return BGRFrames(combArr)
 
 class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and columns
-    def __init__(self, rows, cols):
+    def __init__(self, rows, cols, borders = None):
         self.rows = rows
         self.cols = cols
+        self.borders = borders ### thickness of borders, or none.
 
         self.raster = np.full((rows, cols), fill_value = None).tolist()
         self.element_dims = None
@@ -981,13 +985,26 @@ class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and colu
                 col_left, col_right = col_idx * el_cols, (col_idx + 1) * el_cols
                 jointArr[row_left:row_right, col_left:col_right] = addArr
 
-        return BGRFrame(jointArr)
+        jointFrm = BGRFrame(jointArr)
+
+        if self.borders is not None:
+            cs, rs = self.cols, self.rows
+
+            fullReg = Region.from_points(Point2D((0, 0)), Point2D(self.output_dims))
+            subRegs = [myReg for rowReg in fullReg.subdivide(rs, how = 'vertical') for myReg in rowReg.subdivide(cs, how = 'horizontal')]
+            subLns = [regLn for subReg in subRegs for regLn in subReg.lineList]
+            
+            jointFrm = jointFrm.put(subLns, color = const.BGR['bright_grey'], thickness = self.borders)
+
+        return jointFrm
     
 class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in rows and columns
     ### Create rastered MultiFrames from subframes.
-    def __init__(self, rows, cols):
+    def __init__(self, rows, cols, borders = None):
         self.rows = rows
         self.cols = cols
+
+        self.borders = borders
 
         self.raster = np.full((rows, cols), fill_value = None).tolist()
         self.length = 0
@@ -1007,7 +1024,7 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
 
     def to_frame_raster(self, t = -1):
         ### get a specific frame t and return a corresponding FrameRaster
-        frmRst = FrameRaster(self.rows, self.cols)
+        frmRst = FrameRaster(self.rows, self.cols, borders = self.borders)
 
         if self.length == 0:
             return frmRst
@@ -1092,7 +1109,22 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
                 col_left, col_right = col_idx * el_cols, (col_idx + 1) * el_cols
                 jointArr[:, row_left:row_right, col_left:col_right] = addArr
 
-        return BGRFrames(jointArr)
+        if self.borders is not None:
+            cs, rs = self.cols, self.rows
+
+            fullReg = Region.from_points(Point2D((0, 0)), Point2D(self.output_dims))
+            subRegs = [myReg for rowReg in fullReg.subdivide(rs, how = 'vertical') for myReg in rowReg.subdivide(cs, how = 'horizontal')]
+            subLns = [regLn for subReg in subRegs for regLn in subReg.lineList]
+        
+            newFrms = []
+            for frameArr in jointArr:
+                newFrm = BGRFrame(frameArr).put(subLns, color = const.BGR['bright_grey'], thickness = self.borders)
+                newFrms.append(newFrm)
+            
+            return BGRFrames.from_single_frames(newFrms)
+
+        else:
+            return BGRFrames(jointArr)
 
 def frame_cascade(list_of_cascFrms, baseRst):
     num_rows, num_cols = baseRst.rows, baseRst.cols
@@ -1170,8 +1202,8 @@ def reverse_cascade(finalRst, keep_which = None,
 
 if __name__ == '__main__':
     TEST_CHART = False
-    TEST_TABLES = True
-    TEST_RASTERS = False
+    TEST_TABLES = False
+    TEST_RASTERS = True
     TEST_DIAGRAMS = False
     TEST_LEGEND = False
 
@@ -1290,6 +1322,17 @@ if __name__ == '__main__':
         revRst, revFrms = reverse_cascade(stillRst, frames_per_element = 25, acceleration = 1.1, keep_which = [(1, 1)])
         DecapStream(revFrms, 0, 100).show()
 
+        ### borders
+        myRst = FrameRaster(2, 2, borders = 2)
+
+        myFrm = list_of_randomFrms[0][0]
+        myRst.add(myFrm, 0, 0)
+        myRst.render().show()
+
+        myRst = FramesRaster(2, 2, borders = 2)
+        myRst.add(list_of_randomFrms[0], 0, 0)
+        rstFrms = myRst.render()
+        DecapStream(rstFrms, 0, 100).show()
 
     if TEST_DIAGRAMS:
 
