@@ -57,18 +57,18 @@ bot_srv_deu_cnt_2D = Line(bot_srv_cnt_2D, bot_srv_rgt_2D).center()
 bot_srv_ad_cnt_2D = Line(bot_srv_cnt_2D, bot_srv_lft_2D).center()
 
 ### CAMERAS ###
-def birds_eye_half_court_cam(zoom = 1, side = 'Top'):
+def birds_eye_half_court_cam(side = 'Top', zoom = 1, height = 300):
     if side == 'Top':
         relevantPnt = top_cnt_2D
     elif side == 'Bot':
         relevantPnt = bot_cnt_2D
     
-    c_w = Point3D.from_point2D(relevantPnt, z = 300) ### why we need to go one left is a mystery...
+    c_w = Point3D.from_point2D(relevantPnt, z = height) 
     f_w = Point3D.from_point2D(relevantPnt, z = 0)
     myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom)
     return myCam
 
-def birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top'):
+def birds_eye_service_box_cam(which = 'Deuce', side = 'Top', zoom = 1, height = 190):
     if side == 'Top' and which == 'Deuce':
         relevantPnt = top_deu_2D
     elif side == 'Top' and which == 'Ad':
@@ -78,40 +78,40 @@ def birds_eye_service_box_cam(zoom = 1, which = 'Deuce', side = 'Top'):
     elif side == 'Bot' and which == 'Ad':
         relevantPnt = bot_ad_2D
     
-    c_w = Point3D.from_point2D(relevantPnt, z = 190) ### why we need to go one left is a mystery...
+    c_w = Point3D.from_point2D(relevantPnt, z = height) 
     f_w = Point3D.from_point2D(relevantPnt, z = 0)
     myCam = Camera.from_to(c_w, f_w, f = 1000 * zoom)
     return myCam
 
-def back_view_asymmetric_cam(which = 'Deuce', side = 'Top'):
+def back_view_asymmetric_cam(which = 'Deuce', side = 'Top', height = 100, zoom = 1.7, dist = 350, lateral = 50):
     d_w = Point3D.from_point2D(cnt_2D, z = 0)
     if side == 'Top' and which == 'Deuce':
-        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).front(350).left(50)
+        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = height).front(dist).left(lateral)
     elif side == 'Top' and which == 'Ad':
-        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = 100).front(350).right(50)
+        c_w = Point3D.from_point2D(top_bsl_cnt_2D, z = height).front(dist).right(lateral)
     elif side == 'Bot' and which == 'Deuce':
-        c_w = Point3D.from_point2D(bot_bsl_cnt_2D, z = 100).back(350).right(50)
+        c_w = Point3D.from_point2D(bot_bsl_cnt_2D, z = height).back(dist).right(lateral)
     elif side == 'Bot' and which == 'Ad':
-        c_w = Point3D.from_point2D(bot_bsl_cnt_2D, z = 100).back(350).left(50)
+        c_w = Point3D.from_point2D(bot_bsl_cnt_2D, z = height).back(dist).left(lateral)
 
-    myCam = Camera.from_to(c_w, d_w, f = 1700)
+    myCam = Camera.from_to(c_w, d_w, f = 1000 * zoom)
     return myCam
 
-def onto_service_box_cam(which = 'Deuce', side = 'Top', z = 100, dist = 350, f = 1700):
+def onto_service_box_cam(which = 'Deuce', side = 'Top', height = 100, zoom = 1.7, dist = 350):
     if side == 'Top' and which == 'Deuce':
-        c_w = Point3D.from_point2D(top_srv_deu_cnt_2D, z = z).front(dist)
+        c_w = Point3D.from_point2D(top_srv_deu_cnt_2D, z = height).front(dist)
         d_w = c_w.back(dist) ### dist doesn't matter here.
     elif side == 'Top' and which == 'Ad':
-        c_w = Point3D.from_point2D(top_srv_ad_cnt_2D, z = 100).front(dist)
+        c_w = Point3D.from_point2D(top_srv_ad_cnt_2D, z = height).front(dist)
         d_w = c_w.back(dist) ### dist doesn't matter here.
     elif side == 'Bot' and which == 'Deuce':
-        c_w = Point3D.from_point2D(bot_srv_deu_cnt_2D, z = 100).back(dist)
+        c_w = Point3D.from_point2D(bot_srv_deu_cnt_2D, z = height).back(dist)
         d_w = c_w.front(dist) ### dist doesn't matter here.
     elif side == 'Bot' and which == 'Ad':
-        c_w = Point3D.from_point2D(bot_srv_ad_cnt_2D, z = 100).back(dist)
+        c_w = Point3D.from_point2D(bot_srv_ad_cnt_2D, z = height).back(dist)
         d_w = c_w.front(dist) ### dist doesn't matter here.
 
-    myCam = Camera.from_to(c_w, d_w, f = f)
+    myCam = Camera.from_to(c_w, d_w, f = 1000 * zoom)
     return myCam
 
 if __name__ == '__main__':
