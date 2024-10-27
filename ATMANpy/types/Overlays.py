@@ -75,7 +75,7 @@ def make_text_in(subReg, data_or_string, target_len = None,
 
 class LineChart:
     def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False, x_labels = None,
-                 annotate_line_heights = False):
+                 annotate_line_heights = False, annotate_line_heights_where = 'above'):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
         
@@ -85,7 +85,8 @@ class LineChart:
         self.dashed = dashed ### TODO: inactive for the moment!
         self.x_labels = x_labels
         self.annotate_line_heights = annotate_line_heights
-        
+        self.annotate_line_heights_where = annotate_line_heights_where
+
     def __len__(self):
         return len(self.xs)
     
@@ -143,7 +144,7 @@ class Graph:
                  label_size = 1, tick_label_size = 1,
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
                  header_size = 1, header_height = 1, graph_height = 9,
-                 render_height = 100, dimensions = (600, 400), resolution = 10):
+                 cam = None, render_height = 100, dimensions = (600, 400), resolution = 10):
         ### TODO: add axis labels (y-axis vertical! how?)
         self.charts = charts
         self.color = color
@@ -169,14 +170,16 @@ class Graph:
 
         self.label_size = label_size
         self.tick_label_size = tick_label_size
+ 
+        if cam is None: ### Rendering Camera
+            cam = Camera.birds_eye(render_height, sensor_dims = dimensions)
+        else: ### Injecting Camera -> overwrite render height
+            render_height = cam.get_cw()[2]
 
+        self.cam = cam
         self.render_height = render_height
         self.dimensions = dimensions
         self.resolution = resolution
-
-        ### Rendering Camera
-        cam = Camera.birds_eye(render_height, sensor_dims = dimensions)
-        self.cam = cam
 
         ### Graph Regions
         camReg = cam.approximate_fov(render_height)
@@ -314,11 +317,12 @@ class Graph:
 
                 ### Make annotations for values
                 if chart.annotate_line_heights:
+                    sign = -1 if chart.annotate_line_heights_where == 'below' else 1
                     for coords, y_val in zip(coordArr.T, chart.ys):
                         x, y, z = coords
 
                         labelStr = maybe_data_to_text(y_val, number_format = self.y_label_format)
-                        anchorPnt = Point3D(coords).front(self.x_label_dist).left(self.x_tick_label_left_shift)
+                        anchorPnt = Point3D(coords).front(sign * self.x_label_dist).left(self.x_tick_label_left_shift)
                         annPnt = anchorPnt.recolor(chart.color).annotate(labelStr)
                         val_label_pnts.append(annPnt)
 
@@ -829,7 +833,7 @@ class Legend:
 
             legend_shapes, annotated_points = [legLines], [headerPt]
         else:
-            otherRegs = legReg.subdivide(elements = num_els + 1, how = 'horizontal')
+            otherRegs = legReg.subdivide(elements = num_els, how = 'horizontal')
             legend_shapes, annotated_points = [legLines], []
         
         for row, subReg in zip(self.legend_rows, otherRegs):
@@ -1201,9 +1205,9 @@ def reverse_cascade(finalRst, keep_which = None,
 
 
 if __name__ == '__main__':
-    TEST_CHART = False
+    TEST_CHART = True
     TEST_TABLES = False
-    TEST_RASTERS = True
+    TEST_RASTERS = False    
     TEST_DIAGRAMS = False
     TEST_LEGEND = False
 
@@ -1251,6 +1255,18 @@ if __name__ == '__main__':
         myGraph = Graph([aChart], y_label_format = '.0%', y_label = 'Ret. Win%', x_label = 'Rally Length', 
                             y_label_dist = 1.25, offset = 0.35, x_label_left_shift = 1.5)
         myGraph.render().show()
+
+        ### TEST Line Heights
+        aChart = LineChart([0, 1, 2, 3], [0.1, 0.6, 0.2, 0.3], annotate_line_heights = True)
+        myGraph = Graph([aChart], y_label_format = '.0%', y_label = 'Ret. Win%', x_label = 'Rally Length', 
+                            y_label_dist = 1.25, offset = 0.35, x_label_left_shift = 1.5)
+        myGraph.render().show()
+        
+        aChart = LineChart([0, 1, 2, 3], [0.1, 0.6, 0.2, 0.3], annotate_line_heights = True, annotate_line_heights_where = 'below')
+        myGraph = Graph([aChart], y_label_format = '.0%', y_label = 'Ret. Win%', x_label = 'Rally Length', 
+                            y_label_dist = 1.25, offset = 0.35, x_label_left_shift = 1.5)
+        myGraph.render().show()
+
 
     #####################
     ### TABLE TESTING ###
