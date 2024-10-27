@@ -142,7 +142,7 @@ savePath = get_folder_struct('results_video')[SAVE_FOLDER]
 ########################################
 ######## INSTRUCTIONS ##################
 ########################################
-SAVE_REGS = False
+SAVE_REGS = True
 
 ########################################
 ############# PARAMETERS ###############
@@ -709,16 +709,68 @@ regDict = {'chip_inter': [   'is_chipped', 'launch_angle', 'ret_dist_to_bsl', 'r
                                     'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
                                     'ret_speed', 'ret_dist_to_opt_x_ret_speed', 'ret_dist_to_opt_sq_x_ret_speed',
                                     'ret_dist_to_bsl_x_ret_speed', 
-                                    'ret_dist_to_bh_x_ret_speed', 'ret_dist_to_bh_sq_x_ret_speed'],}
+                                    'ret_dist_to_bh_x_ret_speed', 'ret_dist_to_bh_sq_x_ret_speed'],
+            }
+
+### specifications without is_chipped
+regDict = {'nochip_launch_speed_rpm_tight': ['launch_angle', 'ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                    'ret_dist_to_bh', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_bh',
+                                    'ret_dist_to_bsl_x_launch_angle', 
+                                    'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                    'ret_dist_to_bsl_x_ret_speed', 
+                                    'ret_dist_to_opt_x_ret_speed', 'ret_dist_to_opt_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_ret_speed', 'ret_dist_to_bh_sq_x_ret_speed'],
+            'nochip_launch_speed_rpm': ['launch_angle', 'ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                    'ret_dist_to_bh', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_bh',
+                                    'ret_dist_to_bsl_x_launch_angle', 
+                                    'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                    'ret_dist_to_bh_x_launch_angle', 'ret_dist_to_bh_sq_x_launch_angle',
+                                    'ret_dist_to_bsl_x_ret_speed', 
+                                    'ret_dist_to_opt_x_ret_speed', 'ret_dist_to_opt_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_ret_speed', 'ret_dist_to_bh_sq_x_ret_speed'],
+            'nochip_launch_speed_rpm_inter': ['launch_angle', 'ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                    'ret_dist_to_bh', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_bh',
+                                    'ret_dist_to_bsl_x_launch_angle', 
+                                    'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                    'ret_dist_to_bh_x_launch_angle', 'ret_dist_to_bh_sq_x_launch_angle',
+                                    'ret_dist_to_bsl_x_ret_speed', 
+                                    'ret_dist_to_opt_x_ret_speed', 'ret_dist_to_opt_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_ret_speed', 'ret_dist_to_bh_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_is_chipped', 'ret_dist_to_bh_sq_x_is_chipped',],
+            'nochip_launch_speed_rpm_inter2': ['launch_angle', 'ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                    'ret_dist_to_bh', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_bh',
+                                    'ret_dist_to_bsl_x_launch_angle', 
+                                    'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                    'ret_dist_to_bh_x_launch_angle', 'ret_dist_to_bh_sq_x_launch_angle',
+                                    'ret_dist_to_bsl_x_ret_speed', 
+                                    'ret_dist_to_opt_x_ret_speed', 'ret_dist_to_opt_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_ret_speed', 'ret_dist_to_bh_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_is_chipped', 'ret_dist_to_bh_sq_x_is_chipped',
+                                    'ret_dist_to_bsl_x_is_chipped',],
+            'nochip_launch_speed_rpm_inter3': ['launch_angle', 'ret_speed', 'ret_spin', 'ret_dist_to_bsl', 'ret_dist_to_opt', 'ret_dist_to_opt_sq',
+                                    'ret_dist_to_bh', 'ret_dist_to_bh_sq', 'ret_dist_to_bsl_bh',
+                                    'ret_dist_to_bsl_x_launch_angle', 
+                                    'ret_dist_to_opt_x_launch_angle', 'ret_dist_to_opt_sq_x_launch_angle',
+                                    'ret_dist_to_bh_x_launch_angle', 'ret_dist_to_bh_sq_x_launch_angle',
+                                    'ret_dist_to_bsl_x_ret_speed', 
+                                    'ret_dist_to_opt_x_ret_speed', 'ret_dist_to_opt_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_ret_speed', 'ret_dist_to_bh_sq_x_ret_speed',
+                                    'ret_dist_to_bh_x_is_chipped', 'ret_dist_to_bh_sq_x_is_chipped',
+                                    'ret_dist_to_bsl_x_is_chipped',
+                                    'ret_dist_to_opt_x_is_chipped', 'ret_dist_to_opt_sq_x_is_chipped']}
 
 
 ### Result Path
 project_results_path = get_folder_struct('results_video')['return_chip_topspin']
 current_results_path = maybe_make_folder(project_results_path, f'regressions_' + make_timestamp())
 
-comparison_prob_dict = {'tp': 0.53, ### this way, target areas will have roughly the same size:
-                        'lo': 0.56,      ### we then annotate their quality with annotation point
-                        'hi': 0.56}
+comparison_prob_dict = {'tp': 0.535, ### this way, target areas will have roughly the same size:
+                        'lo': 0.57,      ### we then annotate their quality with annotation point
+                        'hi': 0.57}
+
+comparison_prob_dict = {'tp': 0.55, ### this way, target areas will have roughly the same size:
+                        'lo': 0.55,      ### we then annotate their quality with annotation point
+                        'hi': 0.5}
 
 if SAVE_REGS:
     #########################################
