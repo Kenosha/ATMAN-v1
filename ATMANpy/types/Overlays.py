@@ -1055,6 +1055,14 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
 
         return frmRst
 
+    def reset_size(self):
+        for row_frms in self.raster:
+            for frms in row_frms:
+                if frms is None:
+                    continue
+                if frms.length() > self.length:
+                    self.length = frms.length()
+
     def add(self, someFrms, row, col,
             set_size = False): ### added element overwrites the size
         
@@ -1068,15 +1076,16 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
         else:
             self.element_dims = dims
         
-        if someFrms.length() > self.length or set_size:
-            self.length = someFrms.length()
-        
         if self.output_dims is None:
             el_cols, el_rows = self.element_dims
             self.output_dims = el_cols * self.cols, el_rows * self.rows
 
         self[row, col] = someFrms
         
+        # if someFrms.length() > self.length or set_size:
+        #     self.length = someFrms.length()
+        self.reset_size()
+
     def render(self):
         ### idea: get all the element MultiFrames to have the target dimensions and the target length
         ### for None elements, create black 
