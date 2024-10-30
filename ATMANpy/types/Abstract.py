@@ -1371,6 +1371,12 @@ class Point(Shots):
         except:
             next_srv_val, next_rec_val = score_func_tiebreak(next_srv_str), score_func_tiebreak(next_rec_str)
 
+        ### check if the server and the receiver switch places.
+        if self.get_srv_player_name() != nextPnt.get_srv_player_name(): ### happens during tiebreak and change of sides,
+                                                                        ### but the latter case could be handled without this if condition
+                                                                        ### by the section below: next_srv_val == next_rec_val == 0
+            next_srv_val, next_rec_val = next_rec_val, next_srv_val 
+            
         ### in this case, the current point is the last in the game, and the winner is whoever has the higher score.
         if next_srv_val == next_rec_val == 0: 
             if curr_srv_val > curr_rec_val:
@@ -1385,7 +1391,7 @@ class Point(Shots):
             if verbose: print(f'Winner: Server -> {curr_srv_str}-{curr_rec_str} to {next_srv_str}-{next_rec_str}')
             return srv_name
         
-        ### Score does not contain advantage; server wins point
+        ### Score does not contain advantage; receiver wins point
         elif next_srv_val == curr_srv_val and next_rec_val > curr_rec_val: 
             if verbose: print(f'Winner: Returner -> {curr_srv_str}-{curr_rec_str} to {next_srv_str}-{next_rec_str}')
             return rec_name 
