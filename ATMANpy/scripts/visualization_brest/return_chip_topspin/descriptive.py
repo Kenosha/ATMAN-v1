@@ -470,7 +470,10 @@ if DO_METHOD_SECTION:
 
     centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(const.BGR['leafy_green']).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
 
-    script_line = "... with a slight preference for the server's backhand."
+    script_line =   """
+                        ... with a moderate preference for the server's backhand: 
+                        Around 60% balls are hit to the backhand side of the court. 
+                    """
     myFrms, _ = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam, **prmDict_nolum, **animDict,
                                          annotated_points = centerPts)
 
@@ -516,7 +519,7 @@ if DO_METHOD_SECTION:
 
     centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(const.BGR['leafy_green']).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
 
-    script_line = "As with topspin returns, chipped returns are hit predominantly to the backhand side."
+    script_line = "As with topspin returns, chipped returns are hit predominantly to the backhand side; again, the split is around 60/40."
     myFrms, _ = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam, **prmDict_nolum, **animDict,
                                          annotated_points = centerPts)
 

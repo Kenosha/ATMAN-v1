@@ -7,7 +7,7 @@ import statsmodels.api as sm
 import ATMANpy.auxil.constants as const
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
-from ATMANpy.types.Abstract import Points, Point, read_in_all_tables
+from ATMANpy.types.Abstract import Points, Point, NullPoint, read_in_data_tables, read_in_all_placeholder_tables
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.Lines import CourtLines, Line
@@ -46,9 +46,15 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 ###################################
 ######### READ IN DATA ############
 ###################################
-allTable = read_in_all_tables(confs)
-allPnts = Points.from_datatable(allTable, split_by_match = False)
-firstPnts = allPnts.filter('is_first_serve')
+dataTable = read_in_data_tables(confs)
+nullTable = read_in_all_placeholder_tables(confs)
+
+dataPnts = Points.from_datatable(dataTable, split_by_match = False)
+nullPnts = Points.from_placeholder_table(nullTable)
+
+allPnts = dataPnts.join(nullPnts).sort()
+
+firstPnts = dataPnts.filter('is_first_serve')
 
 ### Remove aces, faults and net balls.
 def get_returned_balls(myPnt):
@@ -173,6 +179,28 @@ naiveGraph, smartGraph = vis_ut.uniform_kdes_for_rally_length(regFrm, normalize_
 # why does the conditional win percentage improve so drastically for chipped returns
 # when introducing the length weight adjustment?
 # (whereas topspin conditional win % does not change much?)
+
+### little test: why do almost 10% of chipped returns in rallys that end on that return result in a return winner???!!!
+checkFrm = regFrm[(regFrm.winner_code == -1) & regFrm.is_chipped & (regFrm.len == 2)]
+weird_idxFrm = checkFrm[['mtc_idx', 'pnt_idx']]
+for idx, mtc_pnt in weird_idxFrm.iterrows():
+    mtc, pnt = mtc_pnt
+    myPnt = retPnts.get(mtc, pnt)
+    nextPnt = allPnts.get(mtc, pnt + 1)
+
+    winner_name = myPnt.get_winner_from_score(nextPnt, verbose = True)
+    print(myPnt)
+    myPnt.stream(confs = confs).widen(200).show(ms_between_frames = 50)
+    print('_________')
+
+mtc, pnt = weird_idxFrm.iloc[2]
+somePnt = allPnts.get(mtc, pnt)
+nextPnt = allPnts.get(mtc, pnt + 1)
+
+self = somePnt
+
+a = somePnt.get_winner_from_score(nextPnt, verbose = True)
+a
 
 ### Make a Graph: Win% returner over Rally Length
 jntFrm, jntFrm_decayed, shrFrm, diffFrm_chip, diffFrm_top, avgFrm = vis_ut.chip_topspin_return_avgs_by_length(regFrm, decay_rate = DECAY_RATE)
@@ -351,7 +379,7 @@ ex2_table = Table(table_data, title = 'Example 2', **table_kwargs_examples)
 ex2Frm = ex2_table.render()
 ex2Frm.show()
 
-myStr = '-> Player A playes more points on return!'
+myStr = '-> Player A plays more points on return!'
 
 ex1Frm_with_text = ex1Frm.put(myStr, where = (118, 500), size = 2, color = const.BGR['bright_grey'])
 ex1Frm_with_text.show()
@@ -496,13 +524,13 @@ cond_smart_table =  Table(table_data, **table_kwargs, null_columns = 0)
 ###########################################
 
 x, y = DIMENSIONS
-index_name_t = 'Topspin Returns'
-index_name_c = 'Chipped Returns'
-index_name_a = '      All Returns' ### weirdly, need two extra spaces...
+index_name_t = 'Topspin Returns (on first serve)'
+index_name_c = 'Chipped Returns (on first serve)'
+index_name_a = 'Total' ### weirdly, need two extra spaces...
 title = 'Returner Point Win%'
 
 table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
-                        'skip_after_how_many_symbols': 20, 'dimensions': (x, y),
+                        'skip_after_how_many_symbols': 15, 'dimensions': (x, y),
                         'skeleton_shrinkage': 0.2, 'skeleton_vertical_offset': 1, 
                         'title_vertical_offset': 0, 'title_horizontal_offset': 3.5,
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
@@ -510,7 +538,7 @@ table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col
 
 table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False, 
                         'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
-                        'skip_after_how_many_symbols': 20, 'dimensions': (int(2.7 * x), int(2.7 * y)),
+                        'skip_after_how_many_symbols': 15, 'dimensions': (int(2.7 * x), int(2.7 * y)),
                         'skeleton_shrinkage': 0.15, 'skeleton_vertical_offset': 1,
                         'title_vertical_offset': -2, 'title_horizontal_offset': 19,
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
@@ -636,7 +664,7 @@ script_line =   """
                     and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
                 """
 
-baseRst = FrameRaster(3, 3)
+baseRst = FrameRaster(3, 3, borders = 2)
 baseRst.add(sample_table.render(), 1, 1)
 baseFrm = baseRst.render()
 # baseFrm.show()
@@ -660,7 +688,7 @@ all_frames.append(baseFrms)
 script_lines.append(script_line)
 
 script_line = ""
-baseRst = FramesRaster(3, 3)
+baseRst = FramesRaster(3, 3, borders = 2)
 baseRst.add(sample_and_win_table.render(), 1, 1)
 finalRst, cascFrms = frame_cascade(high_pred_exFrms, baseRst)
 # DecapStream(cascFrms, 0, 100).show()
@@ -701,7 +729,7 @@ script_lines.append(script_line)
 #################################
  
 RESOLUTION = 1
-renameDict = {'serve_speed': 'Serve Speed', 'serve_spin': 'Serve Topspin', 'serve_width': 'Serve Width', 
+renameDict = {'serve_speed': 'Serve Speed', 'serve_spin': 'Serve Kick', 'serve_width': 'Serve Width', 
               'serve_depth': 'Return Depth', 'serve_height': 'Bounce Height', 'ret_is_back': 'Returner uses Backhand', 'serve_dist_sq': 'Stretch Distance'}
 fitted_model = logReg
 max_line_thickness = 2.5
@@ -742,7 +770,7 @@ outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for i
 #     diagFrm.show()
 
 ### Propensity Wording:
-# To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Modelling, or PSM for short.
+# To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Matching, or PSM for short.
 # PSM calculates the propensity to chip a ball given a set of explanatory variables.
 # in our case, these variables pertain to the quality of the serve 
 # (show and discuss table now?)
@@ -756,13 +784,13 @@ outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for i
 
 
 script_line =   """
-                    To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Modelling, or PSM for short.
+                    To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Matching, or PSM for short.
                 """
 blankFrms = BGRFrames.from_frame(blankFrm, STATIC_FRAMES)
 all_frames.append(blankFrms)
 script_lines.append(script_line)
 
-diagRaster = FrameRaster(3, 3)
+diagRaster = FrameRaster(3, 3, borders = 2)
 
 script_line = """
                 PSM estimates, from the data at hand, the propensity to chip a ball, given a set of explanatory variables. 
@@ -903,7 +931,7 @@ transFrms, arrScn, arrCam, ptDict = vis_ut.region_to_line_to_arrow(myReg, annPnt
                                                                     resolution = RESOLUTION, num_frames = 25, ann_right_px = -45, ann_left_px = 0, ann_vert_px = 15)
 
 script_line = ""
-myRst = FramesRaster(3, 3)
+myRst = FramesRaster(3, 3, borders = 2)
 myRst.add(transFrms, 1, 1)
 transFrms_rast = myRst.render()
 all_frames.append(transFrms_rast)
@@ -926,7 +954,7 @@ script_line =   """
 arrFrm0_noright = View.make(arrCam, arrScn, annotatedPoints = [ptDict['m_text'], ptDict['l_num']]).snap()
 arrFrms_blink0 = vs.blinking(arrFrm0, arrFrm0_noright, blinks_per_second = 2, duration_in_frames = 300)
 
-myRst = FramesRaster(3, 3)
+myRst = FramesRaster(3, 3, borders = 2)
 myRst.add(arrFrms_blink0, 1, 1)
 blinkFrms_rast = myRst.render()
 all_frames.append(blinkFrms_rast)
@@ -951,7 +979,7 @@ script_line =   """
 arrFrm1_noleft = View.make(arrCam, arrScn, annotatedPoints = [ptDict['m_text'], ptDict['r_num'], ptDict['r_text']]).snap()
 arrFrms_blink1 = vs.blinking(arrFrm1, arrFrm1_noleft, blinks_per_second = 2, duration_in_frames = 300)
 
-myRst = FramesRaster(3, 3)
+myRst = FramesRaster(3, 3, borders = 2)
 myRst.add(arrFrms_blink1, 1, 1)
 blinkFrms_rast = myRst.render()
 all_frames.append(blinkFrms_rast)
@@ -1064,7 +1092,7 @@ script_lines.append(script_line)
 
 script_line =   "To illuminate why, imagine player A has a great serve and average return; player B has an average return and serve."
 
-myRst = FrameRaster(2, 2)
+myRst = FrameRaster(2, 2, borders = 2)
 myRst.add(ex1Frm, 0, 0)
 rstFrm = myRst.render()
 rstFrms = BGRFrames.from_frame(rstFrm, STATIC_FRAMES)
@@ -1220,7 +1248,7 @@ script_line =   """
                     The question then is: how good must a chip return be to overcome those 10%? Where should it be placed; how should it be played?
                     Is it better to play a high-arcing chip or a low-bouncing chip? 
                     
-                    In the following, we will attempt to answer these questions.  
+                    In the following, we will attempt to answer these questions.
                 """
 
 tabFrm = smart_bal_len_table.render()

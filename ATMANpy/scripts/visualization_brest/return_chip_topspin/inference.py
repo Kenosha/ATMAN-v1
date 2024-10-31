@@ -134,7 +134,7 @@ regFrm_in = regFrm[regFrm[in_col]]
 ########### SAVE FOLDER ################
 ########################################
 
-DESCRIPTOR = 'descriptive'
+DESCRIPTOR = 'inference'
 SAVE_FOLDER = 'return_chip_topspin'
 savePath = get_folder_struct('results_video')[SAVE_FOLDER]
 
@@ -226,8 +226,8 @@ prmDict_annot_heat['argument_luminosity'] = 1.5
 backView_half = View.make(halfCam, courtScn, resolution = 1, annotatedPoints = [fhPt_annot, bhPt_annot])
 backView_heat = View.make(heatCam, courtScn, resolution = 1, annotatedPoints = [fhPt_annot_heat, bhPt_annot_heat])
 
-backView_half.snap().show()
-backView_heat.snap().show()
+# backView_half.snap().show()
+# backView_heat.snap().show()
 
 ### Points over which to render
 aPnt = retPnts_in.get(26, 40)
@@ -644,22 +644,23 @@ color_dict = {'tp': TOPS_COLOR,
               'hi': CHIP_HI_COLOR}
 
 from ATMANpy.types.Overlays import Legend, LegendRow, overlay
-tpRow = LegendRow('Topspin', shape_color = TOPS_COLOR, text_size = 2)
-loRow = LegendRow('Low Chip', shape_color = CHIP_LO_COLOR, text_size = 2)
-hiRow = LegendRow('High Chip', shape_color = CHIP_HI_COLOR, text_size = 2)
+tpRow = LegendRow('... Topspin', shape_color = TOPS_COLOR, text_size = 2)
+loRow = LegendRow('... Low Chip', shape_color = CHIP_LO_COLOR, text_size = 2)
+hiRow = LegendRow('... High Chip', shape_color = CHIP_HI_COLOR, text_size = 2)
 
-leg_dims = (250, 250)
-leg_params = {'borders': True, 'header_text': ' ', 'resolution': 100, 'legend_dimensions': leg_dims}
+leg_dims = (300, 300)
+# leg_dims = (500, 500)
+leg_params = {'borders': True, 'header_text': 'Return is ...', 'resolution': 100, 'legend_dimensions': leg_dims, 'header_offset': 2, 'header_thickness': 1}
 
-leg1 = Legend([tpRow, LegendRow(None), LegendRow(None), LegendRow(None)], **leg_params)
+leg1 = Legend([tpRow, LegendRow(None), LegendRow(None)], **leg_params)
 leg1Frm = leg1.render()
 # leg1Frm.show()
 
-leg2 = Legend([tpRow, loRow, LegendRow(None), LegendRow(None)], **leg_params)
+leg2 = Legend([tpRow, loRow, LegendRow(None)], **leg_params)
 leg2Frm = leg2.render()
 # leg2Frm.show()
 
-leg3 = Legend([tpRow, loRow, hiRow, LegendRow(None)], **leg_params)
+leg3 = Legend([tpRow, loRow, hiRow], **leg_params)
 leg3Frm = leg3.render()
 # leg3Frm.show()
 
@@ -780,13 +781,13 @@ script_line =   """
                     intended target. Therefore, areas too close to the base- and sidelines are excluded as targets, even though
                     a shot that would land here would typically yield the highest return win probability. 
                     Nevertheless, it still holds that any return that lands within the target zone 
-                    improves the returner chance of winning the point to above 50%, according to the data and our model.
+                    improves the returner's chance of winning the point to above 50%, according to the data and our model.
                     
                     In three words, the target zone basically says: aim here, and if you make it, you'll win the point
                     more often than you lose it. 
 
-                    Our model believes that it is best hit the topspin return cross-court in this specific situation:
-                    a right-handed server serving from the deuce side of the court, out wide. 
+                    Our model believes that it is best to hit the topspin return cross-court in this specific situation, 
+                    where a right-handed server serves out wide from the deuce side of the court.
                     All the examples following will be depicted true to a right-handed server, 
                     in case of a left-handed server, simply flip the entire situation, and the target zone, across the middle:
                     the forehand side is then on the screen's right, and the exact same cross-court return would be optimal, 
@@ -803,7 +804,7 @@ zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']))
 script_line =   """
                     As for the low chip, the model likes the cross-court return again. 
                     This time, it may land more shallow in the court, but needs a more acute angle to remain 
-                    above 50%.
+                    above 50%. 
                 """
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
 myRst.add(myFrms, i, j)
@@ -814,9 +815,10 @@ script_lines.append(script_line)
 
 zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']))
 script_line =   """
-                    For a high bouncing chip, shown here in light-blue, 
+                    For a high-arching chip, shown here in light-blue, 
                     the target zone is considerably smaller than either the topspin return or the low chip.
-                    A promising high chip needs much more depth than the low chip; it may not land as shallow in the court.
+                    The data therefore confirms what we hypothesized earlier: 
+                    The high chip needs much more depth than the low chip; it may not land as shallow in the court.
                 """
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
 myRst.add(myFrms, i, j)
@@ -881,7 +883,7 @@ postFrms = BGRFrames.from_frames([transFrms, moveFrms, lineFrms, statFrms])
 postRst.add(postFrms, i, j)
 # postFrms[-1].show()
 
-postFrms[-1].show()
+# postFrms[-1].show()
 
 ###### DEUCE MIDDLE ######
 side, where = 'deuce', 'middle'
@@ -921,7 +923,7 @@ for angle in ['tp', 'lo', 'hi']:
     pvalDict[angle] = (maxPt, max_val)
 
 script_line =   """
-                    Consider now a serve down the middle from the server's forehand side.
+                    Consider now a serve DOWN THE MIDDLE from the server's forehand side.
                 """
 rastFrms = myRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
@@ -976,7 +978,7 @@ all_frames.append(rastFrms)
 script_lines.append(script_line)
 
 zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']))
-script_line = "Again, the low chip has the smallest target zone, requiring depth and width on the server's forehand side."
+script_line = "Again, the high chip has the smallest target zone, requiring depth and width on the server's forehand side."
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
 myRst.add(myFrms, i, j)
 rastFrms = myRst.render()
@@ -1038,7 +1040,7 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
 postFrms = BGRFrames.from_frames([transFrms, moveFrms, lineFrms, statFrms])
 postRst.add(postFrms, i, j)
 
-postFrms[-1].show()
+# postFrms[-1].show()
 
 # statFrms[-1].show()
 
@@ -1080,7 +1082,7 @@ for angle in ['tp', 'lo', 'hi']:
     pvalDict[angle] = (maxPt, max_val)
 
 script_line =   """
-                    Up next: a serve down the middle, from the server's backhand side, 
+                    Up next: a serve down the middle, from the server's BACKHAND side, 
                     that is: the ad side for a right-handed server, or the deuce side for a lefty server
                 """
 rastFrms = myRst.render()
@@ -1118,7 +1120,7 @@ zoneScn = zoneDict['tp']
 script_line =   """
                     Similarly to the forehand-side return down the middle, the backhand-side return down the middle should be played
                     anywhere from down the line to the returner's feet. 
-                    However, presumably because now the ball lands on the server's forehand side, the return requires greater depth
+                    However, presumably because now the return lands on the server's FOREHAND side, the model requires greater depth
                     to bring the returner's chances to above 50%.
                 """
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
@@ -1199,7 +1201,7 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
 postFrms = BGRFrames.from_frames([transFrms, moveFrms, lineFrms, statFrms])
 postRst.add(postFrms, i, j)
 
-postFrms[-1].show()
+# postFrms[-1].show()
 
 ###### AD WIDE ######
 side, where = 'ad', 'wide'
@@ -1275,11 +1277,11 @@ script_lines.append(script_line)
 zoneScn = zoneDict['tp']
 script_line =   """
                     In this situation, the model recommends playing the topspin return strictly cross-court. 
-                    Recall from the earlier discussion that the returner is afforded with very little time to reposition on 
+                    Recall from the earlier discussion that the returner is afforded very little time to reposition on 
                     the topspin return. 
                     On wide serves, the returning player is already off the court, 
                     The model therefore sees it as imperative to send the ball cross-court to reduce the distance the returning player 
-                    needs to cover. 
+                    needs to cover to get back in position.
                 """
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
 myRst.add(myFrms, i, j)
@@ -1305,7 +1307,7 @@ zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']).combine
 script_line =   """
                     The high-chip target zone is virtually identical with the low-chip zone and not much smaller, as usual:
                     though the returner would play himself out of position with the high-chip, the model takes into account
-                    that the high-chip affords the returner with plenty of time to recover to almost anywhere along the baseline.
+                    that the high-chip affords the returner with plenty of time to recover to almost anywhere along the baseline, as we saw earleir.
 
                     Having gone through the four serve cases, let's take a closer look at the target zones. 
                 """
@@ -1371,7 +1373,7 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
 postFrms = BGRFrames.from_frames([transFrms, moveFrms, lineFrms, statFrms])
 postRst.add(postFrms, i, j)
 
-postFrms[-1].show()
+# postFrms[-1].show()
 
 ####### POST-STUFF #######
 
@@ -1381,11 +1383,10 @@ all_frames.append(postFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The flags indicate the highest returner win probability point within the target zone.
+                    The flags indicate the highest returner win probability spot within the target zone.
                     Interestingly, though the low chip zones are typically smaller than the topspin target zones, 
-                    their peak probability is higher, indicating that a low chip is higher risk, but also higher reward
-                    according to our model, as opposed to the topspin return, which allows more room for error, 
-                    but a slightly lower returner advantage beyond 50%.
+                    their peak probability is higher, indicating that a low chip is higher risk, but also higher reward stategy according to our model, 
+                    as opposed to the topspin return, which allows more room for error, but affords a slightly lower returner advantage beyond 50%.
                     The high chip return consistently has not only the smallest target zone, but also the lowest peak probability;
                     our model therefore would discourage its use. 
                 """
@@ -1395,12 +1396,12 @@ script_lines.append(script_line)
 
 script_line =   """
                     The remaining mystery to take a look at is the model's consistent infatuation with chip returns to the 
-                    server's forehand side. Typically, these would be easier to attack; a player can redirect balls down the line
-                    more easily on the forehand, and inject more pace on a floating ball; why then does the model want the chip 
-                    to be played to the forehand?
+                    server's forehand side. Typically, these would be easier to attack; a player can redirect balls more easily on the forehand,
+                    and inject more pace on a floating ball; 
+                    why then does the model want the chip to be played to the forehand?
 
                     We have alluded to one potential factor earlier: serve + 1 winners are not as promising on chip returns
-                    than serve + 2 combinations; The returner may therefore goad the serving player 
+                    as serve + 2 combinations; The returner may therefore goad the serving player 
                     into premature aggression with a well-placed chip to the forehand.
 
                     But what explains the aversion to the backhand side, on the chip return? 
@@ -1561,8 +1562,8 @@ print(grpFrm)
 
 
 ###### CONTINUE ANIMATING ######
-fhPt_annot_fore = fhPt_annot.resize(2).right(5)
-bhPt_annot_fore = bhPt_annot.resize(2)
+fhPt_annot_fore = fhPt_annot.resize(2).right(16)
+bhPt_annot_fore = bhPt_annot.resize(2).left(16)
 
 from ATMANpy.types.Overlays import reverse_cascade, make_text_in
 
@@ -1681,7 +1682,7 @@ myGraph1 = Graph([topsChart, chipChart], cam = topCam, dimensions = (1920, 1080)
                 y_label_format = '>5.0%', y_label_dist = 14, offset = 0.38, header_text = "", header_height = 0, 
                 y_label = 'Ret. Win%', label_size = 2, tick_label_size = 2, 
                 x_label_dist = 5, x_tick_label_left_shift = 5)
-myGraph1.render().show()
+# myGraph1.render().show()
 
 # b) fore probability on chip/tops
 tops_rets = foreFrm[False].values.tolist()
@@ -1694,7 +1695,7 @@ myGraph2 = Graph([topsChart, chipChart], cam = topCam, dimensions = (1920, 1080)
                 y_label_format = '>5.0%', y_label_dist = 14, offset = 0.38, header_text = "", header_height = 0, 
                 y_label = 'S+1 Fore%', label_size = 2, tick_label_size = 2,
                 x_label_dist = 5, x_tick_label_left_shift = 5)
-myGraph2.render().show()
+# myGraph2.render().show()
 
 # c) win probability on fore/back
 back_rets = fore_ret_winFrm[False].values.tolist()
@@ -1714,7 +1715,7 @@ myGraph3 = Graph([backChart, foreChart], cam = topCam, dimensions = (1920, 1080)
                 y_label_format = '>5.0%', y_label_dist = 14, offset = 0.38, header_text = "", header_height = 0, 
                 y_label = 'Ret. Win%', label_size = 2, tick_label_size = 2,
                 x_label_dist = 5, x_tick_label_left_shift = 5)
-myGraph3.render().show()
+# myGraph3.render().show()
 
 ##########################
 #### MAKE THE LEGENDS ####
@@ -1727,7 +1728,7 @@ legRows = [LegendRow('... Topspin', TOPS_COLOR, text_size = 2),
 myLeg_chip_tops = Legend(legRows, header_text = 'Return is ...', header_offset = 2.7, header_thickness = 1,
                             legend_dimensions = (400, 200), resolution = 100, borders = False)
 legFrm_chip_tops = myLeg_chip_tops.render()
-legFrm_chip_tops.show()
+# legFrm_chip_tops.show()
 
 # b) fore / back
 legRows = [LegendRow('... Forehand', fore_color, text_size = 2),
@@ -1735,7 +1736,7 @@ legRows = [LegendRow('... Forehand', fore_color, text_size = 2),
 myLeg_chip_tops = Legend(legRows, header_text = 'Serve + 1 is ...', header_offset = 2.7, header_thickness = 1,
                             legend_dimensions = (400, 200), resolution = 100, borders = False)
 legFrm_fore_back = myLeg_chip_tops.render()
-legFrm_fore_back.show()
+# legFrm_fore_back.show()
 
 
 ##########################
@@ -1775,6 +1776,7 @@ jntPts = [*annotated_points, *graph_annPnts]
 script_line =   """
                     Reading the graph from left-to-right, virtually all returns, be they chipped or hit with topspin,
                     are replied to with the forehand if the return lands in the forehand half of the server's court, in zones A or B.
+                    No surprises here.
                     However, more than 80% of chipped returns into C are run around, and hit with the forehand. 
                     Even if a chip lands in D, more than half of the time the server will have time to run around the chip and reply with the forehand.
                 """
@@ -1792,8 +1794,8 @@ jntLns = [*regLines3D_trunc, *graphScn.shapes[2:]]
 jntPts = [*annotated_points, *graph_annPnts]
 
 script_line =   """
-                    The data shows that running around returns to the backhand pays off for the server: 
-                    if a return to the backhand side can be run around, the returner's win% goes from 48% to 42% in area C, and from 50% to 41% in area D.
+                    The data also shows that running around returns to the backhand pays off for the server: 
+                    if a return to the backhand side can be run around, the returner's win% falls from 48% to 42% in area C, and from 50% to 41% in area D.
                 """
 graphFrms, _ = vs.animate_static(jntLns, static_cam = topCam, **prmDict, 
                                       background_scene = courtScn_subset,
@@ -1876,7 +1878,7 @@ script_line =   """
                     for two, it goes cross-court, thus allowing a greater margin of error. 
 
                     Our data shows that on returns that can be run around, the server indeed goes for the cross-court inside-out forehand most frequently:
-                    more than half of all run-around backhands are hit back to the returner's D sector (the extreme backhand side).
+                    more than half of all run-around backhands are hit back to the returner's D sector (which is the extreme backhand side).
                 """
 
 showArrows = [  
@@ -1893,7 +1895,7 @@ graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDic
                                       annotated_points = jntPnts_lo_lum, num_frames = 25)
 graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
 
-graphFrms[-1].show()
+# graphFrms[-1].show()
 
 script_lines.append(script_line)
 all_frames.append(graphFrms)
@@ -1919,7 +1921,7 @@ graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDic
 
 graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
 
-graphFrms[-1].show()
+# graphFrms[-1].show()
 
 script_lines.append(script_line)
 all_frames.append(graphFrms)
@@ -1944,13 +1946,13 @@ graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDic
 
 graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
 
-graphFrms[-1].show()
+# graphFrms[-1].show()
 
 script_lines.append(script_line)
 all_frames.append(graphFrms)
 
 script_line =   """
-                    On the other hand, if the return is NOT run around, the server will not look for aggressive cross-court or down-the-line angles so often,
+                    On the other hand, if the return is NOT run around, the server will not look for aggressive cross-court or down-the-line angles as often,
                     opting for a ball down the middle much more frequently. 
                 """
 
@@ -1972,9 +1974,45 @@ graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDic
 
 graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
 
-graphFrms[-1].show()
-
-script_lines.append(script_line)
 all_frames.append(graphFrms)
+script_lines.append(script_line)
+
+####### SUMMARY #######
+
+# what have we shown?
+### -> where to play the chip
+### -> how to play the chip
+
+# caveat: specific subset of players, only one tournament of data!
+### -> would be very interesting to do this for one specific player, but for this, much more data!
+
+script_line = ""
+itplFrms = vs.interpolate_frames(graphFrms[-1], statFrms_post[-1], STATIC_FRAMES)
+all_frames.append(itplFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    Ok then, so there it is: for a specific set of players in a sample of twenty tournament matches played, 
+                    the chip return is a viable strategy as long as it is hit low and wide to the forehand of the server.
+                    Naturally, this analysis would be more actionable if it was tailor-made for one specific player, 
+                    but for this, we'd need much more data. However, in principle, the methods and models would be the same,
+                    and would allow us to state with some confidence how to return a ball against that specific player on serve.
+                """
+                
+all_frames.append(statFrms_post)
+script_lines.append(script_line)
 
 show(all_frames)
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+for idx, script_line in enumerate(script_lines):
+    with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+        f.write(script_line)
