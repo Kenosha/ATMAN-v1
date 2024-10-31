@@ -1363,19 +1363,33 @@ class Point(Shots):
             else:
                 if verbose: print(f'Non-Decisive Score on Last Point: {curr_srv_str}-{curr_rec_str}')
                 return None
+        elif isinstance(nextPnt, NullPoint):
+            try:
+                lo_name, lo_score = nextPnt['lo_name'], nextPnt['lo_score']
+                hi_name, hi_score = nextPnt['hi_name'], nextPnt['hi_score']
+            except:
+                return None
+            else:
+                if lo_name == srv_name:
+                    next_srv_str, next_rec_str = str(lo_score), str(hi_score)
+                elif hi_name == srv_name:
+                    next_srv_str, next_rec_str = str(hi_score), str(lo_score) 
+                else:
+                    raise Exception(f'Neither {lo_name} nor {hi_name} are serving; server should be {srv_name}.')
+
         else:
             next_srv_str, next_rec_str = nextPnt.get_point_score()
+            
+            ### check if the server and the receiver switch places.
+            if self.get_srv_player_name() != nextPnt.get_srv_player_name(): ### happens during tiebreak and change of sides,
+                                                                            ### but the latter case could be handled without this if condition
+                                                                            ### by the section below: next_srv_val == next_rec_val == 0
+                next_srv_str, next_rec_str = next_rec_str, next_srv_str
 
         try:
             next_srv_val, next_rec_val = score_func_regular(next_srv_str), score_func_regular(next_rec_str)
         except:
             next_srv_val, next_rec_val = score_func_tiebreak(next_srv_str), score_func_tiebreak(next_rec_str)
-
-        ### check if the server and the receiver switch places.
-        if self.get_srv_player_name() != nextPnt.get_srv_player_name(): ### happens during tiebreak and change of sides,
-                                                                        ### but the latter case could be handled without this if condition
-                                                                        ### by the section below: next_srv_val == next_rec_val == 0
-            next_srv_val, next_rec_val = next_rec_val, next_srv_val 
             
         ### in this case, the current point is the last in the game, and the winner is whoever has the higher score.
         if next_srv_val == next_rec_val == 0: 
@@ -1620,6 +1634,30 @@ class Point(Shots):
         return Stream(cap, fs, ls)
     
 @dataclass(frozen = True)
+class NullPoint:
+    ### A Point for which we have no trajectory data, but for which we know at least that it exists (and maybe other stuff)
+    infoDict: dict ### what we know about the NullPoint (score, player names, etc)
+
+    @staticmethod
+    def from_placeholder_series(placeSer):
+        return NullPoint(placeSer.to_dict())
+
+    def get_match_index(self):
+        try:
+            return int(self.infoDict['match_idx'])
+        except KeyError:
+            return None
+    
+    def get_point_index(self):
+        try:
+            return int(self.infoDict['point_idx'])
+        except KeyError:
+            return None
+
+    def get_winner_from_score(self, nextPnt, verbose = False):    ### implement as needed.
+        pass
+
+@dataclass(frozen = True)
 class Points:
     pointList: List[Point]
 
@@ -1648,6 +1686,11 @@ class Points:
         else:   
             pointList = [Point.from_point_table(pointFrm) for _, pointFrm in tableFrm.groupby(['match_idx', 'point_idx'])]
             return cls(pointList)
+
+    @classmethod
+    def from_placeholder_table(cls, placeFrm):
+        pointList = [NullPoint.from_placeholder_series(pointSer) for _, pointSer in placeFrm.iterrows()]
+        return cls(pointList)
 
     def __repr__(self):
         SHOW_THRESHOLD = 20
@@ -1826,7 +1869,7 @@ for methodStr in dir(Shot):
         if not methodStr in dir(Shots): ### do not overwrite
             __make_method_is(Shots, methodStr)
 
-def read_in_all_tables(confs):
+def read_in_data_tables(confs):
     ### READ IN DATA
     tables = []
     for conf_idx, conf in enumerate(confs):
@@ -1841,6 +1884,19 @@ def read_in_all_tables(confs):
     allTable = pd.concat(tables)    
     return allTable
 
+def read_in_all_placeholder_tables(confs):
+    tables = []
+    for conf_idx, conf in enumerate(confs):
+        vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    
+        placeTable = ff.read_feature_frame('placeTable', vid, sto, keep_only = 'last')
+        placeTable['match_idx'] = conf_idx
+        tables.append(placeTable)
+    
+    allTable = pd.concat(tables)    
+    return allTable
+
+
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
     import ATMANpy.scripts.pipeline_brest_tightseg as ppl
@@ -1851,10 +1907,39 @@ if __name__ == '__main__':
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
 
-    confs = [cnf_mod.get_conf(avail_vids[0]), cnf_mod.get_conf(avail_vids[1])] 
+    # confs = [cnf_mod.get_conf(avail_vids[0]), cnf_mod.get_conf(avail_vids[1])] 
+    confs = [cnf_mod.get_conf(vid) for vid in avail_vids]
 
-    tableFrm = read_in_all_tables(confs)
+    dataTable = read_in_data_tables(confs)
+    placeTable = read_in_all_placeholder_tables(confs)
+
+    dataPoints = Points.from_datatable(dataTable)
+    placePoints = Points.from_placeholder_table(placeTable)
+    allPoints = dataPoints.join(placePoints).sort()
+
+    print(placePoints)
+    print('______')
+    print(dataPoints)
+    print('______')
+    print(allPoints)
+
+    # conf_idx = 10
+    # conf = confs[conf_idx]
+
+    # vid, sto = conf['video_id'], conf['store_name']
+    # placeTable = ff.read_feature_frame('placeTable', vid, sto)
     
-    myPnts = Points.from_datatable(tableFrm)
-    print(Points.from_datatable(tableFrm))
+    # print(Points.from_placeholder_table(placeTable).sort())
+
+
+    # for pnt_idx, placeSer in placeTable.iterrows():
+    #     print(NullPoint.from_placeholder_series(placeSer))
+    
+    
+    
+
+    # tableFrm = read_in_all_tables(confs)
+    
+    # myPnts = Points.from_datatable(tableFrm)
+    # print(Points.from_datatable(tableFrm))
 

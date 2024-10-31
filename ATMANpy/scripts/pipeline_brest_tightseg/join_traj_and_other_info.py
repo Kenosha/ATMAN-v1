@@ -62,9 +62,11 @@ def load(vid, sto):
     trajFrm = ff.read_feature_frame('trajTable', vid, sto, keep_only = 'last')
     return HPCF, segBF, plySF, srvSF, scrSF, trajFrm
 
-def save(trajDFs, vid, sto):
+def save(trajDFs, placeholderSers, vid, sto):
     trajFrm = pd.concat(trajDFs)
+    placeFrm = pd.concat(placeholderSers, axis = 1).T
     ff.save_feature_frame(trajFrm, 'dataTable', vid, sto)
+    ff.save_feature_frame(placeFrm, 'placeTable', vid, sto)
 
 def main(conf, name = None):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
@@ -188,6 +190,7 @@ def main(conf, name = None):
     gamesFrms = ut.split(gamesFrm)
 
     frmList = []
+    placeholderList = []
     for idx in range(trajSFs.length()):
         trjFrm = trajSFs[idx].to_dataframe()
         trjFrm = trjFrm.dropna(how = 'all', axis = 0) ### narrow it down to where info about the shot actually exists (this way, we kill stuff that happens before ball leaves the racket on serve)
@@ -227,7 +230,7 @@ def main(conf, name = None):
 
         plyFrm['rec_x'], plyFrm['rec_y'] = rec_x, rec_y
 
-        ### Merge in the score information 
+        ### Gather Score Information 
         scoreFrm = scoreFrms[idx]
         p1, p2 = scoreFrm.columns
         p1_vals, p2_vals = scoreFrm[p1].unique(), scoreFrm[p2].unique()
@@ -235,10 +238,6 @@ def main(conf, name = None):
         p1_val, p2_val = p1_vals[0], p2_vals[0]
         scoreDict = {p1: p1_val, p2: p2_val}
         
-        plyFrm['hit_score'] = plyFrm['hit_name'].map(scoreDict)
-        plyFrm['rec_score'] = plyFrm['rec_name'].map(scoreDict)
-
-        ### Merge in the set information
         gamesFrm = gamesFrms[idx]
         p1, p2 = gamesFrm.columns
         p1_vals, p2_vals = gamesFrm[p1].unique(), gamesFrm[p2].unique()
@@ -265,19 +264,31 @@ def main(conf, name = None):
         setsDict = {p1: p1_sets, p2: p2_sets}
         del p1_games, p2_games
         
-        plyFrm['hit_games'] = plyFrm['hit_name'].map(gamesDict)
-        plyFrm['rec_games'] = plyFrm['rec_name'].map(gamesDict)
-        
-        plyFrm['hit_sets'] = plyFrm['hit_name'].map(setsDict)
-        plyFrm['rec_sets'] = plyFrm['rec_name'].map(setsDict)
+        if len(trjFrm) > 0:
+            ### Merge in the score information
+            plyFrm['hit_score'] = plyFrm['hit_name'].map(scoreDict)
+            plyFrm['rec_score'] = plyFrm['rec_name'].map(scoreDict)
+            
+            plyFrm['hit_games'] = plyFrm['hit_name'].map(gamesDict)
+            plyFrm['rec_games'] = plyFrm['rec_name'].map(gamesDict)
+            
+            plyFrm['hit_sets'] = plyFrm['hit_name'].map(setsDict)
+            plyFrm['rec_sets'] = plyFrm['rec_name'].map(setsDict)
 
-        ### join, and write to list
-        allFrm = trjFrm.merge(plyFrm, left_index = True, right_index = True)
-        frmList.append(allFrm)
+            ### join, and write to list
+            allFrm = trjFrm.merge(plyFrm, left_index = True, right_index = True)
+            frmList.append(allFrm)
+        else: ### no trajectories found at all! have to make a placeholder point
+            lo_name, up_name = lower_upper_names_proper
+            resDict = {'point_idx': idx, 
+                       'lo_name': lo_name, 'up_name': up_name, 
+                       'lo_score': scoreDict[lo_name], 'up_score': scoreDict[up_name],
+                       'lo_games': gamesDict[lo_name], 'up_games': gamesDict[up_name],
+                       'lo_sets': setsDict[lo_name], 'up_sets': setsDict[up_name]}
+            outSer = pd.Series(resDict)
+            placeholderList.append(outSer)
 
-    frmList = [frm for frm in frmList if len(frm) > 0]
-
-    save(frmList, vid, sto)
+    save(frmList, placeholderList, vid, sto)
 
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
@@ -287,7 +298,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[0])
+    conf = cnf_mod.get_conf(avail_vids[10])
 
     name = ppl._name
 
