@@ -121,6 +121,8 @@ xFrm = pd.DataFrame(X, columns = varDict.keys())
 xFrm['const'] = 1
 ySer = pd.Series(y, name = 'is_chipped').astype(bool)
 
+xFrm = xFrm.drop(['serve_width', 'serve_spin'], axis = 1) ### these two are highly insignificant
+
 logReg = Logit(ySer, xFrm)
 logReg = logReg.fit()
 logReg.summary()
@@ -130,6 +132,57 @@ logReg.summary()
 #########################################
 DECAY_RATE = 0.9
 regFrm = vis_ut.make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = DECAY_RATE)
+
+# ###### FIXED IN MAKE_REGRESSOR_FRAME
+# SHOW_CHIP_WEIRDNESS = False
+# SHOW_TOPS_WEIRDNESS = False
+
+# ### little test: why do almost 10% of chipped returns in rallys that end on that return result in a return winner???!!!
+# checkFrm_chip = regFrm[(regFrm.winner_code == -1) & regFrm.is_chipped & (regFrm.len == 2)]
+# weird_idxFrm = checkFrm_chip[['mtc_idx', 'pnt_idx']]
+
+# if SHOW_CHIP_WEIRDNESS:
+#     i = 0
+#     for idx, mtc_pnt in weird_idxFrm.iterrows():
+#         mtc, pnt = mtc_pnt
+#         myPnt = retPnts.get(mtc, pnt)
+#         nextPnt = allPnts.get(mtc, pnt + 1)
+
+#         winner_name = myPnt.get_winner_from_score(nextPnt, verbose = True)
+#         print(myPnt)
+#         myPnt.stream(confs = confs).widen(200).show(ms_between_frames = 50)
+#         print('_________')
+        
+#         i += 1
+
+# ### fix these instances manually! none of these are 2nd shot winners, they're all length 3 (but directionally correct)!
+# regFrm.loc[weird_idxFrm.index, 'len'] = 3
+
+# ### same test for topspin return stuff.
+# checkFrm_tops = regFrm[(regFrm.winner_code == -1) & ~regFrm.is_chipped & (regFrm.len == 2)]
+# weird_idxFrm = checkFrm_tops[['mtc_idx', 'pnt_idx']]
+
+# if SHOW_TOPS_WEIRDNESS:
+#     i = 0
+#     for idx, mtc_pnt in weird_idxFrm.iterrows():
+#         mtc, pnt = mtc_pnt
+#         myPnt = retPnts.get(mtc, pnt)
+#         nextPnt = allPnts.get(mtc, pnt + 1)
+
+#         print(i)
+#         winner_name = myPnt.get_winner_from_score(nextPnt, verbose = True)
+#         print(myPnt)
+#         myPnt.stream(confs = confs).widen(200).show(ms_between_frames = 50)
+#         print('_________')
+
+#         i += 1
+
+# to_winner_code_zero = [1, 2, 10, 17, 19]
+# to_len_three = [0, 5, 6, 7, 9, 13]
+
+# regFrm.loc[weird_idxFrm.index[to_winner_code_zero], 'winner_code'] = 0
+# regFrm.loc[weird_idxFrm.index[to_len_three], 'len'] = 3
+
 
 #################################
 ####### PARAMETERS ##############
@@ -179,28 +232,6 @@ naiveGraph, smartGraph = vis_ut.uniform_kdes_for_rally_length(regFrm, normalize_
 # why does the conditional win percentage improve so drastically for chipped returns
 # when introducing the length weight adjustment?
 # (whereas topspin conditional win % does not change much?)
-
-### little test: why do almost 10% of chipped returns in rallys that end on that return result in a return winner???!!!
-checkFrm = regFrm[(regFrm.winner_code == -1) & regFrm.is_chipped & (regFrm.len == 2)]
-weird_idxFrm = checkFrm[['mtc_idx', 'pnt_idx']]
-for idx, mtc_pnt in weird_idxFrm.iterrows():
-    mtc, pnt = mtc_pnt
-    myPnt = retPnts.get(mtc, pnt)
-    nextPnt = allPnts.get(mtc, pnt + 1)
-
-    winner_name = myPnt.get_winner_from_score(nextPnt, verbose = True)
-    print(myPnt)
-    myPnt.stream(confs = confs).widen(200).show(ms_between_frames = 50)
-    print('_________')
-
-mtc, pnt = weird_idxFrm.iloc[2]
-somePnt = allPnts.get(mtc, pnt)
-nextPnt = allPnts.get(mtc, pnt + 1)
-
-self = somePnt
-
-a = somePnt.get_winner_from_score(nextPnt, verbose = True)
-a
 
 ### Make a Graph: Win% returner over Rally Length
 jntFrm, jntFrm_decayed, shrFrm, diffFrm_chip, diffFrm_top, avgFrm = vis_ut.chip_topspin_return_avgs_by_length(regFrm, decay_rate = DECAY_RATE)
@@ -655,7 +686,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     The chipped return is infrequently employed by choice; 
-                    in our sample of 1,487 first-serve returns, only 28% of first-serves are returned as a chip, 
+                    in our sample of 1,451 first-serve returns, only 28% of first-serves are returned as a chip, 
                     and even fewer, as we will see, by choice.
                     However, some highly successful players consistently use it as a tool 
                     to either neutralize the rally with a deep, floating chip, or draw the server into the court with a shallow, low-bouncing chip.
@@ -664,7 +695,7 @@ script_line =   """
                     and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
                 """
 
-baseRst = FrameRaster(3, 3, borders = 2)
+baseRst = FrameRaster(3, 3, borders = None)
 baseRst.add(sample_table.render(), 1, 1)
 baseFrm = baseRst.render()
 # baseFrm.show()
@@ -674,8 +705,8 @@ script_lines.append(script_line)
 
 script_line =   """
                     At first glance, it doesn't look good for the chipped return. 
-                    On average, in our sample, the returner wins around 40.3% of points whenever he returns topspin, 
-                    versus only around 21.8% of points when he chips the ball back.
+                    On average, in our sample, the returner wins around 40% of points whenever he returns topspin, 
+                    versus only around 20% of points when he chips the ball back.
 
                     However, this view is slightly unfair toward the chipped return. 
                     To understand why, carefully consider these eight returns, and what they have in common.
@@ -688,7 +719,7 @@ all_frames.append(baseFrms)
 script_lines.append(script_line)
 
 script_line = ""
-baseRst = FramesRaster(3, 3, borders = 2)
+baseRst = FramesRaster(3, 3, borders = None)
 baseRst.add(sample_and_win_table.render(), 1, 1)
 finalRst, cascFrms = frame_cascade(high_pred_exFrms, baseRst)
 # DecapStream(cascFrms, 0, 100).show()
@@ -729,30 +760,32 @@ script_lines.append(script_line)
 #################################
  
 RESOLUTION = 1
-renameDict = {'serve_speed': 'Serve Speed', 'serve_spin': 'Serve Kick', 'serve_width': 'Serve Width', 
-              'serve_depth': 'Return Depth', 'serve_height': 'Bounce Height', 'ret_is_back': 'Returner uses Backhand', 'serve_dist_sq': 'Stretch Distance'}
+renameDict = {  'serve_speed': 'Serve Speed', 'serve_depth': 'Return Depth', 'serve_height': 'Bounce Height', 
+                'ret_is_back': 'Returner uses Backhand', 'serve_dist_sq': 'Stretch Distance'}
 fitted_model = logReg
 max_line_thickness = 2.5
 thickness_taper = 0.05
+shape_offset = 0.1
 model_name = 'Propensity to Chip'
 
 
 outDiag = vis_ut.model_to_diagram(fitted_model, renameDict = renameDict, model_name = 'Propensity to Chip', 
-                                    max_line_thickness = 3, resolution = RESOLUTION, shape_color = const.BGR['marine_blue'], text_color = const.BGR['bright_grey'])
+                                    max_line_thickness = 3, resolution = RESOLUTION, shape_offset = shape_offset, 
+                                    shape_color = const.BGR['marine_blue'], text_color = const.BGR['bright_grey'])
 
-for col in range(7):
+for col in range(5):
     outDiag[0, col][0].text_vertical_offset = -8
 
-outDiag[0, 0][0].text_horizontal_offset = 2.5
-outDiag[0, 1][0].text_horizontal_offset = 0.5
-outDiag[0, 2][0].text_horizontal_offset = 5
-outDiag[0, 3][0].text_horizontal_offset = 6.5
-outDiag[0, 4][0].text_horizontal_offset = 5.5
-outDiag[0, 5][0].text_horizontal_offset = 4
-outDiag[0, 6][0].text_horizontal_offset = 5
+outDiag[0, 0][0].text_horizontal_offset = 6
+outDiag[0, 1][0].text_horizontal_offset = 4
+outDiag[0, 2][0].text_horizontal_offset = 9
+outDiag[0, 3][0].text_horizontal_offset = 9
+outDiag[0, 4][0].text_horizontal_offset = 10
+# outDiag[0, 5][0].text_horizontal_offset = 4
+# outDiag[0, 6][0].text_horizontal_offset = 5
 
 outDiag[1, 0][0].text_skip_after_how_many_symbols = None
-outDiag[1, 0][0].text_horizontal_offset = 50
+outDiag[1, 0][0].text_horizontal_offset = 40
 outDiag[1, 0][0].text_vertical_offset = 0
 outDiag[1, 0][0].text_size = 2
 outDiag[1, 0][0].text_thickness = 2
@@ -763,11 +796,11 @@ def remove_all_diagram_shapes_after_index(myDiag, idx):
     myDiag.arrows[0] = [arrow for i, arrow in enumerate(myDiag.arrows[0]) if i < idx]
     return myDiag
 
-outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for idx in range(8)]
+outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for idx in range(6)]
 
-# for myDiag in outDiags:
-#     diagFrm = myDiag.render()
-#     diagFrm.show()
+for myDiag in outDiags:
+    diagFrm = myDiag.render()
+    diagFrm.show()
 
 ### Propensity Wording:
 # To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Matching, or PSM for short.
@@ -784,13 +817,14 @@ outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for i
 
 
 script_line =   """
-                    To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Matching, or PSM for short.
+                    To be able to differentiate between forced chips and choice chips, 
+                    we employ a technique called Propensity Score Matching, or PSM for short.
                 """
 blankFrms = BGRFrames.from_frame(blankFrm, STATIC_FRAMES)
 all_frames.append(blankFrms)
 script_lines.append(script_line)
 
-diagRaster = FrameRaster(3, 3, borders = 2)
+diagRaster = FrameRaster(3, 3, borders = None)
 
 script_line = """
                 PSM estimates, from the data at hand, the propensity to chip a ball, given a set of explanatory variables. 
@@ -848,7 +882,7 @@ all_frames.append(diagFrms3)
 script_lines.append(script_line)
 
 script_line =   """
-                    A wide serve is MORE likely to be a chip than a serve down the middle.
+                    A fast serve is more likely to be chipped back than a slow serve...
                 """
 diagFrm = outDiags[4].render()
 diagRaster.add(diagFrm, 1, 1)
@@ -859,7 +893,7 @@ all_frames.append(diagFrms4)
 script_lines.append(script_line)
 
 script_line =   """
-                    A fast serve is more likely to be chipped back than a slow serve...
+                    And, finally, a low-bouncing serve is more likely to be chipped back than a high-bouncing serve.
                 """
 diagFrm = outDiags[5].render()
 diagRaster.add(diagFrm, 1, 1)
@@ -870,37 +904,15 @@ all_frames.append(diagFrms5)
 script_lines.append(script_line)
 
 script_line =   """
-                    A kick serve is more likely to be returned with topspin than a flat serve...
-                """
-diagFrm = outDiags[6].render()
-diagRaster.add(diagFrm, 1, 1)
-diagFrm6 = diagRaster.render()
-# diagFrm6.show()
-diagFrms6 = BGRFrames.from_frame(diagFrm6, STATIC_FRAMES)
-all_frames.append(diagFrms6)
-script_lines.append(script_line)
-
-script_line =   """
-                    And, finally, a low-bouncing serve is more likely to be chipped back than a high-bouncing serve...
-                """
-diagFrm = outDiags[7].render()
-diagRaster.add(diagFrm, 1, 1)
-diagFrm7 = diagRaster.render()
-# diagFrm7.show()
-diagFrms7 = BGRFrames.from_frame(diagFrm7, STATIC_FRAMES)
-all_frames.append(diagFrms7)
-script_lines.append(script_line)
-
-script_line =   """
                     So how is this propensity model useful in differentiating between chips that are forced and chips that are done by choice?
                 """
-all_frames.append(diagFrms7)
+all_frames.append(diagFrms5)
 script_lines.append(script_line)
 
-
 num_frames = 5
-reversed_frame_list = [ diagFrms7[:num_frames], diagFrms6[:num_frames], diagFrms5[:num_frames], diagFrms4[:num_frames], 
-                        diagFrms3[:num_frames], diagFrms2[:num_frames], diagFrms1[:num_frames], diagFrms0[:num_frames]]
+reversed_frame_list = [ diagFrms5[:num_frames], diagFrms4[:num_frames], 
+                        diagFrms3[:num_frames], diagFrms2[:num_frames], 
+                        diagFrms1[:num_frames], diagFrms0[:num_frames]]
 
 for myFrms in reversed_frame_list:
     all_frames.append(myFrms)
@@ -931,7 +943,7 @@ transFrms, arrScn, arrCam, ptDict = vis_ut.region_to_line_to_arrow(myReg, annPnt
                                                                     resolution = RESOLUTION, num_frames = 25, ann_right_px = -45, ann_left_px = 0, ann_vert_px = 15)
 
 script_line = ""
-myRst = FramesRaster(3, 3, borders = 2)
+myRst = FramesRaster(3, 3, borders = None)
 myRst.add(transFrms, 1, 1)
 transFrms_rast = myRst.render()
 all_frames.append(transFrms_rast)
@@ -954,7 +966,7 @@ script_line =   """
 arrFrm0_noright = View.make(arrCam, arrScn, annotatedPoints = [ptDict['m_text'], ptDict['l_num']]).snap()
 arrFrms_blink0 = vs.blinking(arrFrm0, arrFrm0_noright, blinks_per_second = 2, duration_in_frames = 300)
 
-myRst = FramesRaster(3, 3, borders = 2)
+myRst = FramesRaster(3, 3, borders = None)
 myRst.add(arrFrms_blink0, 1, 1)
 blinkFrms_rast = myRst.render()
 all_frames.append(blinkFrms_rast)
@@ -979,7 +991,7 @@ script_line =   """
 arrFrm1_noleft = View.make(arrCam, arrScn, annotatedPoints = [ptDict['m_text'], ptDict['r_num'], ptDict['r_text']]).snap()
 arrFrms_blink1 = vs.blinking(arrFrm1, arrFrm1_noleft, blinks_per_second = 2, duration_in_frames = 300)
 
-myRst = FramesRaster(3, 3, borders = 2)
+myRst = FramesRaster(3, 3, borders = None)
 myRst.add(arrFrms_blink1, 1, 1)
 blinkFrms_rast = myRst.render()
 all_frames.append(blinkFrms_rast)
@@ -1055,7 +1067,7 @@ blankFrms_short = BGRFrames.from_frame(blankFrm, STATIC_FRAMES)
 blankFrms_long = BGRFrames.from_frame(blankFrm, TRANSITION_FRAMES)
 
 script_line =   """
-                    As we saw earlier, the probability to win a point following a chipped return is 21.8%. 
+                    As we saw earlier, the probability to win a point following a chipped return is just under 20%. 
                     If we concentrate on choice chips, we expect that probability to increase, since we discount
                     those serves that are returned on the stretch, under great difficulty.
                 """
@@ -1068,7 +1080,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     When concentrating on choice returns, the probability does indeed increase; 
-                    however, it only increases by 4%, to 25.8%.  
+                    however, it only increases modestly, to 23.3%.  
                 """
 tabFrm = smart_table.render()
 tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
@@ -1092,7 +1104,7 @@ script_lines.append(script_line)
 
 script_line =   "To illuminate why, imagine player A has a great serve and average return; player B has an average return and serve."
 
-myRst = FrameRaster(2, 2, borders = 2)
+myRst = FrameRaster(2, 2, borders = None)
 myRst.add(ex1Frm, 0, 0)
 rstFrm = myRst.render()
 rstFrms = BGRFrames.from_frame(rstFrm, STATIC_FRAMES)
@@ -1210,9 +1222,9 @@ all_frames.append(ovrFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    On a chipped return, the server's probability to make the (serve + 1) winner is "only" 60%. 
+                    On a chipped return, the server's probability to make the (serve + 1) winner is "only" 62%. 
                     On aggregate, the server's patience would pay off: if he were to play a set-up shot instead of an immediate winner, 
-                    let the returner scramble, and attempt a winner on the fifth shot of the rally, his success rate would rise to 81%.
+                    let the returner scramble, and attempt a winner on the fifth shot of the rally, his success rate would rise to 82%.
                 """
 
 graphFrms = BGRFrames.from_frame(avg_graphFrm1, STATIC_FRAMES)
@@ -1244,8 +1256,8 @@ script_lines.append(script_line)
 
 script_line =   """
                     So then, alright: This is our bottom line:
-                    After all adjustments are made, chipped returns are still 10% worse than topspin returns in terms of winning percentage.
-                    The question then is: how good must a chip return be to overcome those 10%? Where should it be placed; how should it be played?
+                    After all adjustments are made, chipped returns are still 12% worse than topspin returns in terms of winning percentage.
+                    The question then is: how good must a chip return be to overcome those 12%? Where should it be placed; how should it be played?
                     Is it better to play a high-arcing chip or a low-bouncing chip? 
                     
                     In the following, we will attempt to answer these questions.

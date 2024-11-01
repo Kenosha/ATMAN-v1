@@ -9,7 +9,7 @@ import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.vis_funcs as vs
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
-from ATMANpy.types.Abstract import Points, Point, Shots, read_in_all_tables
+from ATMANpy.types.Abstract import Points, Shots, read_in_data_tables, read_in_all_placeholder_tables
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.Lines import CourtLines, Line
@@ -42,9 +42,15 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 ###################################
 ######### READ IN DATA ############
 ###################################
-allTable = read_in_all_tables(confs)
-allPnts = Points.from_datatable(allTable, split_by_match = False)
-firstPnts = allPnts.filter('is_first_serve')
+dataTable = read_in_data_tables(confs)
+nullTable = read_in_all_placeholder_tables(confs)
+
+dataPnts = Points.from_datatable(dataTable, split_by_match = False)
+nullPnts = Points.from_placeholder_table(nullTable)
+
+allPnts = dataPnts.join(nullPnts).sort()
+
+firstPnts = dataPnts.filter('is_first_serve')
 
 ### Remove aces, faults and net balls.
 def get_returned_balls(myPnt):
@@ -110,6 +116,8 @@ X = np.stack(list(varDict.values()), axis = 1)
 xFrm = pd.DataFrame(X, columns = varDict.keys())
 xFrm['const'] = 1
 ySer = pd.Series(y, name = 'is_chipped').astype(bool)
+
+xFrm = xFrm.drop(['serve_width', 'serve_spin'], axis = 1) ### these two are highly insignificant
 
 logReg = Logit(ySer, xFrm)
 logReg = logReg.fit()
@@ -184,7 +192,8 @@ FADE_IN_FACTOR = (FULL_ALPHA / INVISIBLE_ALPHA) ** (1 / TRANSITION_FRAMES)
 FADE_OUT_FACTOR = 1 / FADE_IN_FACTOR ### easy to show that this must hold.
 
 BALL_COLOR = const.BGR['ball_yellow']
-CHIP_COLOR = const.BGR['marine_blue']
+CHIP_LO_COLOR = const.BGR['marine_blue']
+CHIP_HI_COLOR = const.BGR['bright_blue']
 TOPS_COLOR = const.BGR['light_brown']
 
 BANDWIDTH = 45
@@ -247,14 +256,38 @@ courtScn = Scene.make_court()
 
 ### Legends
 from ATMANpy.types.Overlays import Legend, LegendRow, overlay
-legRows = [LegendRow('Topspin', const.BGR['light_brown'], text_size = 2),
-           LegendRow('Chip', const.BGR['marine_blue'], text_size = 2)]
-myLeg_chip_topspin = Legend(legRows, header_text = '', header_offset = 2, header_thickness = 1,
-                            legend_dimensions = (300, 200), resolution = 100)
 
-legFrm = myLeg_chip_topspin.render()
+color_dict = {'tp': TOPS_COLOR,
+              'lo': CHIP_LO_COLOR,
+              'hi': CHIP_HI_COLOR}
 
-anchorPt = Point2D((1920 // 12, 1080 // 12))
+from ATMANpy.types.Overlays import Legend, LegendRow, overlay
+tpRow = LegendRow('... Topspin', shape_color = TOPS_COLOR, text_size = 2)
+loRow = LegendRow('... Low Chip', shape_color = CHIP_LO_COLOR, text_size = 2)
+hiRow = LegendRow('... High Chip', shape_color = CHIP_HI_COLOR, text_size = 2)
+
+leg_dims = (300, 300)
+# leg_dims = (500, 500)
+leg_params = {'borders': True, 'header_text': 'Return is ...', 'resolution': 100, 'legend_dimensions': leg_dims, 'header_offset': 2, 'header_thickness': 1}
+
+leg1 = Legend([loRow, LegendRow(None), LegendRow(None)], **leg_params)
+leg1Frm = leg1.render()
+leg1Frm.show()
+
+leg2 = Legend([loRow, hiRow, LegendRow(None)], **leg_params)
+leg2Frm = leg2.render()
+leg2Frm.show()
+
+leg3 = Legend([loRow, hiRow, tpRow], **leg_params)
+leg3Frm = leg3.render()
+leg3Frm.show()
+
+leg_base = Legend([tpRow, loRow], **leg_params)
+legFrm = leg_base.render()
+legFrm.show()
+
+
+anchorPt = Point2D((1920 // 24, 1080 // 24))
 
 ### Flight Splines
 serveSF = myShots[0].feat_spline_cumul(which_endpoint = 'penultimate')
@@ -490,7 +523,7 @@ if DO_METHOD_SECTION:
                             position_func = 'get_first_bounce_position', 
                             weight_func_or_arr = topspin_preds,
                             normalize_density = True,
-                            zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
+                            zero_color = CHIP_LO_COLOR, one_color = CHIP_LO_COLOR,
                             bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
     itplScns = vs.interpolate_dummy_scenes(topsScn, chipScn, STATIC_FRAMES)
@@ -568,7 +601,7 @@ if DO_METHOD_SECTION:
 
 # chipScn = vs.kde_hillmap(chip_retShots_rectified, showReg = vis_ut.topReg, resolution = RESOLUTION_KDE, position_func = 'get_first_bounce_position',
 #                             weight_func_or_arr = topspin_preds, bandwidth = BANDWIDTH, max_height = 30, mix_colors = True, mix_alpha = True,
-#                             one_color = CHIP_COLOR)
+#                             one_color = CHIP_LO_COLOR)
 # myFrms, _ = vs.animate_static(chipScn, background_scene = courtScn, static_cam = heatCam, **prmDict)
 # myFrms[-1].show()
 
@@ -588,14 +621,14 @@ if DO_METHOD_SECTION:
 # chipScn = vs.kde_hillmap(chip_retShots_rectified, weight_func_or_arr = topspin_preds, 
 #                          showReg = vis_ut.topReg, resolution = RESOLUTION_KDE, position_func = 'get_first_bounce_position',
 #                             bandwidth = BANDWIDTH + 10, max_height = 30, mix_colors = False, mix_alpha = True,
-#                             one_color = CHIP_COLOR)
+#                             one_color = CHIP_LO_COLOR)
 # myFrms, _ = vs.animate_static(chipScn, background_scene = courtScn, static_cam = heatCam, **prmDict)
 # myFrms[-1].show()
 
 # chipScn = vs.kde_heatmap(chip_retShots_rectified, weight_func_or_arr = topspin_preds, 
 #                          showReg = vis_ut.topReg, resolution = RESOLUTION_KDE, position_func = 'get_first_bounce_position',
 #                             bandwidth = BANDWIDTH, mix_colors = False, mix_alpha = True,
-#                             one_color = CHIP_COLOR)
+#                             one_color = CHIP_LO_COLOR)
 # myFrms, _ = vs.animate_static(chipScn, background_scene = courtScn, static_cam = heatCam, **prmDict)
 # myFrms[-1].show()
 
@@ -622,7 +655,7 @@ if DO_HEATMAP_SECTION:
                                         position_func = 'get_first_bounce_position', 
                                         weight_func_or_arr = topspin_preds,
                                         normalize_density = False,
-                                        zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
+                                        zero_color = CHIP_LO_COLOR, one_color = CHIP_LO_COLOR,
                                         bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
     tops_kde = topsScn_not_norm.alphaArrs[0]
@@ -631,7 +664,7 @@ if DO_HEATMAP_SECTION:
     diff_kde = tops_kde - chip_kde
 
     rastArr = topsScn_not_norm.rastArrs[0]
-    bgrArr = np.where(diff_kde > 0, TOPS_COLOR, CHIP_COLOR)
+    bgrArr = np.where(diff_kde > 0, TOPS_COLOR, CHIP_LO_COLOR)
 
     diff_kde_plus, diff_kde_minus = diff_kde.clip(min = 0), -diff_kde.clip(max = 0)
 
@@ -715,7 +748,7 @@ weightArr = regFrm_in.loc[regFrm_in.is_chipped == 1, 'weight_topspin'].values
 weightArr_preds = 1 - regFrm_in.loc[regFrm_in.is_chipped == 1, 'pred_is_chipped'].values
 
 tops_angleScn, tops_modes = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict, color = TOPS_COLOR)
-chip_angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, weight_func_or_arr = weightArr_preds, color = CHIP_COLOR)
+chip_angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, weight_func_or_arr = weightArr_preds, color = CHIP_LO_COLOR)
 
 ### make axes
 xLn, yLn = tops_angleScn.shapes[1], tops_angleScn.shapes[2]
@@ -738,13 +771,13 @@ chip_angleScn = chip_angleScn.drop(2).drop(1)
 
 ### get modes
 # a) chip
-chip_mode_lo, chip_mode_hi = chip_modes[[2, 10]]
+chip_mode_lo, chip_mode_hi = chip_modes[[3, 10]]
 mode_angles = [chip_mode_lo, chip_mode_hi]
 modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict['axis_length'] * 1.5, 
                                  x_ax = kwargDict['x_unit_vector'], y_ax = kwargDict['y_unit_vector'],
                                  orig = kwargDict['axis_origin_point'])
-modeScn0 = Scene([modeLns[0].recolor(CHIP_COLOR)]).dim(1.2)
-modeScn1 = Scene([modeLns[1].recolor(CHIP_COLOR)]).dim(1.2)
+modeScn0 = Scene([modeLns[0].recolor(CHIP_LO_COLOR)]).dim(1.2)
+modeScn1 = Scene([modeLns[1].recolor(CHIP_HI_COLOR)]).dim(1.2)
 
 itpl_lns0 = vs.interpolate_scenes(nullScn, modeScn0, num_frames = 25)
 itpl_lns1 = vs.interpolate_scenes(nullScn, modeScn1, num_frames = 25)
@@ -809,7 +842,7 @@ if DO_LAUNCH_ANGLE_INTRO:
     anglePt = bPt.front(24).up(1).annotate(f'{ang:.1f} Degrees')
 
     script_line =   """
-                        The example return is chipped back at an angle of 11.9 degrees. 
+                        The example return that we saw just two minutes ago is chipped back at an angle of 11.9 degrees. 
                         Let's see how launch angles are distributed for choice chipped returns in general. 
                     """
     myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = [anglePt, *axPnts],
@@ -857,14 +890,14 @@ if DO_LAUNCH_ANGLE_DISTRO:
         shotList.append(shot)
         weightList.append(weight)
         kde, _ = vs.kde_angle_distribution(Shots(shotList), **kwargDict, weight_func_or_arr = np.array(weightList), 
-                                        color = CHIP_COLOR)
+                                        color = CHIP_LO_COLOR)
         kde = Scene([kde[0]])
 
         ### if necessary: create previous KDE
         if prev_kde is None:
             els = len(kde[0].coords[0])
             x, y, z = bPt.coords
-            prev_pt = Point3D((np.full(els, fill_value = x), np.full(els, fill_value = y), np.full(els, fill_value = z)), color = CHIP_COLOR)
+            prev_pt = Point3D((np.full(els, fill_value = x), np.full(els, fill_value = y), np.full(els, fill_value = z)), color = CHIP_LO_COLOR)
             prev_kde = Scene([prev_pt])
         
         ### Animate the current trajectory
@@ -925,21 +958,21 @@ if DO_LAUNCH_ANGLE_MODES:
                     """
     myFrms, animDict = vs.animate_static(chip_angleScn, background_scene = court_and_axScn, **prmDict_nolum,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES)
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    # myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
     myFrms, animDict = vs.animate_sequence(itpl_lns0, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg1Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
     myFrms, animDict = vs.animate_sequence(itpl_lns1, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg2Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -947,7 +980,7 @@ if DO_LAUNCH_ANGLE_MODES:
                         On the other hand, for topspin returns, the distribution is more uniform: we observe only a single mode.
                     """
     staticFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
-    staticFrms = overlay(staticFrms, legFrm, top_left_point = anchorPt)
+    staticFrms = overlay(staticFrms, leg2Frm, top_left_point = anchorPt)
     all_frames.append(staticFrms)
     script_lines.append(script_line)
 
@@ -958,7 +991,7 @@ if DO_LAUNCH_ANGLE_MODES:
     itpl_angleScns = vs.interpolate_scenes(chip_angleScn, tops_angleScn, 25)
     myFrms, animDict = vs.animate_sequence(itpl_angleScns, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -969,20 +1002,20 @@ if DO_LAUNCH_ANGLE_MODES:
                     """
     myFrms, animDict = vs.animate_static(tops_angleScn, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES)
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
     myFrms, animDict = vs.animate_sequence(itpl_lns2, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
     statFrms = BGRFrames.from_frame(myFrms[-1], TRANSITION_FRAMES)
-    statFrms = overlay(statFrms, legFrm, top_left_point = anchorPt)
+    statFrms = overlay(statFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(statFrms)
     script_lines.append(script_line)
 
@@ -1002,21 +1035,21 @@ if DO_LAUNCH_ANGLE_MODES:
     animDict['previous_foreground_scene'] = animDict['previous_foreground_scene'].drop(2)
     myFrms, animDict = vs.animate_static(Scene([degCrc0]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0])
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = f"... the low-angle choice chip return at {chip_mode_lo:.1f} Degrees..."
     myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1])
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = f"... and the high_angle choice chip return at {chip_mode_hi:.1f} Degrees."
     myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1, angPt2])
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -1028,7 +1061,7 @@ if DO_LAUNCH_ANGLE_MODES:
                     """
     myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1, angPt2])
-    myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -1160,7 +1193,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     # rasterize frames, and fade in the point being played
     script_line = ""
-    fadeinRst = FramesRaster(2, 2)
+    fadeinRst = FramesRaster(2, 2, borders = None)
     fadeinRst.add(orig_itplFrms, 0, 0)
     fadeinFrms = fadeinRst.render()
     all_frames.append(fadeinFrms)
@@ -1168,7 +1201,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     # play out point with spline
     script_line = ""
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     myRst.add(splineFrms_orig, 0, 0)
     playFrms_orig = myRst.render()
     all_frames.append(playFrms_orig)
@@ -1184,7 +1217,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     # fade in best comparison in lower right
     script_line = ""
-    fadeinRst = FramesRaster(2, 2)
+    fadeinRst = FramesRaster(2, 2, borders = None)
     fadeinRst.add(splineFrms_orig[-1], 0, 0)
     fadeinRst.add(best_itplFrms, 1, 1)
     fadeinFrms = fadeinRst.render()
@@ -1193,7 +1226,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     # play out point with spline
     script_line = ""
-    fadeinRst = FramesRaster(2, 2)
+    fadeinRst = FramesRaster(2, 2, borders = None)
     fadeinRst.add(splineFrms_orig[-1], 0, 0)
     fadeinRst.add(splineFrms_best, 1, 1)
     fadeinFrms = fadeinRst.render()
@@ -1269,7 +1302,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_line =   """
                         The high-arcing chip bounces 70 cm higher than the low chip. 
                         If the arcing chip does not bounce close to the server's baseline, its high bounce can allow the server to attack with a flat shot at aggressive angles,
-                        whereas a low-angle chip that bounces shallow in the court is not so exploitable: it stays low and is awkward to attack because it has to be played with aggressive topspin
+                        whereas a low-flying chip that bounces shallow in the court is not so exploitable: it stays low and is awkward to attack because it has to be played with aggressive topspin
                         or lower margins over the net to dip back down into the returner's half.
                         On the other hand, the high chip loses more of its speed along the ground, which means that the server has to generate all the power if he wants to attack;
                         in this sense, a high-arcing chip can neutralize a serve if hit with sufficient depth.
@@ -1439,7 +1472,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                                                 **prmDict)
 
     script_line = ""
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     myRst.add(splinerevFrms_orig, 0, 0)
     myRst.add(splineFrms_best[-1], 1, 1)
     myFrms_rev_orig = myRst.render()
@@ -1454,7 +1487,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     staticFrms_orig, _ = vs.animate_static(origMark_repos, static_cam = brestCam_resized_half, background_scene = None, animate_over = revFrms_orig[-1], 
                                             previous_foreground_scene = Scene([origMark]))
     
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     myRst.add(staticFrms_orig, 0, 0)
     myRst.add(splineFrms_best[-1], 1, 1)
     staticFrms_orig = myRst.render()
@@ -1477,11 +1510,11 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.2)
     loCrcs2 = make_thick_circle(x, y, lo_dist, 0.8, 2)
-    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_COLOR)
+    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
 
     hiCrcs1 = make_thick_circle(x, y, hi_dist, 0, 0.165)
     hiCrcs2 = make_thick_circle(x, y, hi_dist, 0.84, 2)
-    hiCrcs = hiCrcs1.join(hiCrcs2).recolor(CHIP_COLOR)
+    hiCrcs = hiCrcs1.join(hiCrcs2).recolor(CHIP_HI_COLOR)
 
     tpCrcs = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
 
@@ -1494,7 +1527,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     myFrms, _ = vs.animate_static(Scene([loCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1), 
                                   previous_foreground_scene = Scene([origMark, origMark_repos]),
                                   **prmDict)
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     myRst.add(myFrms, 0, 0)
     myRst.add(splineFrms_best[-1], 1, 1)
     crcFrms_orig = myRst.render()
@@ -1541,14 +1574,14 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.26)
     loCrcs2 = make_thick_circle(x, y, lo_dist, 0.74, 2)
-    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_COLOR)
+    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
 
-    hiCrcs = make_thick_circle(x, y, hi_dist, 0.8, 1.815).recolor(CHIP_COLOR)
+    hiCrcs = make_thick_circle(x, y, hi_dist, 0.8, 1.815).recolor(CHIP_HI_COLOR)
     tpCrcs = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
     
 
     script_line = ""
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     myRst.add(ls_staticFrm_orig, 0, 0)
     myRst.add(splinerevFrms_best, 1, 1)
     myFrms_rev_best = myRst.render()
@@ -1563,7 +1596,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     staticFrms_best, _ = vs.animate_static(bestMark_repos, static_cam = brestCam_resized_half, background_scene = None, animate_over = last_bestFrm.dim(1), 
                                             previous_foreground_scene = Scene([bestMark]), **prmDict)
 
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     myRst.add(ls_staticFrm_orig, 0, 0)
     myRst.add(staticFrms_best, 1, 1)
     staticFrms = myRst.render()
@@ -1596,18 +1629,18 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     lo_dist, hi_dist, tp_dist = time_dist_frame.loc['best_lo', 'dist_pix'], time_dist_frame.loc['best_hi', 'dist_pix'], time_dist_frame.loc['best_tp', 'dist_pix']
     loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.26)
     loCrcs2 = make_thick_circle(x, y, lo_dist, 0.74, 2)
-    loCrcs_best = loCrcs1.join(loCrcs2).recolor(CHIP_COLOR)
+    loCrcs_best = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
 
-    hiCrcs_best = make_thick_circle(x, y, hi_dist, 0.8, 1.815).recolor(CHIP_COLOR)
+    hiCrcs_best = make_thick_circle(x, y, hi_dist, 0.8, 1.815).recolor(CHIP_HI_COLOR)
     tpCrcs_best = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
     
     lo_dist, hi_dist, tp_dist = time_dist_frame.loc['cntr_lo', 'dist_pix'], time_dist_frame.loc['cntr_hi', 'dist_pix'], time_dist_frame.loc['cntr_tp', 'dist_pix']
     
     loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.24)
     loCrcs2 = make_thick_circle(x, y, lo_dist, 0.72, 2)
-    loCrcs_cntr = loCrcs1.join(loCrcs2).recolor(CHIP_COLOR)
+    loCrcs_cntr = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
     
-    hiCrcs_cntr = make_thick_circle(x, y, hi_dist, 0.78, 1.85).recolor(CHIP_COLOR)
+    hiCrcs_cntr = make_thick_circle(x, y, hi_dist, 0.78, 1.85).recolor(CHIP_HI_COLOR)
     tpCrcs_cntr = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
 
     crcScn0 = Scene([hiCrcs_best, loCrcs_best, tpCrcs_best])
@@ -1644,29 +1677,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         We know, roughly, what an average challenger-level player does 
                         with respect to the chipped return versus the topspin return,
                         what we are lacking is an answer to the question: what should he do.
-                        Where should the chip return be placed to overcome the 10% win-rate deficit over the topspin return?
-                        At what angle should the ball be played? 
-
-                        We will now attempt an answer to these questions, with the following caveat: To the extent that
-                        these normative kinds of questions are the more interesting to answer, they are also more difficult to answer
-                        statistically, for the lack of a counterfactual. 
-                        In any specific situation, we only ever observe the return that was actually hit,
-                        not the set of all other possible returns. Had we observed that set and had we recorded the outcome 
-                        of the point for each of the possible returns, we could easily give an answer to what the returner should do,
-                        especially if we had observed the whole set a bunch of times over to average out the randomness that 
-                        a tennis point is heir to.
-                        However, we do not inhabit the world of hypotheticals, and must make do with just the one outcome. 
-                        
-                        Though imperfect, an adequate attempt can still be made to answer the question: what should the returner do, here.
-
-                        To this end, we estimate a model that takes into account a variety of factors, 
-                        such as return placement, launch angle, speed, spin and on-court positioning of the returner and server
-                        and calculates the returner's win probability. 
-                        We can then let the model evaluate all kinds of hypothetical returns, and let it calculate their win probability.
-                        For a few different example situations, the best chip and topspin returns emerge naturally as the best
-                        hypothetical return among all.
+                        Where should the chip return be placed to overcome the 12% win-rate deficit over the topspin return?
+                        At what launch angle should the ball be played? 
                     """
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     myRst.add(itplFrms[-1], 1, 1)
 
     num_frames = 10
@@ -1675,6 +1689,31 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                                         **prmDict)
     myRst.add(staticFrms_derender, 0, 0)
     crcFrms_derender = myRst.render()
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line =   """
+                        We will now attempt an answer to these questions, with the following caveat: To the extent that
+                        these normative kinds of questions are the more interesting to answer, they are also more difficult to answer
+                        statistically, for the lack of a counterfactual. 
+                        In any specific situation, we only ever observe the return that was actually hit,
+                        not the set of all other possible returns. Had we observed that set and had we recorded the outcome 
+                        of the point for each of the possible returns, we could easily give an answer to what the returner should do,
+                        especially if we had observed the whole set a bunch of times over to average out the randomness that 
+                        a tennis point is subject to.
+                        However, we do not inhabit the world of hypotheticals, and must make do with just the one outcome. 
+                        
+                        Though imperfect, an adequate attempt can still be made to answer the question: what should the returner do, here.
+                    """
+    all_frames.append(crcFrms_derender)
+    script_lines.append(script_line)
+
+    script_line =   """
+                        To this end, we use the available data to estimate a model that takes into account a variety of factors, 
+                        such as return placement, launch angle, speed, spin and on-court positioning of the returner and server
+                        and calculates the returner's win probability. 
+                        We can then let the model evaluate all kinds of hypothetical returns, and let it calculate their win probability.
+                    """
     all_frames.append(crcFrms_derender)
     script_lines.append(script_line)
 
@@ -1724,7 +1763,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_lines.append(script_line)
 
     ### derender also other frame
-    myRst = FramesRaster(2, 2)
+    myRst = FramesRaster(2, 2, borders = None)
     
     script_line = ""
     staticFrms_derender, _ = vs.animate_static(endScn, static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1), num_frames = num_frames, **prmDict)
