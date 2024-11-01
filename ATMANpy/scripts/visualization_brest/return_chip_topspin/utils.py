@@ -541,6 +541,30 @@ def make_regressor_frame(retPnts, logReg, winSer, idxFrm_new, decay_rate = 0.75)
     regFrm['len'] = retPnts.apply('__len__')
     regFrm['len_weight'] = decay_rate ** (regFrm['len'] - 2)
 
+    #################################################################
+    #### Little Excursion: fixes for short rallyes where sometimes...
+        # the serve and volley is not recognized
+        # the winner code should be zero
+    # -> see intro.py for a closer look
+
+    ### little test: why do almost 10% of chipped returns in rallys that end on that return result in a return winner???!!!
+    checkFrm_chip = regFrm[(regFrm.winner_code == -1) & regFrm.is_chipped & (regFrm.len == 2)]
+    weird_idxFrm = checkFrm_chip[['mtc_idx', 'pnt_idx']]
+
+    ### fix these instances manually! none of these are 2nd shot winners, they're all length 3 (but directionally correct)!
+    regFrm.loc[weird_idxFrm.index, 'len'] = 3
+
+    ### same test for topspin return stuff.
+    checkFrm_tops = regFrm[(regFrm.winner_code == -1) & ~regFrm.is_chipped & (regFrm.len == 2)]
+    weird_idxFrm = checkFrm_tops[['mtc_idx', 'pnt_idx']]
+
+    to_winner_code_zero = [1, 2, 10, 17, 19]
+    to_len_three = [0, 5, 6, 7, 9, 13]
+
+    regFrm.loc[weird_idxFrm.index[to_winner_code_zero], 'winner_code'] = 0
+    regFrm.loc[weird_idxFrm.index[to_len_three], 'len'] = 3
+    ######################################
+
     # c) choice weights
     regFrm['odds_topspin'] = regFrm['pred_is_topspin'] / regFrm['pred_is_chipped']
     regFrm['weight_topspin'] = np.where(regFrm.is_chipped, regFrm.odds_topspin, 1)
@@ -912,7 +936,7 @@ def field_array_kernelized(glmReg, regressor_frame, showReg = None, relative_to 
 
 def model_to_diagram(fitted_model, renameDict = None, model_name = 'Propensity to Chip',
                      max_line_thickness = 5, min_line_thickness = 0.1, resolution = 10, render_height = 1500, 
-                     shape_color = const.BGR['strong_blue'], text_color = const.BGR['smokey_grey']):
+                     shape_offset = 0.05, shape_color = const.BGR['strong_blue'], text_color = const.BGR['smokey_grey']):
         
     from ATMANpy.types.Overlays import Diagram
     from ATMANpy.types.ShapesTennis3D import Arrow
@@ -930,7 +954,7 @@ def model_to_diagram(fitted_model, renameDict = None, model_name = 'Propensity t
     regressor_keys = pSer_sorted.index.to_list()
     regressor_names = [renameDict[key] for key in regressor_keys if key in renameDict]
     myDiag = Diagram([regressor_names, [], [model_name]], resolution = resolution, text_skip_after_how_many_symbols = 3,
-                     shape_color = shape_color, shape_offset = 0.05, text_color = text_color, arrow_hat_length = 10, 
+                     shape_color = shape_color, shape_offset = shape_offset, text_color = text_color, arrow_hat_length = 10, 
                      dimensions = (640, 360), render_height = render_height)
 
     inverted_renameDict = {v: k for k, v in renameDict.items()}
