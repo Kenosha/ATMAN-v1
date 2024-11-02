@@ -75,13 +75,14 @@ def make_text_in(subReg, data_or_string, target_len = None,
 
 class LineChart:
     def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False, x_labels = None,
-                 annotate_line_heights = False, annotate_line_heights_where = 'above'):
+                 annotate_line_heights = False, annotate_line_heights_where = 'above', thickness = 0):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
         
         self.xs = np.array(xs)
         self.ys = np.array(ys)
         self.color = color
+        self.thickness = thickness
         self.dashed = dashed ### TODO: inactive for the moment!
         self.x_labels = x_labels
         self.annotate_line_heights = annotate_line_heights
@@ -143,7 +144,7 @@ class Graph:
                  x_label = None, y_label = None, 
                  label_size = 1, tick_label_size = 1,
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
-                 header_size = 1, header_height = 1, graph_height = 9,
+                 header_size = 1, header_height = 1, graph_height = 9, z_epsilon = 0.01,
                  cam = None, render_height = 100, dimensions = (600, 400), resolution = 10):
         ### TODO: add axis labels (y-axis vertical! how?)
         self.charts = charts
@@ -170,6 +171,8 @@ class Graph:
 
         self.label_size = label_size
         self.tick_label_size = tick_label_size
+
+        self.z_epsilon = z_epsilon
  
         if cam is None: ### Rendering Camera
             cam = Camera.birds_eye(render_height, sensor_dims = dimensions)
@@ -280,6 +283,9 @@ class Graph:
 
         x_label_pnts = []
         val_label_pnts = []
+
+        
+        up_idx = 0
         for chart in self.charts:
             ### re-norm the xs and ys (between 0 and 1)
             xs_norm = chart.xs / (self.max_x - self.min_x)
@@ -294,15 +300,15 @@ class Graph:
 
             if isinstance(chart, ScatterChart):
                 coordPt_vectorized = Point3D(coordArr, color = chart.color)
-                myScn = myScn.put(coordPt_vectorized)
+                myScn = myScn.put(coordPt_vectorized.up(self.z_epsilon * up_idx))
             elif isinstance(chart, LineChart):
                 coordArr_prev = coordArr[:, :-1]
                 coordArr_next = ut.shift_array(coordArr, -1, axis = 1)[:, :-1]
 
                 coordPt_vectorized = Point3D(coordArr_prev)
                 coordPt_vectorized_next = Point3D(coordArr_next)
-                coordLn_vectorized = Line3D(coordPt_vectorized, coordPt_vectorized_next, color = chart.color)
-                myScn = myScn.put(coordLn_vectorized)
+                coordLn_vectorized = Line3D(coordPt_vectorized, coordPt_vectorized_next, color = chart.color, thickness = chart.thickness)
+                myScn = myScn.put(coordLn_vectorized.up(self.z_epsilon * up_idx))
                 
                 ### Make x-labels
                 if chart.x_labels is not None:
@@ -344,7 +350,7 @@ class Graph:
                     p1, p2, p3, p4 = Point3D((x1, y1, z)), Point3D((x1, y2, z)), Point3D((x2, y2, z)), Point3D((x2, y1, z))
                     barReg = Region3D.from_points3D(p1, p2, p3, p4, color = chart.color)
 
-                    regions.append(barReg)
+                    regions.append(barReg.up(self.z_epsilon * up_idx))
                 
                 myScn = myScn.put(regions)
 
@@ -368,6 +374,8 @@ class Graph:
                         anchorPnt = Point3D(coords).front(self.x_label_dist).left(self.x_tick_label_left_shift)
                         annPnt = anchorPnt.recolor(chart.color).annotate(labelStr)
                         val_label_pnts.append(annPnt)
+
+            up_idx += 1
 
         annotatedPoints = [*x_labels, *y_labels, *header_pnts, *x_label_pnts, *val_label_pnts, *axis_labels]
         return myScn, annotatedPoints ### by exposing these we can morph and move chart elements.
