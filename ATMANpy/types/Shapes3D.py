@@ -291,7 +291,15 @@ class Point3D:
             return False
         else:
             return True
-        
+    
+    def devectorize(self):
+        if not self.is_vectorized():
+            return self
+        else:
+            tuples = [tuple(c) for c in self.coords.T]
+            attr_dicts = [get_updated_attribute_dictionary(self, {'coords': tup}) for tup in tuples]
+            return Points3D([self.__class__(**attr_dict) for attr_dict in attr_dicts])
+
     def num_elements(self):
         if self.is_vectorized():
             return len(self.x)
@@ -325,7 +333,6 @@ class Point3D:
     def annotate(self, text):
         attrDict = get_updated_attribute_dictionary(self, {})
         return AnnotatedPoint3D(text = text, **attrDict)
-    
 
 @dataclass(frozen = True, eq = False)
 class AnnotatedPoint3D(Point3D):
@@ -839,43 +846,54 @@ class Line3D:
     def find_orientation_hori_vert(self):
         return self.to_vector().find_orientation_hori_vert()
         
-    def rasterize(self, resolution):
-        line_len = self.length()
-        if not isinstance(line_len, int): ### in this case, our Line3D object is a vectorized representation of multiple lines
-            line_len = np.max(line_len)
+    def is_vectorized(self):
+        return self.leftPt.is_vectorized()
 
-        lineArr = self.subdivide(elements = int(resolution * line_len) + 1, return_coords = True)
-        if self.thickness == 0:
-            if len(lineArr.shape) == 2: ### in this case, we have an unvectorized line -> res_points x dims (=3)
-                return lineArr
-            elif len(lineArr.shape) == 3: ### in this case, we have an unvectorized line -> res_points x dims (=3) x vec_points
-                lineArr = lineArr.swapaxes(1, 2) ### now, the array is: resolution_points x vector_points x dimensions (=3) 
-                n_res, n_vec, n_dims = lineArr.shape
-                return lineArr.reshape((n_res * n_vec, n_dims))
+    def devectorize(self):
+        if not self.is_vectorized():
+            return self
         else:
-            ### TODO: vectorized case not implemented for line with positive thickness.
-            radius = self.thickness / 2
-            ### 6 points around a circle, scaled up with resolution and the thickness
-            # -> the thicker the line, the farther out the points, so we need more.
-            num_circle_points = int(radius * resolution * 6)
-            radList = np.linspace(-np.pi, np.pi, num = num_circle_points, endpoint = False) 
-            ### turn into 2D -> n x dim
-            radArr = radList[:, np.newaxis] 
-            ### make orthogonal vectors
-            orthVector_1 = self.find_perpendicular().to_vector()
-            orthVector_2 = orthVector_1.cross(self.to_vector())
-            # normalize to unit length
-            orthVector_1, orthVector_2 = orthVector_1 / orthVector_1.length(), orthVector_2 / orthVector_2.length()
-            # turn into 2D -> n x dim
-            orthVector_1, orthVector_2 = np.array(orthVector_1.coords)[np.newaxis, :] , np.array(orthVector_2.coords)[np.newaxis, :] 
-            # find unit_circle points
-            unitArr = orthVector_1 * np.cos(radArr) + orthVector_2 * np.sin(radArr)
-            # scale circle
-            scaledArr = unitArr * radius
-            # add center points
-            outArr = np.tile(scaledArr, (len(lineArr), 1)) + np.repeat(lineArr, num_circle_points, axis = 0)
-            return outArr
-    
+            left_tuples = [tuple(c) for c in self.leftPt.coords.T]
+            right_tuples = [tuple(c) for c in self.rightPt.coords.T]
+
+            attr_dicts = [get_updated_attribute_dictionary(self, {'leftPt': Point3D(l_tup), 'rightPt': Point3D(r_tup)}) for l_tup, r_tup in zip(left_tuples, right_tuples)]
+            return Lines3D([self.__class__(**attr_dict) for attr_dict in attr_dicts])
+
+    def rasterize(self, resolution):
+        ### idea: if necessary, de-vectorize the Line3D to Lines3D, and rasterize that
+        if self.is_vectorized():
+            return self.devectorize().rasterize(resolution)
+        else:
+            line_len = self.length()
+            if not isinstance(line_len, int): ### in this case, our Line3D object is a vectorized representation of multiple lines
+                line_len = np.max(line_len)
+
+            lineArr = self.subdivide(elements = int(resolution * line_len) + 1, return_coords = True)
+            if self.thickness == 0:
+                return lineArr
+            else:
+                radius = self.thickness / 2
+                ### 6 points around a circle, scaled up with resolution and the thickness
+                # -> the thicker the line, the farther out the points, so we need more.
+                num_circle_points = int(radius * resolution * 6)
+                radList = np.linspace(-np.pi, np.pi, num = num_circle_points, endpoint = False) 
+                ### turn into 2D -> n x dim
+                radArr = radList[:, np.newaxis] 
+                ### make orthogonal vectors
+                orthVector_1 = self.find_perpendicular().to_vector()
+                orthVector_2 = orthVector_1.cross(self.to_vector())
+                # normalize to unit length
+                orthVector_1, orthVector_2 = orthVector_1 / orthVector_1.length(), orthVector_2 / orthVector_2.length()
+                # turn into 2D -> n x dim
+                orthVector_1, orthVector_2 = np.array(orthVector_1.coords)[np.newaxis, :] , np.array(orthVector_2.coords)[np.newaxis, :] 
+                # find unit_circle points
+                unitArr = orthVector_1 * np.cos(radArr) + orthVector_2 * np.sin(radArr)
+                # scale circle
+                scaledArr = unitArr * radius
+                # add center points
+                outArr = np.tile(scaledArr, (len(lineArr), 1)) + np.repeat(lineArr, num_circle_points, axis = 0)
+                return outArr
+                
     def parametrise(self):
         """
         Point y on line can be described by:
@@ -920,7 +938,7 @@ class Line3D:
         outPt = line_orig + line_vec * n
         
         return outPt, (l, m, n)
-      
+
 @dataclass(frozen = True)
 class Region3D():
     """
