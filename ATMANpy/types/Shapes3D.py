@@ -170,27 +170,63 @@ class Point3D:
     
     ### METHODS ###
     def left(self, units):
-        new_coords = (max(self.x - units, 0), self.y, self.z)
+        x, y, z = (max(self.x - units, 0), self.y, self.z)
+        
+        if not self.is_vectorized():
+            new_coords = (x, y, z)
+        else:
+            new_coords = np.vstack([x, y, z])
+
         return self.reposition(new_coords)
 
     def right(self, units):
-        new_coords = (self.x + units, self.y, self.z)
+        x, y, z = (self.x + units, self.y, self.z)
+        
+        if not self.is_vectorized():
+            new_coords = (x, y, z)
+        else:
+            new_coords = np.vstack([x, y, z])
+
         return self.reposition(new_coords)
     
     def front(self, units):
-        new_coords = (self.x, max(self.y - units, 0), self.z)
+        x, y, z = (self.x, max(self.y - units, 0), self.z)
+        
+        if not self.is_vectorized():
+            new_coords = (x, y, z)
+        else:
+            new_coords = np.vstack([x, y, z])
+
         return self.reposition(new_coords)
 
     def back(self, units):
-        new_coords = (self.x, self.y + units, self.z)
+        x, y, z = (self.x, self.y + units, self.z)
+        
+        if not self.is_vectorized():
+            new_coords = (x, y, z)
+        else:
+            new_coords = np.vstack([x, y, z])
+
         return self.reposition(new_coords)
 
     def down(self, units):
-        new_coords = (self.x, self.y, max(self.z - units, 0))
+        x, y, z = (self.x, self.y, max(self.z - units, 0))
+        
+        if not self.is_vectorized():
+            new_coords = (x, y, z)
+        else:
+            new_coords = np.vstack([x, y, z])
+
         return self.reposition(new_coords)
     
     def up(self, units):
-        new_coords = (self.x, self.y, self.z + units)
+        x, y, z = (self.x, self.y, self.z + units)
+        
+        if not self.is_vectorized():
+            new_coords = (x, y, z)
+        else:
+            new_coords = np.vstack([x, y, z])
+
         return self.reposition(new_coords)
 
     def distance_to(self, aPt):
@@ -742,22 +778,34 @@ class Line3D:
 
     ### METHODS ###
     def left(self, units):
-        return Line3D(self.leftPt.left(units), self.rightPt.left(units), name = self.name)
+        updDict = {'leftPt': self.leftPt.left(units), 'rightPt': self.rightPt.left(units)}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     def right(self, units):
-        return Line3D(self.leftPt.right(units), self.rightPt.right(units), name = self.name)
+        updDict = {'leftPt': self.leftPt.right(units), 'rightPt': self.rightPt.right(units)}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
     def back(self, units):
-        return Line3D(self.leftPt.back(units), self.rightPt.back(units), name = self.name)
+        updDict = {'leftPt': self.leftPt.back(units), 'rightPt': self.rightPt.back(units)}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     def front(self, units):
-        return Line3D(self.leftPt.front(units), self.rightPt.front(units), name = self.name)
+        updDict = {'leftPt': self.leftPt.front(units), 'rightPt': self.rightPt.front(units)}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     def up(self, units):
-        return Line3D(self.leftPt.up(units), self.rightPt.up(units), name = self.name)
+        updDict = {'leftPt': self.leftPt.up(units), 'rightPt': self.rightPt.up(units)}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     def down(self, units):
-        return Line3D(self.leftPt.down(units), self.rightPt.down(units), name = self.name)
+        updDict = {'leftPt': self.leftPt.down(units), 'rightPt': self.rightPt.down(units)}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
     
     def is_left_to_right(self):
         x_dist = abs(self.rightPt.x - self.leftPt.x)
