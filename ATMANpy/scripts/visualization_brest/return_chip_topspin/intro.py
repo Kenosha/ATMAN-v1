@@ -225,6 +225,8 @@ print(f'   No len adj: {chips_smart["cond"]:.2f}; len adj: {chips_smart_bal_len[
 ###### LENGTH OF RALLY ##########
 #################################
 
+GRAPH_RESOLUTION = 50
+
 tops_naive_len, chips_naive_len, chips_smart_len = vis_ut.calculate_rally_lengths(regFrm)
 naiveGraph, smartGraph = vis_ut.uniform_kdes_for_rally_length(regFrm, normalize_density = False, bandwidth = 1.5)
 # smartGraph.render().show()
@@ -322,14 +324,14 @@ graph_kwargs = {'color': const.BGR['bright_grey'], 'y_label_format': '>4.0%', 'y
                 'x_tick_label_left_shift': 0.3,
                 'label_size': 2, 'tick_label_size': 2, 
                 'header_text': 'Serve Success and Frequency on Choice Chipped Returns', 'header_size': 2, 'header_horizontal_offset': 5,
-                'x_label': 'Shots in Rally'}
+                'x_label': 'Shots in Rally', 'resolution': GRAPH_RESOLUTION}
 
 avg_color = const.BGR['leafy_green']
 shr_color = const.BGR['bright_blue']
 
-nullChart = LineChart([0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0], color = const.BGR['bright_grey'])
-shrChart = LineChart(xs, shr_ys, color = shr_color, x_labels = x_labels, annotate_line_heights = True)
-avgChart = LineChart(xs, avg_ys, color = avg_color, x_labels = x_labels, annotate_line_heights = True)
+nullChart = LineChart([0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0], color = const.BGR['bright_grey'], thickness = 0)
+shrChart = LineChart(xs, shr_ys, color = shr_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
+avgChart = LineChart(xs, avg_ys, color = avg_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
 
 n = 30
 x_idx = 1
@@ -348,8 +350,8 @@ avgRow = LegendRow(text = 'Server Win%', shape_color = avg_color, text_size = 2,
 shrRow = LegendRow(text = 'Frequency', shape_color = shr_color, text_size = 2, shape_offset = 0.25, text_vertical_offset = 0.3)
 nulRow = LegendRow(text = None)
 
-leg1 = Legend([avgRow, nulRow], legend_dimensions = (300, 150), borders = False, header_text = '', resolution = 100)
-leg2 = Legend([avgRow, shrRow], legend_dimensions = (300, 150), borders = False, header_text = '', resolution = 100)
+leg1 = Legend([avgRow, nulRow], legend_dimensions = (300, 150), borders = False, header_text = '', resolution = 2000)
+leg2 = Legend([avgRow, shrRow], legend_dimensions = (300, 150), borders = False, header_text = '', resolution = 2000)
 legFrm1 = leg1.render()
 legFrm2 = leg2.render()
 
@@ -382,6 +384,8 @@ shr_graphFrm.show()
 
 ###### INVESTIGATE SELECTION BIAS #########
 
+TABLE_RESOLUTION = 50
+
 ### A) example tables with Player A and B
 
 table_kwargs_examples = {   'number_format': '.1%', 'data_right_adjust': False, 
@@ -391,7 +395,8 @@ table_kwargs_examples = {   'number_format': '.1%', 'data_right_adjust': False,
                             'title_vertical_offset': 0, 'title_horizontal_offset': 11.2,
                             'skeleton_vertical_offset': 1, 'title_color': const.BGR['bright_grey'],
                             'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
-                            'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2
+                            'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2,
+                            'resolution': TABLE_RESOLUTION,
                         }
 
 player_a = {'Serve': 'Great', 'Return': 'Average'}
@@ -423,6 +428,8 @@ ex2Frm_with_text.show()
 ### -> more returns observed by the better player!
 ### -> maybe do an importance weight correction?
 
+BAR_RESOLUTION = 1500
+
 f1 = regFrm.len < 5
 f2 = (regFrm.len >= 5) & (regFrm.len < 7)
 f3 = (regFrm.len >= 7) & (regFrm.len < 9)
@@ -436,26 +443,28 @@ m4 = regFrm.loc[f4, 'ret_wins'].mean()
 graph_kwargs = {'color': const.BGR['bright_grey'], 'y_label_format': '>4.0%', 'y_label': None, 'offset': 0.3, 
                 'make_default_x_labels': False,
                 'y_label_dist': 2.5, 'dimensions': (x2, y2), 'x_label_dist': 1.15, 'x_label_left_shift': 3.0, 
-                'x_tick_label_left_shift': 0.8,
+                'x_tick_label_left_shift': 0.6,
                 'label_size': 2, 'tick_label_size': 2, 
                 'header_text': 'Returner Win% over Rally Length', 'header_size': 2, 'header_horizontal_offset': 10,
-                'x_label': 'Shots in Rally'}
+                'x_label': 'Shots in Rally', 'resolution': BAR_RESOLUTION, 'z_epsilon': 0.02}
 
 from ATMANpy.types.Overlays import BarChart, ScatterChart, Graph
-half_line_xs = np.arange(0, 5, 0.1)
+half_line_xs = np.arange(0, 5, 0.025)
 half_line_ys = np.full_like(half_line_xs, fill_value = 0.5)
 
 barChart = BarChart([1, 2, 3, 4], [m1, m2, m3, m4], color = const.BGR['leafy_green'], external_gap = 0.4, 
                     x_labels = ['2-4', '5-6', '7-8', '> 8'], annotate_bar_heights = True)
 halfChart = ScatterChart(half_line_xs, half_line_ys, color = const.BGR['intense_red'])
+halfChart_2 = ScatterChart(half_line_xs, half_line_ys - 0.0015, color = const.BGR['intense_red'])
+halfChart_3 = ScatterChart(half_line_xs, half_line_ys + 0.0015, color = const.BGR['intense_red'])
 
-barGraph = Graph([barChart, halfChart], **graph_kwargs)
+barGraph = Graph([barChart, halfChart, halfChart_2, halfChart_3], **graph_kwargs)
 barGraph.render().show()
 
 bar_graphScn, bar_annotatedPnts = barGraph.preview()
 
 newPnt = bar_annotatedPnts[7]
-newPnt = newPnt.retext('50%').recolor(const.BGR['intense_red']).right(20.5).front(1.7)
+newPnt = newPnt.retext('50%').recolor(const.BGR['intense_red']).right(20.5).front(1.9)
 bar_annotatedPnts.append(newPnt)
 
 for idx, pnt in enumerate(bar_annotatedPnts):
@@ -474,10 +483,10 @@ def make_null_region(reg):
 
 g1_null, g2_null, g3_null, g4_null = make_null_region(g1), make_null_region(g2), make_null_region(g3), make_null_region(g4) 
 
-bar_graphScn_null = Scene([bar_graphScn[0], bar_graphScn[1], g1_null, g2_null, g3_null, g4_null, bar_graphScn[6]])
+bar_graphScn_null = Scene([bar_graphScn[0], bar_graphScn[1], g1_null, g2_null, g3_null, g4_null, bar_graphScn[6], bar_graphScn[7], bar_graphScn[8]])
 
-View.make(myGraph.cam, bar_graphScn_null, annotatedPoints = bar_annotatedPnts_start).snap().show()
-View.make(myGraph.cam, bar_graphScn, annotatedPoints = bar_annotatedPnts).snap().show()
+View.make(myGraph.cam, bar_graphScn_null, annotatedPoints = bar_annotatedPnts_start, resolution = BAR_RESOLUTION).snap().show()
+View.make(myGraph.cam, bar_graphScn, annotatedPoints = bar_annotatedPnts, resolution = BAR_RESOLUTION).snap().show()
 
 
 r_f, c_f = 1080, 1920
@@ -564,7 +573,7 @@ table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col
                         'skip_after_how_many_symbols': 15, 'dimensions': (x, y),
                         'skeleton_shrinkage': 0.2, 'skeleton_vertical_offset': 1, 
                         'title_vertical_offset': 0, 'title_horizontal_offset': 3.5,
-                        'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
+                        'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1, 'resolution': TABLE_RESOLUTION,
                         }
 
 table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False, 
@@ -574,7 +583,7 @@ table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False,
                         'title_vertical_offset': -2, 'title_horizontal_offset': 19,
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
                         'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2,
-                        'title_color': const.BGR['bright_grey']
+                        'title_color': const.BGR['bright_grey'], 'resolution': TABLE_RESOLUTION,
                         }
 
 t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
@@ -759,7 +768,7 @@ script_lines.append(script_line)
 ##### PROPENSITY SCORE MODEL ####
 #################################
  
-RESOLUTION = 1
+RESOLUTION = 10
 renameDict = {  'serve_speed': 'Serve Speed', 'serve_depth': 'Return Depth', 'serve_height': 'Bounce Height', 
                 'ret_is_back': 'Returner uses Backhand', 'serve_dist_sq': 'Stretch Distance'}
 fitted_model = logReg
@@ -871,7 +880,7 @@ all_frames.append(diagFrms2)
 script_lines.append(script_line)
 
 script_line =   """
-                    A serve that is returned from a deeper position is LESS likely to be a chip; From a deep return position, the returner has more time to set up for a topspin return.
+                    A serve that is returned from a deeper position is LESS likely to be a chip; the red arrow indicates that the relationship is inverse. From a deep return position, the returner has more time to set up for a topspin return.
                 """
 diagFrm = outDiags[3].render()
 diagRaster.add(diagFrm, 1, 1)
@@ -882,7 +891,7 @@ all_frames.append(diagFrms3)
 script_lines.append(script_line)
 
 script_line =   """
-                    A fast serve is more likely to be chipped back than a slow serve...
+                    A low-bouncing serve is more likely to be chipped back than a high-bouncing serve...
                 """
 diagFrm = outDiags[4].render()
 diagRaster.add(diagFrm, 1, 1)
@@ -893,7 +902,7 @@ all_frames.append(diagFrms4)
 script_lines.append(script_line)
 
 script_line =   """
-                    And, finally, a low-bouncing serve is more likely to be chipped back than a high-bouncing serve.
+                    And, finally, a fast serve is more likely to be chipped back than a slow serve.
                 """
 diagFrm = outDiags[5].render()
 diagRaster.add(diagFrm, 1, 1)
@@ -1149,7 +1158,7 @@ script_lines.append(script_line)
 
 graphScns_itpl = vs.interpolate_scenes(bar_graphScn_null, bar_graphScn, num_frames = TRANSITION_FRAMES)
 myFrms, _ = vs.animate_sequence(graphScns_itpl, start_cam = myGraph.cam, stop_cam = myGraph.cam,
-                                annotated_points = bar_annotatedPnts_start, argument_resolution = 10)
+                                annotated_points = bar_annotatedPnts_start, argument_resolution = BAR_RESOLUTION)
 
 ovrFrms = overlay(blankFrms_long, myFrms, top_left_point = graph_offsetPt)
 
@@ -1166,7 +1175,8 @@ script_line =  """
                     Ostensibly, this is the weaker player.
                 """
 
-myFrms, _ = vs.animate_static(graphScns_itpl[-1], static_cam = myGraph.cam, annotated_points = bar_annotatedPnts, argument_resolution = 10, num_frames = STATIC_FRAMES)
+myFrms, _ = vs.animate_static(graphScns_itpl[-1], static_cam = myGraph.cam, annotated_points = bar_annotatedPnts, 
+                                argument_resolution = BAR_RESOLUTION, num_frames = STATIC_FRAMES)
 ovrFrms = overlay(blankFrms_short, myFrms, top_left_point = graph_offsetPt)
 
 all_frames.append(ovrFrms)
