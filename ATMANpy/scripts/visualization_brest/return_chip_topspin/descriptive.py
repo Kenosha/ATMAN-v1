@@ -153,39 +153,47 @@ current_idx = 0
 ############# PARAMETERS ###############
 ########################################
 
-RESOLUTION_MODIFIER = 0.5 # 2
-RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
-RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
-RESOLUTION_KDE = 2 * RESOLUTION_MODIFIER
+def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None):
+    resolution_background = 1 * resolution_modifier
+    resolution_objects = 1 * resolution_modifier
+    resolution_kde = 2 * resolution_modifier
+
+    return {'background_resolution': resolution_background,
+            'argument_resolution': resolution_objects,
+            'foreground_resolution': resolution_objects,
+            'dummy_resolution': resolution_kde,
+            'adaptive_resolution_exponent': adaptive_resolution_exponent,
+            'argument_luminosity': argument_luminosity,
+            'argument_blinks_per_second': argument_blinks_per_second,
+            }
+
+
+RESOLUTION_MODIFIER_NORMAL = 15
+RESOLUTION_MODIFIER_HEATMAP = 0.5
+RESOLUTION_MODIFIER_ANGLE = 5
+prmDict = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1.25, 
+                        adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
+prmDict_nolum = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1, 
+                              adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
+prmDict_heat = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_HEATMAP, argument_luminosity = 1, 
+                             adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
+prmDict_angle = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_ANGLE, argument_luminosity = 1, 
+                             adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
+RESOLUTION_KDE = prmDict_heat['dummy_resolution']
+
 MIX_COLORS_KDE = True
 BANDWIDTH_KDE = 35
 SCENE_FADE = 0.9
 CONTOUR_PROP = 0.5
 EPSILON = 0.002
 EMPHASIS_DIM_FACTOR = 1.5
-ARGUMENT_LUMINOSITY = 1.25
-ARGUMENT_BLINKS_PER_SECOND = None
 ADAPTIVE_RESOLUTION_EXPONENT = 1.5
 BLINK_RATE = 1
-prmDict = {'background_resolution': RESOLUTION_BACKGROUND,
-            'argument_resolution': RESOLUTION_OBJECTS,
-            'foreground_resolution': RESOLUTION_OBJECTS,
-            'dummy_resolution': RESOLUTION_KDE,
-            'adaptive_resolution_exponent': ADAPTIVE_RESOLUTION_EXPONENT,
-            'argument_luminosity': ARGUMENT_LUMINOSITY,
-            'argument_blinks_per_second': ARGUMENT_BLINKS_PER_SECOND,
-            }
-
-prmDict_back = {**prmDict}
-prmDict_back['background_resolution'] /= 2 ### reduce the background resolution when the full background is in view, to lower the Moiree effect on the net.
-
-prmDict_nolum = {**prmDict}
-prmDict_nolum['argument_luminosity'] = 1
 
 STATIC_FRAMES = 100 ### does not matter much once we record: the static frames will be fit to the narration
 TRANSITION_FRAMES = 25 
 
-INVISIBLE_ALPHA = 0.05 ### which alpha is accepted as invisible
+INVISIBLE_ALPHA = 0.01 ### which alpha is accepted as invisible
 FULL_ALPHA = 1 ### which alpha is accepted as fully visible --> FULL_ALPHA as parameter not needed except for FADE_IN, FADE_OUT_FACTOR calculation
 
 FADE_IN_FACTOR = (FULL_ALPHA / INVISIBLE_ALPHA) ** (1 / TRANSITION_FRAMES)
@@ -257,18 +265,19 @@ courtScn = Scene.make_court()
 ### Legends
 from ATMANpy.types.Overlays import Legend, LegendRow, overlay
 
-color_dict = {'tp': TOPS_COLOR,
-              'lo': CHIP_LO_COLOR,
-              'hi': CHIP_HI_COLOR}
+from ATMANpy.funcs.util_funcs import interpolate_tuples
+CHIP_COLOR = interpolate_tuples(CHIP_LO_COLOR, CHIP_HI_COLOR)
 
 from ATMANpy.types.Overlays import Legend, LegendRow, overlay
 tpRow = LegendRow('... Topspin', shape_color = TOPS_COLOR, text_size = 2)
 loRow = LegendRow('... Low Chip', shape_color = CHIP_LO_COLOR, text_size = 2)
 hiRow = LegendRow('... High Chip', shape_color = CHIP_HI_COLOR, text_size = 2)
+cpRow = LegendRow('... (Choice) Chip', shape_color = CHIP_COLOR, text_size = 2)
 
-leg_dims = (300, 300)
+leg_dims = (375, 300)
 # leg_dims = (500, 500)
-leg_params = {'borders': True, 'header_text': 'Return is ...', 'resolution': 100, 'legend_dimensions': leg_dims, 'header_offset': 2, 'header_thickness': 1}
+leg_params = {'borders': True, 'header_text': 'Return is ...', 'resolution': 200, 'render_height': 300,
+              'legend_dimensions': leg_dims, 'header_offset': 2, 'header_thickness': 1}
 
 leg1 = Legend([loRow, LegendRow(None), LegendRow(None)], **leg_params)
 leg1Frm = leg1.render()
@@ -282,19 +291,25 @@ leg3 = Legend([loRow, hiRow, tpRow], **leg_params)
 leg3Frm = leg3.render()
 leg3Frm.show()
 
-leg_base = Legend([tpRow, loRow], **leg_params)
+leg_base = Legend([cpRow, LegendRow(None)], **leg_params)
+legFrm_chip = leg_base.render()
+legFrm_chip.show()
+
+leg_base = Legend([tpRow, cpRow], **leg_params)
 legFrm = leg_base.render()
 legFrm.show()
 
 
 anchorPt = Point2D((1920 // 24, 1080 // 24))
 
+anchorPt_middle = Point2D((1100, 200))
+
 ### Flight Splines
 serveSF = myShots[0].feat_spline_cumul(which_endpoint = 'penultimate')
 returnSF = myShots[1].feat_spline_cumul(which_endpoint = 'penultimate')
 
-serve_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
-return_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
+serve_scenes = [Scene([spLn.recolor(BALL_COLOR).resize(1.5) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
+return_scenes = [Scene([spLn.recolor(BALL_COLOR).resize(1.5) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
 spline_scenes = [*serve_scenes, *return_scenes]
 splnScn = spline_scenes[-1]
 
@@ -303,6 +318,15 @@ splnScn = spline_scenes[-1]
 # topSF = myShots.feat_top_player()
 # botSF = myShots.feat_bot_player()
 # jntSF = ballSF.merge(topSF.rename('Top')).merge(botSF.rename('Bot'))
+
+chipFrm = regFrm_in[regFrm_in.is_chipped == 1]
+topspin_preds = chipFrm.pred_is_topspin.values
+
+
+from ATMANpy.auxil.court import top_bsl_deu_2D, top_bsl_ad_2D
+fhPt = Point3D.from_point2D(top_bsl_deu_2D, z = 0).front(10).annotate('Forehand')
+bhPt = Point3D.from_point2D(top_bsl_ad_2D, z = 0).front(10).left(25).annotate('Backhand')
+
 
 # _, topPly = topSF.last()
 # _, botPly = botSF.last()
@@ -430,11 +454,6 @@ if DO_METHOD_SECTION:
                         Now, differentiate between chipped returns and topspin returns. 
                         Chipped returns are marked in blue, topspin returns in orange.
                     """
-
-    from ATMANpy.auxil.court import top_bsl_deu_2D, top_bsl_ad_2D
-    fhPt = Point3D.from_point2D(top_bsl_deu_2D, z = 0).front(10).annotate('Forehand')
-    bhPt = Point3D.from_point2D(top_bsl_ad_2D, z = 0).front(10).left(25).annotate('Backhand')
-
     myFrms, animDict = vs.animate_static(markScn_mono_rect, static_cam = heatCam, background_scene = courtScn, annotated_points = [fhPt, bhPt], **prmDict)
     all_frames.append(myFrms)
     script_lines.append(script_line)
@@ -499,7 +518,7 @@ if DO_METHOD_SECTION:
     myRegs = [  Region3D.from_region2D(a, z = 0), Region3D.from_region2D(b, z = 0), 
                 Region3D.from_region2D(c, z = 0), Region3D.from_region2D(d, z = 0), 
                 Region3D.from_region2D(dc, z = 0), Region3D.from_region2D(ad, z = 0)]
-    myLns = [regLn.recolor(const.BGR['leafy_green']).resize(3) for reg in myRegs for regLn in reg.lineList]
+    myLns = [regLn.recolor(const.BGR['leafy_green']).resize(1) for reg in myRegs for regLn in reg.lineList]
 
     centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(const.BGR['leafy_green']).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
 
@@ -517,8 +536,6 @@ if DO_METHOD_SECTION:
 
     # Heatmap for Weighted, 'Choice' Chips 
     script_line = ""
-    chipFrm = regFrm_in[regFrm_in.is_chipped == 1]
-    topspin_preds = chipFrm.pred_is_topspin.values
     chipScn = vs.kde_heatmap(chip_retShots_rectified, 
                             position_func = 'get_first_bounce_position', 
                             weight_func_or_arr = topspin_preds,
@@ -548,7 +565,7 @@ if DO_METHOD_SECTION:
     myRegs = [  Region3D.from_region2D(a, z = 0), Region3D.from_region2D(b, z = 0), 
                 Region3D.from_region2D(c, z = 0), Region3D.from_region2D(d, z = 0), 
                 Region3D.from_region2D(dc, z = 0), Region3D.from_region2D(ad, z = 0)]
-    myLns = [regLn.recolor(const.BGR['leafy_green']).resize(3) for reg in myRegs for regLn in reg.lineList]
+    myLns = [regLn.recolor(const.BGR['leafy_green']).resize(1) for reg in myRegs for regLn in reg.lineList]
 
     centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(const.BGR['leafy_green']).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
 
@@ -736,7 +753,7 @@ _, player = myShots[1].feat_top_player().first()
 
 # get topspin and chip dists, with axes
 kwargDict = {'bandwidth': 2,
-             'resolution': 100,
+             'resolution': 1000,
              'axis_length': 40,
              'axis_origin_point': bPt,
              'x_unit_vector': Point3D((0, -1, 0)), 
@@ -748,7 +765,7 @@ weightArr = regFrm_in.loc[regFrm_in.is_chipped == 1, 'weight_topspin'].values
 weightArr_preds = 1 - regFrm_in.loc[regFrm_in.is_chipped == 1, 'pred_is_chipped'].values
 
 tops_angleScn, tops_modes = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict, color = TOPS_COLOR)
-chip_angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, weight_func_or_arr = weightArr_preds, color = CHIP_LO_COLOR)
+chip_angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, weight_func_or_arr = weightArr_preds, color = CHIP_COLOR)
 
 ### make axes
 xLn, yLn = tops_angleScn.shapes[1], tops_angleScn.shapes[2]
@@ -771,7 +788,7 @@ chip_angleScn = chip_angleScn.drop(2).drop(1)
 
 ### get modes
 # a) chip
-chip_mode_lo, chip_mode_hi = chip_modes[[3, 10]]
+chip_mode_lo, chip_mode_hi = chip_modes[[4, 10]]
 mode_angles = [chip_mode_lo, chip_mode_hi]
 modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict['axis_length'] * 1.5, 
                                  x_ax = kwargDict['x_unit_vector'], y_ax = kwargDict['y_unit_vector'],
@@ -795,38 +812,53 @@ itpl_lns2 = vs.interpolate_scenes(nullScn, modeScn2, num_frames = 25)
 ### build a distribution of launch angles on choice chips.
 sorted_chip_retShots_rectified = chip_retShots_rectified.sort(weightArr_preds, descending = True)
 
+def scene_to_graph_scene(splnScn, cutoff_frames = None):
+    ### make it so that the scene looks good with the graph, and is easier to render
+    if cutoff_frames is not None:
+        splnShapes = splnScn.shapes[:cutoff_frames]
+    else:
+        splnShapes = splnScn.shapes
+
+    splnShapes = [shape.resize(0.25) for shape in splnShapes]
+    return Scene(splnShapes)
+
 if DO_LAUNCH_ANGLE_INTRO:
     all_frames = []
     script_lines = []
 
+    splnScn_thin = scene_to_graph_scene(splnScn)
+
     # fade trajectory back in
     script_line = ""
-    itplScns = vs.interpolate_scenes(splnScn.realpha(0), splnScn, num_frames = 25)
+    itplScns = vs.interpolate_scenes(splnScn_thin.realpha(0), splnScn_thin, num_frames = 25)
     myFrms, animDict = vs.animate_sequence(itplScns, start_cam = heatCam, stop_cam = heatCam, background_scene = courtScn, 
-                                        **prmDict_nolum, **animDict, annotated_points = [fhPt, bhPt], cumulative_foreground_transparence = 0.9)
+                                        **prmDict_angle, **animDict, annotated_points = [fhPt, bhPt], cumulative_foreground_transparence = 0.9)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     # cam motion -> made so that the motion shows also the entire trajectory!
     script_line = ""
-    myFrms1, animDict = vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
-                                            background_scene = courtScn, start_cam = heatCam, stop_cam = intmCam, **prmDict_nolum)
+    myFrms1, animDict = vs.animate_cam_motion(splnScn_thin, num_frames = 50,  annotated_points = [fhPt, bhPt],
+                                            background_scene = courtScn, start_cam = heatCam, stop_cam = intmCam, **prmDict_angle)
 
-    myFrms2, animDict =  vs.animate_cam_motion(splnScn, num_frames = 50,  annotated_points = [fhPt, bhPt],
-                                            background_scene = courtScn, start_cam = intmCam, stop_cam = sideretCam, **prmDict_nolum)
+    myFrms2, animDict =  vs.animate_cam_motion(splnScn_thin, num_frames = 50,  annotated_points = [fhPt, bhPt],
+                                            background_scene = courtScn, start_cam = intmCam, stop_cam = sideretCam, **prmDict_angle)
     myFrms = BGRFrames.from_frames([myFrms1, myFrms2])
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
+    splnScn_thin_short = scene_to_graph_scene(splnScn, cutoff_frames = 5)
+    animDict['previous_foreground_scene'] = splnScn_thin_short
+
     ### TODO: Use null line to animate axes appearing
     script_line = ""
     itplScns = vs.interpolate_scenes(axScn_null, axScn, TRANSITION_FRAMES)
-    myFrms, animDict = vs.animate_sequence(itplScns, start_cam = sideretCam, stop_cam = sideretCam, background_scene = courtScn, **animDict, **prmDict_nolum)
+    myFrms, animDict = vs.animate_sequence(itplScns, start_cam = sideretCam, stop_cam = sideretCam, background_scene = courtScn, **animDict, **prmDict_angle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
-    myFrms, animDict = vs.animate_static(splnScn, static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = axPnts, **prmDict_nolum)
+    myFrms, animDict = vs.animate_static(splnScn_thin_short, static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = axPnts, **prmDict_angle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -834,8 +866,8 @@ if DO_LAUNCH_ANGLE_INTRO:
     limit_theta = ((180 - ang) * const.ANGLE_TO_RAD, 180 * const.ANGLE_TO_RAD)
     degCrc = Circle3D.from_point3D(bPt, fixed_dimension = 'x', radius = 25, limit_theta = limit_theta)
 
-    myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = axPnts,
-                                         **prmDict_nolum)
+    myFrms, animDict = vs.animate_static(splnScn_thin_short.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = axPnts,
+                                         **prmDict_angle)
     # all_frames.append(myFrms)
     # script_lines.append(script_line)
 
@@ -845,8 +877,8 @@ if DO_LAUNCH_ANGLE_INTRO:
                         The example return that we saw just two minutes ago is chipped back at an angle of 11.9 degrees. 
                         Let's see how launch angles are distributed for choice chipped returns in general. 
                     """
-    myFrms, animDict = vs.animate_static(splnScn.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = [anglePt, *axPnts],
-                                         **prmDict_nolum)
+    myFrms, animDict = vs.animate_static(splnScn_thin_short.put(degCrc), static_cam = sideretCam, background_scene = court_and_axScn, annotated_points = [anglePt, *axPnts],
+                                         **prmDict_angle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -873,13 +905,12 @@ if DO_LAUNCH_ANGLE_DISTRO:
 
     acceleration_rate = 0.2
     initial_frames = 20
-    splnScn_curr = splnScn
     prev_kde = None
     shotList = []
     weightList = []
     frms = []
     idx = 0
-    for shot, weight in zip(sorted_chip_retShots_rectified[:], weightArr_preds[:]):
+    for shot, weight in zip(sorted_chip_retShots_rectified[:2], weightArr_preds[:2]):
         if not 0 < shot.get_launch_angle() <= 75:
             continue
 
@@ -889,9 +920,9 @@ if DO_LAUNCH_ANGLE_DISTRO:
         ### build new kde
         shotList.append(shot)
         weightList.append(weight)
-        kde, _ = vs.kde_angle_distribution(Shots(shotList), **kwargDict, weight_func_or_arr = np.array(weightList), 
-                                        color = CHIP_LO_COLOR)
-        kde = Scene([kde[0]])
+        kde1, _ = vs.kde_angle_distribution(Shots(shotList), **kwargDict, weight_func_or_arr = np.array(weightList), 
+                                        color = CHIP_COLOR)
+        kde = Scene([kde1[0]])
 
         ### if necessary: create previous KDE
         if prev_kde is None:
@@ -905,7 +936,9 @@ if DO_LAUNCH_ANGLE_DISTRO:
         _, splines_current = anchTraj.feat_spline_cumul().last()
         splnScn_curr = Scene([spLn.recolor(BALL_COLOR) for spLn in splines_current if spLn is not None])
 
-        myFrms, _ = vs.animate_static(splnScn_curr, background_scene = court_and_axScn, previous_foreground_scene = prev_kde, **prmDict,
+        splnScn_curr = scene_to_graph_scene(splnScn_curr, cutoff_frames = 5)
+
+        myFrms, _ = vs.animate_static(splnScn_curr, background_scene = court_and_axScn, previous_foreground_scene = prev_kde, **prmDict_angle,
                                     static_cam = sideretCam, num_frames = num_frames)
         frms.append(myFrms)
 
@@ -914,7 +947,7 @@ if DO_LAUNCH_ANGLE_DISTRO:
             itpl_kdes = vs.interpolate_scenes(prev_kde, kde, num_frames)
         else:
             itpl_kdes = Scene([kde])
-        myFrms, _ = vs.animate_sequence(itpl_kdes, background_scene = court_and_axScn, previous_foreground_scene = splnScn_curr, **prmDict,
+        myFrms, _ = vs.animate_sequence(itpl_kdes, background_scene = court_and_axScn, previous_foreground_scene = splnScn_curr, **prmDict_angle,
                                         start_cam = sideretCam, stop_cam = sideretCam, cumulative_foreground_transparence = 1)
         frms.append(myFrms)
 
@@ -923,7 +956,7 @@ if DO_LAUNCH_ANGLE_DISTRO:
 
     script_line = ""
     jntFrms = BGRFrames.from_frames(frms)
-    jntFrms = overlay(jntFrms, legFrm, top_left_point = anchorPt)
+    jntFrms = overlay(jntFrms, legFrm_chip, top_left_point = anchorPt_middle)
     all_frames.append(jntFrms)
     script_lines.append(script_line)
 
@@ -956,23 +989,23 @@ if DO_LAUNCH_ANGLE_MODES:
                         It does seem to be the case empirically that when a player opts for a chipped return, 
                         he really opts for either a low, shallow-bouncing chip, or a high-arcing chip. 
                     """
-    myFrms, animDict = vs.animate_static(chip_angleScn, background_scene = court_and_axScn, **prmDict_nolum,
+    myFrms, animDict = vs.animate_static(chip_angleScn, background_scene = court_and_axScn, **prmDict_angle,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES)
-    # myFrms = overlay(myFrms, legFrm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, legFrm_chip, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
-    myFrms, animDict = vs.animate_sequence(itpl_lns0, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_sequence(itpl_lns0, background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, leg1Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg1Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
-    myFrms, animDict = vs.animate_sequence(itpl_lns1, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_sequence(itpl_lns1, background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, leg2Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg2Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -980,7 +1013,7 @@ if DO_LAUNCH_ANGLE_MODES:
                         On the other hand, for topspin returns, the distribution is more uniform: we observe only a single mode.
                     """
     staticFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
-    staticFrms = overlay(staticFrms, leg2Frm, top_left_point = anchorPt)
+    staticFrms = overlay(staticFrms, leg2Frm, top_left_point = anchorPt_middle)
     all_frames.append(staticFrms)
     script_lines.append(script_line)
 
@@ -989,9 +1022,9 @@ if DO_LAUNCH_ANGLE_MODES:
     script_line = ""
     animDict['previous_foreground_scene'] = animDict['previous_foreground_scene'].drop(0)
     itpl_angleScns = vs.interpolate_scenes(chip_angleScn, tops_angleScn, 25)
-    myFrms, animDict = vs.animate_sequence(itpl_angleScns, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_sequence(itpl_angleScns, background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -1000,22 +1033,22 @@ if DO_LAUNCH_ANGLE_MODES:
                         which is why we differentiate between a slice and a chip: 
                         a typical rally slice would depart at a launch angle lower than, or similar to, a typical topspin shot.
                     """
-    myFrms, animDict = vs.animate_static(tops_angleScn, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_static(tops_angleScn, background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES)
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
-    myFrms, animDict = vs.animate_sequence(itpl_lns2, background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_sequence(itpl_lns2, background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam)
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = ""
     statFrms = BGRFrames.from_frame(myFrms[-1], TRANSITION_FRAMES)
-    statFrms = overlay(statFrms, leg3Frm, top_left_point = anchorPt)
+    statFrms = overlay(statFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(statFrms)
     script_lines.append(script_line)
 
@@ -1033,23 +1066,23 @@ if DO_LAUNCH_ANGLE_MODES:
 
     script_line = f"To put numbers to it: the typical topspin return is launched at an angle of {tops_mode:.1f} Degrees..."
     animDict['previous_foreground_scene'] = animDict['previous_foreground_scene'].drop(2)
-    myFrms, animDict = vs.animate_static(Scene([degCrc0]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_static(Scene([degCrc0]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0])
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = f"... the low-angle choice chip return at {chip_mode_lo:.1f} Degrees..."
-    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1])
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
     script_line = f"... and the high_angle choice chip return at {chip_mode_hi:.1f} Degrees."
-    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1, angPt2])
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -1059,9 +1092,9 @@ if DO_LAUNCH_ANGLE_MODES:
                         making it a good representative of the low-angle chip mode. 
                         Let's watch it again, in this light.
                     """
-    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_nolum, **animDict,
+    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES, annotated_points = [angPt0, angPt1, angPt2])
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt)
+    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
@@ -1182,8 +1215,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     serveSF = bestShots[0].feat_spline_cumul(which_endpoint = 'penultimate')
     returnSF = bestShots[1].feat_spline_cumul(which_endpoint = 'penultimate')
 
-    serve_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
-    return_scenes = [Scene([spLn.recolor(BALL_COLOR) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
+    serve_scenes = [Scene([spLn.recolor(BALL_COLOR).resize(1.5) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
+    return_scenes = [Scene([spLn.recolor(BALL_COLOR).resize(1.5) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
     best_spline_scenes = [*serve_scenes, *return_scenes]
 
     splineFrms_best, _ = vs.animate_sequence(best_spline_scenes, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
@@ -1256,7 +1289,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.25, 
-                  title = 'Initial Conditions', title_horizontal_offset = 11,
+                  title = 'Initial Conditions', title_horizontal_offset = 11, header_text_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
                   skip_after_how_many_symbols = None)
     tabFrm_match = myTab.render()
@@ -1293,7 +1326,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
-                  title = 'Trajectory Comparison', title_horizontal_offset = 10,
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
                   skip_after_how_many_symbols = None)
     tabFrm_comp = myTab.render()
