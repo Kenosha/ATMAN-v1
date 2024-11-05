@@ -281,23 +281,23 @@ leg_params = {'borders': True, 'header_text': 'Return is ...', 'resolution': 200
 
 leg1 = Legend([loRow, LegendRow(None), LegendRow(None)], **leg_params)
 leg1Frm = leg1.render()
-leg1Frm.show()
+# leg1Frm.show()
 
 leg2 = Legend([loRow, hiRow, LegendRow(None)], **leg_params)
 leg2Frm = leg2.render()
-leg2Frm.show()
+# leg2Frm.show()
 
 leg3 = Legend([loRow, hiRow, tpRow], **leg_params)
 leg3Frm = leg3.render()
-leg3Frm.show()
+# leg3Frm.show()
 
 leg_base = Legend([cpRow, LegendRow(None)], **leg_params)
 legFrm_chip = leg_base.render()
-legFrm_chip.show()
+# legFrm_chip.show()
 
 leg_base = Legend([tpRow, cpRow], **leg_params)
 legFrm = leg_base.render()
-legFrm.show()
+# legFrm.show()
 
 
 anchorPt = Point2D((1920 // 24, 1080 // 24))
@@ -540,7 +540,7 @@ if DO_METHOD_SECTION:
                             position_func = 'get_first_bounce_position', 
                             weight_func_or_arr = topspin_preds,
                             normalize_density = True,
-                            zero_color = CHIP_LO_COLOR, one_color = CHIP_LO_COLOR,
+                            zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
                             bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
     itplScns = vs.interpolate_dummy_scenes(topsScn, chipScn, STATIC_FRAMES)
@@ -672,7 +672,7 @@ if DO_HEATMAP_SECTION:
                                         position_func = 'get_first_bounce_position', 
                                         weight_func_or_arr = topspin_preds,
                                         normalize_density = False,
-                                        zero_color = CHIP_LO_COLOR, one_color = CHIP_LO_COLOR,
+                                        zero_color = CHIP_COLOR, one_color = CHIP_COLOR,
                                         bandwidth = BANDWIDTH, resolution = RESOLUTION_KDE)
 
     tops_kde = topsScn_not_norm.alphaArrs[0]
@@ -681,7 +681,7 @@ if DO_HEATMAP_SECTION:
     diff_kde = tops_kde - chip_kde
 
     rastArr = topsScn_not_norm.rastArrs[0]
-    bgrArr = np.where(diff_kde > 0, TOPS_COLOR, CHIP_LO_COLOR)
+    bgrArr = np.where(diff_kde > 0, TOPS_COLOR, CHIP_COLOR)
 
     diff_kde_plus, diff_kde_minus = diff_kde.clip(min = 0), -diff_kde.clip(max = 0)
 
@@ -693,7 +693,7 @@ if DO_HEATMAP_SECTION:
     diffScn = DummyScene([rastArr], [bgrArr], [alphaArr])
 
     script_line =   """
-                        We construct a difference heatmap that highlights the areas 
+                        Here we see a difference heatmap that highlights the areas 
                         in which choice chip and topspin returns are more prevalent in their respective colors.
 
                         Chipped returns are overrepresented at the corners of the court and the shallower areas along the center service line,
@@ -910,7 +910,7 @@ if DO_LAUNCH_ANGLE_DISTRO:
     weightList = []
     frms = []
     idx = 0
-    for shot, weight in zip(sorted_chip_retShots_rectified[:2], weightArr_preds[:2]):
+    for shot, weight in zip(sorted_chip_retShots_rectified[:], weightArr_preds[:]):
         if not 0 < shot.get_launch_angle() <= 75:
             continue
 
@@ -928,7 +928,7 @@ if DO_LAUNCH_ANGLE_DISTRO:
         if prev_kde is None:
             els = len(kde[0].coords[0])
             x, y, z = bPt.coords
-            prev_pt = Point3D((np.full(els, fill_value = x), np.full(els, fill_value = y), np.full(els, fill_value = z)), color = CHIP_LO_COLOR)
+            prev_pt = Point3D((np.full(els, fill_value = x), np.full(els, fill_value = y), np.full(els, fill_value = z)), color = CHIP_COLOR)
             prev_kde = Scene([prev_pt])
         
         ### Animate the current trajectory
@@ -1116,7 +1116,6 @@ if DO_LAUNCH_ANGLE_MODES:
             f.write(script_line)
 
     current_idx = current_idx + len(all_frames)
-
 
 if DO_LAUNCH_ANGLE_EXAMPLE:
     all_frames = []
@@ -1711,7 +1710,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         with respect to the chipped return versus the topspin return,
                         what we are lacking is an answer to the question: what should he do.
                         Where should the chip return be placed to overcome the 12% win-rate deficit over the topspin return?
-                        At what launch angle should the ball be played? 
+                        And what launch angle should the ball be played at?
                     """
     myRst = FramesRaster(2, 2, borders = None)
     myRst.add(itplFrms[-1], 1, 1)
