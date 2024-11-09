@@ -9,7 +9,7 @@ import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.vis_funcs as vs
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
-from ATMANpy.types.Abstract import Points, Point, Shots, read_in_all_tables
+from ATMANpy.types.Abstract import Points, Shots, read_in_data_tables, read_in_all_placeholder_tables
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.Lines import CourtLines, Line
@@ -45,9 +45,15 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 ###################################
 ######### READ IN DATA ############
 ###################################
-allTable = read_in_all_tables(confs)
-allPnts = Points.from_datatable(allTable, split_by_match = False)
-firstPnts = allPnts.filter('is_first_serve')
+dataTable = read_in_data_tables(confs)
+nullTable = read_in_all_placeholder_tables(confs)
+
+dataPnts = Points.from_datatable(dataTable, split_by_match = False)
+nullPnts = Points.from_placeholder_table(nullTable)
+
+allPnts = dataPnts.join(nullPnts).sort()
+
+firstPnts = dataPnts.filter('is_first_serve')
 
 ### Remove aces, faults and net balls.
 def get_returned_balls(myPnt):
@@ -147,31 +153,38 @@ SAVE_REGS = False
 ############# PARAMETERS ###############
 ########################################
 
-RESOLUTION_MODIFIER = 0.5 # 2
-RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
-RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
-RESOLUTION_KDE = 2 * RESOLUTION_MODIFIER
+def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None):
+    resolution_background = 1 * resolution_modifier
+    resolution_objects = 1 * resolution_modifier
+    resolution_kde = 2 * resolution_modifier
+
+    return {'background_resolution': resolution_background,
+            'argument_resolution': resolution_objects,
+            'foreground_resolution': resolution_objects,
+            'dummy_resolution': resolution_kde,
+            'adaptive_resolution_exponent': adaptive_resolution_exponent,
+            'argument_luminosity': argument_luminosity,
+            'argument_blinks_per_second': argument_blinks_per_second,
+            }
+
+
+RESOLUTION_MODIFIER_NORMAL = 35
+RESOLUTION_MODIFIER_HEATMAP = 0.5
+prmDict = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1.25, 
+                        adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
+prmDict_nolum = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1, 
+                              adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
+prmDict_heat = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_HEATMAP, argument_luminosity = 1, 
+                             adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
+RESOLUTION_KDE = prmDict_heat['dummy_resolution']
+
 MIX_COLORS_KDE = True
 BANDWIDTH_KDE = 35
 SCENE_FADE = 0.9
 CONTOUR_PROP = 0.5
 EPSILON = 0.002
 EMPHASIS_DIM_FACTOR = 1.5
-ARGUMENT_LUMINOSITY = 1.25
-ARGUMENT_BLINKS_PER_SECOND = None
-ADAPTIVE_RESOLUTION_EXPONENT = 1.5
 BLINK_RATE = 1
-prmDict = {'background_resolution': RESOLUTION_BACKGROUND,
-            'argument_resolution': RESOLUTION_OBJECTS,
-            'foreground_resolution': RESOLUTION_OBJECTS,
-            'dummy_resolution': RESOLUTION_KDE,
-            'adaptive_resolution_exponent': ADAPTIVE_RESOLUTION_EXPONENT,
-            'argument_luminosity': ARGUMENT_LUMINOSITY,
-            'argument_blinks_per_second': ARGUMENT_BLINKS_PER_SECOND,
-            }
-
-prmDict_back = {**prmDict}
-prmDict_back['background_resolution'] /= 2 ### reduce the background resolution when the full background is in view, to lower the Moiree effect on the net.
 
 prmDict_nolum = {**prmDict}
 prmDict_nolum['argument_luminosity'] = 1
@@ -220,7 +233,6 @@ prmDict_annot['previous_annotated_points'] = [fhPt_annot_half, bhPt_annot_half]
 
 prmDict_annot_heat = {**prmDict}
 prmDict_annot_heat['previous_annotated_points'] = [fhPt_annot_heat, bhPt_annot_heat]
-prmDict_annot_heat['argument_resolution'] = 10
 prmDict_annot_heat['argument_luminosity'] = 1.5
 
 backView_half = View.make(halfCam, courtScn, resolution = 1, annotatedPoints = [fhPt_annot, bhPt_annot])
@@ -238,7 +250,7 @@ vis_ut.is_serve_out_wide(bPnt)
 
 def get_spline_frames(myPnt):
     serve_splines = myPnt[0].feat_spline_cumul(which_endpoint = 'penultimate').values()
-    splnScns = [Scene([spln.recolor(BALL_COLOR) for spln in splns if spln is not None]) for splns in serve_splines]
+    splnScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in serve_splines]
     realFrms = myPnt[0].stream(confs = confs).decap().frames
     myFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = realFrms.rescale(3), **prmDict)
     return myFrms
@@ -252,7 +264,7 @@ def get_wide_frames(myPnt, pre_frames = 150):
 
 def get_spline_and_player_scene(myPnt):
     _, serve_splines = myPnt[0].feat_spline_cumul(which_endpoint = 'penultimate').last()
-    outScn = Scene([spln.recolor(BALL_COLOR) for spln in serve_splines if spln is not None])
+    outScn = Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in serve_splines if spln is not None])
     
     x0, y0 = myPnt[0].get_player_hit_position()
     x1, y1 = myPnt[1].get_player_hit_position()
@@ -284,9 +296,9 @@ sceneDict['deuce_wide'] = myScn
 
 # b) deuce, down middle
 relPnts = retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_deuce').filter(is_return_topspin)
-myFrms = get_spline_frames(relPnts[0])
-preFrms = get_wide_frames(relPnts[0], pre_frames = pre_frames)
-myScn = get_spline_and_player_scene(relPnts[0])
+myFrms = get_spline_frames(relPnts[39])
+preFrms = get_wide_frames(relPnts[39], pre_frames = pre_frames)
+myScn = get_spline_and_player_scene(relPnts[39])
 # DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
 # myFrms[-1].show()
 realDict['deuce_middle'] = myFrms
@@ -295,9 +307,9 @@ sceneDict['deuce_middle'] = myScn
 
 # c) ad, down middle
 relPnts = retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_ad').filter(is_return_topspin)
-myFrms = get_spline_frames(relPnts[41]) ### not nakashima again.
-preFrms = get_wide_frames(relPnts[41], pre_frames = pre_frames) 
-myScn = get_spline_and_player_scene(relPnts[41])
+myFrms = get_spline_frames(relPnts[40]) ### not nakashima again.
+preFrms = get_wide_frames(relPnts[40], pre_frames = pre_frames) 
+myScn = get_spline_and_player_scene(relPnts[40])
 # DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
 # myFrms[-1].show()
 realDict['ad_middle'] = myFrms
@@ -306,9 +318,9 @@ sceneDict['ad_middle'] = myScn
 
 # d) ad, out wide
 relPnts =  retPnts_in.filter(vis_ut.is_serve_out_wide).filter('is_serve_ad').filter(is_return_topspin)
-myFrms = get_spline_frames(relPnts[100])
-preFrms = get_wide_frames(relPnts[100], pre_frames = pre_frames) 
-myScn = get_spline_and_player_scene(relPnts[100])
+myFrms = get_spline_frames(relPnts[96])
+preFrms = get_wide_frames(relPnts[96], pre_frames = pre_frames) 
+myScn = get_spline_and_player_scene(relPnts[96])
 # DecapStream(myFrms, 0, 100).show(ms_between_frames = 100)
 # myFrms[-1].show()
 realDict['ad_wide'] = myFrms
@@ -625,7 +637,7 @@ glmReg = vis_ut.make_and_save_model(regFrm_in, regressors, save_path = None, sav
                                                 endog_col = endog, weight_col = weight)
     
 ########## SETUP #########
-myRst = FramesRaster(2, 2, borders = 2)
+myRst = FramesRaster(2, 2, borders = None)
 all_frames = []
 script_lines = []
 dim_factor = 0.25
@@ -643,14 +655,22 @@ color_dict = {'tp': TOPS_COLOR,
               'lo': CHIP_LO_COLOR,
               'hi': CHIP_HI_COLOR}
 
+### Legends
+from ATMANpy.types.Overlays import Legend, LegendRow, overlay
+
+from ATMANpy.funcs.util_funcs import interpolate_tuples
+CHIP_COLOR = interpolate_tuples(CHIP_LO_COLOR, CHIP_HI_COLOR)
+
 from ATMANpy.types.Overlays import Legend, LegendRow, overlay
 tpRow = LegendRow('... Topspin', shape_color = TOPS_COLOR, text_size = 2)
 loRow = LegendRow('... Low Chip', shape_color = CHIP_LO_COLOR, text_size = 2)
 hiRow = LegendRow('... High Chip', shape_color = CHIP_HI_COLOR, text_size = 2)
+cpRow = LegendRow('... (Choice) Chip', shape_color = CHIP_COLOR, text_size = 2)
 
 leg_dims = (300, 300)
 # leg_dims = (500, 500)
-leg_params = {'borders': True, 'header_text': 'Return is ...', 'resolution': 100, 'legend_dimensions': leg_dims, 'header_offset': 2, 'header_thickness': 1}
+leg_params = {'borders': True, 'header_text': 'Return is ...', 'resolution': 200, 'render_height': 300,
+              'legend_dimensions': leg_dims, 'header_offset': 2, 'header_thickness': 1}
 
 leg1 = Legend([tpRow, LegendRow(None), LegendRow(None)], **leg_params)
 leg1Frm = leg1.render()
@@ -693,7 +713,6 @@ def make_flag(basePt, height_of_flag = 10, width_of_flag = 20, color = const.BGR
     flagLn = Line3D(leftPt, rightPt)
     return Region3D.from_line3D(flagLn, width = height_of_flag, dim = 'z', left_right = "+x", top_bottom = '+z',
                                 color = color, alpha = alpha)
-
 
 ###### DEUCE WIDE ######
 side, where = 'deuce', 'wide'
@@ -766,6 +785,7 @@ script_line = ""
 itplFrms = vs.interpolate_frames(realFrms_resc[-1], realFrms_resc[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
 itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
 
+myRst.borders = 2
 myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
 myRst.add(myFrms, i, j)
 rastFrms = myRst.render()
@@ -881,7 +901,6 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
 
 postFrms = BGRFrames.from_frames([transFrms, moveFrms, lineFrms, statFrms])
 postRst.add(postFrms, i, j)
-# postFrms[-1].show()
 
 # postFrms[-1].show()
 
@@ -925,7 +944,8 @@ for angle in ['tp', 'lo', 'hi']:
 script_line =   """
                     Consider now a serve DOWN THE MIDDLE from the server's forehand side.
                 """
-rastFrms = myRst.render()
+rastFrm = myRst.render()[0]
+rastFrms = BGRFrames.from_frame(rastFrm, STATIC_FRAMES)
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 all_frames.append(rastFrms)
 script_lines.append(script_line)
@@ -969,7 +989,7 @@ all_frames.append(rastFrms)
 script_lines.append(script_line)
 
 zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']))
-script_line = "On the other hand, the model still recommends to play the low chip cross-court, to the returner's forehand."
+script_line = "On the other hand, the model still recommends to play the low chip cross-court to the forehand."
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
 myRst.add(myFrms, i, j)
 rastFrms = myRst.render()
@@ -1085,7 +1105,8 @@ script_line =   """
                     Up next: a serve down the middle, from the server's BACKHAND side, 
                     that is: the ad side for a right-handed server, or the deuce side for a lefty server
                 """
-rastFrms = myRst.render()
+rastFrm = myRst.render()[0]
+rastFrms = BGRFrames.from_frame(rastFrm, STATIC_FRAMES)
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 all_frames.append(rastFrms)
 script_lines.append(script_line)
@@ -1119,7 +1140,7 @@ script_lines.append(script_line)
 zoneScn = zoneDict['tp']
 script_line =   """
                     Similarly to the forehand-side return down the middle, the backhand-side return down the middle should be played
-                    anywhere from down the line to the returner's feet. 
+                    anywhere from down the line to the server's feet. 
                     However, presumably because now the return lands on the server's FOREHAND side, the model requires greater depth
                     to bring the returner's chances to above 50%.
                 """
@@ -1243,7 +1264,8 @@ for angle in ['tp', 'lo', 'hi']:
 script_line =   """
                     Finally, we have a serve out wide from the server's backhand half of the court.
                 """
-rastFrms = myRst.render()
+rastFrm = myRst.render()[0]
+rastFrms = BGRFrames.from_frame(rastFrm, STATIC_FRAMES)
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 all_frames.append(rastFrms)
 script_lines.append(script_line)
@@ -1303,11 +1325,12 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 all_frames.append(rastFrms)
 script_lines.append(script_line)
 
-zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']))
+zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['hi']).combine(zoneDict['lo']))
 script_line =   """
-                    The high-chip target zone is virtually identical with the low-chip zone and not much smaller, as usual:
-                    though the returner would play himself out of position with the high-chip, the model takes into account
-                    that the high-chip affords the returner with plenty of time to recover to almost anywhere along the baseline, as we saw earleir.
+                    In this isolated case, the high-chip target zone is actually larger than the low-chip zone:
+                    though the returner would play himself out of position going down-the-line, the model takes into account
+                    that the high-chip affords the returner with plenty of time to recover to almost anywhere along the baseline; 
+                    as we saw earlier, this is especially useful on the down-the-line return from out wide.
 
                     Having gone through the four serve cases, let's take a closer look at the target zones. 
                 """
@@ -1379,18 +1402,20 @@ postRst.add(postFrms, i, j)
 
 script_line = ""
 postFrms = postRst.render()
+postFrms = overlay(postFrms, leg3Frm, top_left_point = tlPt)
 all_frames.append(postFrms)
 script_lines.append(script_line)
 
 script_line =   """
                     The flags indicate the highest returner win probability spot within the target zone.
                     Interestingly, though the low chip zones are typically smaller than the topspin target zones, 
-                    their peak probability is higher, indicating that a low chip is higher risk, but also higher reward stategy according to our model, 
-                    as opposed to the topspin return, which allows more room for error, but affords a slightly lower returner advantage beyond 50%.
-                    The high chip return consistently has not only the smallest target zone, but also the lowest peak probability;
+                    their peak probability is higher in three out of four cases, indicating that a low chip is higher risk, but also higher reward stategy according to our model, 
+                    as opposed to the topspin return, which allows for more room for error, but affords a slightly lower returner advantage beyond 50%.
+                    The high-chip return consistently has the lowest peak win probability, and, barring one exception, the smallest target zone;
                     our model therefore would discourage its use. 
                 """
 statFrms_post = BGRFrames.from_frame(postFrms[-1], STATIC_FRAMES)
+statFrms_post = overlay(statFrms_post, leg3Frm, top_left_point = tlPt)
 all_frames.append(statFrms_post)
 script_lines.append(script_line)
 
@@ -1590,7 +1615,7 @@ from ATMANpy.auxil.court import top_a, top_b, top_c, top_d
 top_a_3D, top_b_3D, top_c_3D, top_d_3D = Region3D.from_region2D(top_a, z = 0), Region3D.from_region2D(top_b, z = 0), Region3D.from_region2D(top_c, z = 0), Region3D.from_region2D(top_d, z = 0)
 
 regLines3D = [myLn for myReg in [top_a_3D, top_b_3D, top_c_3D, top_d_3D] for myLn in myReg.lineList]
-regLines3D = [myLn.recolor(const.BGR['leafy_green']) for myLn in regLines3D]
+regLines3D = [myLn.recolor(const.BGR['leafy_green']).resize(0.5) for myLn in regLines3D]
 
 script_line = ""
 abcd_params = {'color': const.BGR['leafy_green'], 'size': 2, 'horizontal_offset': 25}
@@ -1630,8 +1655,8 @@ from ATMANpy.types.Shapes3D import Lines3D
 srvLn3D = Line3D.from_line2D(srvLn, z = 1)
 lftLn3D = Line3D.from_line2D(lftLn, z = 1)
 
-srvReg3D = Region3D.from_line3D(srvLn3D, width = 2, dim = 'y')
-lftReg3D = Region3D.from_line3D(lftLn3D, width = 2, dim = 'x')
+srvReg3D = Region3D.from_line3D(srvLn3D, width = 0.5, dim = 'y')
+lftReg3D = Region3D.from_line3D(lftLn3D, width = 0.5, dim = 'x')
 courtScn_subset = Scene([srvReg3D, lftReg3D])
 
 someLn3D = regLines3D[0]
@@ -1675,8 +1700,10 @@ from ATMANpy.types.Overlays import Graph, LineChart, ScatterChart
 tops_rets = chip_ret_winFrm[False].values.tolist()
 chip_rets = chip_ret_winFrm[True].values.tolist()
 
-topsChart = LineChart([0.5, 1.5, 2.5, 3.5], tops_rets, color = TOPS_COLOR, annotate_line_heights = True, annotate_line_heights_where = 'above')
-chipChart = LineChart([0.5, 1.5, 2.5, 3.5], chip_rets, color = CHIP_LO_COLOR, annotate_line_heights = True, annotate_line_heights_where = 'below')
+topsChart = LineChart([0.5, 1.5, 2.5, 3.5], tops_rets, color = TOPS_COLOR, thickness = 0.5,
+                        annotate_line_heights = True, annotate_line_heights_where = 'above')
+chipChart = LineChart([0.5, 1.5, 2.5, 3.5], chip_rets, color = CHIP_LO_COLOR, thickness = 0.5,
+                        annotate_line_heights = True, annotate_line_heights_where = 'below')
 
 myGraph1 = Graph([topsChart, chipChart], cam = topCam, dimensions = (1920, 1080), make_default_x_labels = False,
                 y_label_format = '>5.0%', y_label_dist = 14, offset = 0.38, header_text = "", header_height = 0, 
@@ -1688,8 +1715,10 @@ myGraph1 = Graph([topsChart, chipChart], cam = topCam, dimensions = (1920, 1080)
 tops_rets = foreFrm[False].values.tolist()
 chip_rets = foreFrm[True].values.tolist()
 
-topsChart = LineChart([0.5, 1.5, 2.5, 3.5], tops_rets, color = TOPS_COLOR, annotate_line_heights = True, annotate_line_heights_where = 'above')
-chipChart = LineChart([0.5, 1.5, 2.5, 3.5], chip_rets, color = CHIP_LO_COLOR, annotate_line_heights = True, annotate_line_heights_where = 'below')
+topsChart = LineChart([0.5, 1.5, 2.5, 3.5], tops_rets, color = TOPS_COLOR, thickness = 0.5,
+                      annotate_line_heights = True, annotate_line_heights_where = 'above')
+chipChart = LineChart([0.5, 1.5, 2.5, 3.5], chip_rets, color = CHIP_LO_COLOR, thickness = 0.5,
+                      annotate_line_heights = True, annotate_line_heights_where = 'below')
 
 myGraph2 = Graph([topsChart, chipChart], cam = topCam, dimensions = (1920, 1080), make_default_x_labels = False,
                 y_label_format = '>5.0%', y_label_dist = 14, offset = 0.38, header_text = "", header_height = 0, 
@@ -1708,8 +1737,10 @@ back_rets_extra = [back_rets_extra_val, *back_rets[2:]]
 back_color = const.BGR['minty_green']
 fore_color = const.BGR['rose_orange']
 
-backChart = LineChart([2, 2.5, 3.5], back_rets_extra, color = back_color, annotate_line_heights = True, annotate_line_heights_where = 'above')
-foreChart = LineChart([0.5, 1.5, 2.5, 3.5], fore_rets, color = fore_color, annotate_line_heights = True, annotate_line_heights_where = 'below')
+backChart = LineChart([2, 2.5, 3.5], back_rets_extra, color = back_color, thickness = 0.5,
+                        annotate_line_heights = True, annotate_line_heights_where = 'above')
+foreChart = LineChart([0.5, 1.5, 2.5, 3.5], fore_rets, color = fore_color, thickness = 0.5,
+                        annotate_line_heights = True, annotate_line_heights_where = 'below')
 
 myGraph3 = Graph([backChart, foreChart], cam = topCam, dimensions = (1920, 1080), make_default_x_labels = False,
                 y_label_format = '>5.0%', y_label_dist = 14, offset = 0.38, header_text = "", header_height = 0, 
@@ -1724,9 +1755,9 @@ from ATMANpy.types.Overlays import Legend, LegendRow, overlay
 
 # a) chip / tops
 legRows = [LegendRow('... Topspin', TOPS_COLOR, text_size = 2),
-           LegendRow('... Chip', CHIP_LO_COLOR, text_size = 2)]
+           LegendRow('... (Choice) Chip', CHIP_COLOR, text_size = 2)]
 myLeg_chip_tops = Legend(legRows, header_text = 'Return is ...', header_offset = 2.7, header_thickness = 1,
-                            legend_dimensions = (400, 200), resolution = 100, borders = False)
+                            legend_dimensions = (400, 200), resolution = 2000, borders = False)
 legFrm_chip_tops = myLeg_chip_tops.render()
 # legFrm_chip_tops.show()
 
@@ -1734,7 +1765,7 @@ legFrm_chip_tops = myLeg_chip_tops.render()
 legRows = [LegendRow('... Forehand', fore_color, text_size = 2),
            LegendRow('... Backhand', back_color, text_size = 2)]
 myLeg_chip_tops = Legend(legRows, header_text = 'Serve + 1 is ...', header_offset = 2.7, header_thickness = 1,
-                            legend_dimensions = (400, 200), resolution = 100, borders = False)
+                            legend_dimensions = (400, 200), resolution = 2000, borders = False)
 legFrm_fore_back = myLeg_chip_tops.render()
 # legFrm_fore_back.show()
 
@@ -1795,7 +1826,14 @@ jntPts = [*annotated_points, *graph_annPnts]
 
 script_line =   """
                     The data also shows that running around returns to the backhand pays off for the server: 
-                    if a return to the backhand side can be run around, the returner's win% falls from 48% to 42% in area C, and from 50% to 41% in area D.
+                    if a return to the backhand side can be run around, the returner's win% falls from 47% to 43% in area C, and from 50% to 41% in area D.
+                
+                    That running around a return is advantageous for the server should come as no surprise;
+                    the forehand typically allows for more pace and more acute angles than the backhand.
+
+                    To verify this, let's look at 16 cases in which a return to the backhand is run-around.
+                    These 16 cases are chosen to be representative with respect to where the server places them. 
+
                 """
 graphFrms, _ = vs.animate_static(jntLns, static_cam = topCam, **prmDict, 
                                       background_scene = courtScn_subset,
@@ -1804,177 +1842,458 @@ graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
 script_lines.append(script_line)
 all_frames.append(graphFrms)
 
-######### ARROWS ###########
-from ATMANpy.types.ShapesTennis3D import Arrow
 
-def resize_arrow(someArrow, new_length, hat_length = 3, color = const.BGR['strong_blue'], alpha = 1, thickness = 1, gamma = 3 * np.pi / 4, theta = np.pi):
-    mainLn = someArrow[0]
-    vec, size = mainLn.to_vector(), mainLn.length()
-    unit_vec = vec / size
-    new_endPt = mainLn.leftPt + (unit_vec * new_length)
-    return Arrow.make(someArrow.start_point(), new_endPt, hat_length = hat_length, color = color, alpha = alpha, thickness = thickness, gamma = gamma, theta = theta)
+######### EXAMPLES #########
+def get_example_spline_frames(myPnt, third_color = BALL_COLOR, only_last = False, rescale_factor = 3/4, which_regions = ['a']):
+    from ATMANpy.auxil.court import bot_a, bot_b, bot_c, bot_d
+    from ATMANpy.types.Visual3D import Camera
 
-def get_arrows_variable_length(startPt, endPts, length_scales, base_len = 50, color = const.BGR['strong_blue']):
-    longArrows = [Arrow.make(startPt, endPt) for endPt in endPts]
-    resizedArrows = [resize_arrow(longArrow, length_scale * base_len, color = color) for longArrow, length_scale in zip(longArrows, length_scales)]
-    return resizedArrows
+    serve_splines = myPnt[0].feat_spline_cumul(which_endpoint = 'penultimate').values()
+    return_splines = myPnt[1].feat_spline_cumul(which_endpoint = 'penultimate').values()
+    third_splines = myPnt[2].feat_spline_cumul(which_endpoint = 'penultimate').values()
 
-def get_arrows_variable_alpha(startPt, endPts, alphas, base_len = 50, color = const.BGR['strong_blue']):
-    longArrows = [Arrow.make(startPt, endPt) for endPt in endPts]
-    resizedArrows = [resize_arrow(longArrow, base_len, color = color, alpha = alpha) for longArrow, alpha in zip(longArrows, alphas)]
-    return resizedArrows
+    serveScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in serve_splines]
+    returnScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in return_splines]
+    thirdScns = [Scene([spln.recolor(third_color).resize(1.5) for spln in splns if spln is not None]) for splns in third_splines]
+    splnScns = serveScns + returnScns + thirdScns
 
+    myCam = Camera.calibrated_brest_behind()
+
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames
+
+    ### Final Frames
+    regDict = { 'a': Region3D.from_region2D(bot_a, z = 0.25).recolor(const.BGR['soft_yellow']),
+                'b': Region3D.from_region2D(bot_b, z = 0.25).recolor(const.BGR['soft_yellow']),
+                'c': Region3D.from_region2D(bot_c, z = 0.25).recolor(const.BGR['soft_yellow']),
+                'd': Region3D.from_region2D(bot_d, z = 0.25).recolor(const.BGR['soft_yellow'])}
+    lastScn = splnScns[-1]
+    for region in which_regions:
+        lastScn = lastScn.put(regDict[region])
+
+    statFrms, _ = vs.animate_static(lastScn, static_cam = myCam, background_scene = courtScn, num_frames = 1,
+                                    background_resolution = 1, argument_resolution = 1, foreground_resolution = 0.5, argument_luminosity = 1)
+    statFrm = statFrms[0].rescale(rescale_factor)
+
+    if only_last:
+        return statFrm
+
+    ### Movement Frames
+    myFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
+                                    animate_over = realFrms, 
+                                    background_resolution = 1, argument_resolution = 0.5, foreground_resolution = 0.5, argument_luminosity = 1)
+    myFrms = myFrms.rescale(rescale_factor)
+    
+    colFrms = vs.interpolate_frames(myFrms[-1], statFrm, 25)
+    
+    return myFrms.join(colFrms)
+
+def shot_is_where(myPnt, shot_idx, areas):
+    return shot_lands_in_or_near_area(myPnt, shot_idx = shot_idx, num_subdivisions = 4) in areas
 
 ### Where are balls hit given shot area
-grpFrm = subFrm.groupby(['return_area', 'third_fore'])['third_area'].value_counts(normalize = True)
+grpFrm = subFrm.groupby(['return_area', 'third_fore'])['third_area'].value_counts(normalize = False)
 grpFrm = grpFrm.unstack('third_fore')
-print(grpFrm)
-cFrm, dFrm = grpFrm.loc['3'], grpFrm.loc['4']
+back_grpFrm = grpFrm.loc['3'] + grpFrm.loc['4']
+back_grpFrm = back_grpFrm / back_grpFrm.sum()
+print(back_grpFrm)
 
-### Collect the Points
-cPt = (top_c_3D.p1 + top_c_3D.p2) / 2
-dPt = (top_d_3D.p1 + top_d_3D.p2) / 2
+checkPnts = dec_retPnts.filter(lambda myPnt: len(myPnt) > 2).filter(vis_ut.server_is_right_handed).filter('is_top_to_bot')
+checkPnts = checkPnts.filter(shot_is_where, shot_idx = 1, areas = [3, 4])
 
-from ATMANpy.auxil.court import bot_a, bot_b, bot_c, bot_d
-front_px = 220
-aPt2 = Point3D.from_point2D(bot_a.centroid(), z = 0).front(front_px) ### move them up a bit so the arrows spread more
-bPt2 = Point3D.from_point2D(bot_b.centroid(), z = 0).front(front_px)
-cPt2 = Point3D.from_point2D(bot_c.centroid(), z = 0).front(front_px)
-dPt2 = Point3D.from_point2D(bot_d.centroid(), z = 0).front(front_px)
-endPts = [aPt2, bPt2, cPt2, dPt2]
+fore_checkPnts = checkPnts.filter(vis_ut.is_third_shot_fore)
+back_checkPnts = checkPnts.filter(vis_ut.is_third_shot_back)
 
-### Make Arrows
-c_alphaFrm = cFrm / cFrm.max().max()
-d_alphaFrm = dFrm / dFrm.max().max()
-base_len = 35
+fore_a, fore_b, fore_c, fore_d = [  fore_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [1]),
+                                    fore_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [2]),
+                                    fore_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [3]),
+                                    fore_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [4])]
+                                    
+back_a, back_b, back_c, back_d = [  back_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [1]),
+                                    back_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [2]),
+                                    back_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [3]),
+                                    back_checkPnts.filter(shot_is_where, shot_idx = 2, areas = [4])]
 
-# a) forehand
-alphas = c_alphaFrm[True].values 
-fore_ca, fore_cb, fore_cc, fore_cd = get_arrows_variable_alpha(cPt.front(10), endPts, alphas, base_len = base_len, color = fore_color)
+### get representative number of examples
+num_samples = 16
+round_grpFrm = (back_grpFrm * num_samples).round()
+print(round_grpFrm)
 
-alphas = d_alphaFrm[True].values 
-fore_da, fore_db, fore_dc, fore_dd = get_arrows_variable_alpha(dPt.front(10), endPts, alphas, base_len = base_len, color = fore_color)
+# ### run-around forehand
+# for idx, somePnt in enumerate(back_a):
+#     try:
+#         myFrms = get_example_spline_frames(somePnt, third_color = fore_color)
+#     except:
+#         continue
+#     else:
+#         print(idx)
+#         DecapStream(myFrms, 0, 100).show(ms_between_frames = 50)
 
-# b) backhand
-alphas = c_alphaFrm[False].values 
-back_ca, back_cb, back_cc, back_cd = get_arrows_variable_alpha(cPt.back(30), endPts, alphas, base_len = base_len, color = back_color)
+fore_a_cands = [2, 5, 7, 8, 20, 22, 23, 29, 32, 33, 39]
+fore_b_cands = [3]
+fore_c_cands = [1, 3, 4, 7, 10, 11]
+fore_d_cands = [1, 2, 3, 9, 10, 11, 12, 16, 17, 23, 27, 31, 33, 34, 35, 39, 41, 43, 44, 46]
 
-alphas = c_alphaFrm[False].values 
-back_da, back_db, back_dc, back_dd = get_arrows_variable_alpha(dPt.back(30), endPts, alphas, base_len = base_len, color = back_color)
+back_a_cands = [1, 2, 3, 5, 6, 9, 10, 11, 14, 15, 19, 20, 23, 24]
+back_b_cands = [2, 3, 6, 10, 13, 14]
+back_c_cands = [1, 3, 8, 10, 11, 12, 14, 20, 26, 27, 28, 29, 31, 32, 37]
+back_d_cands = [0, 1, 2, 3, 7, 9, 12, 15, 16, 17, 18, 22, 24, 25, 31]
 
-####### CONTINUE ANIMATING ########
+bigRst = FramesRaster(4, 4, borders = 1)
 
-dim_factor = 0.4
-def dim_if_annot(annPnt):
-    if annPnt.text.replace(' ', '') not in ['0%', '100%', 'Ret.Win%']:
-        return annPnt.dim(dim_factor)
-    else:
-        return annPnt
+script_line = ""
+myFrms = get_example_spline_frames(fore_d[12], third_color = fore_color, only_last = False, which_regions = ['d'])
+bigRst.add(myFrms, 0, 0)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 0, 0)
 
+script_line = ""
+myFrms = get_example_spline_frames(fore_d[16], third_color = fore_color, only_last = False, which_regions = ['d'])
+bigRst.add(myFrms, 0, 1)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 0, 1)
 
-script_line =   """         
-                    Running around a chip to the backhand side opens up the forehand inside-out for the server, 
-                    which, for one, targets the returner's backhand, and therefore opens up an advantage for the server; 
+script_line = ""
+myFrms = get_example_spline_frames(fore_d[17], third_color = fore_color, only_last = False, which_regions = ['d'])
+bigRst.add(myFrms, 0, 2)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 0, 2)
+
+script_line =   """
+                    The server's primary option is the forehand inside-out. This shot confers two advantages:
+                    For one, it (usually) targets the returner's backhand, 
                     for two, it goes cross-court, thus allowing a greater margin of error. 
-
-                    Our data shows that on returns that can be run around, the server indeed goes for the cross-court inside-out forehand most frequently:
-                    more than half of all run-around backhands are hit back to the returner's D sector (which is the extreme backhand side).
                 """
-
-showArrows = [  
-                fore_cd, fore_dd
-            ]
-
-jntLns_lo_lum = [l.dim(dim_factor) for l in jntLns]
-lines_and_arrows = [*jntLns_lo_lum, *showArrows]
-
-jntPnts_lo_lum = [dim_if_annot(annPnt) for annPnt in jntPts]
-
-graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDict, 
-                                      background_scene = courtScn_subset,
-                                      annotated_points = jntPnts_lo_lum, num_frames = 25)
-graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
-
-# graphFrms[-1].show()
-
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
 script_lines.append(script_line)
-all_frames.append(graphFrms)
 
+script_line = ""
+myFrm = get_example_spline_frames(fore_d[23], third_color = fore_color, only_last = True, which_regions = ['d'])
+bigRst.add(myFrm, 0, 3)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(fore_d[27], third_color = fore_color, only_last = True, which_regions = ['d'])
+bigRst.add(myFrm, 1, 0)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(fore_d[31], third_color = fore_color, only_last = True, which_regions = ['d'])
+bigRst.add(myFrm, 1, 1)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(fore_d[43], third_color = fore_color, only_last = True, which_regions = ['d'])
+bigRst.add(myFrm, 1, 2)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(fore_d[46], third_color = fore_color, only_last = True, which_regions = ['d'])
+bigRst.add(myFrm, 1, 3)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
 
 script_line =   """
+                    Our data shows that on returns that can be run around, 
+                    the server indeed goes for the cross-court inside-out forehand slightly more than half of the time, 
+                    occupying 8 of our 16 representative cases.
+                """
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
+script_lines.append(script_line)
 
+### Forehand INSIDE-IN
+fore_a_cands = [2, 5, 7, 8, 20, 22, 23, 29, 32, 33, 39]
+
+script_line = ""
+myFrms = get_example_spline_frames(fore_a[22], third_color = fore_color, only_last = False, which_regions = ['a'])
+bigRst.add(myFrms, 2, 0)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 2, 0)
+
+script_line = ""
+myFrms = get_example_spline_frames(fore_a[29], third_color = fore_color, only_last = False, which_regions = ['a'])
+bigRst.add(myFrms, 2, 1)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 2, 1)
+
+script_line = ""
+myFrms = get_example_spline_frames(fore_a[39], third_color = fore_color, only_last = False, which_regions = ['a'])
+bigRst.add(myFrms, 2, 2)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 2, 2)
+
+script_line =   """
                     The second most employed alternative is the more forcing, but higher risk, forehand inside-in, 
-                    which is employed around a third of the time on run-around returns; the lower frequency is shown graphically with greater transparence of the arrows.
+                    on which the server attempts to end the point down-the-line.
                 """
-
-showArrows = [  
-                fore_cd, fore_dd, fore_ca, fore_da
-            ]
-jntLns_lo_lum = [l.dim(dim_factor) for l in jntLns]
-lines_and_arrows = [*jntLns_lo_lum, *showArrows]
-
-jntPnts_lo_lum = [dim_if_annot(annPnt) for annPnt in jntPts]
-
-graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDict, 
-                                      background_scene = courtScn_subset,
-                                      annotated_points = jntPnts_lo_lum, num_frames = 25)
-
-graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
-
-# graphFrms[-1].show()
-
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
 script_lines.append(script_line)
-all_frames.append(graphFrms)
 
+script_line = ""
+myFrm = get_example_spline_frames(fore_a[5], third_color = fore_color, only_last = True, which_regions = ['a'])
+bigRst.add(myFrm, 2, 3)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(fore_a[8], third_color = fore_color, only_last = True, which_regions = ['a'])
+bigRst.add(myFrm, 3, 0)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    The server plays inside-in in 5 of our 16 representative cases.
+                """
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+
+### Forehand DOWN THE MIDDLE
+fore_b_cands = [3]
+fore_c_cands = [1, 3, 4, 7, 10, 11]
+
+script_line = ""
+myFrms = get_example_spline_frames(fore_c[4], third_color = fore_color, only_last = False, which_regions = ['b', 'c'])
+bigRst.add(myFrms, 3, 1)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 3, 1)
+
+script_line = ""
+myFrms = get_example_spline_frames(fore_c[1], third_color = fore_color, only_last = False, which_regions = ['b', 'c'])
+bigRst.add(myFrms, 3, 2)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 3, 2)
+
+script_line = ""
+myFrms = get_example_spline_frames(fore_b[3], third_color = fore_color, only_last = False, which_regions = ['b', 'c'])
+bigRst.add(myFrms, 3, 3)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 3, 3)
+
+script_line =   """
+                    Less than 20% of run-around returns are hit back towards the middle of the court, 
+                    which is arguably the more passive continuation.
+
+                    Now, let's see what happens, placement-wise, if the return to the backhand is not run around.
+                """
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+
+###### BACKHAND ########
+
+print(round_grpFrm)
+back_a_cands = [1, 2, 3, 5, 6, 9, 10, 11, 14, 15, 19, 20, 23, 24]
+back_b_cands = [2, 3, 6, 10, 13, 14]
+back_c_cands = [1, 3, 8, 10, 11, 12, 14, 20, 26, 27, 28, 29, 31, 32, 37]
+back_d_cands = [0, 1, 2, 3, 7, 9, 12, 15, 16, 17, 18, 22, 24, 25, 31]
+
+bigRst = FramesRaster(4, 4, borders = 2)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_d[17], third_color = back_color, only_last = False, which_regions = ['d'])
+bigRst.add(myFrms, 0, 0)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 0, 0)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_d[12], third_color = back_color, only_last = False, which_regions = ['d'])
+bigRst.add(myFrms, 0, 1)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 0, 1)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_d[9], third_color = back_color, only_last = False, which_regions = ['d'])
+bigRst.add(myFrms, 0, 2)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 0, 2)
+
+script_line =   """
+                    Some backhand returns go cross-court...
+                """
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+
+
+script_line = ""
+myFrm = get_example_spline_frames(back_d[0], third_color = back_color, only_last = True, which_regions = ['d'])
+bigRst.add(myFrm, 0, 3)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(back_d[1], third_color = back_color, only_last = True, which_regions = ['d'])
+bigRst.add(myFrm, 1, 0)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    A few others go down the line...
+                """
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_a[10], third_color = back_color, only_last = False, which_regions = ['a'])
+bigRst.add(myFrms, 1, 1)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 1, 1)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_a[15], third_color = back_color, only_last = False, which_regions = ['a'])
+bigRst.add(myFrms, 1, 2)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 1, 2)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_a[20], third_color = back_color, only_last = False, which_regions = ['a'])
+bigRst.add(myFrms, 1, 3)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 1, 3)
+
+script_line = ""
+myFrm = get_example_spline_frames(back_a[1], third_color = back_color, only_last = True, which_regions = ['a'])
+bigRst.add(myFrm, 2, 0)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... but the majority of our representative backhands go rather passively back toward the middle of the court.
+                """
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_b[10], third_color = back_color, only_last = False, which_regions = ['b', 'c'])
+bigRst.add(myFrms, 2, 1)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 2, 1)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_c[10], third_color = back_color, only_last = False, which_regions = ['b', 'c'])
+bigRst.add(myFrms, 2, 2)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 2, 2)
+
+script_line = ""
+myFrms = get_example_spline_frames(back_c[20], third_color = back_color, only_last = False, which_regions = ['b', 'c'])
+bigRst.add(myFrms, 2, 3)
+bigFrms = bigRst.render()
+all_frames.append(bigFrms)
+script_lines.append(script_line)
+bigRst.add(myFrms[-1], 2, 3)
+
+script_line = ""
+myFrm = get_example_spline_frames(back_b[13], third_color = back_color, only_last = True, which_regions = ['b', 'c'])
+bigRst.add(myFrm, 3, 0)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(back_b[14], third_color = back_color, only_last = True, which_regions = ['b', 'c'])
+bigRst.add(myFrm, 3, 1)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(back_c[26], third_color = back_color, only_last = True, which_regions = ['b', 'c'])
+bigRst.add(myFrm, 3, 2)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line = ""
+myFrm = get_example_spline_frames(back_c[28], third_color = back_color, only_last = True, which_regions = ['b', 'c'])
+bigRst.add(myFrm, 3, 3)
+statFrm = bigRst.render()[0]
+statFrms = BGRFrames.from_frame(statFrm, 10)
+all_frames.append(statFrms)
+script_lines.append(script_line)
 
 
 script_line =   """
-                    Only very few run-around returns are hit back towards the middle of the court, which is arguably the more passive continuation.
+                    Putting it all together, we have confirmed that the model has good reason to avoid the backhand-side chip return;
+                    it is unwilling to give the server the possibility of running around the backhand and hitting an inside-out or inside-in forehand.
                 """
-showArrows = [  
-                fore_ca, fore_cb, fore_cc, fore_cd,
-                fore_da, fore_db, fore_dc, fore_dd,
-            ]
-jntLns_lo_lum = [l.dim(dim_factor) for l in jntLns]
-lines_and_arrows = [*jntLns_lo_lum, *showArrows]
-
-jntPnts_lo_lum = [dim_if_annot(annPnt) for annPnt in jntPts]
-
-graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDict, 
-                                      background_scene = courtScn_subset,
-                                      annotated_points = jntPnts_lo_lum, num_frames = 25)
-
-graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
-
-# graphFrms[-1].show()
-
-script_lines.append(script_line)
-all_frames.append(graphFrms)
-
-script_line =   """
-                    On the other hand, if the return is NOT run around, the server will not look for aggressive cross-court or down-the-line angles as often,
-                    opting for a ball down the middle much more frequently. 
-                """
-
-showArrows = [  
-                fore_ca, fore_cb, fore_cc, fore_cd,
-                fore_da, fore_db, fore_dc, fore_dd,
-                back_ca, back_cb, back_cc, back_cd,
-                back_da, back_db, back_dc, back_dd
-            ]
-
-jntLns_lo_lum = [l.dim(dim_factor) for l in jntLns]
-lines_and_arrows = [*jntLns_lo_lum, *showArrows]
-
-jntPnts_lo_lum = [dim_if_annot(annPnt) for annPnt in jntPts]
-
-graphFrms, _ = vs.animate_static(lines_and_arrows, static_cam = topCam, **prmDict, 
-                                      background_scene = courtScn_subset,
-                                      annotated_points = jntPnts_lo_lum, num_frames = 25)
-
-graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
-
-all_frames.append(graphFrms)
+bigFrm = bigRst.render()[0]
+bigFrms = BGRFrames.from_frame(bigFrm, STATIC_FRAMES)
+all_frames.append(bigFrms)
 script_lines.append(script_line)
 
 ####### SUMMARY #######
@@ -1987,14 +2306,19 @@ script_lines.append(script_line)
 ### -> would be very interesting to do this for one specific player, but for this, much more data!
 
 script_line = ""
-itplFrms = vs.interpolate_frames(graphFrms[-1], statFrms_post[-1], STATIC_FRAMES)
+itplFrms = vs.interpolate_frames(bigFrms[-1], statFrms_post[-1], STATIC_FRAMES)
 all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 script_line =   """
                     Ok then, so there it is: for a specific set of players in a sample of twenty tournament matches played, 
-                    the chip return is a viable strategy as long as it is hit low and wide to the forehand of the server.
-                    Naturally, this analysis would be more actionable if it was tailor-made for one specific player, 
+                    the chip return is a viable strategy as long as it is hit low and wide to the forehand of the server, 
+                    with maybe an exception on a serve out wide from the server's backhand side. 
+                    The topspin return is always a solid choice: The heuristic here is to go cross court if pulled out wide, 
+                    and back down the middle if the serve is down the middle. 
+                    Note that these are aggregate results; they relate to the "average" challenger-level player.
+                    Strictly speaking, however, the "average" challenger-level player does not exist:
+                    This analysis would be more actionable if it was tailor-made for one specific player, 
                     but for this, we'd need much more data. However, in principle, the methods and models would be the same,
                     and would allow us to state with some confidence how to return a ball against that specific player on serve.
                 """
@@ -2002,7 +2326,7 @@ script_line =   """
 all_frames.append(statFrms_post)
 script_lines.append(script_line)
 
-show(all_frames)
+# show(all_frames)
 
 from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
 saveFolder = DESCRIPTOR + '_' + str(make_timestamp())

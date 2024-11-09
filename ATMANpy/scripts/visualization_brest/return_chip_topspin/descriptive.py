@@ -347,7 +347,7 @@ if DO_METHOD_SECTION:
     script_lines = []
 
     script_line =   """
-                        We build up our understanding of a good chip by looking at some characteristics of chipped returns in general. 
+                        We build up our understanding of a good chip by looking at some characteristics of topspin and chip returns in general. 
                         First up: placement.
                     """
     blankFrm = BGRFrame(np.zeros((1080, 1920, 3), dtype = 'uint8'))
@@ -386,7 +386,7 @@ if DO_METHOD_SECTION:
     all_frames.append(myFrms)
     script_lines.append(script_line)
 
-    script_line = "As in the case of this example return, we collect the bounce position of all returns in our sample."
+    script_line = ""
     myFrms = BGRFrames.from_frame(myFrms[-1], STATIC_FRAMES)
     all_frames.append(myFrms)
     script_lines.append(script_line)
@@ -414,7 +414,7 @@ if DO_METHOD_SECTION:
     tops_markScn = vs.scatter_markmap(tops_retShots_rectified, one_color = const.BGR['light_brown'])
 
     ####### FADE OUT FLIGHT LINE
-    script_line = ""
+    script_line = "As in the case of this example return, we collect the bounce position of all returns in our sample."
     mark_scenes = [bounceMk for _ in range(TRANSITION_FRAMES)]
     myFrms, animDict = vs.animate_sequence(mark_scenes, start_cam = heatCam, stop_cam = heatCam, cumulative_foreground_transparence = FADE_OUT_FACTOR,
                                         background_scene = courtScn, **animDict, **prmDict)
@@ -581,7 +581,7 @@ if DO_METHOD_SECTION:
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)
 
-    show(all_frames)
+    # show(all_frames)
 
     # b) Save segments
     for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
@@ -716,7 +716,7 @@ if DO_HEATMAP_SECTION:
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)
 
-    show(all_frames)
+    # show(all_frames)
 
     # b) Save segments
     for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
@@ -885,7 +885,7 @@ if DO_LAUNCH_ANGLE_INTRO:
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)
 
-    show(all_frames)
+    # show(all_frames)
 
     # b) Save segments
     for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
@@ -963,7 +963,7 @@ if DO_LAUNCH_ANGLE_DISTRO:
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)
 
-    show(all_frames)
+    # show(all_frames)
 
     # b) Save segments
     for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
@@ -1104,7 +1104,7 @@ if DO_LAUNCH_ANGLE_MODES:
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)
 
-    show(all_frames)
+    # show(all_frames)
 
     # b) Save segments
     for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
@@ -1318,17 +1318,54 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     hi_secs = bestShots[1].get_num_frames_until_bounce() / 25
     hi_hori = bestShots[1].get_post_bounce_horizontal_speed(how = 'corrected_next')
     
+    dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
+
+
     table_data = {  'Apex':                     {lo_name: f'{lo_apx:.1f} m',        hi_name: f'{hi_apx:.1f} m'},
                     'Apex post-bounce':         {lo_name: f'{lo_apx_pst:.1f} m',    hi_name: f'{hi_apx_pst:.1f} m'},
                     'Ground Speed post-bounce': {lo_name: f'{lo_hori:.1f} km/h',    hi_name: f'{hi_hori:.1f} km/h'},
                     'Time until bounce':        {lo_name: f'{lo_secs:.2f} sec',     hi_name: f'{hi_secs:.2f} sec'},}
     
-    dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
+    table_data_0 = {'Apex':                     {lo_name: f'{lo_apx:.1f} m',        hi_name: f'{hi_apx:.1f} m'}}
+
+    table_data_1 = {'Apex':                     {lo_name: f'{lo_apx:.1f} m',        hi_name: f'{hi_apx:.1f} m'},
+                    'Apex post-bounce':         {lo_name: f'{lo_apx_pst:.1f} m',    hi_name: f'{hi_apx_pst:.1f} m'}
+                    }
+    table_data_2 = {'Apex':                     {lo_name: f'{lo_apx:.1f} m',        hi_name: f'{hi_apx:.1f} m'},
+                    'Apex post-bounce':         {lo_name: f'{lo_apx_pst:.1f} m',    hi_name: f'{hi_apx_pst:.1f} m'},
+                    'Ground Speed post-bounce': {lo_name: f'{lo_hori:.1f} km/h',    hi_name: f'{hi_hori:.1f} km/h'}}
+    
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
                   title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
                   skip_after_how_many_symbols = None)
     tabFrm_comp = myTab.render()
+
+    myTab_0 = Table(table_data_0, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
+                  header_text_size = 1, index_text_size = 1, data_text_size = 1, null_rows = 3,
+                  skip_after_how_many_symbols = None)
+    tabFrm_comp_0 = myTab_0.render()
+
+    myTab_1 = Table(table_data_1, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
+                  header_text_size = 1, index_text_size = 1, data_text_size = 1, null_rows = 2,
+                  skip_after_how_many_symbols = None)
+    tabFrm_comp_1 = myTab_1.render()
+    
+    myTab_2 = Table(table_data_2, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
+                  header_text_size = 1, index_text_size = 1, data_text_size = 1, null_rows = 1, ###?
+                  skip_after_how_many_symbols = None)
+    tabFrm_comp_2 = myTab_2.render()
+    
+    tabFrms_blink_0 = vs.blinking(tabFrm_comp_1, tabFrm_comp_0, blinks_per_second = 1.5, duration_in_frames = 300)
+    tabFrms_blink_1 = vs.blinking(tabFrm_comp_2, tabFrm_comp_1, blinks_per_second = 1.5, duration_in_frames = 300)
+    tabFrms_blink_2 = vs.blinking(tabFrm_comp, tabFrm_comp_2, blinks_per_second = 1.5, duration_in_frames = 300)
+
+    # DecapStream(tabFrms_blink_0, 0, 100).show()
+    # DecapStream(tabFrms_blink_1, 0, 100).show()
+    # DecapStream(tabFrms_blink_2, 0, 100).show()
     # tabFrm_comp.show()
 
     script_line =   """
@@ -1336,20 +1373,41 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         If the arcing chip does not bounce close to the server's baseline, its high bounce can allow the server to attack with a flat shot at aggressive angles,
                         whereas a low-flying chip that bounces shallow in the court is not so exploitable: it stays low and is awkward to attack because it has to be played with aggressive topspin
                         or lower margins over the net to dip back down into the returner's half.
-                        On the other hand, the high chip loses more of its speed along the ground, which means that the server has to generate all the power if he wants to attack;
-                        in this sense, a high-arcing chip can neutralize a serve if hit with sufficient depth.
-                        The arcing chip also gives the returner more time to recuperate, which may be especially useful if the serve is hit out wide and carries the returner off the court.
-                        With respect to this latter point, let's visualize the impact of a ball's time in flight on the receiving player's ability to reposition on the court.
                     """
-    myRst = FrameRaster(2, 2)
+    myRst = FramesRaster(2, 2)
     myRst.add(splineFrms_orig[-1], 0, 0)
     myRst.add(splineFrms_best[-1], 1, 1)
     myRst.add(tabFrm_match, 0, 1)
-    myRst.add(tabFrm_comp, 1, 0)
-    tabFrms_match = BGRFrames.from_frame(myRst.render(), STATIC_FRAMES)
+    myRst.add(tabFrms_blink_0, 1, 0)
+    tabFrms_match = myRst.render()
     all_frames.append(tabFrms_match)
     script_lines.append(script_line)
 
+    script_line =   """
+                        On the other hand, the high chip loses more of its speed along the ground, which means that the server has to generate all the power if he wants to attack;
+                        in this sense, a high-arcing chip can neutralize a serve if hit with sufficient depth.
+                    """
+    myRst = FramesRaster(2, 2)
+    myRst.add(tabFrms_blink_1, 1, 0)
+    myRst.add(splineFrms_orig[-1], 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(tabFrm_match, 0, 1)
+    tabFrms_match = myRst.render()
+    all_frames.append(tabFrms_match)
+    script_lines.append(script_line)
+    
+    script_line =   """
+                        The arcing chip also gives the returner more time to recuperate, which may be especially useful if the serve is hit out wide and carries the returner off the court.
+                        With respect to this latter point, let's visualize the impact of a ball's time in flight on the receiving player's ability to reposition on the court.
+                    """
+    myRst = FramesRaster(2, 2)
+    myRst.add(splineFrms_orig[-1], 0, 0)
+    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(tabFrm_match, 0, 1)
+    myRst.add(tabFrms_blink_2, 1, 0)
+    tabFrms_match = myRst.render()
+    all_frames.append(tabFrms_match)
+    script_lines.append(script_line)
 
     ### To say about comparison: The high chip...
         # loses more of its speed along the ground -> server has to generate all the power if he wants to attack
@@ -1498,10 +1556,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     splinerevFrms_orig, _ = vs.animate_sequence(last_spline_scenes_orig, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
                                                 cumulate_argument = False, animate_over = revFrms_orig, previous_foreground_scene = Scene([origMark]),
-                                                **prmDict)
+                                                **prmDict_nolum)
     splinerevFrms_best, _ = vs.animate_sequence(last_spline_scenes_best, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
                                                 cumulate_argument = False, animate_over = revFrms_best, previous_foreground_scene = Scene([bestMark]),
-                                                **prmDict)
+                                                **prmDict_nolum)
 
     script_line = ""
     myRst = FramesRaster(2, 2, borders = None)
@@ -1517,7 +1575,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         roughly to the red X.
                     """
     staticFrms_orig, _ = vs.animate_static(origMark_repos, static_cam = brestCam_resized_half, background_scene = None, animate_over = revFrms_orig[-1], 
-                                            previous_foreground_scene = Scene([origMark]))
+                                            previous_foreground_scene = Scene([origMark]), **prmDict_nolum)
     
     myRst = FramesRaster(2, 2, borders = None)
     myRst.add(staticFrms_orig, 0, 0)
@@ -1741,10 +1799,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_lines.append(script_line)
 
     script_line =   """
-                        To this end, we use the available data to estimate a model that takes into account a variety of factors, 
-                        such as return placement, launch angle, speed, spin and on-court positioning of the returner and server
-                        and calculates the returner's win probability. 
-                        We can then let the model evaluate all kinds of hypothetical returns, and let it calculate their win probability.
+                        To this end, we use the data collected by us to estimate a model that calculates the returner's win probability by taking into account a variety of factors, 
+                        such as return placement, launch angle, speed, spin and on-court positioning of the returner and server.
+                        We can then let the model evaluate not just the return that actually was observed, but also all kinds of hypothetical returns, 
+                        and let it compare their win probability to find the most promising return in any specific situation.
                     """
     all_frames.append(crcFrms_derender)
     script_lines.append(script_line)
@@ -1841,7 +1899,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)
-    show(all_frames)
+    # show(all_frames)
 
     # b) Save segments
     for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):

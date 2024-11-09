@@ -880,7 +880,9 @@ all_frames.append(diagFrms2)
 script_lines.append(script_line)
 
 script_line =   """
-                    A serve that is returned from a deeper position is LESS likely to be a chip; the red arrow indicates that the relationship is inverse. From a deep return position, the returner has more time to set up for a topspin return.
+                    A serve that is returned from a deeper position is LESS likely to be a chip; 
+                    the red arrow indicates that the relationship is inverse. 
+                    From a deep return position, the returner has more time to set up for a topspin return.
                 """
 diagFrm = outDiags[3].render()
 diagRaster.add(diagFrm, 1, 1)
