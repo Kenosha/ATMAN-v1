@@ -159,7 +159,7 @@ class Frames:
         except:
             fall_back_function = np.add
             outArr = Frames.dispatch_arithmetic(self.array, Frames.get_operant(y), fall_back_function)
-        return InstClass(outArr)
+        return InstClass(outArr.astype('uint8'))
     
     def __sub__(self, y):
         InstClass = self.__class__
@@ -172,7 +172,7 @@ class Frames:
                 c = x>y
                 return a*c + b*(~c)
             outArr = fall_back_function(self.array, Frames.get_operant(y))
-        return InstClass(outArr)
+        return InstClass(outArr.astype('uint8'))
     
     def __truediv__(self, y):
         InstClass = self.__class__
@@ -181,18 +181,22 @@ class Frames:
         except:
             fall_back_function = np.divide
             outArr = fall_back_function(self.array, Frames.get_operant(y))
-        return InstClass(outArr)
+        return InstClass(outArr.astype('uint8'))
     
     def __mod__(self, y):
         InstClass = self.__class__
         outArr = np.mod(self.array, Frames.get_operant(y))
-        return InstClass(outArr)
+        return InstClass(outArr.astype('uint8'))
     
     def __mul__(self, y):
-        return Frames(self.array.astype(float) * Frames.get_operant(y))
+        InstClass = self.__class__
+        outArr = self.array.astype(float) * Frames.get_operant(y)
+        return InstClass(outArr.astype('uint8'))
     
     def __pow__(self, y):
-        return Frames(self.array.astype(float) ** y)
+        InstClass = self.__class__
+        outArr = self.array.astype(float) ** y
+        return InstClass(outArr.astype('uint8'))
 
     def __lt__(self, y):
         try:
