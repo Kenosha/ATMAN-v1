@@ -19,9 +19,9 @@ import noisereduce as nr
 
 SAMPLE_RATE = 44100
 PROJECT_NAME = 'return_chip_topspin'
-VIDEOS = ['intro_20241010_175050', 'descriptive_20241011_173710']
+VIDEOS = ['intro_20241103_165952', 'descriptive_20241105_200855', 'inference_20241109_191055']
 
-IDX = 1
+IDX = 2
 VIDEO = VIDEOS[IDX]
 
 ### Paths
@@ -101,7 +101,13 @@ for idx in range(num_segs):
         fs_frm, ls_frm = int(fs_sec * 25), int(ls_sec * 25) + 1
         fs_smp, ls_smp = int(fs_sec * SAMPLE_RATE), int(ls_sec * SAMPLE_RATE) + 1
 
-        cropped_snippet = BGRFrames.from_frame(myFrms[0], repetitions = ls_frm - fs_frm)
+        snippet_len = ls_frm - fs_frm
+        if snippet_len <= myFrms.length():
+            cropped_snippet = myFrms[:snippet_len]
+        else:
+            excessFrms = BGRFrames.from_frame(myFrms[-1], repetitions = snippet_len - myFrms.length())
+            cropped_snippet = myFrms.join(excessFrms)
+
         cropped_waveform = waveform[fs_smp:ls_smp]
 
     ### save cropped video
