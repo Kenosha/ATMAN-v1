@@ -1064,12 +1064,15 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
         return frmRst
 
     def reset_size(self):
+        max_len = 1
         for row_frms in self.raster:
             for frms in row_frms:
                 if frms is None:
                     continue
-                if frms.length() > self.length:
-                    self.length = frms.length()
+                if frms.length() > max_len:
+                    max_len = frms.length()
+
+        self.length = max_len
 
     def add(self, someFrms, row, col,
             set_size = False): ### added element overwrites the size
