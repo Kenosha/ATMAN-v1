@@ -60,10 +60,10 @@ def amplitude_envelope(signal, frame_size, hop_length, sr) -> pd.Series:
 
 
 ### calculate how much time the text ought to be on stream
-def time_needed(script_line, words_per_minute = 100, pause_after_period = 1):
+def time_needed(script_line, words_per_minute = 100, pause_after_period = 1, min_seconds = 10):
     sentences = script_line.split('\n')
     pause_time = len(sentences) * pause_after_period
 
     words = script_line.split(' ')
     speak_time = len(words) / words_per_minute * 60
-    return speak_time + pause_time
+    return max(min_seconds, speak_time + pause_time)
