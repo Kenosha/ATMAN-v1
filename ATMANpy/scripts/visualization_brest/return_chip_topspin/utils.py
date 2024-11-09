@@ -123,7 +123,7 @@ def is_third_shot_back(myPnt):
     except IndexError:
         return None
     else:
-        return thirdShot.is_fore()
+        return thirdShot.is_back()
 
 def is_return_bounce_not_none(myPnt):
     x, y = myPnt.get_return().get_first_bounce_position()
