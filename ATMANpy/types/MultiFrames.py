@@ -421,7 +421,11 @@ class Frames:
 
         return framesType(targetArr, name = self.name)
 
-    def pad(self, to_height = None, to_width = None):
+    def pad(self, to_height = None, to_width = None, height_how = 'center', width_how = 'center'):
+        ### height_how: center, up, down; width_how: center, left, right.
+        assert height_how in ['center', 'up', 'down']
+        assert width_how in ['center', 'left', 'right']
+
         framesType = self.__class__
         
         if to_height is None:
@@ -433,17 +437,31 @@ class Frames:
         wdiff = to_width - self.cols()
     
         if hdiff > 0:
-            hdiv, hmod = hdiff // 2, hdiff % 2
-            top_add = hdiv
-            bot_add = hdiv + hmod
+            if height_how == 'center':
+                hdiv, hmod = hdiff // 2, hdiff % 2
+                top_add = hdiv
+                bot_add = hdiv + hmod
+            elif height_how == 'up':
+                top_add = 0
+                bot_add = hdiff
+            elif height_how == 'down':
+                top_add = hdiff
+                bot_add = 0
         else:
             top_add = 0
             bot_add = 0
         
         if wdiff > 0:
-            wdiv, wmod = wdiff // 2, wdiff % 2
-            left_add = wdiv
-            right_add = wdiv + wmod
+            if width_how == 'center':
+                wdiv, wmod = wdiff // 2, wdiff % 2
+                left_add = wdiv
+                right_add = wdiv + wmod
+            elif width_how == 'left':
+                left_add = 0
+                right_add = wdiff
+            elif width_how == 'right':
+                left_add = wdiff
+                right_add = 0
         else:
             left_add = 0
             right_add = 0

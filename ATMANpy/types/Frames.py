@@ -386,26 +386,44 @@ class Frame:
         
         return InstClass(resArr.astype('uint8'), name = self.name)
     
-    def pad(self, to_height = None, to_width = None):
+    def pad(self, to_height = None, to_width = None, height_how = 'center', width_how = 'center'):
+        ### height_how: center, up, down; width_how: center, left, right.
+        assert height_how in ['center', 'up', 'down']
+        assert width_how in ['center', 'left', 'right']
+
         InstClass = self.__class__
         self_copy = self.array.copy()
         
         if to_height is None:
-            to_height = self.rows()
+            to_height = self.rows
         if to_width is None:
-            to_width = self.cols()
+            to_width = self.cols
             
         hdiff = to_height - self.rows
         wdiff = to_width - self.cols
     
-        hdiv, hmod = hdiff // 2, hdiff % 2
-        top_add = hdiv
-        bot_add = hdiv + hmod
-        
-        wdiv, wmod = wdiff // 2, wdiff % 2
-        left_add = wdiv
-        right_add = wdiv + wmod
-        
+        if height_how == 'center':
+            hdiv, hmod = hdiff // 2, hdiff % 2
+            top_add = hdiv
+            bot_add = hdiv + hmod
+        elif height_how == 'up':
+            top_add = 0
+            bot_add = hdiff
+        elif height_how == 'down':
+            top_add = hdiff
+            bot_add = 0
+
+        if width_how == 'center':
+            wdiv, wmod = wdiff // 2, wdiff % 2
+            left_add = wdiv
+            right_add = wdiv + wmod
+        elif width_how == 'left':
+            left_add = 0
+            right_add = wdiff
+        elif width_how == 'right':
+            left_add = wdiff
+            right_add = 0
+
         outArr = cv.copyMakeBorder(self_copy, top_add, bot_add, left_add, right_add, cv.BORDER_CONSTANT, value = 0)
         
         return InstClass(outArr, name = self.name)
