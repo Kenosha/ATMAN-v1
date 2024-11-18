@@ -1063,6 +1063,9 @@ class ConstFeatures(ConstFeaturesBase):
     def __repr__(self):
         if self.is_empty():
             return 'ConstFeatures()'
+        elif self.frameList is None:
+            features = self.get_features()
+            return f'ConstFeatures({features})'
         else:
             features = self.get_features()
             frames = self.get_frames()
