@@ -100,6 +100,9 @@ class LineChart:
     def get_highest_value(self):
         return max(self.ys)
     
+    def get_lowest_value(self):
+        return min(self.ys)
+    
 class ScatterChart(LineChart):
     pass ### for the moment, ScatterChart is essentially a boolean on LineChart saying: scatter, don't draw lines.
 
@@ -133,6 +136,9 @@ class BarChart:
     
     def get_highest_value(self):
         return max(self.ys)
+    
+    def get_lowest_value(self):
+        return min(self.ys)
 
 class Graph:
     def __init__(self, charts, 
@@ -190,17 +196,23 @@ class Graph:
         self.headerReg = headerReg
         self.otherReg = otherReg
 
+        self.renorm_axes()
+
         ### Graph Axes
         graphReg = otherReg.rescale(1 - offset)
         x_axis, y_axis = graphReg['Bottom'], graphReg['Left']
+        self.x_len = x_axis.length()
+        self.y_len = y_axis.length()
+
+        # shift x_axis up if y_axis has negative values
+        share_above = min((self.max_y - 0) / (self.max_y - self.min_y), 1)
+        share_below = 1 - share_above
+        x_axis = x_axis.front(share_below * self.y_len)
+
         self.x_axis = x_axis.recolor(color)
         self.y_axis = y_axis.recolor(color)
 
         self.x_orig, self.y_orig, _ = x_axis.leftPt.coords
-        self.x_len = x_axis.length()
-        self.y_len = y_axis.length()
-
-        self.renorm_axes()
 
     def renorm_axes(self):
         if len(self.charts) == 0:
@@ -212,10 +224,11 @@ class Graph:
             lfmosts = [chart.get_leftmost_value() for chart in self.charts]
             rtmosts = [chart.get_rightmost_value() for chart in self.charts]
             himosts = [chart.get_highest_value() for chart in self.charts]
+            lomosts = [chart.get_lowest_value() for chart in self.charts]
 
             min_x = 0 #min(0, min(lfmosts))    ### never start an x after 0
             max_x = max(rtmosts)
-            min_y = 0                       ### always start y on 0
+            min_y = min(lomosts)                 
             max_y = max(himosts)
 
             ### rounding to nearest integer TODO: make more dynamic?
