@@ -116,6 +116,40 @@ class LabelledSpectroData(Dataset):
         
         return spec, label
 
+def waveform_generator(vid, sto, segmenter = 'isRally', yield_frame_indices = True):
+    ### path to match file
+    videoDir = ut.get_folder_struct('video_files')[vid]
+    videoPath = os.path.join(videoDir, 'match.mp4')
+        
+    ### get waveform
+    metadata = torchaudio.info(videoPath)
+    sample_rate = metadata.sample_rate
+    # print(metadata)
+    samples_per_frame = sample_rate // FPS
+
+    # waveform to mono
+    stereo_waveform, sample_rate = torchaudio.load(videoPath)
+    stereo_waveform = stereo_waveform.numpy()
+    mono_waveform = np.mean(stereo_waveform, axis = 0)
+
+    ### get segmenter 
+    ### TODO: Why do we read this again, and not pass it in?
+    segBF = BoolFeature.from_store(vid, sto, featname = segmenter)
+    segBFs = segBF.filter(segBF).split()
+    
+    for myBF in segBFs:
+        fs, ls = myBF.fs_ls()
+        
+        ### crop waveform
+        fs_sample, _ = first_last_sample_index_in_frame(fs, 0, samples_per_frame)
+        _, ls_sample = first_last_sample_index_in_frame(ls, 0, samples_per_frame)
+        sf_form = mono_waveform[fs_sample:ls_sample]
+
+        if yield_frame_indices:
+            yield sf_form, fs, ls
+        else:    
+            yield sf_form, fs_sample, ls_sample
+
 def point_sound_generator(vid, sto, segmenter = 'isRally', 
                           mel_bands = 128, hop_length = 512, window_length = 1024,
                           to_db = True, norm_value = 50, db_reference = 1,
