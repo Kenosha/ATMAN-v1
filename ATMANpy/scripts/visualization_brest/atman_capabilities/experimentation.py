@@ -7,12 +7,51 @@ import ATMANpy.scripts.pipeline_brest_tightseg as ppl
 
 from ATMANpy.types.Streams import Stream, CachedStream, NCStream, DecapStream, StreamList, MulStream, RandStream, StillStream
 from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, BoolFeatures, SFList, ConstFeature, ConstFeatures
-from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames
 
-from ATMANpy.types.Overlays import overlay
+from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames
+from ATMANpy.types.Overlays import FramesRaster, overlay, frame_cascade
+from ATMANpy.types.Points import Point2D
+
+from ATMANpy.types.Abstract import Points, Shots, read_in_data_table, read_in_placeholder_table
 
 import ATMANpy.funcs.feature_funcs as ff
 import ATMANpy.funcs.sf_apply_funcs as sa
+
+import ATMANpy.auxil.constants as const
+
+###### FUNCTIONS #####
+def map_label_to_explicit(label):
+    hand_map = {'lf': 'Left-Handed',
+                'rt': 'Right-Handed'}
+    side_map = {'fh': 'Forehand',
+                'bh': 'Backhand'}
+    shot_map = {'gs': 'Groundstroke',
+                'ov': 'Overhead',
+                'vl': 'Volley'}
+    spin_map = {'ts': 'Topspin',
+                'sf': 'Slice'}
+
+    player, what = label.split('_', 1)
+
+    if what == 'oth':
+        return 'Other'
+    
+    side, rest = what.split('_', 1)
+
+    if side == 'srv':
+        handStr = hand_map[rest]
+        return f'Serve ({handStr})'
+
+    hand, spin, shot = rest.split('_')
+
+    sideStr = side_map[side]
+    shotStr = shot_map[shot]
+    spinStr = spin_map[spin]
+    handStr = hand_map[hand]
+
+    return f'{sideStr} {spinStr} {shotStr} ({handStr})'
+    
+#######
 
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
@@ -25,12 +64,23 @@ for idx, vid in enumerate(avail_vids):
 idx = 12
 conf = cnf_mod.get_conf(avail_vids[idx])
 
+### GET ABSTRACT POINT REPRESENTATION 
+dataTable = read_in_data_table(conf, conf_idx = idx)
+nullTable = read_in_placeholder_table(conf, conf_idx = idx)
+
+dataPnts = Points.from_datatable(dataTable, split_by_match = False)
+nullPnts = Points.from_placeholder_table(nullTable)
+
+allPnts = dataPnts.join(nullPnts).sort()
+
 SHOW = False
 DO_LINES = False
 DO_PLAYERS = False
 DO_BALL = False
 DO_SOUND = False
-DO_VISION = True
+DO_VISION = False
+DO_SEGMENTATION = False
+DO_SEGMENTATION_FINE = True
 
 ################################
 ######### COURT LINES ##########
@@ -46,7 +96,9 @@ segBFs = segBF.filter(segBF).split()
 seg_idx = 0
 my_segBF = segBFs[seg_idx]
 
-myStm = Stream.from_SF(my_segBF, cap)
+widen_frames = 30
+
+myStm = Stream.from_SF(my_segBF, cap).widen(widen_frames)
 myDtm = myStm.decap()
 myFrms = myDtm.frames
 
@@ -172,7 +224,6 @@ if DO_SOUND:
     my_spec, fs_spec, ls_spec = next(spec_gen)
     my_spec = my_spec[0]
 
-    import ATMANpy.auxil.constants as const
     import numpy as np
     from ATMANpy.types.Overlays import ScatterChart, LineChart, Graph
     from ATMANpy.types.Visual3D import View
@@ -319,10 +370,6 @@ if DO_SOUND:
 
         start_seconds += (1 / 25)
 
-    from ATMANpy.types.Streams import DecapStream
-    from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames
-    from ATMANpy.types.Overlays import FramesRaster, overlay
-    from ATMANpy.types.Points import Point2D
 
     ####### MAKE 4 FRAMES -> all these are 1920 // 2, 1080 // 2, we then resize them by a factor.
 
@@ -523,38 +570,7 @@ if DO_VISION:
     # ... but they are!!!!!! strange.
 
     ### SHOW DIMMED FRAME WITH BRIGHT REGIONS
-    def map_label_to_explicit(label):
-        hand_map = {'lf': 'Left-Handed',
-                    'rt': 'Right-Handed'}
-        side_map = {'fh': 'Forehand',
-                    'bh': 'Backhand'}
-        shot_map = {'gs': 'Groundstroke',
-                    'ov': 'Overhead',
-                    'vl': 'Volley'}
-        spin_map = {'ts': 'Topspin',
-                    'sf': 'Slice'}
-
-        player, what = label.split('_', 1)
-
-        if what == 'oth':
-            return 'Other'
-        
-        side, rest = what.split('_', 1)
-
-        if side == 'srv':
-            handStr = hand_map[rest]
-            return f'Serve ({handStr})'
-        
-        hand, spin, shot = rest.split('_')
-
-        sideStr = side_map[side]
-        shotStr = shot_map[shot]
-        spinStr = spin_map[spin]
-        handStr = hand_map[hand]
-
-        return f'{sideStr} {spinStr} {shotStr} ({handStr})'
-
-
+   
     scale_factor = 3
     dim_factor = 0.5
     p_threshold = 0.1
@@ -619,6 +635,7 @@ if DO_VISION:
     regFrms = BGRFrames.from_single_frames(frameList)
     DecapStream(regFrms, 0, 100).show(ms_between_frames = 100)
 
+if DO_SEGMENTATION:
     ### SEGMENTATION ###
         # in general, segment often during the pipeline, so the recognition system can be parallelized
             ### -> work on many "segments" (not necessarily points) at the same time!
@@ -628,7 +645,96 @@ if DO_VISION:
             # then finally with the visual info: every point begins with a serve, which is visually detected.
         # however, the system pipeline is highly modular and can be adapted to the realities of the video data used, 
         # so any subtask, not just segmentation but also recognition, can be changed, adapted, removed or added.
+    myRst = FramesRaster(3, 3)
     
+    def speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100):
+        if segFrms.length() <= ramp_up_frames * 2:
+            return segFrms
+        else:
+            segFrms_start = segFrms[:ramp_up_frames]
+            segFrms_middle = segFrms[ramp_up_frames:-ramp_up_frames]
+            segFrms_end = segFrms[-ramp_up_frames:]
+
+            if segFrms_middle.length() <= min_frames_for_speedup:
+                return segFrms
+            elif min_frames_for_speedup < segFrms_middle.length() <= min_frames_for_speedup + 2 * ramp_up_frames:
+                segFrms_middle = segFrms_middle[::2]
+                return segFrms_start.join(segFrms_middle).join(segFrms_end)
+            else: ### in this case, two levels of speedup
+                segFrms_middle_start = segFrms_middle[:ramp_up_frames:2]
+                segFrms_middle_middle = segFrms_middle[ramp_up_frames:-ramp_up_frames:3]
+                segFrms_middle_end = segFrms_middle[-ramp_up_frames::2]
+                return segFrms_start.join(segFrms_middle_start).join(segFrms_middle_middle).join(segFrms_middle_end).join(segFrms_end)
+
+    frmsList = []
+    for idx in range(9):
+        segStm = Stream.from_SF(segBFs[idx], cap).widen(widen_frames)
+        segFrms = segStm.decap().frames
+        frmsList.append(segFrms)
+
+    # our example exchange - a short rally.
+    segFrms = frmsList[0]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100) ### returns itself!
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 0, 0)
+
+    # next up: a longer rally ## -> have to speed it up a bit...
+    segFrms = frmsList[1]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 0, 1)
+    
+    # another long rally
+    segFrms = frmsList[2]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 0, 2)
+    
+    # a let on first serve. 
+    # Is this auto-recognized? i dont think so. in that case: say it! emphasize that:
+        # 1) the let is flagged (because we see three serves in a row, or we see a serve in that is not an ace.)
+        # 2) the let is manually checked after flagging. the manual checking script is simple to integrate into workflow, and requires very few actual checks.
+    allPnts[3][0].get_hit_event_info() ### -> this is registered as a Let!
+    segFrms = frmsList[3]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 1, 0)
+
+    # first serve re-do
+    segFrms = frmsList[4]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 1, 1)
+
+    # second serve
+    segFrms = frmsList[5]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 1, 2)
+
+    # a rally -> widen!
+    segFrms = frmsList[6]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 2, 0)
+
+    # first serve fault
+    segFrms = frmsList[7]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 2, 1)
+    
+    # a return error.
+    segFrms = frmsList[8]
+    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    DecapStream(segFrms, 0, 100).show()
+    myRst.add(segFrms, 2, 2)
+
+    ### put it all together
+    rstFrms = myRst.render()
+    DecapStream(rstFrms, 0, 100).show()
+
+if DO_SEGMENTATION_FINE:
     ### SEGMENTATION INTO SHOTS ###
     # -> once we have a point, we must segment the point into shots, that comprise it.
     # -> to this end, we combine the timing information of the sound and the vision to detect when a ball has been hit.
@@ -637,6 +743,87 @@ if DO_VISION:
     ### -> this way, we combine all available information in a consistent manner. 
     # The modular nature of the pipeline easily allows for adding or changing sources of truth,
     # which can be flexibly combined (using the viterbi algorithm.)
+    dim_factor = 0.5
+
+    P = ConstFeature.from_store(vid, sto, featname = 'P').feature
+    myPnt = allPnts[0]
+
+    sht0, sht1, sht2 = myPnt[0], myPnt[1], myPnt[2]
+    stm0, stm1, stm2 = sht0.stream(cap), sht1.stream(cap), sht2.stream(cap)
+    
+    frms0, frms1, frms2 = stm0.decap().frames.rescale(1.5), stm1.decap().frames.rescale(1.5), stm2.decap().frames.rescale(1.5)
+    frms0_ls, frms1_ls, frms2_ls = BGRFrames.from_frame(frms0[-1].dim(dim_factor), 25), BGRFrames.from_frame(frms1[-1].dim(dim_factor), 25), BGRFrames.from_frame(frms2[-1].dim(dim_factor), 25)
+
+    from ATMANpy.types.Overlays import Table
+
+    def map_desc(desc):
+        side_map = {'fh': 'Forehand',
+                    'bh': 'Backhand'}
+        spin_map = {'ts': 'Topspin',
+                    'sf': 'Slice'}
+
+        if desc == 'srv':
+            return 'Serve'
+        elif desc == 'ovh':
+            return 'Overhead'
+        else:
+            side, spin = desc.split('_')
+            sideStr = side_map[side]
+            spinStr = spin_map[spin]
+            return f'{sideStr} {spinStr}'
+
+    def get_shot_string(myShot):
+        if myShot.is_serve():
+            dirStr = 'Ad' if myShot.is_serve_ad() else 'Deuce'
+            kindStr = 'Serve (Let)' if myShot.is_let() else 'Serve'
+            whichStr = 'First' if myShot.is_first_serve() else 'Second'
+            return f'{whichStr} {kindStr} ({dirStr})'
+        else:
+            descStr = map_desc(myShot.get_hit_event_descriptor())
+            return descStr
+
+    str0, str1, str2 = get_shot_string(sht0), get_shot_string(sht1), get_shot_string(sht2)
+
+    tab_params = {'index_offset': 2, 'index_col_width': 0.5, 'dimensions': (960, 540), 'skeleton_shrinkage': 0.2}
+
+    tab_data0 = {'1st Shot': {'Description': str0}}
+    tab_data1 = {'1st Shot': {'Description': str0}, '2nd Shot': {'Description': str1}}
+    tab_data2 = {'1st Shot': {'Description': str0}, '2nd Shot': {'Description': str1}, '3rd Shot': {'Description': str2}}
+    
+    tab0 = Table(tab_data0, **tab_params, null_rows = 2)
+    tab1 = Table(tab_data1, **tab_params, null_rows = 1)
+    tab2 = Table(tab_data2, **tab_params, null_rows = 0)
+
+    tab_frm0 = tab0.render()
+    tab_frm1 = tab1.render()
+    tab_frm2 = tab2.render()
+    
+    tab_frms0 = BGRFrames.from_frame(tab_frm0, 25)
+    tab_frms1 = BGRFrames.from_frame(tab_frm1, 25)
+    tab_frms2 = BGRFrames.from_frame(tab_frm2, 25)
+
+    tab_frm0.show()
+    tab_frm1.show()
+    tab_frm2.show()
+
+    myRst = FramesRaster(2, 2)
+
+    myRst.add(frms0, 0, 0)
+    myRst.add(tab_frms0, 1, 1)
+    rstFrms0 = myRst.render()
+    DecapStream(rstFrms0, 0, 100).show()
+
+    myRst.add(frms0_ls, 0, 0)
+    myRst.add(frms1, 0, 1)
+    myRst.add(tab_frms1, 1, 1)
+    rstFrms1 = myRst.render()
+    DecapStream(rstFrms1, 0, 100).show()
+
+    myRst.add(frms1_ls, 0, 1)
+    myRst.add(frms2, 1, 0)
+    myRst.add(tab_frms2, 1, 1)
+    rstFrms2 = myRst.render()
+    DecapStream(rstFrms2, 0, 100).show()
 
     ### BALL TRAJECTORY ### 
     # Once segmentation into Shots within a point has been established, it remains to calculate the trajectory of the ball.
@@ -663,3 +850,24 @@ if DO_VISION:
         # the likeliest ball trajectory is very often very close to the real trajectory.
         # an advantage of the physics matching is that we get, without extra work as a by-product, the 
         # initial launch angle, speed and spin of the ball.
+
+    myPnt.stream_ball(P, cap = cap).show()
+
+    ### get ball splines
+    
+    ball_color = const.BGR['ball_yellow']
+
+    splns0 = myPnt[0].feat_spline_cumul().values()
+    splns1 = myPnt[1].feat_spline_cumul().values()
+    splns2 = myPnt[2].feat_spline_cumul().values()
+
+    from ATMANpy.types.Visual3D import Camera, Scene
+    myCam = Camera.calibrated_brest_behind()    
+
+    scns0 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns0]
+    scns1 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns1]
+    scns2 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns2]
+    
+    from ATMANpy.funcs.vis_funcs import animate_sequence
+
+    animate_sequence(scns0, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = frms0)

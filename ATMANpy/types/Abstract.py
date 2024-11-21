@@ -1869,33 +1869,38 @@ for methodStr in dir(Shot):
         if not methodStr in dir(Shots): ### do not overwrite
             __make_method_is(Shots, methodStr)
 
+#####################################
+####### DATA READ-IN FUNCTIONS ######
+#####################################
+def read_in_data_table(conf, conf_idx = 0):
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    dataTable = ff.read_feature_frame('dataTable', vid, sto, keep_only = 'last')
+    dataTable.index = pd.MultiIndex.from_product([[conf_idx], dataTable.index])
+    dataTable.index.names = ['match_idx', 'frame_num']
+    return dataTable
+
+def read_in_placeholder_table(conf, conf_idx = 0):
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    placeTable = ff.read_feature_frame('placeTable', vid, sto, keep_only = 'last')
+    placeTable['match_idx'] = conf_idx
+    return placeTable
+
 def read_in_data_tables(confs):
     ### READ IN DATA
     tables = []
     for conf_idx, conf in enumerate(confs):
-        vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
-    
-        dataTable = ff.read_feature_frame('dataTable', vid, sto, keep_only = 'last')
-        dataTable.index = pd.MultiIndex.from_product([[conf_idx], dataTable.index])
-        dataTable.index.names = ['match_idx', 'frame_num']
-        
+        dataTable = read_in_data_table(conf, conf_idx = conf_idx)
         tables.append(dataTable)
-
     allTable = pd.concat(tables)    
     return allTable
 
-def read_in_all_placeholder_tables(confs):
+def read_in_placeholder_tables(confs):
     tables = []
     for conf_idx, conf in enumerate(confs):
-        vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
-    
-        placeTable = ff.read_feature_frame('placeTable', vid, sto, keep_only = 'last')
-        placeTable['match_idx'] = conf_idx
+        placeTable = read_in_placeholder_table(conf, conf_idx = conf_idx)
         tables.append(placeTable)
-    
     allTable = pd.concat(tables)    
     return allTable
-
 
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
@@ -1911,7 +1916,7 @@ if __name__ == '__main__':
     confs = [cnf_mod.get_conf(vid) for vid in avail_vids]
 
     dataTable = read_in_data_tables(confs)
-    placeTable = read_in_all_placeholder_tables(confs)
+    placeTable = read_in_placeholder_tables(confs)
 
     dataPoints = Points.from_datatable(dataTable)
     placePoints = Points.from_placeholder_table(placeTable)
