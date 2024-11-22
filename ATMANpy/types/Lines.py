@@ -58,6 +58,12 @@ class Line:
         rightPt = Point2D((x2, y2))
         return Line(leftPt, rightPt, name = lnSer.name)
     
+    ### ARITHMETIC ###
+    def __mul__(self, y):
+        InstClass = self.__class__
+        new_leftPt, new_rightPt = self.leftPt * y, self.rightPt * y
+        return InstClass(new_leftPt, new_rightPt, name = self.name)
+
     ### METHODS ### 
     def append(self, other):
         try:
@@ -280,6 +286,12 @@ class Lines:
         for idx, rowSer in lnFrm.iterrows():
             outList.append(Line.from_series(rowSer))
         return Lines(outList)
+    
+    ### ARITHMETIC ###
+    def __mul__(self, y):
+        InstClass = self.__class__
+        new_lineList = [aLn * y for aLn in self.lineList]
+        return InstClass(new_lineList, name = self.name)
 
     def __iter__(self):
         return iter(self.lineList)
