@@ -38,7 +38,8 @@ def make_region_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
 
 def make_text_in(subReg, data_or_string, target_len = None,
                  size = 1, thickness = 1, color = const.BGR['leafy_green'], 
-                 horizontal_offset = 0, vertical_offset = 0, skip_after_how_many_symbols = None,
+                 horizontal_offset = 0, vertical_offset = 0, automatic_vertical_offset_text_line_height = None,
+                 skip_after_how_many_symbols = None,
                  number_format = '.2f'):
     textStr = maybe_data_to_text(data_or_string, number_format, target_len = target_len)
 
@@ -67,8 +68,22 @@ def make_text_in(subReg, data_or_string, target_len = None,
     else:
         splitStr = textStr
 
+    if automatic_vertical_offset_text_line_height is not None:
+        ### automatic vertical offsetter -> use line count to center the text at the middle
+        # -> one parameter: text_line_height_3D -> the height of a text line in the 3D space.
+        # important note: by default, the text is rendered at the middle of the boxes height.
+            # the text is rendered so that the bottom of the text lines up with this height, 
+            # so that the text looks offset upwards, towards the top of the region.
+            # --> offset a one-liner down by half the line width!
+            # --> offset a two-liner down by nothing
+            # --> offset a three-liner up by half the line width! etc. 
+            ### -> this assumes that the space between the lines is 0... tenable?
+        line_count = len(splitStr.split('\n'))
+        line_offset_auto = (line_count - 2) / 2 ### -> this is going up! up, with a table in 3D, means 'front' ...
+        vertical_offset_auto = line_offset_auto * automatic_vertical_offset_text_line_height
+        vertical_offset -= vertical_offset_auto ### ... and since the default vertical offset is 'back', we subtract.
+    
     textPt = subReg['Left'].center_point().annotate(splitStr)
-
     textPt = textPt.resize(size).rethicken(thickness).recolor(color)
     textPt = textPt.right(horizontal_offset).back(vertical_offset)
     return textPt
@@ -481,6 +496,7 @@ class Table:
                  title = None, title_size = 2, title_thickness = 1, title_color = const.BGR['leafy_green'],
                  title_horizontal_offset = 0, title_vertical_offset = 0,
                  skeleton_shrinkage = 0, skeleton_horizontal_offset = 0, skeleton_vertical_offset = 0,
+                 automatic_vertical_offset_text_line_height = None, ### supply a number for the 3D line height of a text_size = 1 line.
                  header_offset = 0, index_offset = 0, data_offset = 0,
                  index_col_width = 1, header_row_height = 1,
                  index_line_thickness = 0, header_line_thickness = 0, data_line_thickness = 0,
@@ -551,6 +567,19 @@ class Table:
         self.title_horizontal_offset = title_horizontal_offset
         self.title_vertical_offset = title_vertical_offset
 
+        # auto offsets
+        self.automatic_vertical_offset_text_line_height = automatic_vertical_offset_text_line_height
+        if automatic_vertical_offset_text_line_height is not None:
+            self.title_auto_vert_offset = automatic_vertical_offset_text_line_height * self.title_size
+            self.index_auto_vert_offset = automatic_vertical_offset_text_line_height * self.index_text_size
+            self.header_auto_vert_offset = automatic_vertical_offset_text_line_height * self.header_text_size
+            self.data_auto_vert_offset = automatic_vertical_offset_text_line_height * self.data_text_size
+        else:
+            self.title_auto_vert_offset = None
+            self.index_auto_vert_offset = None
+            self.header_auto_vert_offset = None
+            self.data_auto_vert_offset = None
+
         if title is None:
             self.headerReg = None
         else:
@@ -573,7 +602,8 @@ class Table:
         if self.title is not None:
             textPt = make_text_in(self.headerReg, self.title, 
                                   size = self.title_size, color = self.title_color, thickness = self.title_thickness, 
-                                  horizontal_offset = self.title_horizontal_offset, vertical_offset = self.title_vertical_offset)
+                                  horizontal_offset = self.title_horizontal_offset, vertical_offset = self.title_vertical_offset,
+                                  automatic_vertical_offset_text_line_height = self.title_auto_vert_offset)
             annPnts.append(textPt)
 
         ### render indices:
@@ -582,7 +612,8 @@ class Table:
             textPt = make_text_in(myReg, text, number_format = self.number_format, 
                                   size = self.index_text_size, thickness = self.index_text_thickness, color = self.index_text_color, 
                                   skip_after_how_many_symbols = self.skip_after_how_many_symbols,
-                                  horizontal_offset = self.index_offset)
+                                  horizontal_offset = self.index_offset,
+                                  automatic_vertical_offset_text_line_height = self.index_auto_vert_offset)
             annPnts.append(textPt)
 
         ### render columns:
@@ -591,7 +622,9 @@ class Table:
             textPt = make_text_in(myReg, text, number_format = self.number_format, 
                                   size = self.header_text_size, thickness = self.header_text_thickness, color = self.header_text_color,
                                   skip_after_how_many_symbols = self.skip_after_how_many_symbols,
-                                  horizontal_offset = self.header_offset)
+                                  horizontal_offset = self.header_offset, 
+                                  automatic_vertical_offset_text_line_height = self.header_auto_vert_offset
+                                  )
             annPnts.append(textPt)
 
         ### render data:
@@ -606,7 +639,9 @@ class Table:
                 textPt = make_text_in(myReg, text, number_format = self.number_format, target_len = target_len,
                                       size = self.data_text_size, thickness = self.data_text_thickness, color = self.data_text_color,
                                       skip_after_how_many_symbols = self.skip_after_how_many_symbols,
-                                      horizontal_offset = self.data_offset)
+                                      horizontal_offset = self.data_offset, 
+                                      automatic_vertical_offset_text_line_height = self.data_auto_vert_offset
+                                      )
                 annPnts.append(textPt)
 
         tabView = View.make(self.tabCam, tabScn, resolution = self.resolution, annotatedPoints = annPnts)
