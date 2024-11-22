@@ -1637,6 +1637,7 @@ class Point(Shots):
 class NullPoint:
     ### A Point for which we have no trajectory data, but for which we know at least that it exists (and maybe other stuff)
     infoDict: dict ### what we know about the NullPoint (score, player names, etc)
+    ### TODO: add start and stop frame to infoDict!
 
     @staticmethod
     def from_placeholder_series(placeSer):
