@@ -9,7 +9,7 @@ from ATMANpy.types.Streams import Stream, CachedStream, NCStream, DecapStream, S
 from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, BoolFeatures, SFList, ConstFeature, ConstFeatures
 
 from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames
-from ATMANpy.types.Overlays import FramesRaster, overlay, frame_cascade
+from ATMANpy.types.Overlays import Table, FramesRaster, overlay, frame_cascade
 from ATMANpy.types.Points import Point2D
 
 from ATMANpy.types.Abstract import Points, Shots, read_in_data_table, read_in_placeholder_table
@@ -50,7 +50,32 @@ def map_label_to_explicit(label):
     handStr = hand_map[hand]
 
     return f'{sideStr} {spinStr} {shotStr} ({handStr})'
-    
+
+def map_desc(desc):
+    side_map = {'fh': 'Forehand',
+                'bh': 'Backhand'}
+    spin_map = {'ts': 'Topspin',
+                'sf': 'Slice'}
+
+    if desc == 'srv':
+        return 'Serve'
+    elif desc == 'ovh':
+        return 'Overhead'
+    else:
+        side, spin = desc.split('_')
+        sideStr = side_map[side]
+        spinStr = spin_map[spin]
+        return f'{sideStr} {spinStr}'
+
+def get_shot_string(myShot):
+    if myShot.is_serve():
+        dirStr = 'Ad' if myShot.is_serve_ad() else 'Deuce'
+        kindStr = 'Serve (Let)' if myShot.is_let() else 'Serve'
+        whichStr = 'First' if myShot.is_first_serve() else 'Second'
+        return f'{whichStr} {kindStr} ({dirStr})'
+    else:
+        descStr = map_desc(myShot.get_hit_event_descriptor())
+        return descStr
 #######
 
 prm_mod = ppl.parameter_files.default
@@ -81,6 +106,7 @@ DO_SOUND = False
 DO_VISION = False
 DO_SEGMENTATION = False
 DO_SEGMENTATION_FINE = True
+DO_TRAJECTORY = True
 
 ################################
 ######### COURT LINES ##########
@@ -103,6 +129,8 @@ myDtm = myStm.decap()
 myFrms = myDtm.frames
 
 fs, ls = myStm.start_frame, myStm.stop_frame
+
+P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 
 if DO_LINES:
     HSF = ConstFeature.from_store(vid, sto, featname = 'H')
@@ -745,7 +773,6 @@ if DO_SEGMENTATION_FINE:
     # which can be flexibly combined (using the viterbi algorithm.)
     dim_factor = 0.5
 
-    P = ConstFeature.from_store(vid, sto, featname = 'P').feature
     myPnt = allPnts[0]
 
     sht0, sht1, sht2 = myPnt[0], myPnt[1], myPnt[2]
@@ -754,37 +781,13 @@ if DO_SEGMENTATION_FINE:
     frms0, frms1, frms2 = stm0.decap().frames.rescale(1.5), stm1.decap().frames.rescale(1.5), stm2.decap().frames.rescale(1.5)
     frms0_ls, frms1_ls, frms2_ls = BGRFrames.from_frame(frms0[-1].dim(dim_factor), 25), BGRFrames.from_frame(frms1[-1].dim(dim_factor), 25), BGRFrames.from_frame(frms2[-1].dim(dim_factor), 25)
 
-    from ATMANpy.types.Overlays import Table
-
-    def map_desc(desc):
-        side_map = {'fh': 'Forehand',
-                    'bh': 'Backhand'}
-        spin_map = {'ts': 'Topspin',
-                    'sf': 'Slice'}
-
-        if desc == 'srv':
-            return 'Serve'
-        elif desc == 'ovh':
-            return 'Overhead'
-        else:
-            side, spin = desc.split('_')
-            sideStr = side_map[side]
-            spinStr = spin_map[spin]
-            return f'{sideStr} {spinStr}'
-
-    def get_shot_string(myShot):
-        if myShot.is_serve():
-            dirStr = 'Ad' if myShot.is_serve_ad() else 'Deuce'
-            kindStr = 'Serve (Let)' if myShot.is_let() else 'Serve'
-            whichStr = 'First' if myShot.is_first_serve() else 'Second'
-            return f'{whichStr} {kindStr} ({dirStr})'
-        else:
-            descStr = map_desc(myShot.get_hit_event_descriptor())
-            return descStr
 
     str0, str1, str2 = get_shot_string(sht0), get_shot_string(sht1), get_shot_string(sht2)
 
-    tab_params = {'index_offset': 2, 'index_col_width': 0.5, 'dimensions': (960, 540), 'skeleton_shrinkage': 0.2}
+    tab_params = {  'index_offset': 1, 'index_col_width': 0.5, 'dimensions': (960, 540), 'skeleton_shrinkage': 0.2, 
+                    'automatic_vertical_offset_text_line_height': 0.4,
+                    'null_columns': 1
+                    }
 
     tab_data0 = {'1st Shot': {'Description': str0}}
     tab_data1 = {'1st Shot': {'Description': str0}, '2nd Shot': {'Description': str1}}
@@ -825,6 +828,8 @@ if DO_SEGMENTATION_FINE:
     rstFrms2 = myRst.render()
     DecapStream(rstFrms2, 0, 100).show()
 
+
+if DO_TRAJECTORY:
     ### BALL TRAJECTORY ### 
     # Once segmentation into Shots within a point has been established, it remains to calculate the trajectory of the ball.
     # since this task is the most challenging, but also the most important, it is left to the end, when as
@@ -851,18 +856,26 @@ if DO_SEGMENTATION_FINE:
         # an advantage of the physics matching is that we get, without extra work as a by-product, the 
         # initial launch angle, speed and spin of the ball.
 
+    dim_factor = 0.5
+
+    myPnt = allPnts[0]
     myPnt.stream_ball(P, cap = cap).show()
 
+    sht0, sht1, sht2 = myPnt[0], myPnt[1], myPnt[2]
+    stm0, stm1, stm2 = sht0.stream(cap), sht1.stream(cap), sht2.stream(cap)
+    
+    frms0, frms1, frms2 = stm0.decap().frames.rescale(1.5), stm1.decap().frames.rescale(1.5), stm2.decap().frames.rescale(1.5)
+    
     ### get ball splines
     
     ball_color = const.BGR['ball_yellow']
 
-    splns0 = myPnt[0].feat_spline_cumul().values()
-    splns1 = myPnt[1].feat_spline_cumul().values()
-    splns2 = myPnt[2].feat_spline_cumul().values()
+    splns0 = sht0.feat_spline_cumul(which_endpoint = 'penultimate').values()
+    splns1 = myPnt[1].feat_spline_cumul(which_endpoint = 'penultimate').values()
+    splns2 = myPnt[2].feat_spline_cumul(which_endpoint = 'penultimate').values()
 
     from ATMANpy.types.Visual3D import Camera, Scene
-    myCam = Camera.calibrated_brest_behind()    
+    myCam = Camera.calibrated_brest_behind().resize(1.5)
 
     scns0 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns0]
     scns1 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns1]
@@ -870,4 +883,119 @@ if DO_SEGMENTATION_FINE:
     
     from ATMANpy.funcs.vis_funcs import animate_sequence
 
-    animate_sequence(scns0, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = frms0)
+    spln_frms0, _ = animate_sequence(scns0, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = frms0)
+    spln_frms1, _ = animate_sequence(scns1, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = frms1)
+    spln_frms2, _ = animate_sequence(scns2, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = frms2)
+    
+    DecapStream(spln_frms0, 0, 100).show(ms_between_frames = 100)
+    DecapStream(spln_frms1, 0, 100).show(ms_between_frames = 100)
+    DecapStream(spln_frms2, 0, 100).show(ms_between_frames = 100)
+
+    ls_frm_dim0 = spln_frms0[-1].dim(dim_factor)
+    ls_frm_dim1 = spln_frms1[-1].dim(dim_factor)
+    ls_frm_dim2 = spln_frms2[-1].dim(dim_factor)
+    frms0_ls, frms1_ls, frms2_ls = BGRFrames.from_frame(ls_frm_dim0, 25), BGRFrames.from_frame(ls_frm_dim1, 25), BGRFrames.from_frame(ls_frm_dim2, 25)
+
+    myShot = sht0
+    def get_data_string(myShot):
+        velo = myShot.get_initial_speed()
+        spin = myShot.get_initial_spin()
+        angl = myShot.get_launch_angle()
+
+        veloStr = f'{int(round(velo, 0))} km/h'
+        spinStr = f'{int(round(spin, 0))} RPM'
+        anglStr = f'{round(angl, 1)} deg.'
+
+        return f'Speed: {veloStr} \n\nSpin: {spinStr} \n\nLaunch Angle: {anglStr}'
+
+    ### THE TABLE ###
+    str0, str1, str2 = get_shot_string(sht0), get_shot_string(sht1), get_shot_string(sht2)
+    dat0, dat1, dat2 = get_data_string(sht0), get_data_string(sht1), get_data_string(sht2)
+
+    tab_params = {  'index_offset': 1, 'index_col_width': 0.5, 'dimensions': (960, 540), 'skeleton_shrinkage': 0.2, 
+                    'automatic_vertical_offset_text_line_height': 0.4,
+                    'null_columns': 0
+                    }
+
+    tab_data0 = {'1st Shot': {'Description': str0, 'Data': dat0}}
+    tab_data1 = {'1st Shot': {'Description': str0, 'Data': dat0}, '2nd Shot': {'Description': str1, 'Data': dat1}}
+    tab_data2 = {'1st Shot': {'Description': str0, 'Data': dat0}, '2nd Shot': {'Description': str1, 'Data': dat1}, '3rd Shot': {'Description': str2, 'Data': dat2}}
+    
+    tab0 = Table(tab_data0, **tab_params, null_rows = 2)
+    tab1 = Table(tab_data1, **tab_params, null_rows = 1)
+    tab2 = Table(tab_data2, **tab_params, null_rows = 0)
+
+    tab_frm0 = tab0.render()
+    tab_frm1 = tab1.render()
+    tab_frm2 = tab2.render()
+    
+    tab_frms0 = BGRFrames.from_frame(tab_frm0, 25)
+    tab_frms1 = BGRFrames.from_frame(tab_frm1, 25)
+    tab_frms2 = BGRFrames.from_frame(tab_frm2, 25)
+
+    tab_frm0.show()
+    tab_frm1.show()
+    tab_frm2.show()
+
+    ### THE RASTER ###
+    myRst = FramesRaster(2, 2)
+
+    myRst.add(spln_frms0, 0, 0)
+    myRst.add(tab_frms0, 1, 1)
+    rstFrms0 = myRst.render()
+    DecapStream(rstFrms0, 0, 100).show(ms_between_frames = 100)
+
+    myRst.add(frms0_ls, 0, 0)
+    myRst.add(spln_frms1, 0, 1)
+    myRst.add(tab_frms1, 1, 1)
+    rstFrms1 = myRst.render()
+    DecapStream(rstFrms1, 0, 100).show(ms_between_frames = 100)
+
+    myRst.add(frms1_ls, 0, 1)
+    myRst.add(spln_frms2, 1, 0)
+    myRst.add(tab_frms2, 1, 1)
+    rstFrms2 = myRst.render()
+    DecapStream(rstFrms2, 0, 100).show(ms_between_frames = 100)
+    
+    rstFrms2[-1].show()
+
+    ### Check out trajectories for the 9 other examples:
+    from ATMANpy.types.Abstract import NullPoint
+
+    def has_nan_point_or_is_none(myLn):
+        if myLn is None:
+            return True
+        else:
+            return np.isnan(myLn.leftPt.coords).all() or np.isnan(myLn.rightPt.coords).all()
+
+    raster_frames = []
+    for frm_idx, myPnt in enumerate(allPnts[:9]):
+        print(frm_idx)
+
+        if isinstance(myPnt, NullPoint):
+            stm = Stream.from_SF(segBFs[frm_idx], cap)
+            frms = stm.decap().frames
+            raster_frames.append(frms)
+            continue
+
+        point_splns = myPnt.feat_spline_cumul(which_endpoint = 'penultimate').values()
+
+        ### cull points in the net -> have a nan Point or two.
+        ### also cull None
+
+        point_splns = [[spln for spln in splns if not has_nan_point_or_is_none(spln)] for splns in point_splns ]
+
+        scns = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns]) for splns in point_splns]
+
+        stm = myPnt.stream(cap = cap)
+        frms = stm.decap().frames[:-1]
+
+        myCam = Camera.calibrated_brest_behind()
+
+        frms_spln, _ = animate_sequence(scns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = frms)
+
+        raster_frames.append(frms_spln)
+
+    for frms in raster_frames:
+        DecapStream(frms, 0, 100).show()
+
