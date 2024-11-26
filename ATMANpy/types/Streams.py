@@ -409,7 +409,30 @@ class Stream:
             
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def decap_with_features(self):
+        gen = self.generator(quiet_and_uninterruptable = True)
+        frmNum, myFrm, myDict = next(gen) ### prime the generator
+        drawFunc = draw(self.features.get_features(), textRegion = None)
+        
+        frmList = []
+        while True:
+            sendFrm = drawFunc({'cFrm': myFrm}, myDict) ### TODO: Clean this up! myFrm is not always cFrm!
+                 
+            try:
+                frmNum, myFrm, myDict = gen.send(sendFrm)
+                frmList.append(sendFrm)
+            except StopIteration:
+                cv.destroyAllWindows()
+                break 
+
+        framesType = framesTypeMap[self.target_color_space]
+        myFrms = framesType.from_single_frames(frmList)
+        return DecapStream(myFrms, self.start_frame, self.stop_frame) ### features are not appended! they are now on the frame.
+
+    def generator(self, ms_between_frames = 25, frame_counter = False, 
+                  quiet_and_uninterruptable = False ### this function is needed only when we are decapping with features
+                                                    ### it guarantees that everything is decapped and does not show the rendered frame.
+                  ): ### cv_funcs.video_stream
         
         self.cap.set(cv.CAP_PROP_POS_FRAMES, self.start_frame - self.truncation_anchor)        
         frmNum = self.start_frame
@@ -442,9 +465,10 @@ class Stream:
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
-                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
-                if not still_showing:
-                    break
+                if not quiet_and_uninterruptable:
+                    still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                    if not still_showing:
+                        break
             
             frmNum += 1
         
