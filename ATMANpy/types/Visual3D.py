@@ -138,11 +138,18 @@ class Scene:
         return Scene([])
     
     @staticmethod
-    def make_court(courtLines = None, line_color = const.BGR['bright_grey'], net_color = const.BGR['smokey_grey']):
-        courtRegions3D = Court.make(courtLines = courtLines, color = line_color)
-        net3D = Net.make_singles(color = net_color)
+    def make_court(courtLines = None, make_net = True, 
+                   line_color = const.BGR['bright_grey'], line_alpha = 1, 
+                   net_color = const.BGR['smokey_grey'], net_alpha = 1):
+        
+        courtRegions3D = Court.make(courtLines = courtLines, color = line_color, alpha = line_alpha)
+        myScn = Scene.make_empty().put(courtRegions3D)
 
-        return Scene.make_empty().put(courtRegions3D).put(net3D)
+        if make_net:
+            net3D = Net.make_singles(color = net_color, alpha = net_alpha)
+            myScn = myScn.put(net3D)
+
+        return myScn
     
     def is_empty(self):
         return len(self.shapes) == 0
