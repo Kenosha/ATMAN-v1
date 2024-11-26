@@ -41,18 +41,19 @@ from ATMANpy.types.Frames import Frame, BoolFrame, MaskFrame, GreyFrame, BGRFram
 from ATMANpy.types.Contours import Contour, Contours
 
 def get_courtlines(gFrm, width_of_line = 8, 
-                   int_diff_thresh = 30,
-                   white_thresh = 150,
-                   rho = 3, theta = np.pi / 180, min_votes = 500,
-                   minLineLength = 8 + 1, maxLineGap = 1,
-                   merge_threshold = 2 * 8, 
-                   horizontal_filter_margin = 40,
-                   vertical_filter_margin = None,
-                   points_on_line = 100, acceptable_failure_rate = 0.5,
-                   schemaLines = schemaLines, only_225 = True, verbose = False):
+                    int_diff_thresh = 30,
+                    white_thresh = 150,
+                    rho = 3, theta = np.pi / 180, min_votes = 500,
+                    minLineLength = 8 + 1, maxLineGap = 1,
+                    merge_threshold = 2 * 8, 
+                    horizontal_filter_margin = 40,
+                    vertical_filter_margin = None,
+                    points_on_line = 100, acceptable_failure_rate = 0.5,
+                    schemaLines = schemaLines, only_225 = True, 
+                    verbose = False):
     
     if only_225:
-        H, config = find_homography_225_only(gFrm,
+        retVals = find_homography_225_only(gFrm,
                                              width_of_line = width_of_line,
                                              int_diff_thresh = int_diff_thresh,
                                              white_thresh = white_thresh,
@@ -61,9 +62,9 @@ def get_courtlines(gFrm, width_of_line = 8,
                                              merge_threshold = merge_threshold, 
                                              horizontal_filter_margin = horizontal_filter_margin,
                                              vertical_filter_margin = vertical_filter_margin,
-                                             verbose = verbose)
+                                             verbose = verbose, return_substeps = False)
     else:
-        H, config = find_homography(gFrm,
+        retVals = find_homography(gFrm,
                                     width_of_line = width_of_line,
                                     int_diff_thresh = int_diff_thresh,
                                     white_thresh = white_thresh,
@@ -72,16 +73,64 @@ def get_courtlines(gFrm, width_of_line = 8,
                                     merge_threshold = merge_threshold, 
                                     horizontal_filter_margin = horizontal_filter_margin,
                                     vertical_filter_margin = vertical_filter_margin,
-                                    verbose = verbose)
-    trackFlag = 'Found'
+                                    verbose = verbose, return_substeps = False)
     
-    if not H is None:
-        courtLines = find_courtlines(H, schemaLines)
-    else:
-        trackFlag = 'Not Found'
+    H, config = retVals
+    
+    if H is None:
         courtLines = None
-    
+        trackFlag = 'Not Found'    
+    else:
+        courtLines = find_courtlines(H, schemaLines)
+        trackFlag = 'Found'
+        
     return courtLines, H, config, trackFlag
+
+def get_courtlines_substeps(gFrm, width_of_line = 8, 
+                            int_diff_thresh = 30,
+                            white_thresh = 150,
+                            rho = 3, theta = np.pi / 180, min_votes = 500,
+                            minLineLength = 8 + 1, maxLineGap = 1,
+                            merge_threshold = 2 * 8, 
+                            horizontal_filter_margin = 40,
+                            vertical_filter_margin = None,
+                            points_on_line = 100, acceptable_failure_rate = 0.5,
+                            schemaLines = schemaLines, only_225 = True, 
+                            verbose = False):
+    
+    if only_225:
+        retVals = find_homography_225_only(gFrm,
+                                             width_of_line = width_of_line,
+                                             int_diff_thresh = int_diff_thresh,
+                                             white_thresh = white_thresh,
+                                             rho = rho, theta = theta, min_votes = min_votes,
+                                             minLineLength = minLineLength, maxLineGap = maxLineGap,
+                                             merge_threshold = merge_threshold, 
+                                             horizontal_filter_margin = horizontal_filter_margin,
+                                             vertical_filter_margin = vertical_filter_margin,
+                                             verbose = verbose, return_substeps = True)
+    else:
+        retVals = find_homography(gFrm,
+                                    width_of_line = width_of_line,
+                                    int_diff_thresh = int_diff_thresh,
+                                    white_thresh = white_thresh,
+                                    rho = rho, theta = theta, min_votes = min_votes,
+                                    minLineLength = minLineLength, maxLineGap = maxLineGap,
+                                    merge_threshold = merge_threshold, 
+                                    horizontal_filter_margin = horizontal_filter_margin,
+                                    vertical_filter_margin = vertical_filter_margin,
+                                    verbose = verbose, return_substeps = True)
+    
+    H, config, l_v_Lines, r_v_Lines, h_Lines, houghLines, allBFrm = retVals
+    
+    if H is None:
+        courtLines = None
+        trackFlag = 'Not Found'    
+    else:
+        courtLines = find_courtlines(H, schemaLines)
+        trackFlag = 'Found'
+        
+    return courtLines, H, config, l_v_Lines, r_v_Lines, h_Lines, houghLines, allBFrm, trackFlag
 
 def track_courtlines(gCache, featCache,
                      width_of_line = 8, 

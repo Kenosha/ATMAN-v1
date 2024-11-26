@@ -98,7 +98,7 @@ def find_homography_225_only(gFrm,
                              merge_threshold = MERGE_THRESHOLD, 
                              horizontal_filter_margin = MARGIN_TO_CUT_HORIZONTAL,
                              vertical_filter_margin = None,
-                             verbose = False):
+                             verbose = False, return_substeps = False):
     from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
     allBFrm = get_white_lines_fast(gFrm, 
@@ -147,10 +147,14 @@ def find_homography_225_only(gFrm,
         # print('Fast Homography Algorithm...')
         from ATMANpy.funcs.line_funcs import get_homography_225
         H, config = get_homography_225(l_v_Lines, r_v_Lines, h_Lines, allBFrm, verbose = verbose)
-        return H, config
     else:
-        return None, None
-    
+        H, config = None, None
+
+    if return_substeps:
+        return H, config, l_v_Lines, r_v_Lines, h_Lines, houghLines, allBFrm
+    else:
+        return H, config
+
     
 def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH, 
                     int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
@@ -160,7 +164,7 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
                     merge_threshold = MERGE_THRESHOLD, 
                     horizontal_filter_margin = MARGIN_TO_CUT_HORIZONTAL,
                     vertical_filter_margin = None,
-                    verbose = False):
+                    verbose = False, return_substeps = False):
     from ATMANpy.funcs.line_funcs import get_white_lines_fast
     
     allBFrm = get_white_lines_fast(gFrm, 
@@ -222,7 +226,10 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
         v_Lines = l_v_Lines.append(r_v_Lines).sort('left_point', 'l2r', 't2b')
         H, config = get_homography(v_Lines, h_Lines, allBFrm, verbose = verbose)
 
-    return H, config
+    if return_substeps:
+        return H, config, l_v_Lines, r_v_Lines, h_Lines, houghLines, allBFrm
+    else:
+        return H, config
 
 def find_courtlines(H, schemaLines):
     courtLines = schemaLines.transform('apply_homography', H).transform('round_points')
