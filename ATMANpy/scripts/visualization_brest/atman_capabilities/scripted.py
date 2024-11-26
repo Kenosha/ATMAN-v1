@@ -9,7 +9,7 @@ from ATMANpy.types.Streams import Stream, CachedStream, NCStream, DecapStream, S
 from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, BoolFeatures, SFList, ConstFeature, ConstFeatures
 
 from ATMANpy.types.Frames import BGRFrame
-from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames
+from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames, MaskFrames
 from ATMANpy.types.Overlays import Table, FramesRaster, overlay, frame_cascade
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Visual3D import Camera, View, Scene
@@ -18,10 +18,12 @@ from ATMANpy.types.Abstract import Points, Shots, read_in_data_table, read_in_pl
 
 import ATMANpy.funcs.feature_funcs as ff
 import ATMANpy.funcs.sf_apply_funcs as sa
+import ATMANpy.funcs.extract_funcs as ex
 
 import ATMANpy.auxil.constants as const
 
 import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
+import ATMANpy.funcs.vis_funcs as vs
 
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
@@ -69,10 +71,17 @@ scaledFrms = myFrms.rescale(3)
 
 fs, ls = myStm.start_frame, myStm.stop_frame
 
+### for the recreation of the line finding steps, we need the extracted steps!
+from ATMANpy.scripts.pipeline_brest_tightseg.parameter_files.default import court_lines
+prms = court_lines.courtline_params
+step_frames = 25
+lineSF = myStm.conform(fs, fs + step_frames * 3).recolor('grey').extract(ex.get_courtlines_substeps, **prms)
+
 ### pre-frames
+dim_factor = 0.5
 pre_frames = 150
 preFrms = myStm.widen(pre_frames).decap().frames[:pre_frames].rescale(3)
-preArr_dimmed = np.stack([f.dim((idx / pre_frames) ** 2).array for idx, f in enumerate(preFrms)], axis = 0)
+preArr_dimmed = np.stack([f.dim(min((idx / pre_frames) ** 2, dim_factor)).array for idx, f in enumerate(preFrms)], axis = 0)
 preFrms_dimmed = BGRFrames(preArr_dimmed)
 
 ### Projection Matrix
@@ -114,22 +123,93 @@ script_line =   """
                     To this end, let's take as an example the first point of the match between Richard Gasquet and Thomas Fabbiano.
                 """
 all_frames.append(preFrms_dimmed)
-script_line.append(script_line)
+script_lines.append(script_line)
 
+script_line =   """
+                    Lines are detected using the simple, but robust probabilistic hough line finding algorithm. 
+                """
+
+### recreate the line finding steps
+zeroFrm = BGRFrame(np.zeros((360, 640, 3), dtype = 'uint8'))
+
+### first, show the white mask
+start, stop = fs, fs+step_frames
+frmSF = lineSF['allBFrm'][list(range(start, stop))]
+maskFrms = MaskFrames.from_single_frames(list(frmSF.values()))
+# DecapStream(maskFrms, 0, 100).show()
+
+currFrms = myDtm.conform(start, stop - 1).frames
+mixFrms = currFrms.mask(maskFrms) + currFrms.mask(~maskFrms) * dim_factor
+mixFrms = mixFrms.rescale(3)
+# DecapStream(mixFrms, 0, 100).show()
+
+all_frames.append(mixFrms)
+
+### then, show the hough lines
+start, stop = fs+step_frames, fs+2*step_frames
+houghSF = lineSF['houghLines'][list(range(start, stop))]
+# houghStm = myStm.conform(start, stop).attach(houghSF)
+# houghDtm = houghStm.decap_with_features()
+# houghFrms = houghDtm.frames
+hough_frames = [zeroFrm.put(houghLns) for houghLns in houghSF.values()]
+houghFrms = BGRFrames.from_single_frames(hough_frames)
+houghMask = houghFrms.to_grey() > 0
+
+currFrms = myDtm.conform(start, stop - 1).frames
+mixFrms = houghFrms.mask(houghMask) + currFrms.mask(~houghMask) * dim_factor
+mixFrms = mixFrms.rescale(3)
+
+all_frames.append(mixFrms)
+
+### then show the vertical and horizontal filtered lines
+start, stop = fs+2*step_frames, fs+3*step_frames
+filtSF = lineSF[['l_v_Lines', 'r_v_Lines', 'h_Lines']][list(range(start, stop))]
+# lineStm = myStm.conform(start, stop).attach(lineSF)
+# lineDtm = lineStm.decap_with_features()
+# lineFrms = lineDtm.frames.rescale(3)
+line_frames = [zeroFrm.put(featDict['l_v_Lines']).put(featDict['r_v_Lines']).put(featDict['h_Lines']) for featDict in filtSF.values()]
+lineFrms = BGRFrames.from_single_frames(line_frames)
+lineMask = lineFrms.to_grey() > 0
+
+currFrms = myDtm.conform(start, stop - 1).frames
+mixFrms = lineFrms.mask(lineMask) + currFrms.mask(~lineMask) * dim_factor
+mixFrms = mixFrms.rescale(3)
+
+all_frames.append(mixFrms)
+
+### finally, show the court lines detected 
+start, stop = fs+3*step_frames, fs+4*step_frames
+HSF = ConstFeature.from_store(vid, sto, featname = 'H')
+H = HSF.feature
+courtLines = sa.find_courtlines(H)
+courtlineSF = ConstFeature('my_courtLines', courtLines)
+# courtStm = myStm.conform(start, stop).attach(courtlineSF)
+# courtDtm = courtStm.decap_with_features()
+# courtFrms = courtDtm.frames.rescale(3)
+
+court_frames = [zeroFrm.put(courtLines) for _ in range(start, stop)]
+courtFrms = BGRFrames.from_single_frames(court_frames)
+courtMask = courtFrms.to_grey() > 1
+
+currFrms = myDtm.conform(start, stop - 1).frames
+mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
+mixFrms = mixFrms.rescale(3)
+
+all_frames.append(mixFrms)
+
+
+show(all_frames, ms_between_frames = 40)
 
 
 ################################
 ######### COURT LINES ##########
 ################################
 
-HSF = ConstFeature.from_store(vid, sto, featname = 'H')
-H = HSF.feature
-courtLines = sa.find_courtlines(H)
 courtlineSF = ConstFeature('courtLines', courtLines)
 courtlineSF_with_net = ConstFeature('courtLines', courtLines.add_singles_netline())
 
 showStm = myStm.attach(courtlineSF)
-showStm.show()
+DecapStream(showStm.decap().frames, 0, 100).show()
 
 
 
