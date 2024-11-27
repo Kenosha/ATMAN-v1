@@ -77,6 +77,21 @@ class Net(Regions3D):
         
         return Net([leftReg, rightReg], name = 'Net', color = color, alpha = alpha)
         
+    @staticmethod
+    def make_doubles(color = _NET_COLOR, alpha = _NET_ALPHA):
+        courtLines = CourtLines.make()
+
+        netLn = Line3D.from_line2D(courtLines.add_doubles_netline()['Net Line'], z = 0)
+        lPt, cPt, rPt = netLn.subdivide(3)
+        
+        lPt_up, cPt_up, rPt_up = [lPt.up(courtLines.net_height_post), 
+                                  cPt.up(courtLines.net_height_middle), 
+                                  rPt.up(courtLines.net_height_post)]
+        leftReg = Region3D.from_points3D(lPt_up, cPt_up, lPt, cPt, name = 'Left Net')
+        rightReg = Region3D.from_points3D(cPt_up, rPt_up, cPt, rPt, name = 'Right Net')
+        
+        return Net([leftReg, rightReg], name = 'Net', color = color, alpha = alpha)
+        
     def get_rectangular_net_region(self):
         ### this is a region approximating the full net -> rectangular, without the dip in the middle.
         leftLn, rightLn = self['Left Net']['Left'], self['Right Net']['Right']
