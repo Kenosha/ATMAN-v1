@@ -284,12 +284,14 @@ class Frame:
         
     def within_contour(self, contour: Contour):
         zeroArr = np.zeros((self.rows, self.cols), dtype = 'uint8')
-        cntMask = cv.fillPoly(zeroArr, [contour.points], 255)
+        points = contour.points
+        cntMask = cv.fillPoly(zeroArr, [points], 255)
         return MaskFrame(cntMask)
     
     def within_contours(self, contours: Contours):
         zeroArr = np.zeros((self.rows, self.cols), dtype = 'uint8')
-        cntMask = cv.fillPoly(zeroArr, [contours.points], 255)
+        points = np.concatenate([contour.points for contour in contours])
+        cntMask = cv.fillPoly(zeroArr, [points], 255)
         return MaskFrame(cntMask)
     
     def roll(self, how = 'down', shift = 1, nan_sentinel = np.nan):
