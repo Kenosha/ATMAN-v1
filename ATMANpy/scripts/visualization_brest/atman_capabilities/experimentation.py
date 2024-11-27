@@ -17,6 +17,8 @@ from ATMANpy.types.Abstract import Points, Shots, read_in_data_table, read_in_pl
 import ATMANpy.funcs.feature_funcs as ff
 import ATMANpy.funcs.sf_apply_funcs as sa
 
+import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
+
 import ATMANpy.auxil.constants as const
 
 ###### FUNCTIONS #####
@@ -675,25 +677,6 @@ if DO_SEGMENTATION:
         # so any subtask, not just segmentation but also recognition, can be changed, adapted, removed or added.
     myRst = FramesRaster(3, 3)
     
-    def speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100):
-        if segFrms.length() <= ramp_up_frames * 2:
-            return segFrms
-        else:
-            segFrms_start = segFrms[:ramp_up_frames]
-            segFrms_middle = segFrms[ramp_up_frames:-ramp_up_frames]
-            segFrms_end = segFrms[-ramp_up_frames:]
-
-            if segFrms_middle.length() <= min_frames_for_speedup:
-                return segFrms
-            elif min_frames_for_speedup < segFrms_middle.length() <= min_frames_for_speedup + 2 * ramp_up_frames:
-                segFrms_middle = segFrms_middle[::2]
-                return segFrms_start.join(segFrms_middle).join(segFrms_end)
-            else: ### in this case, two levels of speedup
-                segFrms_middle_start = segFrms_middle[:ramp_up_frames:2]
-                segFrms_middle_middle = segFrms_middle[ramp_up_frames:-ramp_up_frames:3]
-                segFrms_middle_end = segFrms_middle[-ramp_up_frames::2]
-                return segFrms_start.join(segFrms_middle_start).join(segFrms_middle_middle).join(segFrms_middle_end).join(segFrms_end)
-
     frmsList = []
     for idx in range(9):
         segStm = Stream.from_SF(segBFs[idx], cap).widen(widen_frames)
@@ -702,19 +685,19 @@ if DO_SEGMENTATION:
 
     # our example exchange - a short rally.
     segFrms = frmsList[0]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100) ### returns itself!
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100) ### returns itself!
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 0, 0)
 
     # next up: a longer rally ## -> have to speed it up a bit...
     segFrms = frmsList[1]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 0, 1)
     
     # another long rally
     segFrms = frmsList[2]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 0, 2)
     
@@ -724,37 +707,37 @@ if DO_SEGMENTATION:
         # 2) the let is manually checked after flagging. the manual checking script is simple to integrate into workflow, and requires very few actual checks.
     allPnts[3][0].get_hit_event_info() ### -> this is registered as a Let!
     segFrms = frmsList[3]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 1, 0)
 
     # first serve re-do
     segFrms = frmsList[4]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 1, 1)
 
     # second serve
     segFrms = frmsList[5]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 1, 2)
 
     # a rally -> widen!
     segFrms = frmsList[6]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 2, 0)
 
     # first serve fault
     segFrms = frmsList[7]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 2, 1)
     
     # a return error.
     segFrms = frmsList[8]
-    segFrms = speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
+    segFrms = vis_ut.speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100)
     DecapStream(segFrms, 0, 100).show()
     myRst.add(segFrms, 2, 2)
 
