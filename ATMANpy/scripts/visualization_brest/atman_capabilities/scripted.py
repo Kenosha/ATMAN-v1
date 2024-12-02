@@ -19,11 +19,13 @@ from ATMANpy.types.Abstract import Points, Shots, read_in_data_table, read_in_pl
 import ATMANpy.funcs.feature_funcs as ff
 import ATMANpy.funcs.sf_apply_funcs as sa
 import ATMANpy.funcs.extract_funcs as ex
-
-import ATMANpy.auxil.constants as const
-
-import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
+import ATMANpy.funcs.sf_funcs as sf
 import ATMANpy.funcs.vis_funcs as vs
+import ATMANpy.auxil.constants as const
+import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
+
+from ATMANpy.models.ParticleFilter import ParticleFilter
+from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
@@ -613,42 +615,92 @@ script_line =   """
                     it believes shapes to be the ball which in fact are not the ball.
                 """
                 ### -> TODO: give examples with a freeze frame!
+                ### -> how? once you vet the code above, and have it recorded it, come back here, 
+                ### and look for a good example to freeze on within the duration (not too close to beginning or end).
+                ### then, we simply freeze on that frame, and continue with the duration. 
 duration = 100
 start, stop = stop, stop + duration
-myStm = Stream.from_SF(segBFs[2], cap).conform(start, stop - 1)
 
-interFrms = myStm.decap().frames * dim_factor
+cand_color = const.BGR['leafy_green']
+non_cand_color = const.BGR['intense_red']
 
-cntSF = StreamFeature.from_store(vid, sto, featname = 'cand2Cnts') ### get only the high confidence contours!
-my_cntSF = cntSF.conform(list(range(start, stop)))
+from ATMANpy.types.Contours import Contours
+my_cntSF = cntSF.conform(list(range(start, stop))).fillna(Contours([]))
+my_cndSF = cndSF.conform(list(range(start, stop))).fillna(Contours([]))
 
+# annotate each frame
+currStm = Stream(cap, start, stop)
+sub_shadStm = shadStms[2].conform(start, stop) ### (so we can filter out the contours in the shadow...)
 
+initial_frames_per_frame = 25
+decay_rate = 0.05
 
-Stream(cap, start, stop).attach(my_cntSF).show()
+out_frames = []
+for i in range(duration):
+    cnts = my_cntSF[start + i]
+    cnds = my_cndSF[start + i]
+    # non_cnds = Contours([cnt for cnt in cnts if cnt not in cnds])
+    non_cnds = cnts
+
+    currFrm_undimmed = currStm.get(start + i)
+    currFrm = currFrm_undimmed.dim(dim_factor)
+    shadFrm = sub_shadStm.get(start + i)
+    regMask = shadFrm.zero()
+
+    x_offset = 10
+    y_offset = 5
+
+    for cnt in non_cnds:
+        cntPnt = cnt.center()
+        
+        ### check if the contour is in the shadow.
+        if shadFrm.eval_at(cntPnt) == 255:
+            continue
+        
+        x, y = cntPnt.coords
+        x, y = x + x_offset, y + y_offset
+        reg = cnt.enclosing_region(margin = 3)
+
+        regMask = regMask | regMask.within_region(reg)
+        currFrm = currFrm.put(reg, color = non_cand_color, thickness = 2)
+    
+    for cnt in cnds:
+        reg = cnt.enclosing_region(margin = 3)
+
+        regMask = regMask | regMask.within_region(reg)
+        currFrm = currFrm.put(reg, color = cand_color, thickness = 2)
+
+    mixFrm = currFrm_undimmed.mask(regMask) + currFrm.mask(~regMask)
+
+    mixFrm = mixFrm.rescale(3)
+
+    frames_repeat = max(1, int(initial_frames_per_frame * np.exp(-decay_rate * i)))
+    mixFrms = BGRFrames.from_frame(mixFrm, frames_repeat)
+
+    out_frames.append(mixFrms)
+
+interFrms = BGRFrames.from_frames(out_frames)
+
+all_frames.append(interFrms)
+script_lines.append(script_line)
 
 DecapStream(interFrms, 0, 100).show()
 
 ### The Particle Filter in Action.
-cntSF = StreamFeature.from_store(vid, sto, featname = 'cand2Cnts') ### get only the high confidence contours!
 hitcntSF = StreamFeature.from_store(vid, sto, featname = 'hitCnt')
 hitflagSF = StreamFeature.from_store(vid, sto, featname = 'hitFlag')
 
-cntSF_high = cntSF.rename('candCnts')
-
 ### Combine ball contours with hypothesized hit contours
-cntplusSF = cntSF_high.merge(hitcntSF, how = 'outer').apply(sa.merge_contour_into_contours)
+cntplusSF = cndSF.rename('candCnts').merge(hitcntSF, how = 'outer').apply(sa.merge_contour_into_contours)
 
 hitcntSFs = hitcntSF.conform(segBF.filter(segBF)).split()
 hitflagSFs = hitflagSF.conform(segBF.filter(segBF)).split()
-cntSFs_high = cntSF_high.conform(segBF.filter(segBF)).split()
+cntSFs_high = cndSF.rename('candCnts').conform(segBF.filter(segBF)).split()
 cntplusSFs = cntplusSF.conform(segBF.filter(segBF)).split()
 
 ### Create model switching points at and around hit points
 hitSFs = hitflagSFs.dropna().thin().merge(hitcntSFs) ### thin out hitflags so we have one flag for each hit exactly.
 
-import ATMANpy.funcs.sf_funcs as sf
-
-from ATMANpy.models.ParticleFilter import ParticleFilter
 hitSF = hitSFs[2]
 
 propagation_params = prm_mod.ball_inference_particles.propagation_params
@@ -675,16 +727,121 @@ filter_run_params_additional = {'frame_width': width,
                                     'pixel_per_meter_vertical': side_length / const.SIDE_LENGTH}
 
 partSF = myFilter.find_particles(inSF, **filter_run_params, **filter_run_params_additional)
-
 kitaSF = sf.kitagawa_smooth(partSF)
 
+### some parameters
+N = 100 # how many particles to show
+scale = (10, 10, 1, 1) ### standard deviation for kitagawa perturbation
+part_color = const.BGR['fair_yellow']
+kita_color = const.BGR['ball_yellow']
 
+script_line =   """
+                    To remove those ball shapes that the SVM believes to look like a ball, 
+                    we implement a Particle Filter. The Particle Filter tracks candidate ball shapes on the screen;
+                    the particles that track the ball obey simple motion laws, and therefore 
+                    stay close to the ball shapes that behave like a ball in flight.
+                """
+duration = 100
+start, stop = stop, stop + duration
 
+subStm = Stream(cap, start, stop - 1)
+subFrms = subStm.decap().frames * dim_factor
+subFrms_resc = subFrms.rescale(3) ### scale up, so we render the points on the big screen directly!
 
-kitaSF[3722].shape
+my_partSF = partSF['particles'].conform(list(range(start, stop)))
+partArrs = np.array(list(my_partSF.values()))
+partArrs_resc = partArrs * 3 ### scale up, so we render the points on the big screen directly!
 
+part_frames = [subFrm.put(particles_to_points(partArr, N), color = part_color, size = 0) for subFrm, partArr in zip(subFrms_resc, partArrs_resc)]
+partFrms = BGRFrames.from_single_frames(part_frames)
 
-partSF[3660]['particles'].shape
+DecapStream(partFrms, 0, 100).show(ms_between_frames = 100)
+
+all_frames.append(partFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    In flight, the particles consistently gather around the travelling ball, and therefore confirm its position;
+                    However, whenever the ball is hit by either player, the subsequent flight of the ball is uncertain:
+                    This is reflected in the particles, which scatter for a short moment to re-locate the ball.
+                    This scattering can be reduced using a technique called Kitagawa Smoothing.
+                """
+duration = 100
+start, stop = stop, stop + duration
+
+subStm = Stream(cap, start, stop - 1)
+subFrms = subStm.decap().frames * dim_factor
+subFrms_resc = subFrms.rescale(3) ### scale up, so we render the points on the big screen directly!
+
+my_partSF = kitaSF.conform(list(range(start, stop)))
+partArrs = np.array(list(my_partSF.values()))
+partArrs_resc = partArrs * 3 ### scale up, so we render the points on the big screen directly!
+
+### perturb the kitagawa particles a bit. 
+# (even though this does not happen in the code, it would yield the same results and looks better on screen.)
+partArr = partArrs_resc[0]
+def perturb_array(partArr, N = 100, scale = (10, 10, 1, 1)):
+    uniques = np.unique(partArr, axis = 0)
+
+    randArrs = []
+    for _ in range(N):
+        idx = np.random.choice(len(uniques))
+        randArr = np.random.normal(uniques[idx], scale = scale)
+        randArrs.append(randArr)
+
+    return np.array(randArrs)
+
+scale = (10, 10, 1, 1)
+partArrs_resc = np.array([perturb_array(partArr, N = N, scale = scale) for partArr in partArrs_resc])
+
+part_frames = [subFrm.put(particles_to_points(partArr, N), color = kita_color, size = 0) for subFrm, partArr in zip(subFrms_resc, partArrs_resc)]
+partFrms = BGRFrames.from_single_frames(part_frames)
+
+all_frames.append(partFrms)
+script_lines.append(script_lines)
+
+DecapStream(partFrms, 0, 100).show(ms_between_frames = 100)
+
+script_line =   """
+                    With the support vector machine finding ball candidates based on how they look, 
+                    and the particle filter confirming them based on how they behave in flight,
+                    we can fairly confidently identify the ball in flight. 
+
+                    Note that in some frames, no ball is detected. Given the low resolution and bitrate of the video, 
+                    this is no surprise; however, it means that our job in detecting the ball is not done:
+                    We have to reconstruct the entire ball trajectory, at all times.
+
+                    To this end, we use the frames in which a ball is detected, but also additional information, to improve the quality
+                    of the trajectory detected. 
+                """
+### -> go until the end!
+start = stop
+stop = segBFs[2].last()[0]
+
+sub_pntSF = pntSF.conform(list(range(start, stop)))
+
+subStm = Stream(cap, start, stop - 1)
+subFrms = subStm.decap().frames * dim_factor
+
+from ATMANpy.types.Lines import Region
+
+out_frames = []
+for pnt, frm in zip(sub_pntSF.values(), subFrms):
+    if pnt is None:
+        reg = None
+    else:
+        reg = Region.from_center(pnt, radius = 5)
+    ball_frm = frm.put(reg, color = ball_color, thickness = 1)
+
+    ball_frm = ball_frm.rescale(3)
+    out_frames.append(ball_frm)
+    
+ballFrms = BGRFrames.from_single_frames(out_frames)
+all_frames.append(ballFrms)
+script_lines.append(script_line)
+
+DecapStream(ballFrms, 0, 100).show()
+
 
 
 show(all_frames, ms_between_frames = 25)
