@@ -434,10 +434,13 @@ script_line =   """
 
                     To this end, we use the frames in which a ball is detected, but also additional information, to improve the quality
                     of the trajectory detected. 
+
+                    One of the additional sources of truth we use for detecting the trajectory is the sound.
                 """
 ### -> go until the end!
+how_many_frames_in_sound = 500
 start = stop
-stop = segBFs[2].last()[0]
+stop = segBFs[2].last()[0] - how_many_frames_in_sound
 
 sub_pntSF = pntSF.conform(list(range(start, stop)))
 
@@ -458,6 +461,8 @@ for pnt, frm in zip(sub_pntSF.values(), subFrms):
     out_frames.append(ball_frm)
     
 ballFrms = BGRFrames.from_single_frames(out_frames)
+ballFrms = vis_ut.speed_up_frames_progressively(ballFrms)
+
 all_frames.append(ballFrms)
 script_lines.append(script_line)
 
