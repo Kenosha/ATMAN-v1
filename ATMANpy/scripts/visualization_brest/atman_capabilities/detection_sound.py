@@ -62,10 +62,14 @@ cap = conf['cap']
 segBF = StreamFeature.from_store(vid, sto, featname = 'isRally')
 segBFs = segBF.filter(segBF).split()
 
+### sound and vision -> segment 3 and 4
 seg_idx = 3
-my_segBF = segBFs[seg_idx] ### sound and vision -> segment 3
+fs_segBF = segBFs[seg_idx] 
+seg_idx_2 = 4
+ls_segBF = segBFs[seg_idx_2]
 
 how_many_frames_in_sound = 500 ### -> how many frames belonging to the intermezzo are needed here (also needed in detection balls)
+how_many_frames_in_vision = 100 ### -> how many frames belonging to the intermezzo are needed in the next part (also needed in vision)
 
 ###########################
 ####### SOUND #############
@@ -117,78 +121,12 @@ wav_color = const.BGR['bluey_green']
 hit_color = const.BGR['rose_orange']
 bnc_color = const.BGR['soft_yellow']
 now_line_points = 400
-rescale_ratio = 0.4
-
-
-#### Intermezzo: introduce graph elements
-
-script_line = "PLAY SOUND"
-
-duration = 100 # frames
-start, stop = fs_wave, fs_wave + duration
-start_seconds = 0
-wave_graphs = []
-for left_frame in range(start, stop): 
-    start_seconds = (left_frame - start) / 25
-    stop_seconds = start_seconds + window_width_in_seconds
-    start_sample = int(start_seconds * sr)
-    stop_sample = int(stop_seconds * sr)
-
-    snippet = my_wave[start_sample:stop_sample]
-
-    xs = np.linspace(0, 1, num = len(snippet))
-    waveChart = ScatterChart(xs, snippet, color = wav_color)
-
-    nowChart = ScatterChart(np.ones(now_line_points) * 0.5, np.linspace(-1, 1, now_line_points), color = const.BGR['intense_red'])
-
-    waveGraph = Graph([waveChart, nowChart], make_default_x_labels = False, as_density = False, resolution = 20,
-                        tick_label_size = 0, color = const.BGR['bright_grey'], dimensions = chart_dims, offset = 0.25,
-                        header_text = 'Sound Waveform', header_height = 1, header_size = 2, header_horizontal_offset = 10,
-                    )
-    waveScn, annPnts = waveGraph.preview()
-    waveScn = waveScn.drop(1) ### drop the y axis
-
-    now_annPnt = annPnts[2].retext('Now').back(12.3).right(2.3).recolor(const.BGR['intense_red'])
-    annPnts.append(now_annPnt)
-
-    waveView = View.make(waveGraph.cam, waveScn, annotatedPoints = annPnts, resolution = 20)
-    waveFrm = waveView.snap()
-    wave_graphs.append(waveFrm)
-
-wave_graphFrms = BGRFrames.from_single_frames(wave_graphs)
-DecapStream(wave_graphFrms, 0, 100).show()
-
-myRst = FramesRaster(2, 2)
-
-myRst.add(wave_graphFrms.rescale(rescale_ratio), 0, 0)
-showFrms = myRst.render()
-DecapStream(showFrms, 0, 100).show(ms_between_frames = 100)
-
-start_video = start + round(0.5 * window_width_in_frames)
-stop_video = stop + round(0.5 * window_width_in_frames) - 1
-
-myStm = Stream(cap, start_video, stop_video)
-myFrms = myStm.decap().frames
-myFrms_full = myFrms.rescale(3)
-
-tl_x, tl_y = myFrms_full.cols() - showFrms.cols() - 1, 0
-tlPt = Point2D((tl_x, tl_y))
-
-overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-
-start_sample = (start_video - fs_wave) / 25 * sr
-stop_sample = (stop_video - fs_wave) / 25 * sr
-play_wave = my_wave[start_sample:stop_sample]
-
-sd.play(play_wave, samplerate = sr)
-DecapStream(overFrms, 0, 100).show()
-
 
 start_seconds = 0
 wave_graphs = []
 prob_graphs = []
 spec_graphs = []
-for frame in range(start, stop + 1): 
+for frame in range(fs_wave, ls_wave + 1): 
     ### TODO: actually, the waveforms, spectrograms and graphs produced are not lined up with the frame in the middle,
     # but with the frame at the start... either fix here or just shift the Stream that is shown by half the window_width_in_seconds * 25 frames
     stop_seconds = start_seconds + window_width_in_seconds
@@ -311,7 +249,6 @@ for frame in range(start, stop + 1):
 
     start_seconds += (1 / 25)
 
-
 ### 1) Wave Graph
 wave_graphFrms = BGRFrames.from_single_frames(wave_graphs)
 DecapStream(wave_graphFrms, 0, 100).show(ms_between_frames = 100)
@@ -356,33 +293,370 @@ myLeg = Legend([hitRow, bncRow], legend_dimensions = (1920 // 3, 1080 // 3), bor
 legFrm = myLeg.render()
 legFrm = legFrm.pad(to_height = 1080 // 2, to_width = 1920 // 2)
 
-#### resize to cols, rows
+#### BEGIN ANIMATING ###
+all_frames = []
+script_lines = []
 
+### raster params
 rescale_ratio = 0.4
-
 myRst = FramesRaster(2, 2)
-
-myRst.add(wave_graphFrms.rescale(rescale_ratio), 0, 0)
-myRst.add(prob_graphFrms.rescale(rescale_ratio), 1, 0)
-myRst.add(specFrms_over_with_line.rescale(rescale_ratio), 0, 1)
-myRst.add(legFrm.rescale(rescale_ratio), 1, 1)
-
-showFrms = myRst.render()
-DecapStream(showFrms, 0, 100).show(ms_between_frames = 100)
-
-myStm = Stream(cap, start, stop)
-myFrms = myStm.decap().frames
-myFrms_full = myFrms.rescale(3)
-
-tl_x, tl_y = myFrms_full.cols() - showFrms.cols() - 1, 0
+tl_x, tl_y = int((1 - rescale_ratio) * 1920) - 1, 0
 tlPt = Point2D((tl_x, tl_y))
 
+#### Intermezzo: introduce graph elements
+script_line = '[PLAY SOUND]'
+duration = 100
+start, stop = fs_wave, fs_wave + duration
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+all_frames.append(myFrms_full)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND] 
+                    The sound of the ball being hit or bouncing on the ground gives us a very good idea of when exactly these events occur.
+                    Knwoing the timing of hits and bounces greatly improves our ability to construct ball trajectories.
+                """
+duration = 100
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show(ms_between_frames = 40)
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+# DecapStream(overFrms, 0, 100).show(ms_between_frames = 40)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND]
+                    To identify hits and bounces from the sound, we train a neural network on the Mel Spectrogram of the sound waveform.
+                """
+duration = 100
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+# DecapStream(overFrms, 0, 100).show(ms_between_frames = 100)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND]
+                    The neural network spits out the probability that the sound currently being heard is a hit or a bounce,
+                    shown here in red and yellow respectively. Currently, the model is correctly detecting neither hit nor bounce. 
+                    Look out now for the spike in the red curve as soon as the serve is hit, indicating that a hit has been detected. 
+                    This is followed by a spike in the yellow curve, indicating that the bounce has been heard and identified by the model.
+                """
+duration = 150
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+# DecapStream(overFrms, 0, 100).show(ms_between_frames = 100)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND slowed to half]
+                """
+duration = 35
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms = overFrms.slow(2)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND slowed to fourth]
+                """
+duration = 15
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms = overFrms.slow(2).slow(2)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND slowed to eigth]
+                """
+duration = 25
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms = overFrms.slow(2).slow(2).slow(2)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND slowed to eigth] 
+                    In this manner, the model detectes hits and bounces when they occur, for the entire rally.
+                """
+duration = 15
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms = overFrms.slow(2).slow(2).slow(2)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    [PLAY SOUND slowed to fourth] 
+                """
+duration = 15
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms = overFrms.slow(2).slow(2)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    [PLAY SOUND slowed to half] 
+                """
+duration = 15
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms = overFrms.slow(2)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    [PLAY SOUND] 
+                """
+duration = 100
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
-sd.play(my_wave, samplerate = sr / 4)
-DecapStream(overFrms, 0, 100).show(ms_between_frames = 40)
+all_frames.append(overFrms)
+script_lines.append(script_line)
 
-from time import sleep
-sleep(2)
-DecapStream(overFrms, 0, 100).show(ms_between_frames = 500)
+script_line =   """
+                    [PLAY SOUND] 
+                    Note that the serve here is a let: the sound of the umpire or an electronic signal announcing the let is not detected,
+                    even though a model could well be trained for it.
+                """
+duration = 100
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    [PLAY SOUND] 
+                """
+
+start, stop = stop, segBFs[5].first()[0] - how_many_frames_in_vision
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+
+
+
+### intermezzo
+
+
+show(all_frames)
+
+Stream.from_SF(segBFs[7], cap).show()
