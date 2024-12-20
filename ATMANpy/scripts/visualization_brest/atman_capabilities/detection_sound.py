@@ -625,7 +625,11 @@ script_lines.append(script_line)
 
 
 script_line =   """
-                    [PLAY SOUND] 
+                    [FADE OUT SOUND] 
+                    Paired with the visual recognition of the ball in flight, the sound information gives us 
+                    a very good idea about when and where the ball is hit, and when and where it bounces. 
+                    To supplement our knowledge on timing and location, and to find out what type of shot is
+                    actually being hit, we analyse the hitting motion of both players visually.
                 """
 
 start, stop = stop, segBFs[5].first()[0] - how_many_frames_in_vision
