@@ -1,3 +1,5 @@
+import pandas as pd
+import numpy as np
 
 ###### USEFUL MAPPING FUNCTIONS #####
 def map_label_to_explicit(label):
@@ -56,6 +58,18 @@ def get_shot_string(myShot):
     else:
         descStr = map_desc(myShot.get_hit_event_descriptor())
         return descStr
+
+def get_data_string(myShot):
+    velo = myShot.get_initial_speed()
+    spin = myShot.get_initial_spin()
+    angl = myShot.get_launch_angle()
+
+    veloStr = f'{int(round(velo, 0))} km/h'
+    spinStr = f'{int(round(spin, 0))} RPM'
+    anglStr = f'{round(angl, 1)} deg.'
+
+    return f'Speed: {veloStr} \n\nSpin: {spinStr} \n\nLaunch Angle: {anglStr}'
+
 #######
 
 def speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100):
@@ -76,3 +90,39 @@ def speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_s
             segFrms_middle_middle = segFrms_middle[ramp_up_frames:-ramp_up_frames:3]
             segFrms_middle_end = segFrms_middle[-ramp_up_frames::2]
             return segFrms_start.join(segFrms_middle_start).join(segFrms_middle_middle).join(segFrms_middle_end).join(segFrms_end)
+
+### fold bot and top into correct handedness -> this is done automatically in the code.
+def adjust_probs_for_handedness(someFrm, hand = 'right'):
+    right_cols, left_cols = someFrm.columns.str.contains('_rt'), someFrm.columns.str.contains('_lf')
+    
+    rtFrm = someFrm.loc[:, right_cols]
+    lfFrm = someFrm.loc[:, left_cols]
+    
+    rtFrm.columns = rtFrm.columns.str.replace('_rt', '_hand')
+    lfFrm.columns = lfFrm.columns.str.replace('_lf', '_hand')
+
+    if hand == 'right':
+        base_probs = rtFrm.copy()
+        repl_probs = lfFrm.copy()
+    elif hand == 'left':
+        base_probs = lfFrm.copy()
+        repl_probs = rtFrm.copy()
+
+    repl_probs.columns = repl_probs.columns.str.replace('_bh', '_chng').str.replace('_fh', '_bh').str.replace('_chng', '_fh') ### triple swap to avoid replacing same row twice
+
+    probs = base_probs + repl_probs
+
+    if hand == 'right':
+        probs.columns = probs.columns.str.replace('_hand', '_rt')
+    elif hand == 'left':
+        probs.columns = probs.columns.str.replace('_hand', '_lf')
+
+    notFrm = someFrm.loc[:, (~right_cols) & (~left_cols)]
+
+    return pd.concat([probs, notFrm], axis = 1)
+
+def has_nan_point_or_is_none(myLn):
+    if myLn is None:
+        return True
+    else:
+        return np.isnan(myLn.leftPt.coords).all() or np.isnan(myLn.rightPt.coords).all()
