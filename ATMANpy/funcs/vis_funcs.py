@@ -798,7 +798,8 @@ def scatter_markmap(myShots, showReg = None,
                     normalize = True,
                     mix_colors = True, mix_alpha = False,
                     flat_along_dimension = 'z',
-                    zero_color = (0, 0, 0), one_color = const.BGR['intense_red']):        
+                    zero_color = (0, 0, 0), one_color = const.BGR['intense_red'],
+                    mark_size = 2):        
     from ATMANpy.types.ShapesTennis3D import Mark
     from ATMANpy.types.Shapes3D import Point3D
     from ATMANpy.types.Points import Point2D
@@ -867,7 +868,7 @@ def scatter_markmap(myShots, showReg = None,
 
         ### make a mark
         pt3D = Point3D(coords)
-        myMark = Mark.make(pt3D, color = mixed_tuple, alpha = mixed_alpha, flat_along_dimension = flat_along_dimension)
+        myMark = Mark.make(pt3D, color = mixed_tuple, alpha = mixed_alpha, flat_along_dimension = flat_along_dimension, size = mark_size)
         shapeList.append(myMark)
 
     return Scene(shapeList)
