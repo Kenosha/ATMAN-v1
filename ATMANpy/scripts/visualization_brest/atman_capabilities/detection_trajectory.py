@@ -82,7 +82,9 @@ splns1 = myPnt[1].feat_spline_cumul(which_endpoint = 'penultimate').values()
 splns2 = myPnt[2].feat_spline_cumul(which_endpoint = 'penultimate').values()
 
 from ATMANpy.types.Visual3D import Camera, Scene
+myCam_small = Camera.calibrated_brest_behind()
 myCam = Camera.calibrated_brest_behind().resize(1.5)
+myCam_full = Camera.calibrated_brest_behind().resize(3)
 
 scns0 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns0]
 scns1 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns1]
@@ -184,41 +186,173 @@ script_line =   """
                 """
 pre_frames = 150
 preFrms = stm0.widen(pre_frames).decap().frames[:pre_frames]
-preArr_dimmed = np.stack([f.dim(min((idx / pre_frames) ** 2, dim_factor)).array for idx, f in enumerate(preFrms)], axis = 0)
+preArr_dimmed = np.stack([f.dim(min((idx / pre_frames) ** 2, 1)).array for idx, f in enumerate(preFrms)], axis = 0)
 preFrms_dimmed = BGRFrames(preArr_dimmed)
+preFrms_dimmed = BGRFrames.from_frames([preFrms_dimmed[:50], preFrms_dimmed[50:100].slow(2), preFrms_dimmed[100:].slow(2).slow(2)])
 
+dimRst = FramesRaster(2, 2)
+dimRst.add(preFrms_dimmed, 0, 0)
+rstFrms_init = dimRst.render()
+rstFrms_init = rstFrms_init.rescale(1.5)
 
+all_frames.append(rstFrms_init)
+script_lines.append(script_line)
 
 script_line =   """
                     Serve is recognized as more of a kick serve than a flat serve; landing location is very good however. 
                     The serve is generally more challenging to recognize since it flies faster and therefore there are fewer frames for the ball to be tracked in, and the balls are blurry within the frames.
                 """
-all_frames.append(rstFrms0)
+rstFrms_slow = rstFrms0.slow(2)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 50)
+rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
+
+all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
 
 
 script_line =   """
                     The return is well recognized as a backhand slice at 77 km/h, 2500 RPM and a launch angle of 10.8 degrees.
                 """
-all_frames.append(rstFrms1)
+rstFrms_slow = rstFrms1.slow(2)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 50)
+rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
+
+all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
 
 script_line =   """
                     The server's forehand is tracked perfectly, flying out of the court at 111 km/h at a considerable topspin rate of 3750 RPM.
                 """
-all_frames.append(rstFrms2)
+rstFrms_slow = rstFrms2.slow(2)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 50)
+rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
+
+all_frames.append(rstFrms_slow_all)
+script_lines.append(script_line)
+
+### remove raster elements, then remove trajectory, to prepare for zoom
+from ATMANpy.types.Overlays import reverse_cascade, overlay
+
+script_line = ""
+finRst = myRst.to_frame_raster()
+revRst, revFrms = reverse_cascade(finRst, [(1, 0)], frames_per_element = 15)
+all_frames.append(revFrms)
+script_lines.append(script_line)
+
+script_line = ""
+lsFrm = stm2.get(stm2.stop_frame).rescale(1.5)
+y, x, _ = lsFrm.shape
+
+blackFrm = BGRFrame(np.zeros((1080, 1920, 3), dtype = 'uint8'))
+
+tlPt = Point2D((0, 1080 - y))
+overFrm = overlay(blackFrm, lsFrm, tlPt)
+overFrms = BGRFrames.from_frame(overFrm, 10)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+### next few rallyes --> slowly zoom out at the end of the last shot.
+script_line =   """
+                    Let us now take a look at the next few rallyes to see more of the trajectory detection at work.
+                """
+fs_zoom, ls_zoom = stm2.stop_frame + 1, stm2.stop_frame + 101
+zoomStm = Stream(cap, fs_zoom, ls_zoom - 1)
+zoomStm.show()
+
+zoom_frames = []
+for frm_num, frm, _ in zoomStm.generator():
+    lmbd = (ls_zoom - frm_num) / (ls_zoom - fs_zoom)
+    lmbd_rescale_factor = 1.5 * lmbd + 3 * (1 - lmbd)
+
+    frm_resc = frm.rescale(lmbd_rescale_factor)
+    y, x, _ = frm_resc.shape
+    tlPt = Point2D((0, 1080 - y))
+    
+    frm_resc_over = overlay(blackFrm, frm_resc, tlPt)
+    zoom_frames.append(frm_resc_over)
+
+zoomFrms = BGRFrames.from_single_frames(zoom_frames)
+
+all_frames.append(zoomFrms)
+script_lines.append(script_line)
+
+### prep next points
+nextPnt1 = allPnts[1]
+nextPnt2 = allPnts[2]
+
+stm_p1 = nextPnt1.stream(cap = cap)
+stm_p2 = nextPnt2.stream(cap = cap)
+
+### transition to beginning of trajectory
+script_line = ""
+start, stop = ls_zoom, stm_p1.start_frame
+
+transStm1 = Stream(cap, start, stop - 1)
+transFrms = transStm1.decap().frames.rescale(3)
+transFrms = vis_ut.speed_up_frames_progressively(transFrms, ramp_up_frames = 25)
+
+all_frames.append(transFrms)
+script_lines.append(script_line)
+
+### show next points
+
+script_line = ""
+
+point_splns = nextPnt1.feat_spline_cumul(which_endpoint = 'penultimate').values()
+point_splns = [[spln for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)] for splns in point_splns ]
+scns = [Scene([spln.recolor(ball_color).resize(1) for spln in splns]) for splns in point_splns]
+
+frms = stm_p1.decap().frames[:-1]
+
+splnFrms1, _ = animate_sequence(scns, start_cam = myCam_small, stop_cam = myCam_small, cumulate_argument = False, animate_over = frms)
+splnFrms1 = splnFrms1.rescale(3)
+# DecapStream(splnFrms1, 0, 100).show()
+
+all_frames.append(splnFrms1)
+script_lines.append(script_line)
+
+### transition to the next trajectory
+script_line = ""
+start, stop = stm_p1.stop_frame, stm_p2.start_frame
+
+transStm2 = Stream(cap, start, stop - 1)
+transFrms = transStm2.decap().frames.rescale(3)
+transFrms = vis_ut.speed_up_frames_progressively(transFrms, ramp_up_frames = 25)
+
+all_frames.append(transFrms)
+script_lines.append(script_line)
+
+script_line = ""
+
+point_splns = nextPnt2.feat_spline_cumul(which_endpoint = 'penultimate').values()
+point_splns = [[spln for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)] for splns in point_splns ]
+scns = [Scene([spln.recolor(ball_color).resize(1) for spln in splns]) for splns in point_splns]
+
+frms = stm_p2.decap().frames[:-1]
+
+splnFrms2, _ = animate_sequence(scns, start_cam = myCam_small, stop_cam = myCam_small, cumulate_argument = False, animate_over = frms)
+splnFrms2 = splnFrms2.rescale(3)
+# DecapStream(splnFrms2, 0, 100).show()
+
+all_frames.append(splnFrms2)
+script_lines.append(script_line)
+
+### finish up this traj -> not quite done!
+script_line = ""
+start, stop = stm_p2.stop_frame, stm_p2.stop_frame + 100 
+
+transStm3 = Stream(cap, start, stop - 1)
+transFrms = transStm3.decap().frames.rescale(3)
+
+all_frames.append(transFrms)
 script_lines.append(script_line)
 
 
+show(all_frames)
 
 ### Check out trajectories for the 9 other examples:
 from ATMANpy.types.Abstract import NullPoint
-
-def has_nan_point_or_is_none(myLn):
-    if myLn is None:
-        return True
-    else:
-        return np.isnan(myLn.leftPt.coords).all() or np.isnan(myLn.rightPt.coords).all()
 
 raster_frames = []
 for frm_idx, myPnt in enumerate(allPnts[:20]):
@@ -235,7 +369,7 @@ for frm_idx, myPnt in enumerate(allPnts[:20]):
     ### cull points in the net -> have a nan Point or two.
     ### also cull None
 
-    point_splns = [[spln for spln in splns if not has_nan_point_or_is_none(spln)] for splns in point_splns ]
+    point_splns = [[spln for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)] for splns in point_splns ]
 
     scns = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns]) for splns in point_splns]
 
