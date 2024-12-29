@@ -447,7 +447,9 @@ total_frames = ls_frame + pre_frames
 # the spline
 exFrms = filtered_spline_frames[pt_idx][:ls_frame]
 # the pre-stuff
-preFrms = filtPnts4[pt_idx].stream(confs = confs).widen(pre_frames).decap().frames[:pre_frames].rescale(1.5)
+exStm = filtPnts4[pt_idx].stream(confs = confs).widen(pre_frames).decap()
+preFrms = exStm.frames[:pre_frames].rescale(1.5)
+lsFrm_no_traj = exStm.frames[total_frames].rescale(3)
 # joint
 prexFrms = BGRFrames.from_frames([preFrms, exFrms])
 
@@ -469,8 +471,9 @@ retShots_rect_in = retShots_rect.filter('is_fair', nextShot = None)
 
 markScn_in = vs.scatter_markmap(retShots_rect_in, mark_size = 5, one_color = const.BGR['leafy_green'])
 markScn_out = vs.scatter_markmap(retShots_rect_out, mark_size = 5, one_color = const.BGR['intense_red'])
+markScn = markScn_in.combine(markScn_out)
 
-markFrms, _ = vs.animate_static(markScn_in.combine(markScn_out), static_cam = myCam.resize(3), num_frames = 25,
+markFrms, _ = vs.animate_static(markScn, static_cam = myCam.resize(3), num_frames = 25,
                                 animate_over = lsFrm.dim(0.25))
 
 markFrms_itpl = vs.interpolate_frames(lsFrm, markFrms[0], 100)
@@ -498,8 +501,9 @@ heatScn_out1 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_
                             bandwidth = 30, showReg = ownReg_behind, resolution = bh_res)
 heatScn_out2 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_red'], zero_color = const.BGR['intense_red'],
                             bandwidth = 30, showReg = oppReg, resolution = opp_res)
+heatScn = heatScn_in.combine(heatScn_out1).combine(heatScn_out2)
 
-heatFrms, _ = vs.animate_static(heatScn_in.combine(heatScn_out1).combine(heatScn_out2), num_frames = 25, static_cam = myCam.resize(3), animate_over = lsFrm.dim(0.25))
+heatFrms, _ = vs.animate_static(heatScn, num_frames = 25, static_cam = myCam.resize(3), animate_over = lsFrm_no_traj.dim(0.25))
 # heatFrms[-1].show()
 
 heatFrms_itpl = vs.interpolate_frames(markFrms[-1], heatFrms[1], num_frames = 100)
@@ -507,5 +511,24 @@ heatFrms_itpl = vs.interpolate_frames(markFrms[-1], heatFrms[1], num_frames = 10
 
 all_frames.append(heatFrms_itpl)
 script_lines.append(script_line)
+
+### now, as a last step, fade into the court view, to introduce the visual engine
+
+script_line =   """
+                    These and more visualizations can be rendered onto the broadcast screen directly in ATMAN.
+                """
+all_frames.append(heatFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    However, the 3D engine contained is so general as to allow us to abstract away from the TV camera,
+                    the lines, the players, and the ball; we can also render and animate all of these directly in virtual space.
+                """
+
+outFrms, _ = vs.animate_static(heatScn, static_cam = myCam.resize(3), background_scene = courtScn, num_frames = 1)
+
+itplFrms = vs.interpolate_frames(heatFrms[-1], outFrms[0], num_frames = 150)
+
+### TODO: either change the example point or recalculate the homography...
 
 show(all_frames)
