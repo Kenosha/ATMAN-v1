@@ -57,26 +57,6 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
-def get_winners_from_score(retPnts, allPnts):
-    winner_codes = []
-    for myPnt in retPnts:
-        match_idx, point_idx = myPnt.get_match_index(), myPnt.get_point_index()
-        nextPnt = allPnts.get(match_idx, point_idx + 1)
-
-        winner = myPnt.get_winner_from_score(nextPnt, verbose = True)
-
-        if winner is None:
-            winner_codes.append(0)
-        elif winner == myPnt.get_server().get_name():
-            winner_codes.append(1)
-        elif winner == myPnt.get_returner().get_name():
-            winner_codes.append(-1)
-
-    return np.array(winner_codes)
-
-def show(all_frames, ms_between_frames = 25):
-    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
-
 
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
@@ -108,7 +88,7 @@ import ATMANpy.funcs.filter_points_funcs as filt_p
 filtPnts1 = dataPnts.filter(filt_p.is_returner, name = 'Brandon Nakashima').filter(filt_p.is_longer_than, threshold = 1)
 
 filtPnts2 = filtPnts1.filter('is_first_serve')
-decArr = get_winners_from_score(filtPnts2, allPnts) != 0
+decArr = vis_ut.get_winners_from_score(filtPnts2, allPnts) != 0
 filtPnts2 = filtPnts2.filter(decArr)
 
 filtPnts3 = filtPnts2.filter('is_serve_ad')
@@ -232,7 +212,7 @@ avg_speed = np.mean(retShots.get_initial_speed())
 avg_spin = np.mean(retShots.get_initial_spin())
 avg_depth = np.mean([d for d in retShots_fair.get_bounce_distance_from_baseline() if not np.isnan(d)]) / const.SCALE * const.FOOT_TO_METER
 
-winArr = get_winners_from_score(filtPnts4, allPnts)
+winArr = vis_ut.get_winners_from_score(filtPnts4, allPnts)
 ret_wins = (winArr == -1)
 cnt_ret_wins = ret_wins.sum()
 all_ret_wins = len(ret_wins)
@@ -439,13 +419,14 @@ script_line =   """
                     Beyond these simple numeric averages, ATMAN enables us to display visual representations of data.
                 """
 ### fade in a point up until moment of return that has Brandon Nakashima on far side.
-pt_idx = 6
-ls_frame = 16
+pt_idx = 9
+ls_frame = 18
 pre_frames = 150
 total_frames = ls_frame + pre_frames
 
 # the spline
 exFrms = filtered_spline_frames[pt_idx][:ls_frame]
+# DecapStream(exFrms, 0, 100).show(ms_between_frames = 100)
 # the pre-stuff
 exStm = filtPnts4[pt_idx].stream(confs = confs).widen(pre_frames).decap()
 preFrms = exStm.frames[:pre_frames].rescale(1.5)
@@ -528,7 +509,10 @@ script_line =   """
 outFrms, _ = vs.animate_static(heatScn, static_cam = myCam.resize(3), background_scene = courtScn, num_frames = 1)
 
 itplFrms = vs.interpolate_frames(heatFrms[-1], outFrms[0], num_frames = 150)
+# DecapStream(itplFrms, 0, 100).show(ms_between_frames = 40)
 
-### TODO: either change the example point or recalculate the homography...
+all_frames.append(itplFrms)
+script_lines.append(script_line)
 
-show(all_frames)
+vis_ut.show(all_frames)
+
