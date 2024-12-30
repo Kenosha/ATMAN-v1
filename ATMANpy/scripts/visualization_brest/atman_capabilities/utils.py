@@ -1,6 +1,13 @@
 import pandas as pd
 import numpy as np
 
+from ATMANpy.types.Streams import DecapStream
+from ATMANpy.types.MultiFrames import BGRFrames
+
+def show(all_frames, ms_between_frames = 25):
+    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
+
+
 ###### USEFUL MAPPING FUNCTIONS #####
 def map_label_to_explicit(label):
     hand_map = {'lf': 'Left-Handed',
@@ -126,3 +133,22 @@ def has_nan_point_or_is_none(myLn):
         return True
     else:
         return np.isnan(myLn.leftPt.coords).all() or np.isnan(myLn.rightPt.coords).all()
+
+
+def get_winners_from_score(retPnts, allPnts):
+    winner_codes = []
+    for myPnt in retPnts:
+        match_idx, point_idx = myPnt.get_match_index(), myPnt.get_point_index()
+        nextPnt = allPnts.get(match_idx, point_idx + 1)
+
+        winner = myPnt.get_winner_from_score(nextPnt, verbose = True)
+
+        if winner is None:
+            winner_codes.append(0)
+        elif winner == myPnt.get_server().get_name():
+            winner_codes.append(1)
+        elif winner == myPnt.get_returner().get_name():
+            winner_codes.append(-1)
+
+    return np.array(winner_codes)
+
