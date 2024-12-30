@@ -114,6 +114,23 @@ def onto_service_box_cam(which = 'Deuce', side = 'Top', height = 100, zoom = 1.7
     myCam = Camera.from_to(c_w, d_w, f = 1000 * zoom)
     return myCam
 
+def central_side_cam(from_where = 'left', width = 100, height = 50, zoom = 1.7):
+    if from_where == 'left':
+        anchorPt = courtLines['Net Line'].leftPt
+        c_w = Point3D.from_point2D(anchorPt, z = height).left(width)
+        d_w = Point3D.from_point2D(cnt_2D, z = 0)
+    elif from_where == 'right':
+        anchorPt = courtLines['Net Line'].rightPt
+        c_w = Point3D.from_point2D(anchorPt, z = height).right(width)
+        d_w = Point3D.from_point2D(cnt_2D, z = 0)
+    else:
+        raise Exception('from_where argument must be either left or right!')
+
+    myCam = Camera.from_to(c_w, d_w, f = 1000 * zoom)
+    return myCam
+
+def baseline_side_cam(which = 'deuce', side = 'top'):
+
 if __name__ == '__main__':
     top_cntCam = birds_eye_half_court_cam(zoom = 1, side = 'Top')
     bot_cntCam = birds_eye_half_court_cam(zoom = 1, side = 'Bot')
@@ -146,4 +163,8 @@ if __name__ == '__main__':
     View.make(bot_deuCam, courtScn, resolution = 1).snap().show()
     View.make(bot_adCam, courtScn, resolution = 1).snap().show()
 
+    left_sideCam = central_side_cam(from_where = 'left', width = 100, height = 50, zoom = 1)
+    right_sideCam = central_side_cam(from_where = 'right', width = 100, height = 50, zoom = 1)
 
+    View.make(left_sideCam, courtScn, resolution = 1).snap().show()
+    View.make(right_sideCam, courtScn, resolution = 1).snap().show()
