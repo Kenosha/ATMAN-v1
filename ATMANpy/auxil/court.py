@@ -129,7 +129,38 @@ def central_side_cam(from_where = 'left', width = 100, height = 50, zoom = 1.7):
     myCam = Camera.from_to(c_w, d_w, f = 1000 * zoom)
     return myCam
 
-def baseline_side_cam(which = 'deuce', side = 'top'):
+def baseline_side_cam(which = 'Deuce', side = 'Top', width = 100, height = 50, zoom = 1.7):
+    if side == 'Top':
+        bsLn = courtLines['Top Baseline']
+        tarPt = bsLn.center()
+        if which == 'Deuce':
+            anchorPt = bsLn.leftPt
+            c_w = Point3D.from_point2D(anchorPt, z = height).left(width)
+            d_w = Point3D.from_point2D(tarPt, z = 0)
+        elif which == 'Ad':
+            anchorPt = bsLn.rightPt
+            c_w = Point3D.from_point2D(anchorPt, z = height).right(width)
+            d_w = Point3D.from_point2D(tarPt, z = 0)
+        else:
+            raise Exception('which argument must be either Deuce or Ad!')
+    elif side == 'Bot':
+        bsLn = courtLines['Top Baseline']
+        tarPt = bsLn.center()
+        if which == 'Deuce':
+            anchorPt = bsLn.rightPt
+            c_w = Point3D.from_point2D(anchorPt, z = height).right(width)
+            d_w = Point3D.from_point2D(tarPt, z = 0)
+        elif which == 'Ad':
+            anchorPt = bsLn.leftPt
+            c_w = Point3D.from_point2D(anchorPt, z = height).left(width)
+            d_w = Point3D.from_point2D(tarPt, z = 0)
+        else:
+            raise Exception('which argument must be either Deuce or Ad!')
+    else:
+        raise Exception('side argument must be either Top or Bot!')
+
+    myCam = Camera.from_to(c_w, d_w, f = 1000 * zoom)
+    return myCam
 
 if __name__ == '__main__':
     top_cntCam = birds_eye_half_court_cam(zoom = 1, side = 'Top')
@@ -168,3 +199,13 @@ if __name__ == '__main__':
 
     View.make(left_sideCam, courtScn, resolution = 1).snap().show()
     View.make(right_sideCam, courtScn, resolution = 1).snap().show()
+
+    left_topCam = baseline_side_cam(which = 'Deuce', side = 'Top', width = 100, height = 50, zoom = 1)
+    right_topCam = baseline_side_cam(which = 'Ad', side = 'Top', width = 100, height = 50, zoom = 1)
+    left_botCam = baseline_side_cam(which = 'Deuce', side = 'Bot', width = 100, height = 50, zoom = 1)
+    right_botCam = baseline_side_cam(which = 'Ad', side = 'Bot', width = 100, height = 50, zoom = 1)
+
+    View.make(left_topCam, courtScn, resolution = 1).snap().show()
+    View.make(right_topCam, courtScn, resolution = 1).snap().show()
+    View.make(left_botCam, courtScn, resolution = 1).snap().show()
+    View.make(right_botCam, courtScn, resolution = 1).snap().show()
