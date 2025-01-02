@@ -210,6 +210,11 @@ class Trajectory:
     def get_bounce_indices(self):
         return self['event'][self['event'].str.startswith('B')].index.tolist()
     
+    def get_bounce_frames(self):
+        bnc_idxs = self.get_bounce_indices()
+        frames = self.get_frames()
+        return [frames[idx] for idx in bnc_idxs]
+
     def get_num_bounces(self):
         return len(self.get_bounce_events())
     
@@ -819,6 +824,9 @@ class Shot:
     def get_bounce_positions(self):
         return self.shotTraj.get_bounce_positions()
     
+    def get_bounce_frames(self):
+        return self.shotTraj.get_bounce_frames()
+    
     def get_first_bounce_position(self):
         return self.shotTraj.get_first_bounce_position()
     
@@ -872,7 +880,34 @@ class Shot:
         optPt = mirrorLn.weak_intersect(ownLn)
         
         return optPt
-    
+        
+    def get_intersection_with_service_line(self, courtLines = None):
+        from ATMANpy.types.Points import Point2D
+        from ATMANpy.types.Lines import Line
+        assert self.is_serve()
+
+        if courtLines is None:
+            courtLines = CourtLines.make().add_singles_netline()
+
+        side = 'Top' if self.get_hit_side() == 'Bot' else 'Bottom'
+        which = 'Ad' if self.is_serve_ad() else 'Deuce'
+        srvLn, _ = courtLines.get_service_line_and_indicator(side, which)
+
+        hit_pos = self.get_ball_hit_position()
+        if self.is_in_net():
+            x, y, _ = self.get_ball_last_position()
+        else:
+            x, y = self.get_first_bounce_position()
+        bnc_pos = x, y
+        
+        if bnc_pos == (None, None):
+            return (None, None)
+
+        flightLn = Line(Point2D(tuple(hit_pos)), Point2D(tuple(bnc_pos)))
+
+        interPt = flightLn.weak_intersect(srvLn)
+        return interPt.coords
+
     def get_point_score(self):
         if self.is_by_server():
             return self.hitPlayer.get_point_score(), self.recPlayer.get_point_score()
