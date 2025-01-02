@@ -651,8 +651,28 @@ class CourtLines(Lines):
                      [*c.coords, FOOT_HEIGHT_AT_CENTER * scale_factor],
                      [*r.coords, FOOT_HEIGHT_AT_POST * scale_factor]]
         return coords_3D
-
     
+    def get_service_line_and_indicator(self, side, which):
+        srvReg = self.get_service_box(side = side, which = which)
+        
+        if side == 'Bottom':
+            srvLn = srvReg['Bottom']
+        elif side == 'Top':
+            srvLn = srvReg['Top']
+
+        ### get indicator -> which is wide, which is down the middle
+        srvLn.leftPt, srvLn.rightPt
+        center_x, center_y = self.get_center_point().coords
+
+        if srvLn.leftPt.x == center_x:
+            indicator = {'middle': srvLn.leftPt,
+                            'wide': srvLn.rightPt}
+        if srvLn.rightPt.x == center_x:
+            indicator = {'middle': srvLn.rightPt,
+                            'wide': srvLn.leftPt}
+
+        return srvLn, indicator
+
 @dataclass(frozen = True)
 class Region(Lines):
     lineList: List[Line]
