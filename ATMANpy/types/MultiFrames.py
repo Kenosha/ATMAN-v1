@@ -575,6 +575,11 @@ class Frames:
             writer.writeFrame(myArr)
         
         writer.close()
+
+    def put(self, anyObj, **kwargs):
+        framesType = self.__class__
+        return framesType.from_single_frames([subFrm.put(anyObj, **kwargs) for subFrm in self])
+
     
 @dataclass(frozen = True)
 class BGRFrames(Frames):
