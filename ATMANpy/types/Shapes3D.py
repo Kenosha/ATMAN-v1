@@ -721,6 +721,91 @@ class Line3D:
     def get_container(cls):
         return Lines3D
     
+    def __add__(self, other):
+        if isinstance(other, Line3D):
+            new_leftPt = self.leftPt + other.leftPt
+            new_rightPt = self.rightPt + other.rightPt
+        elif isinstance(other, Point3D):
+            new_leftPt = self.leftPt + other
+            new_rightPt = self.rightPt + other
+        else:
+            new_leftPt = self.leftPt + other
+            new_rightPt = self.rightPt + other
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+        
+    def __sub__(self, other):
+        if isinstance(other, Line3D):
+            new_leftPt = self.leftPt - other.leftPt
+            new_rightPt = self.rightPt - other.rightPt
+        elif isinstance(other, Point3D):
+            new_leftPt = self.leftPt - other
+            new_rightPt = self.rightPt - other
+        else:
+            new_leftPt = self.leftPt - other
+            new_rightPt = self.rightPt - other
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def __mul__(self, other):
+        if isinstance(other, Line3D):
+            raise TypeError('Multiplying Line3D with Line3D not supported!')
+        elif isinstance(other, Point3D):
+            new_leftPt = self.leftPt * other
+            new_rightPt = self.rightPt * other
+        else:
+            new_leftPt = self.leftPt * other
+            new_rightPt = self.rightPt * other
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def __div__(self, other):
+        if isinstance(other, Line3D):
+            raise TypeError('Dividing Line3D with Line3D not supported!')
+        elif isinstance(other, Point3D):
+            new_leftPt = self.leftPt / other
+            new_rightPt = self.rightPt / other
+        else:
+            new_leftPt = self.leftPt / other
+            new_rightPt = self.rightPt / other
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def __truediv__(self, other):
+        if isinstance(other, Line3D):
+            raise TypeError('Floor Dividing Line3D with Line3D not supported!')
+        elif isinstance(other, Point3D):
+            new_leftPt = self.leftPt // other
+            new_rightPt = self.rightPt // other
+        else:
+            new_leftPt = self.leftPt // other
+            new_rightPt = self.rightPt // other
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def __abs__(self):
+        new_leftPt, new_rightPt = abs(self.leftPt), abs(self.rightPt)
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def __round__(self):
+        new_leftPt, new_rightPt = round(self.leftPt), round(self.rightPt)
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def __neg__(self):
+        new_leftPt, new_rightPt = -self.leftPt, -self.rightPt
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
@@ -986,6 +1071,11 @@ class Line3D:
         outPt = line_orig + line_vec * n
         
         return outPt, (l, m, n)
+    
+    def dash(self, num_dashes = 10):
+        subPnts = self.subdivide(num_dashes * 2)
+        subLns = Lines3D([Line3D(subPnts[idx], subPnts[idx + 1]) for idx in range(len(subPnts) - 1)])
+        return subLns[::2]
 
 @dataclass(frozen = True)
 class Region3D():
@@ -1322,7 +1412,9 @@ class Container3D:
             ### get line(s) by position in list.
             elements = self.shapeList[item]
             if isinstance(elements, List):
-                return self.__class__(elements)
+                updDict = {'shapeList': elements}
+                newDict = get_updated_attribute_dictionary(self, updDict)
+                return self.__class__(**newDict)
             else:
                 return elements ### a single line
 
