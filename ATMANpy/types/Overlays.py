@@ -970,7 +970,7 @@ def overlay(baseFrm, legFrm, top_left_point = None):
     if lg_t is not None: ### if we have a legend with a time dimension...
         assert bs_t == lg_t
 
-    assert tl_col + lg_col < bs_col and tl_row + lg_row < bs_row
+    assert tl_col + lg_col <= bs_col and tl_row + lg_row <= bs_row
 
     combArr = baseFrm.array.copy()
     legArr = legFrm.array.copy()
@@ -1247,7 +1247,9 @@ def frame_cascade(list_of_cascFrms, baseRst):
 def reverse_cascade(finalRst, keep_which = None, 
                     frames_per_element = 25, acceleration = 1):
     ### TODO: finalRst has to be a FrameRaster for the moment. Generalize if needed.
-
+    if isinstance(finalRst, FramesRaster):
+        finalRst = finalRst.to_frame_raster()
+    
     if keep_which is None:
         keep_which = []
     
