@@ -639,7 +639,7 @@ class Trajectory:
             if ball_bef is None:
                 spLn = None
             else:
-                spLn = Line3D(ball_bef.get_point(), ball_curr.get_point())
+                spLn = Line3D(ball_bef.get_point(), ball_curr.get_point(), contains_endpoint = False)
                 return spLn
         return ballSF_before.merge(ballSF).apply(make_spline)
     

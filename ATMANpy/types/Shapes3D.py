@@ -707,7 +707,9 @@ class Line3D:
     color: Optional[tuple] = _DEFAULT_COLOR
     thickness: Optional[int] = 0
     alpha: Optional[float] = 1
-
+    contains_endpoint: Optional[bool] = True ### if False, the Line is half-open:
+                                               # it contains every point arbitrarily close, but not equal, to the endpoint.
+                                               # this is used in subdivision (and, subsequently, rasterization.)
     def __repr__(self):
         return f'{self.__class__.__name__}(left = {self.leftPt}, right = {self.rightPt})'
 
@@ -956,9 +958,9 @@ class Line3D:
         return self.center_point().coords
 
     def subdivide(self, elements = 100, return_coords = False):
-        x_space = np.linspace(self.leftPt.x, self.rightPt.x, num = elements)
-        y_space = np.linspace(self.leftPt.y, self.rightPt.y, num = elements)
-        z_space = np.linspace(self.leftPt.z, self.rightPt.z, num = elements)
+        x_space = np.linspace(self.leftPt.x, self.rightPt.x, num = elements, endpoint = self.contains_endpoint)
+        y_space = np.linspace(self.leftPt.y, self.rightPt.y, num = elements, endpoint = self.contains_endpoint)
+        z_space = np.linspace(self.leftPt.z, self.rightPt.z, num = elements, endpoint = self.contains_endpoint)
 
         x_y_z_space = zip(x_space, y_space, z_space)
         
