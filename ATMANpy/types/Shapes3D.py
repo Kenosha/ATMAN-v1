@@ -477,7 +477,8 @@ class Circle3D(Point3D):
         itpl_radius = (1 - itpl_lambda) * self.radius + itpl_lambda * otherCrc.radius
 
         return Circle3D(coords = itpl_coords, color = itpl_color, alpha = itpl_alpha,
-                        radius = itpl_radius, limit_theta = itpl_limit_theta)
+                        radius = itpl_radius, limit_theta = itpl_limit_theta, 
+                        fixed_dimension = self.fixed_dimension)
 
     def rasterize(self, resolution):
         ### resolution: number of points on one arc length
