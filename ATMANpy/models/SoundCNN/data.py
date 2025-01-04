@@ -116,7 +116,7 @@ class LabelledSpectroData(Dataset):
         
         return spec, label
 
-def waveform_generator(vid, sto, segmenter = 'isRally', yield_frame_indices = True):
+def waveform_generator(vid, sto, segmenter = 'isRally', yield_frame_indices = True, widen = 0):
     ### path to match file
     videoDir = ut.get_folder_struct('video_files')[vid]
     videoPath = os.path.join(videoDir, 'match.mp4')
@@ -139,7 +139,8 @@ def waveform_generator(vid, sto, segmenter = 'isRally', yield_frame_indices = Tr
     
     for myBF in segBFs:
         fs, ls = myBF.fs_ls()
-        
+        fs, ls = max(fs - widen, 0), max(0, ls + widen)
+
         ### crop waveform
         fs_sample, _ = first_last_sample_index_in_frame(fs, 0, samples_per_frame)
         _, ls_sample = first_last_sample_index_in_frame(ls, 0, samples_per_frame)
@@ -153,7 +154,7 @@ def waveform_generator(vid, sto, segmenter = 'isRally', yield_frame_indices = Tr
 def point_sound_generator(vid, sto, segmenter = 'isRally', 
                           mel_bands = 128, hop_length = 512, window_length = 1024,
                           to_db = True, norm_value = 50, db_reference = 1,
-                          yield_frame_indices = True):
+                          yield_frame_indices = True, widen = 0):
     ### path to match file
     videoDir = ut.get_folder_struct('video_files')[vid]
     videoPath = os.path.join(videoDir, 'match.mp4')
@@ -177,7 +178,8 @@ def point_sound_generator(vid, sto, segmenter = 'isRally',
     
     for myBF in segBFs:
         fs, ls = myBF.fs_ls()
-        
+        fs, ls = max(fs - widen, 0), max(0, ls + widen)
+
         ### crop waveform
         fs_sample, _ = first_last_sample_index_in_frame(fs, 0, samples_per_frame)
         _, ls_sample = first_last_sample_index_in_frame(ls, 0, samples_per_frame)
