@@ -17,6 +17,26 @@ import ATMANpy.auxil.constants as const
 
 from ATMANpy.funcs.util_funcs import get_updated_attribute_dictionary, interpolate_tuples
 
+def strict_equality(someShape, otherShape):
+    if not isinstance(otherShape, someShape.__class__):
+        return False
+
+    self_attrs = get_updated_attribute_dictionary(someShape, {})
+    othr_attrs = get_updated_attribute_dictionary(otherShape, {})
+
+    if self_attrs.keys() != othr_attrs.keys():
+        return False
+    else:
+        ### compare entry by entry, and not the whole dictionary, so we catch differences by value, and not by reference
+        for k in self_attrs:
+            eqBool = self_attrs[k] != othr_attrs[k]
+            if isinstance(eqBool, np.array): ### deal with arrays
+                eqBool == eqBool.all()
+            if not eqBool:
+                return False
+        else:
+            return True
+
 @dataclass(frozen = True)
 class Point3D:
     """
@@ -448,6 +468,15 @@ class Circle3D(Point3D):
     def __repr__(self):
         return f'{self.__class__.__name__}({self.coords}, radius = {self.radius})'
 
+    def __eq__(self, otherCrc):
+        if not Point3D.__eq__(self, otherCrc): ### check for coordinate equality
+            return False
+        else:
+            rad_eq = self.radius == otherCrc.radius
+            lim_eq = self.limit_theta == otherCrc.limit_theta
+            fix_eq = self.fixed_dimension == otherCrc.fixed_dimension
+            return rad_eq and lim_eq and fix_eq
+
     @staticmethod
     def from_point3D(myPnt, radius = 1, limit_theta = None, fixed_dimension = 'z', name = 'Circle3D'):
         if limit_theta is None:
@@ -546,6 +575,17 @@ class Ellipse3D(Point3D):
     def __repr__(self):
         return f'{self.__class__.__name__}({self.coords}, long radius = {self.radius_long}, short radius = {self.radius_short})'
 
+    def __eq__(self, otherEll):
+        if not Point3D.__eq__(self, otherEll): ### check for coordinate equality
+            return False
+        else:
+            rad_long_eq = self.radius_long == otherEll.radius_long
+            rad_short_eq = self.radius_short == otherEll.radius_short
+            tht_eq = self.theta == otherEll.theta
+            lim_eq = self.limit_angle == otherEll.limit_angle
+            fix_eq = self.fixed_dimension == otherEll.fixed_dimension
+            return rad_long_eq and rad_short_eq and tht_eq and lim_eq and fix_eq
+        
     @staticmethod
     def from_point3D(myPnt, radius_long = 1, radius_short = 1, theta = 0, limit_angle = None, fixed_dimension = 'z', name = 'Ellipse3D'):
         return Ellipse3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
@@ -633,6 +673,15 @@ class Ball3D(Point3D):
     def __repr__(self):
         return f'{self.__class__.__name__}({self.coords}, radius = {self.radius})'
 
+    def __eq__(self, otherBall):
+        if not Point3D.__eq__(self, otherBall): ### check for coordinate equality
+            return False
+        else:
+            rad_eq = self.radius == otherBall.radius
+            phi_eq = self.limit_phi == otherBall.limit_phi
+            tht_eq = self.limit_theta == otherBall.limit_theta
+            return rad_eq and phi_eq and tht_eq
+        
     @staticmethod
     def from_point3D(myPnt, radius = 1, limit_phi = None, limit_theta = None, name = 'Ball3D'):
         return Ball3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha, 
@@ -713,6 +762,11 @@ class Line3D:
                                                # this is used in subdivision (and, subsequently, rasterization.)
     def __repr__(self):
         return f'{self.__class__.__name__}(left = {self.leftPt}, right = {self.rightPt})'
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return (self.leftPt == other.leftPt) and (self.rightPt == other.rightPt)
 
     @staticmethod
     def from_line2D(aLn, x = None, y = None, z = None):
@@ -809,11 +863,6 @@ class Line3D:
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
     
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return (self.leftPt == other.leftPt) and (self.rightPt == other.rightPt)
-
     ### REINSTANTIATION ###
     def rename(self, new_name):
         updDict = {'name': new_name}
@@ -1105,6 +1154,11 @@ class Region3D():
     def __repr__(self):
         return f'{self.__class__.__name__}(p1 = {self.p1}, p2 = {self.p2}, p3 = {self.p3}, p4 = {self.p4})'
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return all([myLn == othLn for myLn, othLn in zip(self, other)])
+
     def __iter__(self):
         return iter(self.lineList)
     
@@ -1127,11 +1181,6 @@ class Region3D():
     def __len__(self):
         return len(self.lineList)
     
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return all([myLn == othLn for myLn, othLn in zip(self, other)])
-
     @classmethod
     def from_region2D(cls, myReg, x = None, y = None, z = None):
         return Region3D([Line3D.from_line2D(myLn, x = x, y = y, z = z) for myLn in myReg.lineList])
