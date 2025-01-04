@@ -26,7 +26,8 @@ if __name__ == '__main__':
     
     ######## GENERAL PARAMETERS ########
     blacklist_vids = ['2021-7341-ms019-brest-stefano-travaglia-vs-mohamed-safwat', 
-                      '2021-7341-ms026-brest-thomas-fabbiano-vs-alexey-vatutin'] ### these have a different camera angle on a different court
+                      '2021-7341-ms026-brest-thomas-fabbiano-vs-alexey-vatutin', ### these have a different camera angle on a different court
+                      ]
     
     vidfileDict = ut.get_folder_struct('video_files') 
     driver_scope = [f for f in vidfileDict if 'brest' in f and 'match.mp4' in os.listdir(vidfileDict[f]) and f not in blacklist_vids]

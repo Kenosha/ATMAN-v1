@@ -11,20 +11,22 @@ import pandas as pd
 import numpy as np
 from ATMANpy.funcs.util_funcs import get_folder_struct, shift_array, add_in_nan_rows, argmin_multidim, detect_local_minima
 
+NAME_PREFIX = "Return_Analysis"
+
 ### SEARCH SPACE PARAMETERS ###
-GRANULARITY_INITIAL_GROUND = 60 #100 # 325 ### how many different initial conditions in x
-GRANULARITY_INITIAL_VERT = 41 #50 # 200 ### how many different initial conditions in z
-GRANULARITY_SPIN = 41 #301 ### how many different spin rates
-GRANULARITY_HEIGHT = 46 ### how many different initial heights
+GRANULARITY_INITIAL_GROUND = 600 #100 # 325 ### how many different initial conditions in x
+GRANULARITY_INITIAL_VERT = 300 #50 # 200 ### how many different initial conditions in z
+GRANULARITY_SPIN = 13 #41 #301 ### how many different spin rates
+GRANULARITY_HEIGHT = 3 #46 ### how many different initial heights
 MIN_SPEED_GROUND = 1 ## lowest possible ground speed of ball, in m/s
-MAX_SPEED_GROUND = 60 ## highest possible ground speed of ball, in m/s
-MIN_SPEED_VERT = -20
+MAX_SPEED_GROUND = 30 #60 ## highest possible ground speed of ball, in m/s
+MIN_SPEED_VERT = 1 #-20
 MAX_SPEED_VERT =  20
-MIN_SPIN_RATE = -5000 ### highest slice RPM (this has been switched -> used to be topspin, because it has negative lift, but sign is switched)
-MAX_SPIN_RATE = 5000  ### higgest topspin RPM  (this has been switched -> used to be slice, because it has positive lift, but sign is switched)
-MIN_HIT_HEIGHT = 0 ### min height of ball, at hit
-MAX_HIT_HEIGHT = 4.5 ### max height of ball, at hit
-DURATION_OF_TRAJECTORY = 2.5 ### in seconds
+MIN_SPIN_RATE = -3000 #-5000 ### highest slice RPM (this has been switched -> used to be topspin, because it has negative lift, but sign is switched)
+MAX_SPIN_RATE = 3000 #5000  ### higgest topspin RPM  (this has been switched -> used to be slice, because it has positive lift, but sign is switched)
+MIN_HIT_HEIGHT = 1 #0 ### min height of ball, at hit
+MAX_HIT_HEIGHT = 2 #4.5 ### max height of ball, at hit
+DURATION_OF_TRAJECTORY = 3 #2.5 ### in seconds
 PATHOLOGICAL_RANGE = 2 # 10 -> twice the min/max spin rate is added to the thing. 
 PATHOLOGICAL_TAIL_GRANULARITY = 0 ## zero for no pathological cases
 
@@ -57,7 +59,7 @@ I_cm = alpha * m * R**2 ### moment of inertia
 
 
 ########
-NAME = f'ShorterTrajectories_g{GRANULARITY_INITIAL_GROUND}_v{GRANULARITY_INITIAL_VERT}_s{GRANULARITY_SPIN}_h{GRANULARITY_HEIGHT}'
+NAME = f'{NAME_PREFIX}_g{GRANULARITY_INITIAL_GROUND}_v{GRANULARITY_INITIAL_VERT}_s{GRANULARITY_SPIN}_h{GRANULARITY_HEIGHT}'
 ########
 
 def RPM_to_omega(RPM):

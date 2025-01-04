@@ -221,6 +221,7 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last', k
         frmList = []
 
         files = os.listdir(savePath)
+        ### TODO: this is imperfect! first and last should be determined by date -> need to parse the date and sort it.
         if keep_only == 'first':
             files = [files[0]]
         elif keep_only == 'last':
