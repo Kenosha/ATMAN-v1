@@ -257,6 +257,28 @@ class DummyScene:
         else:
             return '\n'.join([fsStr, *sStrs, lsStr])
 
+    def __getitem__(self, item):
+        return DummyScene([self.rastArrs[item]], [self.colArrs[item]], [self.alphaArrs[item]])
+
+    def __len__(self):
+        return len(self.rastArrs)
+
+    def __eq__(self, otherScn):
+        if not isinstance(otherScn, DummyScene):
+            return False
+        else:
+            if len(self) != len(otherScn):
+                return False
+            else:
+                for idx in range(len(self)):
+                    if not (self.rastArrs[idx] != otherScn.rastArrs[idx]).all():
+                        return False
+                    if not (self.colArrs[idx] != otherScn.colArrs[idx]).all():
+                        return False
+                    if not (self.alphaArrs[idx] != otherScn.alphaArrs[idx]).all():
+                        return False
+                return True
+
     @staticmethod
     def make_empty():
         return DummyScene([], [], [])
