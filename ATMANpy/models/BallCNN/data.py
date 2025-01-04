@@ -14,6 +14,20 @@ import torchvision.transforms.v2 as tf
 from torchvision.io import read_video
 from torch.utils.data import Dataset, IterableDataset, get_worker_info
 
+# def get_contour_frame(myFrm, myCnt, 
+#                       dilTup = (2, 2), ### smallest possible non-trivial dilation
+#                       ):
+#     cntMask = myFrm.within_contour(myCnt)
+#     cntMask = cntMask.dilate(dilTup) 
+    
+#     cntReg = myCnt.enclosing_region(margin = 0)
+#     cntFrm = myFrm.mask(cntMask).crop(cntReg)
+#     cntMask.show()
+
+# def get_context_frame(myFrm, myCnt):
+#     cntReg = myCnt.enclosing_region(margin = 0)
+    
+
 class BallData(Dataset):
     
     @staticmethod
@@ -46,8 +60,8 @@ class BallData(Dataset):
             
             ballCnts = cntSF[frame]['svm_labelled_ballCnts']
             if ballCnts is not None:
-                for cnt in ballCnts:
-                    objReg = cnt.enclosing_region(margin = 0).resize(to_height = d, to_width = d)
+                for myCnt in ballCnts:
+                    objReg = myCnt.enclosing_region(margin = 0).resize(to_height = d, to_width = d)
                     zoomcropFrm = myFrm.crop(objReg).zoom(z)
                     zoomcropFrm = zoomcropFrm.pad(to_height = z * d, to_width = z * d) ### in case we are at the edge of image
                     assert zoomcropFrm.array.shape == (z * d, z * d, 3)
@@ -55,8 +69,8 @@ class BallData(Dataset):
                     
             nonballCnts = cntSF[frame]['svm_labelled_nonballCnts']
             if nonballCnts is not None:
-                for cnt in nonballCnts:
-                    objReg = cnt.enclosing_region(margin = 0).resize(to_height = d, to_width = d)
+                for myCnt in nonballCnts:
+                    objReg = myCnt.enclosing_region(margin = 0).resize(to_height = d, to_width = d)
                     zoomcropFrm = myFrm.crop(objReg).zoom(z)
                     zoomcropFrm = zoomcropFrm.pad(to_height = z * d, to_width = z * d) ### in case we are at the edge of image
                     assert zoomcropFrm.array.shape == (z * d, z * d, 3)
