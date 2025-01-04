@@ -19,6 +19,7 @@ _unused/
 *.stats
 *.txt
 *.wav
+*.lock
 *graphs/
 
 # Byte-compiled / optimized / DLL files
