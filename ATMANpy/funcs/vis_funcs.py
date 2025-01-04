@@ -181,12 +181,18 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
     ### Initialize background and foreground
     if background_scene is None:
         background_scene = Scene.make_empty()
+    else:
+        background_scene = Scene([shape for shape in background_scene if shape not in animation_sequence_objects])
    
     if previous_foreground_scene is None:
         previous_foreground_scene = Scene.make_empty()
+    else:
+        previous_foreground_scene = Scene([shape for shape in previous_foreground_scene if shape not in animation_sequence_objects])
 
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
+    else:
+        previous_dummy_scene = Scene([shape for shape in previous_dummy_scene if shape not in animation_sequence_objects])
     
     ### create joint_annotated_points -> previous points and current foreground point
     if annotated_points is None: annotated_points = []
@@ -289,16 +295,22 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
         start_cam = Camera.calibrated_AO_behind()
     if stop_cam is None:
         stop_cam = Camera.calibrated_AO_behind()
-    
+        
     ### Initialize background and foreground
     if background_scene is None:
         background_scene = Scene.make_empty()
+    else:
+        background_scene = Scene([shape for shape in background_scene if shape not in static_scene])
    
     if previous_foreground_scene is None:
         previous_foreground_scene = Scene.make_empty()
+    else:
+        previous_foreground_scene = Scene([shape for shape in previous_foreground_scene if shape not in static_scene])
 
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
+    else:
+        previous_dummy_scene = Scene([shape for shape in previous_dummy_scene if shape not in static_scene])
     
     ### dim or lumify scenes based on whether they're argument or previous
     static_scene_brightened = static_scene.dim(argument_luminosity)
@@ -381,13 +393,19 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
     ### Initialize background and foreground
     if background_scene is None:
         background_scene = Scene.make_empty()
+    else:
+        background_scene = Scene([shape for shape in background_scene if shape not in static_scene])
    
     if previous_foreground_scene is None:
         previous_foreground_scene = Scene.make_empty()
+    else:
+        previous_foreground_scene = Scene([shape for shape in previous_foreground_scene if shape not in static_scene])
 
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
-
+    else:
+        previous_dummy_scene = Scene([shape for shape in previous_dummy_scene if shape not in static_scene])
+    
     ### dim or lumify scenes based on whether they're argument or previous
     static_scene_brightened = static_scene.dim(argument_luminosity)
     static_scene_dimmed = static_scene.dim(1 / argument_luminosity) ### this passes into the next_animation_dictionary
