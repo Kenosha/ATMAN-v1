@@ -944,6 +944,11 @@ class Line3D:
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
     
+    def flip(self):
+        updDict = {'leftPt': self.rightPt, 'rightPt': self.leftPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
     def is_left_to_right(self):
         x_dist = abs(self.rightPt.x - self.leftPt.x)
         y_dist = abs(self.rightPt.y - self.leftPt.y)
