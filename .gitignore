@@ -12,10 +12,12 @@ cnn_player/
 cnn_ball/
 cnn_sound/
 results_video/
+scripts/
 *.ods
 *.csv
 *.stats
-Todo.txt
+*.txt
+*.wav
 *graphs/
 
 # Byte-compiled / optimized / DLL files
