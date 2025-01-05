@@ -190,7 +190,7 @@ class Point3D:
     
     ### METHODS ###
     def left(self, units):
-        x, y, z = (max(self.x - units, 0), self.y, self.z)
+        x, y, z = self.x - units, self.y, self.z
         
         if not self.is_vectorized():
             new_coords = (x, y, z)
@@ -200,7 +200,7 @@ class Point3D:
         return self.reposition(new_coords)
 
     def right(self, units):
-        x, y, z = (self.x + units, self.y, self.z)
+        x, y, z = self.x + units, self.y, self.z
         
         if not self.is_vectorized():
             new_coords = (x, y, z)
@@ -210,7 +210,7 @@ class Point3D:
         return self.reposition(new_coords)
     
     def front(self, units):
-        x, y, z = (self.x, max(self.y - units, 0), self.z)
+        x, y, z = self.x, self.y - units, self.z
         
         if not self.is_vectorized():
             new_coords = (x, y, z)
@@ -220,7 +220,7 @@ class Point3D:
         return self.reposition(new_coords)
 
     def back(self, units):
-        x, y, z = (self.x, self.y + units, self.z)
+        x, y, z = self.x, self.y + units, self.z
         
         if not self.is_vectorized():
             new_coords = (x, y, z)
@@ -230,7 +230,7 @@ class Point3D:
         return self.reposition(new_coords)
 
     def down(self, units):
-        x, y, z = (self.x, self.y, max(self.z - units, 0))
+        x, y, z = self.x, self.y, self.z - units
         
         if not self.is_vectorized():
             new_coords = (x, y, z)
@@ -240,7 +240,7 @@ class Point3D:
         return self.reposition(new_coords)
     
     def up(self, units):
-        x, y, z = (self.x, self.y, self.z + units)
+        x, y, z = self.x, self.y, self.z + units
         
         if not self.is_vectorized():
             new_coords = (x, y, z)
