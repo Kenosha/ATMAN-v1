@@ -408,10 +408,10 @@ class Graph:
         annotatedPoints = [*x_labels, *y_labels, *header_pnts, *x_label_pnts, *val_label_pnts, *axis_labels]
         return myScn, annotatedPoints ### by exposing these we can morph and move chart elements.
     
-    def render(self):
+    def render(self, over_array = None):
         myScn, annotatedPoints = self.preview()
         axView = View.make(self.cam, myScn, resolution = self.resolution, annotatedPoints = annotatedPoints)
-        axFrm = axView.snap()
+        axFrm = axView.snap(over_array = over_array)
         return axFrm
 
 class TableSkeleton:
@@ -483,12 +483,12 @@ class TableSkeleton:
     def get_lines(self):
         return self.vertLns.join(self.horiLns)
 
-    def render(self):
+    def render(self, over_array = None):
         allLns = self.get_lines()
         tabScn = Scene(allLns)
 
         tabView = View.make(self.tabCam, tabScn, resolution = self.resolution)
-        tabFrm = tabView.snap()
+        tabFrm = tabView.snap(over_array = over_array)
         return tabFrm
 
 class Table:
@@ -592,7 +592,7 @@ class Table:
     def __getitem__(self, item):
         return self.tabSket.__getitem__(item)
 
-    def render(self):
+    def render(self, over_array = None):
         allLns = self.get_lines()
         tabScn = Scene(allLns)
 
@@ -645,7 +645,7 @@ class Table:
                 annPnts.append(textPt)
 
         tabView = View.make(self.tabCam, tabScn, resolution = self.resolution, annotatedPoints = annPnts)
-        tabFrm = tabView.snap()
+        tabFrm = tabView.snap(over_array = over_array)
         return tabFrm
 
 class DiagramShape:
@@ -774,7 +774,7 @@ class Diagram:
     def deepcopy(self):
         return deepcopy(self)
 
-    def render(self):
+    def render(self, over_array = None):
         diaRegs = []
         annPnts = []
         diagArrows = []
@@ -797,7 +797,7 @@ class Diagram:
 
         myScn = Scene(diaRegs).put(diagArrows)
         myView = View.make(self.tabCam, myScn, annotatedPoints = annPnts, resolution = self.resolution)
-        myFrm = myView.snap()
+        myFrm = myView.snap(over_array = over_array)
 
         return myFrm
 
@@ -865,7 +865,7 @@ class Legend:
                       header_offset = self.header_offset,
                       header_color = self.header_color)
     
-    def render(self):
+    def render(self, over_array = None):
         legCam = Camera.birds_eye(self.render_height, sensor_dims = self.legend_dimensions)
         legReg = legCam.approximate_fov(self.render_height)
 
@@ -942,7 +942,7 @@ class Legend:
 
         legScn = Scene(legend_shapes)
         legView = View.make(legCam, legScn, annotatedPoints = annotated_points, resolution = self.resolution)
-        legFrm = legView.snap()
+        legFrm = legView.snap(over_array = over_array)
 
         return legFrm
 
