@@ -504,6 +504,8 @@ class Camera:
         
         return Camera(M_int, M_ext, sensor_dims)
 
+    def get_P(self):
+        return self.M_int @ self.M_ext
     def get_K(self):
         return self.M_int[:3, :3]
     def get_R(self):
@@ -539,7 +541,7 @@ class Camera:
         else:
             raise Exception('Points to be projected need to be (homogenous or inhomogenous) 3D')
         
-        M_proj = self.M_int @ self.M_ext
+        M_proj = self.get_P()
         
         homArr_2D = np.einsum('ij, nj -> ni', M_proj, homArr)
         pixArr = homArr_2D[:, :2] / homArr_2D[:, 2][:, np.newaxis]
