@@ -3,6 +3,8 @@ import numpy as np
 
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.MultiFrames import BGRFrames
+from ATMANpy.types.Overlays import Table
+from ATMANpy.types.Points import Point2D
 
 def show(all_frames, ms_between_frames = 25):
     DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
@@ -152,3 +154,48 @@ def get_winners_from_score(retPnts, allPnts):
 
     return np.array(winner_codes)
 
+def make_matrix_table(matArr, title = None, dimensions = (600, 400), horizontal_offset = 4.5):
+    rs, cs = matArr.shape
+    table_data = {i: {j: matArr[i, j] for j in range(cs)} for i in range(rs)}
+
+    rename_null_dict = {0: '', 1: '', 2: '', 3: ''}
+
+    myTab = Table(table_data, columns_rename_dict = rename_null_dict, index_rename_dict = rename_null_dict,
+                  horizontal_lines = False, header_row_height = 0.5, index_col_width = 0, skeleton_shrinkage = 0.25,
+                  number_format = '>10.2f', dimensions = dimensions,
+                  title = title, title_horizontal_offset = horizontal_offset, title_vertical_offset = 0.5)
+    return myTab
+
+
+def render_over_frames(myTab, myFrms, tlPt = Point2D((0, 0))):
+    from ATMANpy.types.Overlays import overlay
+    testFrm = myTab.render()
+    rs, cs = testFrm.rows, testFrm.cols
+    cx, cy = tlPt.coords
+
+    rendered_frames = []
+    for frm in myFrms:
+        overArr = frm.array[cy:cy+rs, cx:cx+cs]
+        overFrm = myTab.render(over_array = overArr)
+        rendered_frames.append(overFrm)
+    
+    renFrms = BGRFrames.from_single_frames(rendered_frames)
+    outFrms = overlay(myFrms, renFrms, top_left_point = tlPt)
+    return outFrms
+
+def render_many_over_frames(myTabs, myFrms, tlPt = Point2D((0, 0))):
+    from ATMANpy.types.Overlays import overlay
+
+    rendered_frames = []
+    for tab, frm in zip(myTabs, myFrms):
+        testFrm = tab.render()
+        rs, cs = testFrm.rows, testFrm.cols
+        cx, cy = tlPt.coords
+
+        overArr = frm.array[cy:cy+rs, cx:cx+cs]
+        overFrm = tab.render(over_array = overArr)
+        rendered_frames.append(overFrm)
+    
+    renFrms = BGRFrames.from_single_frames(rendered_frames)
+    outFrms = overlay(myFrms, renFrms, top_left_point = tlPt)
+    return outFrms
