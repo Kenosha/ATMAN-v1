@@ -88,7 +88,9 @@ dim_factor = 0.5
 pre_frames = 300
 preFrms = myFrms[:pre_frames]
 preArr_dimmed = np.stack([f.dim(min((idx / pre_frames) ** 2, dim_factor)).array for idx, f in enumerate(preFrms)], axis = 0)
-preFrms_dimmed = BGRFrames(preArr_dimmed)
+preFrms_dimmed = BGRFrames(preArr_dimmed).rescale(3)
+
+fs_adj = fs + preFrms_dimmed.length()
 
 ### Projection Matrix
 P = ConstFeature.from_store(vid, sto, featname = 'P').feature
@@ -140,7 +142,7 @@ zeroFrm = BGRFrame(np.zeros((360, 640, 3), dtype = 'uint8'))
 line_color = const.BGR['rose_orange']
 
 ### first, show the white mask
-start, stop = fs, fs+step_frames
+start, stop = fs_adj, fs_adj+step_frames
 frmSF = lineSF['allBFrm'][list(range(start, stop))]
 maskFrms = MaskFrames.from_single_frames(list(frmSF.values()))
 # DecapStream(maskFrms, 0, 100).show()
@@ -154,8 +156,7 @@ mixFrms0 = mixFrms0.rescale(3)
 # DecapStream(mixFrms, 0, 100).show()
 
 ### then, show the hough lines
-script_line = ""
-start, stop = fs+step_frames, fs+2*step_frames
+start, stop = fs_adj+step_frames, fs_adj+2*step_frames
 houghSF = lineSF['houghLines'][list(range(start, stop))]
 # houghStm = myStm.conform(start, stop).attach(houghSF)
 # houghDtm = houghStm.decap_with_features()
@@ -169,8 +170,7 @@ mixFrms1 = houghFrms.mask(houghMask) + currFrms.mask(~houghMask) * dim_factor
 mixFrms1 = mixFrms1.rescale(3)
 
 ### then show the vertical and horizontal filtered lines
-script_line = ""
-start, stop = fs+2*step_frames, fs+3*step_frames
+start, stop = fs_adj+2*step_frames, fs_adj+3*step_frames
 filtSF = lineSF[['l_v_Lines', 'r_v_Lines', 'h_Lines']][list(range(start, stop))]
 # lineStm = myStm.conform(start, stop).attach(lineSF)
 # lineDtm = lineStm.decap_with_features()
@@ -194,7 +194,7 @@ script_line =   """
                     A camera is fully described by two matrices.
                 """
 
-start, stop = fs+3*step_frames, fs+6*step_frames
+start, stop = fs_adj+3*step_frames, fs_adj+6*step_frames
 HSF = ConstFeature.from_store(vid, sto, featname = 'H')
 H = HSF.feature
 courtLines = sa.find_courtlines(H).drop('Net Line')
@@ -211,58 +211,29 @@ currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
 
+all_frames.append(mixFrms)
+script_lines.append(script_line)
+
 ### internal, external, projection matrices
-from ATMANpy.types.Overlays import Table
-
 tab_x, tab_y = 600, 400
-def make_matrix_table(matArr, title = None, dimensions = (tab_x, tab_y), horizontal_offset = 4.5):
-    rs, cs = matArr.shape
-    table_data = {i: {j: matArr[i, j] for j in range(cs)} for i in range(rs)}
-
-    rename_null_dict = {0: '', 1: '', 2: '', 3: ''}
-
-    myTab = Table(table_data, columns_rename_dict = rename_null_dict, index_rename_dict = rename_null_dict,
-                  horizontal_lines = False, header_row_height = 0.5, index_col_width = 0, skeleton_shrinkage = 0.25,
-                  number_format = '>10.2f', dimensions = dimensions,
-                  title = title, title_horizontal_offset = horizontal_offset, title_vertical_offset = 0.5)
-    return myTab
-
 cam0 = Camera.calibrated_brest_behind().resize(3)
 
-intTab = make_matrix_table(cam0.M_int, title = 'Internal Matrix', horizontal_offset = 5.5)
-extTab = make_matrix_table(cam0.M_ext, title = 'External Matrix', horizontal_offset = 5.5)
-prjTab = make_matrix_table(cam0.get_P(), title = 'Projection Matrix', horizontal_offset = 4.5)
-
-intTab.render().show()
-extTab.render().show()
-prjTab.render().show()
+intTab = vis_ut.make_matrix_table(cam0.M_int, title = 'Internal Matrix', horizontal_offset = 5.5, dimensions = (tab_x, tab_y))
+extTab = vis_ut.make_matrix_table(cam0.M_ext, title = 'External Matrix', horizontal_offset = 5.5, dimensions = (tab_x, tab_y))
+prjTab = vis_ut.make_matrix_table(cam0.get_P(), title = 'Projection Matrix', horizontal_offset = 4.5, dimensions = (tab_x, tab_y))
+# intTab.render().show()
+# extTab.render().show()
+# prjTab.render().show()
 
 int_coords, ext_coords = (0, 0), (0, tab_y)
 intPt = Point2D(int_coords)
 extPt = Point2D(ext_coords)
 
-def render_over_frames(myTab, myFrms, tlPt = Point2D((0, 0))):
-    from ATMANpy.types.Overlays import overlay
-
-    testFrm = myTab.render()
-    rs, cs = testFrm.rows, testFrm.cols
-    cx, cy = tlPt.coords
-
-    rendered_frames = []
-    for frm in myFrms:
-        overArr = frm.array[cy:cy+rs, cx:cx+cs]
-        overFrm = myTab.render(over_array = overArr)
-        rendered_frames.append(overFrm)
-    
-    renFrms = BGRFrames.from_single_frames(rendered_frames)
-    outFrms = overlay(myFrms, renFrms, top_left_point = tlPt)
-    return outFrms
-
 # fade in int. matrix
 script_line =   """
                     The internal camera matrix contains all camera intrinsic parameters, like focal length or sensor dimensions.
                 """
-start, stop = fs+6*step_frames, fs+9*step_frames
+start, stop = fs_adj+6*step_frames, fs_adj+9*step_frames
 HSF = ConstFeature.from_store(vid, sto, featname = 'H')
 H = HSF.feature
 courtLines = sa.find_courtlines(H).drop('Net Line')
@@ -276,8 +247,11 @@ currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
 
-intFrms = render_over_frames(intTab, mixFrms, tlPt = intPt)
-DecapStream(intFrms, 0, 100).show()
+intFrms = vis_ut.render_over_frames(intTab, mixFrms, tlPt = intPt)
+# DecapStream(intFrms, 0, 100).show()
+
+all_frames.append(intFrms)
+script_lines.append(script_line)
 
 # fade in ext. matrix
 script_line =   """
@@ -297,9 +271,12 @@ currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
 
-intFrms = render_over_frames(intTab, mixFrms, tlPt = intPt)
-ext_intFrms = render_over_frames(extTab, intFrms, tlPt = extPt)
-DecapStream(ext_intFrms, 0, 100).show()
+intFrms = vis_ut.render_over_frames(intTab, mixFrms, tlPt = intPt)
+ext_intFrms = vis_ut.render_over_frames(extTab, intFrms, tlPt = extPt)
+# DecapStream(ext_intFrms, 0, 100).show()
+
+all_frames.append(ext_intFrms)
+script_lines.append(script_line)
 
 # fade out int. and ext. matrices, fade in proj matrix
 script_line =   """
@@ -307,9 +284,12 @@ script_line =   """
                     a 2-D representation on a screen.
                 """
 
-prjFrm = render_over_frames(prjTab, mixFrms[[-1]], tlPt = extPt // 2)
+prjFrm = vis_ut.render_over_frames(prjTab, mixFrms[[-1]], tlPt = extPt // 2)
 transFrm = vs.interpolate_frames(ext_intFrms[-1], prjFrm, num_frames = 100)
-DecapStream(transFrm, 0, 100).show()
+# DecapStream(transFrm, 0, 100).show()
+
+all_frames.append(transFrm)
+script_lines.append(script_line)
 
 # show net
 script_line =   """
@@ -326,11 +306,14 @@ myNet_null = Net.make_doubles(color = net_color, alpha = 0)
 netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 100)
 
 netFrms, _ = vs.animate_sequence(netScns, start_cam = cam0, stop_cam = cam0, animate_over = transFrm[-1])
-DecapStream(netFrms, 0, 100).show()
+# DecapStream(netFrms, 0, 100).show()
+
+all_frames.append(netFrms)
+script_lines.append(script_line)
 
 script_line =   """
                     Down the line, an understanding of camera determinants will also form the basis of the 3D engine, 
-                    with which we can visually represent the court from all angles.
+                    with which we can visually represent anything that's happened on the court from any perspective we like.
                 """
 
 ###### -> idea: show the lines rotating in space with a small, arbitrary 2D representation with axes!
@@ -340,7 +323,7 @@ from ATMANpy.auxil.court import cnt_2D, courtLines
 cnt_3D = Point3D.from_point2D(cnt_2D, z = 0)
 
 # court
-courtScn = Scene.make_court(make_net = False, line_color = line_color)
+courtScn = Scene.make_court(make_net = True, line_color = line_color, net_color = net_color)
 courtLines3D = Lines3D.from_lines2D(courtLines, z = 0, name = 'CourtLines3D')
 
 # corner points
@@ -357,12 +340,14 @@ ax_dist = 50
 
 axPt = c1.left(ax_dist).front(ax_dist)
 
-# TODO: maybe make these as arrows?
 xLn = Line3D(axPt, axPt.right(ax_len), color = ax_col)
 yLn = Line3D(axPt, axPt.back(ax_len), color = ax_col)
 zLn = Line3D(axPt, axPt.up(ax_len), color = ax_col)
+xLn_null = yLn_null = zLn_null = Line3D(axPt, axPt, color = ax_col)
 
 axScn = Scene([xLn, yLn, zLn])
+axScn_null = Scene([xLn_null, yLn_null, zLn_null])
+axScns_itpl = vs.interpolate_scenes(axScn_null, axScn, num_frames = 50)
 
 # court and ax scene
 courtaxScn = courtScn.combine(axScn)
@@ -403,7 +388,7 @@ arg_res = 0.1
 itpl_func = vs.interpolate_camera_naive
 
 ## over frame(s)
-overFrm = myStm.get(stop).rescale(3)
+overFrm = myStm.get(stop).rescale(3).dim(dim_factor)
 overFrm_dim = overFrm.dim(0.1)
 overFrms_dim = vs.interpolate_frames(overFrm, overFrm_dim, num_frames = num_frames_trans // 2)
 overFrms_still = BGRFrames.from_frame(overFrms_dim[-1], num_frames_trans - overFrms_dim.length())
@@ -411,20 +396,28 @@ overFrms_trans = BGRFrames.from_frames([overFrms_dim, overFrms_still])
 
 transFrms, _ = vs.animate_sequence([courtScn for _ in range(num_frames_trans)], start_cam = cam0, stop_cam = cam3, interpolate_func = itpl_func,
                                     argument_resolution = arg_res, animate_over = overFrms_trans)
-DecapStream(transFrms, 0, 100).show()
 
-transFrms[-1].show()
+cams = itpl_func(cam0, cam3, num_frames = num_frames_trans)
+camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
+transFrms = vis_ut.render_many_over_frames(camTabs, transFrms, tlPt = extPt // 2)
 
-# View.make(cam1, courtaxScn).snap().show()
-# View.make(cam2, courtaxScn).snap().show()
-# View.make(cam3, courtaxScn).snap().show()
-# View.make(cam4, courtaxScn).snap().show()
+## make the axes appear
+axFrms, _ = vs.animate_sequence(axScns_itpl, start_cam = cam3, stop_cam = cam3, interpolate_func = itpl_func, 
+                                background_scene = courtScn, 
+                                argument_resolution = arg_res, animate_over = overFrms_trans[-1])
+camTab = vis_ut.make_matrix_table(cam3.get_P())
+axFrms = vis_ut.render_over_frames(camTab, axFrms, tlPt = extPt // 2) ### todo: projection matrix has to change as we transition!
+
+# DecapStream(axFrms, 0, 100).show()
 
 ## animate rotation in abstract space
 def anim_rot(start, stop):
-    outFrms, _ = vs.animate_cam_motion(courtaxScn, start_cam = start, stop_cam = stop, interpolate_func = itpl_func,
-                                        num_frames = num_frames, argument_resolution = arg_res)
-
+    outFrms, _ = vs.animate_sequence([courtaxScn for _ in range(num_frames_rot)], start_cam = start, stop_cam = stop, 
+                                    interpolate_func = itpl_func,
+                                    argument_resolution = arg_res, animate_over = overFrms_trans[-1])
+    cams = itpl_func(start, stop, num_frames = num_frames_rot)
+    camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
+    outFrms = vis_ut.render_many_over_frames(camTabs, outFrms, tlPt = extPt // 2)
     return outFrms
 
 rotFrms = BGRFrames.from_frames([anim_rot(cam3, cam2a), 
@@ -434,65 +427,15 @@ rotFrms = BGRFrames.from_frames([anim_rot(cam3, cam2a),
                                  anim_rot(cam4a, cam4),
                                  anim_rot(cam4, cam3),
                                  ])
-DecapStream(rotFrms, 0, 100).show()
+# DecapStream(rotFrms, 0, 100).show()
 
 num_rots = 3
 rotFrms_rep = BGRFrames.from_frames([rotFrms for _ in range(num_rots)])
-DecapStream(rotFrms_rep, 0, 100).show()
+# DecapStream(rotFrms_rep, 0, 100).show()
 
-animFrms = BGRFrames.from_frames([animFrms0, rotFrms])
+rotFrms_joint = BGRFrames.from_frames([transFrms, axFrms, rotFrms_rep])
 
-DecapStream(animFrms, 0, 100).show(ms_between_frames = 100)
-
-
-start, stop = fs+3*step_frames, fs+6*step_frames # -> until the end!
-HSF = ConstFeature.from_store(vid, sto, featname = 'H')
-H = HSF.feature
-courtLines = sa.find_courtlines(H).drop('Net Line')
-courtlineSF = ConstFeature('my_courtLines', courtLines)
-# courtStm = myStm.conform(start, stop).attach(courtlineSF)
-# courtDtm = courtStm.decap_with_features()
-# courtFrms = courtDtm.frames.rescale(3)
-
-court_frames = [zeroFrm.put(courtLines, color = line_color) for _ in range(start, stop)]
-courtFrms = BGRFrames.from_single_frames(court_frames)
-courtMask = courtFrms.to_grey() > 1
-
-currFrms = myDtm.conform(start, stop - 1).frames
-mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
-mixFrms = mixFrms.rescale(3)
-
-all_frames.append(mixFrms)
-script_lines.append(script_line)
-
-### the net -> a trivial matter once the lines are found.
-# -> add it! 
-# (maybe during the intermezzo between the two points, so that we can show how we find the players seamlessly, during the next point)
-
-script_line =   """
-                    Armed with the projection matrix, the location of the net can be easily reconstructed.
-                """
-net_color = const.BGR['salmon_pink']
-net_alpha = 0.3
-
-start = ls
-stop, _ = segBFs[1].first()
-
-currFrms = Stream(cap, start, stop - 1).decap().frames
-currFrms = vis_ut.speed_up_frames_progressively(currFrms)
-
-court_frames = [zeroFrm.put(courtLines, color = line_color) for _ in currFrms]
-courtFrms = BGRFrames.from_single_frames(court_frames)
-courtMask = courtFrms.to_grey() > 1
-
-mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
-
-from ATMANpy.types.ShapesTennis3D import Net
-myNet = Net.make_doubles(color = net_color, alpha = net_alpha)
-
-netFrms, _ = vs.animate_sequence([Scene([myNet]) for _ in mixFrms], start_cam = brestCam, stop_cam = brestCam, animate_over = mixFrms)
-netFrms = netFrms.rescale(3)
-all_frames.append(netFrms)
+all_frames.append(rotFrms_joint)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
