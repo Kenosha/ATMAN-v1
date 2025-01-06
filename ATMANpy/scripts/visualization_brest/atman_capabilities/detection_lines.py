@@ -77,12 +77,6 @@ myDtm = myStm.decap()
 myFrms = myDtm.frames
 scaledFrms = myFrms.rescale(3)
 
-### for the recreation of the line finding steps, we need the extracted steps!
-step_frames = 50
-from ATMANpy.scripts.pipeline_brest_tightseg.parameter_files.default import court_lines
-prms = court_lines.courtline_params
-lineSF = myStm.conform(fs, fs + step_frames * 3).recolor('grey').extract(ex.get_courtlines_substeps, **prms)
-
 ### pre-frames
 dim_factor = 0.5
 pre_frames = 300
@@ -91,6 +85,12 @@ preArr_dimmed = np.stack([f.dim(min((idx / pre_frames) ** 2, dim_factor)).array 
 preFrms_dimmed = BGRFrames(preArr_dimmed).rescale(3)
 
 fs_adj = fs + preFrms_dimmed.length()
+
+### for the recreation of the line finding steps, we need the extracted steps!
+step_frames = 50
+from ATMANpy.scripts.pipeline_brest_tightseg.parameter_files.default import court_lines
+prms = court_lines.courtline_params
+lineSF = myStm.conform(fs_adj, fs_adj + step_frames * 3).recolor('grey').extract(ex.get_courtlines_substeps, **prms)
 
 ### Projection Matrix
 P = ConstFeature.from_store(vid, sto, featname = 'P').feature
@@ -233,22 +233,8 @@ extPt = Point2D(ext_coords)
 script_line =   """
                     The internal camera matrix contains all camera intrinsic parameters, like focal length or sensor dimensions.
                 """
-start, stop = fs_adj+6*step_frames, fs_adj+9*step_frames
-HSF = ConstFeature.from_store(vid, sto, featname = 'H')
-H = HSF.feature
-courtLines = sa.find_courtlines(H).drop('Net Line')
-courtlineSF = ConstFeature('my_courtLines', courtLines)
-
-court_frames = [zeroFrm.put(courtLines, color = line_color) for _ in range(start, stop)]
-courtFrms = BGRFrames.from_single_frames(court_frames)
-courtMask = courtFrms.to_grey() > 1
-
-currFrms = myDtm.conform(start, stop - 1).frames
-mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
-mixFrms = mixFrms.rescale(3)
-
-intFrms = vis_ut.render_over_frames(intTab, mixFrms, tlPt = intPt)
-# DecapStream(intFrms, 0, 100).show()
+ls_mixFrms = BGRFrames.from_frame(mixFrms[-1], 25)
+intFrms = vis_ut.render_over_frames(intTab, ls_mixFrms, tlPt = intPt)
 
 all_frames.append(intFrms)
 script_lines.append(script_line)
@@ -257,23 +243,8 @@ script_lines.append(script_line)
 script_line =   """
                     The external camera matrix contains all camera extrinsic parameters, like the placement and rotation of the camera in space.
                 """
-start, stop = fs+9*step_frames, fs+13*step_frames
-HSF = ConstFeature.from_store(vid, sto, featname = 'H')
-H = HSF.feature
-courtLines = sa.find_courtlines(H).drop('Net Line')
-courtlineSF = ConstFeature('my_courtLines', courtLines)
-
-court_frames = [zeroFrm.put(courtLines, color = line_color) for _ in range(start, stop)]
-courtFrms = BGRFrames.from_single_frames(court_frames)
-courtMask = courtFrms.to_grey() > 1
-
-currFrms = myDtm.conform(start, stop - 1).frames
-mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
-mixFrms = mixFrms.rescale(3)
-
-intFrms = vis_ut.render_over_frames(intTab, mixFrms, tlPt = intPt)
-ext_intFrms = vis_ut.render_over_frames(extTab, intFrms, tlPt = extPt)
-# DecapStream(ext_intFrms, 0, 100).show()
+ls_intFrms = BGRFrames.from_frame(intFrms[-1], 25)
+ext_intFrms = vis_ut.render_over_frames(extTab, ls_intFrms, tlPt = extPt)
 
 all_frames.append(ext_intFrms)
 script_lines.append(script_line)
@@ -384,7 +355,7 @@ cam4a = Camera.from_to(oPt4a, cnt_3D, f = f).tilt(tilt)
 ## animate transition from court to abstract
 num_frames_rot = 50
 num_frames_trans = 100
-arg_res = 0.1
+res = 0.1
 itpl_func = vs.interpolate_camera_naive
 
 ## over frame(s)
@@ -395,7 +366,7 @@ overFrms_still = BGRFrames.from_frame(overFrms_dim[-1], num_frames_trans - overF
 overFrms_trans = BGRFrames.from_frames([overFrms_dim, overFrms_still])
 
 transFrms, _ = vs.animate_sequence([courtScn for _ in range(num_frames_trans)], start_cam = cam0, stop_cam = cam3, interpolate_func = itpl_func,
-                                    argument_resolution = arg_res, animate_over = overFrms_trans)
+                                    argument_resolution = res, background_resolution = res, animate_over = overFrms_trans)
 
 cams = itpl_func(cam0, cam3, num_frames = num_frames_trans)
 camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
@@ -404,7 +375,7 @@ transFrms = vis_ut.render_many_over_frames(camTabs, transFrms, tlPt = extPt // 2
 ## make the axes appear
 axFrms, _ = vs.animate_sequence(axScns_itpl, start_cam = cam3, stop_cam = cam3, interpolate_func = itpl_func, 
                                 background_scene = courtScn, 
-                                argument_resolution = arg_res, animate_over = overFrms_trans[-1])
+                                argument_resolution = res, background_resolution = res, animate_over = overFrms_trans[-1])
 camTab = vis_ut.make_matrix_table(cam3.get_P())
 axFrms = vis_ut.render_over_frames(camTab, axFrms, tlPt = extPt // 2) ### todo: projection matrix has to change as we transition!
 
@@ -414,7 +385,7 @@ axFrms = vis_ut.render_over_frames(camTab, axFrms, tlPt = extPt // 2) ### todo: 
 def anim_rot(start, stop):
     outFrms, _ = vs.animate_sequence([courtaxScn for _ in range(num_frames_rot)], start_cam = start, stop_cam = stop, 
                                     interpolate_func = itpl_func,
-                                    argument_resolution = arg_res, animate_over = overFrms_trans[-1])
+                                    argument_resolution = res, background_resolution = res, animate_over = overFrms_trans[-1])
     cams = itpl_func(start, stop, num_frames = num_frames_rot)
     camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
     outFrms = vis_ut.render_many_over_frames(camTabs, outFrms, tlPt = extPt // 2)
