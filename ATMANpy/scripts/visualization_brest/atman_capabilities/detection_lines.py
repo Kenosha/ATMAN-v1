@@ -409,6 +409,47 @@ rotFrms_joint = BGRFrames.from_frames([transFrms, axFrms, rotFrms_rep])
 all_frames.append(rotFrms_joint)
 script_lines.append(script_line)
 
+### rotate back to starting position, in time for detection_player to start.
+script_line = "Having detected the lines and the net, we move on to detecting the players."
+
+start, stop = fs_adj+6*step_frames, fs_adj+9*step_frames
+currFrms = myDtm.conform(start, stop - 1).frames.rescale(3)
+currFrms = currFrms.dim_progressively(0.1, dim_factor, exp = 1)
+# DecapStream(currFrms, 0, 100).show()
+
+axScns_itpl_back = vs.interpolate_scenes(axScn, axScn_null, num_frames = currFrms.length())
+
+res = 1
+transFrms, _ = vs.animate_sequence(axScns_itpl_back, start_cam = cam3, stop_cam = cam0, interpolate_func = itpl_func,
+                                    background_scene = courtScn,
+                                    argument_resolution = res, background_resolution = res, animate_over = currFrms)
+
+cams = itpl_func(cam3, cam0, num_frames = currFrms.length())
+camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
+transFrms = vis_ut.render_many_over_frames(camTabs, transFrms, tlPt = extPt // 2)
+# DecapStream(transFrms, 0, 100).show()
+
+### and go back to lines
+next_fs = segBFs[1].first()[0]
+start, stop = fs_adj+9*step_frames, next_fs
+
+courtLines = sa.find_courtlines(H).drop('Net Line')
+court_frames = [zeroFrm.put(courtLines, color = line_color) for _ in range(start, stop)]
+courtFrms = BGRFrames.from_single_frames(court_frames)
+courtMask = courtFrms.to_grey() > 1
+
+currFrms = Stream(cap, start, stop - 1).decap().frames
+mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
+mixFrms = mixFrms.rescale(3)
+
+mixFrms, _ = vs.animate_sequence([netScns[-1] for _ in range(currFrms.length())], start_cam = cam0, stop_cam = cam0, animate_over = mixFrms)
+
+jointFrms = BGRFrames.from_frames([transFrms, mixFrms])
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
 vis_ut.show(all_frames)
 
 from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
