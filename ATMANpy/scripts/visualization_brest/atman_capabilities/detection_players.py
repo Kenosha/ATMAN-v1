@@ -27,6 +27,16 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'players'
+SAVE_FOLDER = 'atman_capabilities'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+#########################################
+
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
     
@@ -50,9 +60,6 @@ allPnts = dataPnts.join(nullPnts).sort()
 ################################
 ###### GET USEFUL STUFF ########
 ################################
-
-def show(all_frames, ms_between_frames = 25):
-    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
 
 vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
 fs, ls = conf['start_frame'], conf['stop_frame']
@@ -107,7 +114,10 @@ plySF = StreamFeatures.from_store(vid, sto, featnameList = ['topPlayerCnt', 'bot
 my_segBF = segBFs[1] ### on to the next point!
 
 ### fade out the lines!
-script_line = "Having detected the lines and the net, we move on to detecting the players."
+script_line =   """
+                    ATMAN first synthesizes a background image; a still frame of the court only, 
+                    against which we can easily detect foreground objects, such as the players. 
+                """
 duration = 50
 
 ### simple, no line frames
@@ -126,14 +136,11 @@ currFrms = currFrms * dim_factor
 netFrms, _ = vs.animate_sequence([Scene([myNet]) for _ in mixFrms], start_cam = brestCam, stop_cam = brestCam, animate_over = mixFrms)
 
 lambdas = np.linspace(0, 1, duration)[:, np.newaxis, np.newaxis, np.newaxis]
-itplFrms = currFrms * lambdas + netFrms * (1 - lambdas)
-
-itplFrms = itplFrms.rescale(3)
-all_frames.append(itplFrms)
-script_lines.append(script_line)
+backFrms0 = currFrms * lambdas + netFrms * (1 - lambdas)
+backFrms0 = backFrms0.rescale(3)
 
 ### show the removal of foreground objects (by fading between the static background image and the action)
-script_line = "ATMAN first synthesizes a background image, which it can then detect foreground objects, such as the players, on."
+
 duration = 100
 start, stop = stop, stop + duration 
 currStm = Stream(cap, start, stop - 1)
@@ -144,13 +151,17 @@ medFrms = BGRFrames.from_frame(medStms[1].recolor('bgr').stillFrm, duration)
 medFrms = medFrms * dim_factor
 
 lambdas = np.linspace(0, 1, duration)[:, np.newaxis, np.newaxis, np.newaxis]
+backFrms1 = medFrms * lambdas + currFrms * (1 - lambdas)
+backFrms1 = backFrms1.rescale(3)
 
-itplFrms = medFrms * lambdas + currFrms * (1 - lambdas)
-DecapStream(itplFrms, 0, 100).show(ms_between_frames = 40)
+duration = 150
+medFrms = BGRFrames.from_frame(medStms[1].recolor('bgr').stillFrm, duration)
+backFrms2 = medFrms * dim_factor
+backFrms2 = backFrms2.rescale(3)
 
-itplFrms = itplFrms.rescale(3)
+backFrms = BGRFrames.from_frames([backFrms0, backFrms1, backFrms2])
 
-all_frames.append(itplFrms)
+all_frames.append(backFrms)
 script_lines.append(script_line)
 
 ### fade players back in
@@ -170,33 +181,38 @@ burnMask = burnStms[1].conform(start, stop - 1).decap().frames
 mixFrms = currFrms.mask(burnMask) + currFrms.mask(~burnMask) * dim_factor
 
 lambdas = np.linspace(0, 1, duration)[:, np.newaxis, np.newaxis, np.newaxis]
+plFrms0 = mixFrms * lambdas + medFrms * (1 - lambdas)
+plFrms0 = plFrms0.rescale(3)
 
-itplFrms = mixFrms * lambdas + medFrms * (1 - lambdas)
+duration = 100
+start, stop = stop, stop + duration 
+currStm = Stream(cap, start, stop - 1)
+currFrms = currStm.decap().frames
 
-itplFrms = itplFrms.rescale(3)
+burnMask = burnStms[1].conform(start, stop - 1).decap().frames
+mixFrms = currFrms.mask(burnMask) + currFrms.mask(~burnMask) * dim_factor
 
-all_frames.append(itplFrms)
+plFrms1 = mixFrms.rescale(3)
+
+plFrms = BGRFrames.from_frames([plFrms0, plFrms1])
+
+all_frames.append(plFrms)
 script_lines.append(script_line)
-
 
 ### now, show how we use this to find the players
 script_line =   """
                     Notice how the player's shadows are still visible against the background.
                 """
-duration = 50
+duration = 2
 start, stop = stop, stop + duration 
 currStm = Stream(cap, start, stop - 1)
 currFrms = currStm.decap().frames
 
 burnMask = burnStms[1].conform(start, stop - 1).decap().frames
 
-mixFrms = currFrms.mask(burnMask) + currFrms.mask(~burnMask) * dim_factor
-mixFrms = mixFrms.rescale(3)
+shadFrms0 = currFrms.mask(burnMask) + currFrms.mask(~burnMask) * dim_factor
+shadFrms0 = shadFrms0.rescale(3)
 
-all_frames.append(mixFrms)
-script_lines.append(script_line)
-
-script_line = ""
 duration = 200
 
 currFrm = currStm.get(stop - 1)
@@ -209,17 +225,17 @@ remove_shadMask = ~shadMask & burnMask
 
 mixFrm_noshad = currFrm.mask(remove_shadMask) + BGRFrame((currFrm.mask(~remove_shadMask) * dim_factor).array.astype('uint8'))
 
-blinkFrms = vs.blinking(mixFrm, mixFrm_noshad, duration_in_frames = duration, blinks_per_second = 2)
-blinkFrms = blinkFrms.rescale(3)
+shadFrms1 = vs.blinking(mixFrm, mixFrm_noshad, duration_in_frames = duration, blinks_per_second = 2)
+shadFrms1 = shadFrms1.rescale(3)
 
-all_frames.append(blinkFrms)
-script_line = ""
+shadFrms = BGRFrames.from_frames([shadFrms0, shadFrms1])
 
-DecapStream(blinkFrms, 0, 100).show()
+all_frames.append(shadFrms)
+script_lines.append(script_line)
 
 script_line = "These shadows are automatically removed by ATMAN."
 
-duration = 100
+duration = 110
 start, stop = stop, stop + duration 
 currStm = Stream(cap, start, stop - 1)
 currFrms = currStm.decap().frames
@@ -234,12 +250,12 @@ mixFrms = mixFrms.rescale(3)
 all_frames.append(mixFrms)
 script_lines.append(script_line)
 
-DecapStream(mixFrms, 0, 100).show()
+# DecapStream(mixFrms, 0, 100).show()
 
 script_line = "The remaining contours are our player candidates..."
 
 player_color = const.BGR['rose_orange']
-duration = 100
+duration = 110
 start, stop = stop, stop + duration
 my_foreSF = foreSF[list(range(start,stop))]
 
@@ -259,7 +275,7 @@ mixFrms_with_contours = mixFrms_with_contours.rescale(3)
 all_frames.append(mixFrms_with_contours)
 script_lines.append(script_line)
 
-DecapStream(mixFrms_with_contours, 0, 100).show()
+# DecapStream(mixFrms_with_contours, 0, 100).show()
 
 script_line = "... from which the players can easily be found and tracked."
 
@@ -300,4 +316,17 @@ interFrms = interFrms.rescale(3)
 all_frames.append(interFrms)
 script_lines.append(script_line)
 
-DecapStream(mixFrms_with_contours, 0, 100).show()
+vis_ut.show(all_frames)
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+for idx, script_line in enumerate(script_lines):
+    with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+        f.write(script_line)
