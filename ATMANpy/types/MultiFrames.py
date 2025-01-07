@@ -384,6 +384,22 @@ class Frames:
         resArr = np.array([cv.GaussianBlur(imgArr, kernelSize, 0) for imgArr in self.array])
         return framesType(resArr)
     
+    # def dim(self, dim_factor):
+    #     framesType = self.__class__
+    #     single_frames = [f.dim(dim_factor) for f in self]
+    #     return framesType.from_single_frames(single_frames)
+
+    def dim(self, dim_factor):
+        return self * dim_factor
+
+    def dim_progressively(self, fs_dim_factor, ls_dim_factor, exp = 1):
+        framesType = self.__class__
+        frms_len = self.length()
+        lmbds = np.linspace(0, 1, num = frms_len) ** exp
+
+        single_frames = [f.dim((1-lmbd) * fs_dim_factor + lmbd * ls_dim_factor) for f, lmbd in zip(self, lmbds)]
+        return framesType.from_single_frames(single_frames)
+
     def rescale(self, scale_factor):
         framesType = self.__class__
         
