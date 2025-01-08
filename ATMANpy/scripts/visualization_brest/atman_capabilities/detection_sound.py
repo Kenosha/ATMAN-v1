@@ -52,9 +52,6 @@ allPnts = dataPnts.join(nullPnts).sort()
 ###### GET USEFUL STUFF ########
 ################################
 
-def show(all_frames, ms_between_frames = 25):
-    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
-
 vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
 fs, ls = conf['start_frame'], conf['stop_frame']
 cap = conf['cap']
@@ -68,7 +65,7 @@ fs_segBF = segBFs[seg_idx]
 seg_idx_2 = 4
 ls_segBF = segBFs[seg_idx_2]
 
-how_many_frames_in_sound = 500 ### -> how many frames belonging to the intermezzo are needed here (also needed in detection balls)
+how_many_frames_in_sound = 750 ### -> how many frames belonging to the intermezzo are needed here (also needed in detection balls)
 how_many_frames_in_vision = 100 ### -> how many frames belonging to the intermezzo are needed in the next part (also needed in vision)
 
 ###########################
@@ -297,6 +294,13 @@ legFrm = legFrm.pad(to_height = 1080 // 2, to_width = 1920 // 2)
 all_frames = []
 script_lines = []
 
+# idea: talk over a still frame. introduce all elements: waves, mel, graph.
+# then, play sound, and just the sound, for a bit.
+# then, say "Currently...model" over the sound, as we approach the hitting moment. 
+# since we begin with a still frame, we can greatly reduce the time spent in detection_balls intermezzo: go to freeze frame earlier!
+# this gains us a lot of time to actually play the sound, before saying "Currently..."
+
+
 ### raster params
 rescale_ratio = 0.4
 myRst = FramesRaster(2, 2)
@@ -304,7 +308,7 @@ tl_x, tl_y = int((1 - rescale_ratio) * 1920) - 1, 0
 tlPt = Point2D((tl_x, tl_y))
 
 #### Intermezzo: introduce graph elements
-script_line = '[PLAY SOUND]'
+script_line = '[FADE IN SOUND]'
 duration = 100
 start, stop = fs_wave, fs_wave + duration
 
@@ -319,7 +323,7 @@ script_lines.append(script_line)
 script_line =   """
                     [PLAY SOUND] 
                     The sound of the ball being hit or bouncing on the ground gives us a very good idea of when exactly these events occur.
-                    Knwoing the timing of hits and bounces greatly improves our ability to construct ball trajectories.
+                    Knowing the timing of hits and bounces greatly improves our ability to construct ball trajectories.
                 """
 duration = 100
 start, stop = stop, stop + duration
@@ -328,13 +332,13 @@ start_rect, stop_rect = start - fs_wave, stop - fs_wave
 myStm = Stream(cap, start, stop - 1)
 myFrms = myStm.decap().frames
 myFrms_full = myFrms.rescale(3)
-# DecapStream(myFrms_full, 0, 100).show(ms_between_frames = 40)
+# DecapStream(myFrms_full, 0, 100).show()
 
 curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
 myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-# DecapStream(overFrms, 0, 100).show(ms_between_frames = 40)
+# DecapStream(overFrms, 0, 100).show(ms_between_frames = 400)
 
 all_frames.append(overFrms)
 script_lines.append(script_line)
@@ -359,7 +363,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-# DecapStream(overFrms, 0, 100).show(ms_between_frames = 100)
+# DecapStream(overFrms, 0, 100).show(ms_between_frames = 40)
 
 all_frames.append(overFrms)
 script_lines.append(script_line)
@@ -370,7 +374,7 @@ script_line =   """
                     shown here in red and yellow respectively. Currently, the model is correctly detecting neither hit nor bounce. 
                     Look out now for the spike in the red curve as soon as the serve is hit, indicating that a hit has been detected. 
                     This is followed by a spike in the yellow curve, indicating that the bounce has been heard and identified by the model.
-                """
+                """ ### currently to model -> 17s
 duration = 150
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
@@ -596,8 +600,8 @@ script_lines.append(script_line)
 
 script_line =   """
                     [PLAY SOUND] 
-                    Note that the serve here is a let: the sound of the umpire or an electronic signal announcing the let is not detected,
-                    even though a model could well be trained for it.
+                    Note that the serve here is a let: the sound of the umpire declaring the let is not detected,
+                    even though a model could be trained for it, and integrated into the detection pipeline.
                 """
 duration = 100
 start, stop = stop, stop + duration
@@ -628,7 +632,7 @@ script_line =   """
                     [FADE OUT SOUND] 
                     Paired with the visual recognition of the ball in flight, the sound information gives us 
                     a very good idea about when and where the ball is hit, and when and where it bounces. 
-                    To supplement our knowledge on timing and location, and to find out what type of shot is
+                    To supplement our knowledge on timing and location even further, and to find out what type of shot is
                     actually being hit, we analyse the hitting motion of both players visually.
                 """
 
@@ -655,12 +659,5 @@ overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
-
-
-
 ### intermezzo
-
-
-show(all_frames)
-
-Stream.from_SF(segBFs[7], cap).show()
+vis_ut.show(all_frames)
