@@ -485,12 +485,12 @@ ballFrms = BGRFrames.from_single_frames(out_frames).slow(2)
 DecapStream(ballFrms, 0, 100).show()
 
 ### Intermezzo to the next step: sound recognition.
-how_many_frames_in_sound = 500
+how_many_frames_in_sound = 750
 start = stop
 stop = segBFs[3].first()[0] - how_many_frames_in_sound
 
 subStm = Stream(cap, start, stop - 1)
-subFrms = subStm.decap().frames * dim_factor
+subFrms = subStm.decap().frames
 subFrms = subFrms.rescale(3)
 # subFrms = vis_ut.speed_up_frames_progressively(subFrms)
 

@@ -11,7 +11,7 @@ from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, B
 
 from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames, MaskFrames
-from ATMANpy.types.Overlays import Table, FramesRaster, overlay, frame_cascade
+from ATMANpy.types.Overlays import Table, FramesRaster, FrameRaster, overlay, frame_cascade
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Visual3D import Camera, View, Scene
 
@@ -300,82 +300,92 @@ script_lines = []
 # since we begin with a still frame, we can greatly reduce the time spent in detection_balls intermezzo: go to freeze frame earlier!
 # this gains us a lot of time to actually play the sound, before saying "Currently..."
 
-
 ### raster params
 rescale_ratio = 0.4
 myRst = FramesRaster(2, 2)
+myRst_static = FrameRaster(2, 2)
 tl_x, tl_y = int((1 - rescale_ratio) * 1920) - 1, 0
 tlPt = Point2D((tl_x, tl_y))
 
-#### Intermezzo: introduce graph elements
-script_line = '[FADE IN SOUND]'
-duration = 100
-start, stop = fs_wave, fs_wave + duration
-
-myStm = Stream(cap, start, stop - 1)
-myFrms = myStm.decap().frames
-myFrms_full = myFrms.rescale(3)
-# DecapStream(myFrms_full, 0, 100).show()
-
-all_frames.append(myFrms_full)
-script_lines.append(script_line)
+fsFrm = Stream(cap, fs_wave, fs_wave).decap().frames[0].rescale(3)
+fs_wave_graphFrm = wave_graphFrms[0].rescale(rescale_ratio)
+fs_spec_graphFrm = specFrms_over_with_line[0].rescale(rescale_ratio)
+fs_prob_graphFrm = prob_graphFrms[0].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
 
 script_line =   """
-                    [PLAY SOUND] 
                     The sound of the ball being hit or bouncing on the ground gives us a very good idea of when exactly these events occur.
                     Knowing the timing of hits and bounces greatly improves our ability to construct ball trajectories.
                 """
-duration = 100
-start, stop = stop, stop + duration
-start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
-myStm = Stream(cap, start, stop - 1)
-myFrms = myStm.decap().frames
-myFrms_full = myFrms.rescale(3)
-# DecapStream(myFrms_full, 0, 100).show()
+myRst_static.add(fs_wave_graphFrm, 0, 0)
+rstFrm = myRst_static.render()
 
-curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
-myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
-showFrms = myRst.render()
-overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-# DecapStream(overFrms, 0, 100).show(ms_between_frames = 400)
+fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
+fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
 
-all_frames.append(overFrms)
+all_frames.append(fsFrms_over)
 script_lines.append(script_line)
 
 script_line =   """
-                    [PLAY SOUND]
                     To identify hits and bounces from the sound, we train a neural network on the Mel Spectrogram of the sound waveform.
                 """
-duration = 100
-start, stop = stop, stop + duration
+
+myRst_static.add(fs_spec_graphFrm, 0, 1)
+rstFrm = myRst_static.render()
+
+fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
+fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
+
+all_frames.append(fsFrms_over)
+script_lines.append(script_line)
+
+script_line =   """
+                    The neural network spits out the probability that the sound currently being heard is a hit or a bounce,
+                    shown here in red and yellow respectively. Let's hear a bit of the sound, and see how the model registers it.
+                """ ### currently to model -> 17s
+
+myRst_static.add(fs_prob_graphFrm, 1, 0)
+myRst_static.add(curr_legFrm, 1, 1)
+rstFrm = myRst_static.render()
+
+fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
+fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
+
+all_frames.append(fsFrms_over)
+script_lines.append(script_line)
+
+script_line = "[FADE IN SOUND]"
+duration = 125
+start, stop = fs_wave, fs_wave + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
 myStm = Stream(cap, start, stop - 1)
 myFrms = myStm.decap().frames
 myFrms_full = myFrms.rescale(3)
-# DecapStream(myFrms_full, 0, 100).show()
 
 curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
 curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
 myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
 myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
 
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-# DecapStream(overFrms, 0, 100).show(ms_between_frames = 40)
 
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    [PLAY SOUND]
-                    The neural network spits out the probability that the sound currently being heard is a hit or a bounce,
-                    shown here in red and yellow respectively. Currently, the model is correctly detecting neither hit nor bounce. 
+                    [PLAY SOUND SOFTLY]
+                    Currently, the model is correctly detecting neither hit nor bounce. 
                     Look out now for the spike in the red curve as soon as the serve is hit, indicating that a hit has been detected. 
                     This is followed by a spike in the yellow curve, indicating that the bounce has been heard and identified by the model.
                 """ ### currently to model -> 17s
-duration = 150
+duration = 500
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
@@ -396,6 +406,30 @@ myRst.add(curr_legFrm, 1, 1, set_size = True)
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 # DecapStream(overFrms, 0, 100).show(ms_between_frames = 100)
+
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line = "[PLAY SOUND]"
+duration = 75 ### in sum, we have to be at how_many_frames_in_sound - 50, here, so we slow down at the right moment.
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
 all_frames.append(overFrms)
 script_lines.append(script_line)
@@ -485,10 +519,10 @@ all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    [PLAY SOUND slowed to eigth] 
+                    [PLAY SOUND SOFTLY slowed to eigth] 
                     In this manner, the model detectes hits and bounces when they occur, for the entire rally.
                 """
-duration = 15
+duration = 20
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
@@ -546,7 +580,7 @@ script_lines.append(script_line)
 script_line =   """
                     [PLAY SOUND slowed to half] 
                 """
-duration = 15
+duration = 10
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
@@ -597,6 +631,12 @@ overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
 all_frames.append(overFrms)
 script_lines.append(script_line)
+
+### TODO: key issue: we don't have enough frames for the rest of the text.
+## -> do we freeze? 
+## number one goal: don't speed up and slow down the frames too much: we are now back at normal speed. either keep going or freeze.
+## probably best: FADE OUT here, use all the frames we need for this sentence below ("Note that the serve here..."), then freeze at the end
+## to deliver the conclusion.
 
 script_line =   """
                     [PLAY SOUND] 
