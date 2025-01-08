@@ -51,9 +51,6 @@ allPnts = dataPnts.join(nullPnts).sort()
 ###### GET USEFUL STUFF ########
 ################################
 
-def show(all_frames, ms_between_frames = 25):
-    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
-
 vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
 fs, ls = conf['start_frame'], conf['stop_frame']
 cap = conf['cap']
@@ -79,19 +76,19 @@ courtLines = sa.find_courtlines(H).drop('Net Line')
 ####### BALL ##########
 #######################
 
-all_frames = []
-script_lines = []
-
 motiStms = StreamList.from_store('fine_motMask', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
 motiStms_filt = StreamList.from_store('fine_motMask_filt', vid, sto, cap_color_space = 'bool', target_color_space = 'mask') 
 
-my_motiStms = motiStms[seg_idx]
-my_motiStms_filt = motiStms_filt[seg_idx]
+my_motiStm = motiStms[seg_idx]
+my_motiStm_filt = motiStms_filt[seg_idx]
 
 cntSF = StreamFeature.from_store(vid, sto, featname = 'movCnts')
 cndSF = StreamFeature.from_store(vid, sto, featname = 'cand2Cnts') 
 pntSF = StreamFeature.from_store(vid, sto, featname = 'ball_choicePt') 
 hitSF = StreamFeature.from_store(vid, sto, featname = 'hitCnt') 
+
+all_frames = []
+script_lines = []
 
 ### now, show the fine motion mask.
 script_line = "To identify the ball, we look for objects in motion."
@@ -100,7 +97,7 @@ duration = 100
 start = motiStms[2].start_frame
 stop = start + duration
 
-motiMask = my_motiStms.conform(start, stop - 1).decap().frames
+motiMask = my_motiStm.conform(start, stop - 1).decap().frames
 currFrms = Stream(cap, start, stop - 1).decap().frames
 
 mixFrms = currFrms.mask(motiMask) + currFrms.mask(~motiMask) * dim_factor
@@ -114,10 +111,10 @@ DecapStream(mixFrms, 0, 100).show()
 ### the filtered motion mask
 script_line = "Naturally, the players and their shadows are in motion but have already been detected: We filter them out."
 
-duration = 100
+duration = 150
 start, stop = stop, stop + duration
 
-motiMask = my_motiStms_filt.conform(start, stop - 1).decap().frames
+motiMask = my_motiStm_filt.conform(start, stop - 1).decap().frames
 shadMask = shadStms[2].conform(start, stop - 1).decap().frames
 joinMask = motiMask & ~shadMask
 
@@ -125,17 +122,16 @@ currFrms = Stream(cap, start, stop - 1).decap().frames
 
 mixFrms = currFrms.mask(joinMask) + currFrms.mask(~joinMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
+DecapStream(mixFrms, 0, 100).show()
 
 all_frames.append(mixFrms)
 script_lines.append(script_line)
-
-DecapStream(mixFrms, 0, 100).show()
 
 ### the candidate contours
 script_line = "What remains are ball candidates; among these, we see the ball, but also some visual clutter which we have to filter out."
 
 ball_color = const.BGR['ball_yellow']
-duration = 90
+duration = 103 ### TODO: needs to be longer! 8 seconds (plus slight adjustments to make SVM part look sensible) --> done with slow!
 start, stop = stop, stop + duration
 
 cnt_vals = cntSF.conform(list(range(start, stop))).values()
@@ -149,7 +145,8 @@ shadMask = shadStms[2].conform(start, stop - 1).decap().frames
 joinMask = cntMask & ~shadMask
 
 mixFrms = currFrms_with_contours.mask(joinMask) + currFrms.mask(~joinMask) * dim_factor
-mixFrms = mixFrms.rescale(3)
+mixFrms = mixFrms.rescale(3).slow(2)
+DecapStream(mixFrms, 0, 100).show()
 
 all_frames.append(mixFrms)
 script_lines.append(script_line)
@@ -226,6 +223,8 @@ for i in range(duration):
 probFrms = BGRFrames.from_frames(out_frames)
 DecapStream(probFrms, 0, 100).show()
 
+del out_frames
+
 all_frames.append(probFrms)
 script_lines.append(script_line)
 
@@ -233,13 +232,10 @@ script_lines.append(script_line)
 script_line =   """
                     The Support Vector Machine helps us exclude moving shapes which are obviously not a ball;
                     However, it is set to err on the side of caution, and therefore occasionally yields false positives:
-                    it believes shapes to be the ball which in fact are not the ball.
+                    it believes shapes to be the ball which in fact are not the ball. 
+                    For example, in this frame, it considers both the tip of the racket and the ball itself to look sufficiently like a ball in flight. 
                 """
-                ### -> TODO: give examples with a freeze frame!
-                ### -> how? once you vet the code above, and have it recorded it, come back here, 
-                ### and look for a good example to freeze on within the duration (not too close to beginning or end).
-                ### then, we simply freeze on that frame, and continue with the duration. 
-duration = 100
+duration = 45
 start, stop = stop, stop + duration
 
 cand_color = const.BGR['leafy_green']
@@ -254,9 +250,12 @@ currStm = Stream(cap, start, stop)
 sub_shadStm = shadStms[2].conform(start, stop) ### (so we can filter out the contours in the shadow...)
 
 initial_frames_per_frame = 25
-decay_rate = 0.05
+min_frames_per_frame = 4 # 1
+decay_rate = 0.03
 
+current_num_frames = 0
 out_frames = []
+non_unique_frames = []
 for i in range(duration):
     cnts = my_cntSF[start + i]
     cnds = my_cndSF[start + i]
@@ -270,6 +269,8 @@ for i in range(duration):
 
     x_offset = 10
     y_offset = 5
+
+    frames_repeat = max(min_frames_per_frame, int(initial_frames_per_frame * np.exp(-decay_rate * i)))
 
     for cnt in non_cnds:
         cntPnt = cnt.center()
@@ -291,21 +292,44 @@ for i in range(duration):
         regMask = regMask | regMask.within_region(reg)
         currFrm = currFrm.put(reg, color = cand_color, thickness = 2)
 
+    if cnds.length() > 1: ### this is to identify duplicate balls detected by SVM
+        non_unique_frames.append(current_num_frames)
+
     mixFrm = currFrm_undimmed.mask(regMask) + currFrm.mask(~regMask)
-
     mixFrm = mixFrm.rescale(3)
-
-    frames_repeat = max(1, int(initial_frames_per_frame * np.exp(-decay_rate * i)))
     mixFrms = BGRFrames.from_frame(mixFrm, frames_repeat)
-
     out_frames.append(mixFrms)
 
-interFrms = BGRFrames.from_frames(out_frames)
+    current_num_frames += frames_repeat
 
-all_frames.append(interFrms)
+interFrms = BGRFrames.from_frames(out_frames)
+DecapStream(interFrms, 0, 100).show()
+
+del out_frames
+
+### split up to freeze on the first sensible duplicate
+first_dupe_idx = non_unique_frames[1]
+pre_interFrms = interFrms[:first_dupe_idx]
+post_interFrms = interFrms[first_dupe_idx:]
+stat_interFrm = interFrms[first_dupe_idx]
+
+stat_interFrms = BGRFrames.from_frame(stat_interFrm, 100)
+joint_pre_interFrms = BGRFrames.from_frames([pre_interFrms, stat_interFrms])
+joint_post_interFrms = BGRFrames.from_frames([stat_interFrms, post_interFrms]) ### mostly to gain a few seconds. adjust length as needed
+
+del pre_interFrms, stat_interFrms, post_interFrms
+
+all_frames.append(joint_pre_interFrms)
 script_lines.append(script_line)
 
-DecapStream(interFrms, 0, 100).show()
+script_line =   """
+                    To remove those ball shapes that the SVM erroneously believes to look like a ball, we implement a Particle Filter. 
+                    The Particle Filter simulates particles that tracks candidate ball shapes on the screen;
+                    these particles obey simple laws of motion, 
+                    and therefore stay close to the ball shapes that actually behave like a ball in flight.
+                """ ## 18 seconds
+all_frames.append(joint_post_interFrms)
+script_lines.append(script_line)
 
 ### The Particle Filter in Action.
 hitcntSF = StreamFeature.from_store(vid, sto, featname = 'hitCnt')
@@ -357,46 +381,48 @@ part_color = const.BGR['fair_yellow']
 kita_color = const.BGR['ball_yellow']
 
 script_line =   """
-                    To remove those ball shapes that the SVM believes to look like a ball, 
-                    we implement a Particle Filter. The Particle Filter tracks candidate ball shapes on the screen;
-                    the particles that track the ball obey simple motion laws, and therefore 
-                    stay close to the ball shapes that behave like a ball in flight.
-                """
-duration = 100
+                    In flight, the particles consistently gather around the travelling ball, and therefore confirm its position;
+                    However, whenever the ball is hit by either player, the subsequent flight of the ball is uncertain:
+                    The particles scatter for a short moment until the ball is re-located.
+                    This scattering can be reduced using a technique called Kitagawa Smoothing.
+                """ ## 20 seconds
+duration = 65
 start, stop = stop, stop + duration
 
 subStm = Stream(cap, start, stop - 1)
 subFrms = subStm.decap().frames * dim_factor
-subFrms_resc = subFrms.rescale(3) ### scale up, so we render the points on the big screen directly!
+subFrms_slow = subFrms.slow(2).slow(2).slow(2)
+subFrms_slow_resc = subFrms_slow.rescale(3) ### scale up, so we render the points on the big screen directly!
 
 my_partSF = partSF['particles'].conform(list(range(start, stop)))
 partArrs = np.array(list(my_partSF.values()))
 partArrs_resc = partArrs * 3 ### scale up, so we render the points on the big screen directly!
+partArrs_resc_slow = np.repeat(partArrs_resc, repeats = 8, axis = 0)
 
-part_frames = [subFrm.put(particles_to_points(partArr, N), color = part_color, size = 0) for subFrm, partArr in zip(subFrms_resc, partArrs_resc)]
+part_frames = [subFrm.put(particles_to_points(partArr, N), color = part_color, size = 0) for subFrm, partArr in zip(subFrms_slow_resc, partArrs_resc_slow)]
 partFrms = BGRFrames.from_single_frames(part_frames)
 
-DecapStream(partFrms, 0, 100).show(ms_between_frames = 100)
+del part_frames
+DecapStream(partFrms, 0, 100).show()
 
 all_frames.append(partFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    In flight, the particles consistently gather around the travelling ball, and therefore confirm its position;
-                    However, whenever the ball is hit by either player, the subsequent flight of the ball is uncertain:
-                    This is reflected in the particles, which scatter for a short moment to re-locate the ball.
-                    This scattering can be reduced using a technique called Kitagawa Smoothing.
+                    With Kitagawa smoothing, the ball is neatly tracked even at the point of impact.
                 """
-duration = 100
+duration = 75 
 start, stop = stop, stop + duration
 
 subStm = Stream(cap, start, stop - 1)
 subFrms = subStm.decap().frames * dim_factor
-subFrms_resc = subFrms.rescale(3) ### scale up, so we render the points on the big screen directly!
+subFrms_slow = subFrms.slow(2).slow(2)
+subFrms_slow_resc = subFrms_slow.rescale(3) ### scale up, so we render the points on the big screen directly!
 
 my_partSF = kitaSF.conform(list(range(start, stop)))
 partArrs = np.array(list(my_partSF.values()))
 partArrs_resc = partArrs * 3 ### scale up, so we render the points on the big screen directly!
+partArrs_resc_slow = np.repeat(partArrs_resc, repeats = 4, axis = 0)
 
 ### perturb the kitagawa particles a bit. 
 # (even though this does not happen in the code, it would yield the same results and looks better on screen.)
@@ -413,34 +439,29 @@ def perturb_array(partArr, N = 100, scale = (10, 10, 1, 1)):
     return np.array(randArrs)
 
 scale = (10, 10, 1, 1)
-partArrs_resc = np.array([perturb_array(partArr, N = N, scale = scale) for partArr in partArrs_resc])
+partArrs_resc_slow = np.array([perturb_array(partArr, N = N, scale = scale) for partArr in partArrs_resc_slow])
 
-part_frames = [subFrm.put(particles_to_points(partArr, N), color = kita_color, size = 0) for subFrm, partArr in zip(subFrms_resc, partArrs_resc)]
+part_frames = [subFrm.put(particles_to_points(partArr, N), color = kita_color, size = 0) for subFrm, partArr in zip(subFrms_slow_resc, partArrs_resc_slow)]
 partFrms = BGRFrames.from_single_frames(part_frames)
+DecapStream(partFrms, 0, 100).show()
 
 all_frames.append(partFrms)
 script_lines.append(script_lines)
 
-DecapStream(partFrms, 0, 100).show(ms_between_frames = 100)
-
 script_line =   """
                     With the support vector machine finding ball candidates based on how they look, 
                     and the particle filter confirming them based on how they behave in flight,
-                    we can fairly confidently identify the ball in flight. 
+                    we can fairly confidently identify the ball visually.
 
-                    Note that in some frames, no ball is detected. Given the low resolution and bitrate of the video, 
+                    Note that in some frames, however, no ball is detected. Given the low resolution and bitrate of the video, 
                     this is no surprise; however, it means that our job in detecting the ball is not done:
                     We have to reconstruct the entire ball trajectory, at all times.
 
-                    To this end, we use the frames in which a ball is detected, but also additional information, to improve the quality
-                    of the trajectory detected. 
-
-                    One of the additional sources of truth we use for detecting the trajectory is the sound.
-                """
+                    To ensure that the detected trajectory is of the highest possible fidelity, 
+                    we supplement the visual ball tracking data with additional information, one of which is the sound.
+                """ ### 40 seconds --> get it down to 30!!
 ### -> go until the end!
-how_many_frames_in_sound = 500
-start = stop
-stop = segBFs[2].last()[0] - how_many_frames_in_sound
+start, stop = stop, segBFs[2].last()[0]
 
 sub_pntSF = pntSF.conform(list(range(start, stop)))
 
@@ -460,12 +481,21 @@ for pnt, frm in zip(sub_pntSF.values(), subFrms):
     ball_frm = ball_frm.rescale(3)
     out_frames.append(ball_frm)
     
-ballFrms = BGRFrames.from_single_frames(out_frames)
-ballFrms = vis_ut.speed_up_frames_progressively(ballFrms)
-
-all_frames.append(ballFrms)
-script_lines.append(script_line)
+ballFrms = BGRFrames.from_single_frames(out_frames).slow(2)
+DecapStream(ballFrms, 0, 100).show()
 
 ### Intermezzo to the next step: sound recognition.
+how_many_frames_in_sound = 500
+start = stop
+stop = segBFs[3].first()[0] - how_many_frames_in_sound
 
-show(all_frames)
+subStm = Stream(cap, start, stop - 1)
+subFrms = subStm.decap().frames * dim_factor
+subFrms = subFrms.rescale(3)
+# subFrms = vis_ut.speed_up_frames_progressively(subFrms)
+
+jointFrms = BGRFrames.from_frames([ballFrms, subFrms])
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+vis_ut.show(all_frames)
