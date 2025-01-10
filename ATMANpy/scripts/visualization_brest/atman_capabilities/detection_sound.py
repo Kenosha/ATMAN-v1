@@ -28,6 +28,21 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
+def fade_in(some_wave, exp = 1):
+    wavelen = len(some_wave)
+    weights = (np.arange(wavelen) / (wavelen - 1)) ** exp
+    return some_wave * weights
+
+def fade_out(some_wave, exp = 1):
+    wavelen = len(some_wave)
+    weights = (np.arange(wavelen)[::-1] / (wavelen - 1)) ** exp
+    return some_wave * weights
+
+def slow(some_wave, by = 2):
+    from scipy import signal
+    num = len(some_wave) * by
+    return signal.resample(some_wave, num)
+
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
     
@@ -248,11 +263,11 @@ for frame in range(fs_wave, ls_wave + 1):
 
 ### 1) Wave Graph
 wave_graphFrms = BGRFrames.from_single_frames(wave_graphs)
-DecapStream(wave_graphFrms, 0, 100).show(ms_between_frames = 100)
+# DecapStream(wave_graphFrms, 0, 100).show()
 
 ### 2) Probability Graph
 prob_graphFrms = BGRFrames.from_single_frames(prob_graphs)
-DecapStream(prob_graphFrms, 0, 100).show(ms_between_frames = 100)
+# DecapStream(prob_graphFrms, 0, 100).show()
 
 ### 3) Mel Spectrogram
 # we make a graph so that we can superimpose our mel spectrogram with consistent header size, etc.
@@ -273,13 +288,13 @@ over_cols, over_rows = (melFrms.cols() - specFrms_remapped_rescaled.cols()) // 2
 tlPt = Point2D((over_cols, over_rows + 45))
 
 specFrms_over = overlay(melFrms, specFrms_remapped_rescaled, top_left_point = tlPt)
-DecapStream(specFrms_over, 0, 100).show()
+# DecapStream(specFrms_over, 0, 100).show()
 
 from ATMANpy.funcs.vis_funcs import animate_sequence
 nowLn = probScn[-1]
 specFrms_over_with_line, _ = animate_sequence([probScn[-1] for i in range(specFrms_over.length())], annotated_points = [now_annPnt], 
                                 start_cam = probGraph.cam, stop_cam = probGraph.cam, animate_over = specFrms_over)
-DecapStream(specFrms_over_with_line, 0, 100).show()
+# DecapStream(specFrms_over_with_line, 0, 100).show()
 
 ### 4) Legend
 from ATMANpy.types.Overlays import Legend, LegendRow
@@ -290,9 +305,14 @@ myLeg = Legend([hitRow, bncRow], legend_dimensions = (1920 // 3, 1080 // 3), bor
 legFrm = myLeg.render()
 legFrm = legFrm.pad(to_height = 1080 // 2, to_width = 1920 // 2)
 
+#### Params ####
+sound_fade_exp = 1
+sound_softly_factor = 0.5
+
 #### BEGIN ANIMATING ###
 all_frames = []
 script_lines = []
+wave_forms = []
 
 # idea: talk over a still frame. introduce all elements: waves, mel, graph.
 # then, play sound, and just the sound, for a bit.
@@ -324,8 +344,11 @@ rstFrm = myRst_static.render()
 fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
 fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
 
+wave_form = None
+
 all_frames.append(fsFrms_over)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
 script_line =   """
                     To identify hits and bounces from the sound, we train a neural network on the Mel Spectrogram of the sound waveform.
@@ -337,8 +360,11 @@ rstFrm = myRst_static.render()
 fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
 fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
 
+wave_form = None
+
 all_frames.append(fsFrms_over)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
 script_line =   """
                     The neural network spits out the probability that the sound currently being heard is a hit or a bounce,
@@ -352,10 +378,13 @@ rstFrm = myRst_static.render()
 fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
 fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
 
+wave_form = None
+
 all_frames.append(fsFrms_over)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
-script_line = "[FADE IN SOUND]"
+script_line = ""
 duration = 125
 start, stop = fs_wave, fs_wave + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
@@ -376,11 +405,16 @@ myRst.add(curr_legFrm, 1, 1, set_size = True)
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
+### FADE IN SOUND
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form = my_wave[start_sample:stop_sample]
+wave_form = fade_in(wave_form, exp = sound_fade_exp)
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
 script_line =   """
-                    [PLAY SOUND SOFTLY]
                     Currently, the model is correctly detecting neither hit nor bounce. 
                     Look out now for the spike in the red curve as soon as the serve is hit, indicating that a hit has been detected. 
                     This is followed by a spike in the yellow curve, indicating that the bounce has been heard and identified by the model.
@@ -407,10 +441,17 @@ showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 # DecapStream(overFrms, 0, 100).show(ms_between_frames = 100)
 
+# PLAY SOUND SOFTLY
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form = my_wave[start_sample:stop_sample]
+wave_form = fade_in(wave_form, exp = sound_fade_exp)
+wave_form = wave_form * sound_softly_factor
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
-script_line = "[PLAY SOUND]"
+script_line = ""
 duration = 75 ### in sum, we have to be at how_many_frames_in_sound - 50, here, so we slow down at the right moment.
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
@@ -431,12 +472,15 @@ myRst.add(curr_legFrm, 1, 1, set_size = True)
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
+# PLAY SOUND
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form = my_wave[start_sample:stop_sample]
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
-script_line =   """
-                    [PLAY SOUND slowed to half]
-                """
+script_line =   ""
 duration = 35
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
@@ -459,12 +503,17 @@ showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms = overFrms.slow(2)
 
+# PLAY SOUND SLOWED TO HALF
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form = my_wave[start_sample:stop_sample]
+wave_form = slow(wave_form, by = 2)
+# sd.play(wave_form)
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
-script_line =   """
-                    [PLAY SOUND slowed to fourth]
-                """
+script_line =   ""
 duration = 15
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
@@ -487,12 +536,17 @@ showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms = overFrms.slow(2).slow(2)
 
+# PLAY SOUND SLOWED TO FOURTH
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form = my_wave[start_sample:stop_sample]
+wave_form = slow(wave_form, by = 4)
+# sd.play(wave_form)
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
-script_line =   """
-                    [PLAY SOUND slowed to eigth]
-                """
+script_line =   ""
 duration = 25
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
@@ -515,70 +569,18 @@ showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms = overFrms.slow(2).slow(2).slow(2)
 
+# PLAY SOUND SLOWED TO EIGTH
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form = my_wave[start_sample:stop_sample]
+wave_form = slow(wave_form, by = 8)
+# sd.play(wave_form)
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
 script_line =   """
-                    [PLAY SOUND SOFTLY slowed to eigth] 
                     In this manner, the model detectes hits and bounces when they occur, for the entire rally.
-                """
-duration = 20
-start, stop = stop, stop + duration
-start_rect, stop_rect = start - fs_wave, stop - fs_wave
-
-myStm = Stream(cap, start, stop - 1)
-myFrms = myStm.decap().frames
-myFrms_full = myFrms.rescale(3)
-# DecapStream(myFrms_full, 0, 100).show()
-
-curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
-curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
-curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
-curr_legFrm = legFrm.rescale(rescale_ratio)
-myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
-myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
-myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
-myRst.add(curr_legFrm, 1, 1, set_size = True)
-
-showFrms = myRst.render()
-overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-overFrms = overFrms.slow(2).slow(2).slow(2)
-
-all_frames.append(overFrms)
-script_lines.append(script_line)
-
-
-script_line =   """
-                    [PLAY SOUND slowed to fourth] 
-                """
-duration = 15
-start, stop = stop, stop + duration
-start_rect, stop_rect = start - fs_wave, stop - fs_wave
-
-myStm = Stream(cap, start, stop - 1)
-myFrms = myStm.decap().frames
-myFrms_full = myFrms.rescale(3)
-# DecapStream(myFrms_full, 0, 100).show()
-
-curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
-curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
-curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
-curr_legFrm = legFrm.rescale(rescale_ratio)
-myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
-myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
-myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
-myRst.add(curr_legFrm, 1, 1, set_size = True)
-
-showFrms = myRst.render()
-overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-overFrms = overFrms.slow(2).slow(2)
-
-all_frames.append(overFrms)
-script_lines.append(script_line)
-
-
-script_line =   """
-                    [PLAY SOUND slowed to half] 
                 """
 duration = 10
 start, stop = stop, stop + duration
@@ -599,16 +601,17 @@ myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
 showFrms = myRst.render()
-overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-overFrms = overFrms.slow(2)
+overFrms8 = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms8 = overFrms8.slow(2).slow(2).slow(2)
 
-all_frames.append(overFrms)
-script_lines.append(script_line)
+# PLAY SOUND SOFTLY SLOWED TO EIGTH
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form8 = my_wave[start_sample:stop_sample]
+wave_form8 = slow(wave_form8, by = 8)
+wave_form8 = wave_form8 * sound_softly_factor
+# sd.play(wave_form)
 
-script_line =   """
-                    [PLAY SOUND] 
-                """
-duration = 100
+duration = 15
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
@@ -627,23 +630,57 @@ myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
 showFrms = myRst.render()
-overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms4 = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms4 = overFrms4.slow(2).slow(2)
+
+# PLAY SOUND SOFTLY SLOWED TO FOURTH
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form4 = my_wave[start_sample:stop_sample]
+wave_form4 = slow(wave_form4, by = 8)
+wave_form4 = wave_form4 * sound_softly_factor
+# sd.play(wave_form)
+
+duration = 20
+start, stop = stop, stop + duration
+start_rect, stop_rect = start - fs_wave, stop - fs_wave
+
+myStm = Stream(cap, start, stop - 1)
+myFrms = myStm.decap().frames
+myFrms_full = myFrms.rescale(3)
+# DecapStream(myFrms_full, 0, 100).show()
+
+curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
+curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
+curr_legFrm = legFrm.rescale(rescale_ratio)
+myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
+myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
+myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
+myRst.add(curr_legFrm, 1, 1, set_size = True)
+
+showFrms = myRst.render()
+overFrms2 = overlay(myFrms_full, showFrms, top_left_point = tlPt)
+overFrms2 = overFrms2.slow(2)
+
+# PLAY SOUND SOFTLY SLOWED TO HALF
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form2 = my_wave[start_sample:stop_sample]
+wave_form2 = slow(wave_form2, by = 2)
+wave_form2 = wave_form2 * sound_softly_factor
+# sd.play(wave_form)
+
+overFrms = BGRFrames.from_frames([overFrms8, overFrms4, overFrms2])
+wave_form = np.concatenate([wave_form8, wave_form4, wave_form2])
 
 all_frames.append(overFrms)
 script_lines.append(script_line)
-
-### TODO: key issue: we don't have enough frames for the rest of the text.
-## -> do we freeze? 
-## number one goal: don't speed up and slow down the frames too much: we are now back at normal speed. either keep going or freeze.
-## probably best: FADE OUT here, use all the frames we need for this sentence below ("Note that the serve here..."), then freeze at the end
-## to deliver the conclusion.
+wave_forms.append(wave_form)
 
 script_line =   """
-                    [PLAY SOUND] 
-                    Note that the serve here is a let: the sound of the umpire declaring the let is not detected,
+                    Note that the serve we saw just now is a let: the sound of the umpire declaring the let is not detected,
                     even though a model could be trained for it, and integrated into the detection pipeline.
                 """
-duration = 100
+duration = 250
 start, stop = stop, stop + duration
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
@@ -664,12 +701,18 @@ myRst.add(curr_legFrm, 1, 1, set_size = True)
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
+### FADE OUT SLOWED SOUND SOFTLY
+start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
+wave_form = my_wave[start_sample:stop_sample]
+wave_form = slow(wave_form, by = 2)
+wave_form = fade_out(wave_form, exp = sound_fade_exp)
+wave_form = wave_form * sound_softly_factor
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
-
+wave_forms.append(wave_form)
 
 script_line =   """
-                    [FADE OUT SOUND] 
                     Paired with the visual recognition of the ball in flight, the sound information gives us 
                     a very good idea about when and where the ball is hit, and when and where it bounces. 
                     To supplement our knowledge on timing and location even further, and to find out what type of shot is
@@ -696,8 +739,11 @@ myRst.add(curr_legFrm, 1, 1, set_size = True)
 showFrms = myRst.render()
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
+wave_form = None
+
 all_frames.append(overFrms)
 script_lines.append(script_line)
+wave_forms.append(wave_form)
 
 ### intermezzo
 vis_ut.show(all_frames)
