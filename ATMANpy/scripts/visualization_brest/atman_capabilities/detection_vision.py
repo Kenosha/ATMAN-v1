@@ -52,9 +52,6 @@ allPnts = dataPnts.join(nullPnts).sort()
 ###### GET USEFUL STUFF ########
 ################################
 
-def show(all_frames, ms_between_frames = 25):
-    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
-
 vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
 fs, ls = conf['start_frame'], conf['stop_frame']
 cap = conf['cap']
@@ -390,10 +387,10 @@ script_line =   """
                     To this end, a neural network is trained that can detect the type of shot being hit at any given moment.
                     The neural network distinguishes between serves, groundstrokes and volleys; it can tell a topspin shot from a slice,
                     and accounts for player-handedness.
-                """
+                """ ## 15 seconds
 preFrms = myStm.decap().frames[:how_many_frames_in_vision].rescale(3)
-
-comb_preFrms = BGRFrames.from_frames([preFrms[:60], preFrms[60:90].slow(2), preFrms[90:100].slow(2).slow(2)])
+pre_preFrms = BGRFrames.from_frame(preFrms[0], 250)
+comb_preFrms = BGRFrames.from_frames([pre_preFrms, preFrms[:60], preFrms[60:90].slow(2), preFrms[90:100].slow(2).slow(2)])
 
 all_frames.append(comb_preFrms)
 script_lines.append(script_line)
@@ -423,13 +420,22 @@ script_lines.append(script_line)
 script_line =   """
                     At this point, the neural network confuses the wind-down of the Gasquet's backhand motion with a forehand.
                     Though this is not optimal, once the visual information is combined with ball flight and sound data, 
-                    such confusions are easily eliminated, as we will see in a bit.
-                """
+                    such confusions are easily eliminated, as we will see in a bit. 
+                """ ### 17 seconds
 duration = 14
 start, stop = stop, stop + duration
-currFrms = regFrms[start:stop]
-currFrms = currFrms.slow(2).slow(2).slow(2)
-# TODO: (maybe just freeze in the middle, if we have too little time to speak.)
+freeze_within = 6
+
+currFrms_pre = regFrms[start:start+freeze_within]
+currFrms_stat = regFrms[start+freeze_within]
+currFrms_post = regFrms[start+freeze_within:stop]
+
+currFrms_pre = currFrms_pre.slow(2).slow(2).slow(2)
+currFrms_stat = BGRFrames.from_frame(currFrms_stat, 350)
+currFrms_post = currFrms_post.slow(2).slow(2).slow(2)
+
+currFrms = BGRFrames.from_frames([currFrms_pre, currFrms_stat, currFrms_post])
+# DecapStream(currFrms, 0, 100).show()
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -437,8 +443,8 @@ script_lines.append(script_line)
 ### serve + 1
 script_line =   """
                     The next shot is also correctly identified as a topspin backhand, with the highest degree of certainty (96%)
-                    coming at the moment of impact.
-                """
+                    coming at the moment of impact. 
+                """ ### 10 seconds
 duration = 35
 start, stop = stop, stop + duration
 currFrms = regFrms[start:stop]
@@ -450,7 +456,7 @@ script_lines.append(script_line)
 ### return + 1
 script_line =   """
                     Another topspin backhand, and again the moment of impact correlates very well with the highest level of certainty.
-                """
+                """ ### 7 seconds
 duration = 25
 start, stop = stop, stop + duration
 currFrms = regFrms[start:stop]
@@ -461,10 +467,10 @@ script_lines.append(script_line)
 
 ### serve + 2
 script_line =   """
-                    Thomas Fabbiano's topspin backhand is recognized as such also, at 99% certainty just before impact and 98% at impact.
-                    In this way, visual analysis of player motion supplements ball flight and sound information to refine our knowledge
-                    of timing and location, and tells us what kind of shot is being hit.  
-                """
+                    Thomas Fabbiano's topspin backhand is recognized as such also, at 99% certainty around the moment of impact.
+                    In this way, visual analysis of player motion supplements ball flight and sound information, 
+                    and tells us additionally what kind of shot is being hit.  
+                """ ### 15 seconds
 duration = 50
 start, stop = stop, stop + duration
 currFrms = regFrms[start:stop]
@@ -483,15 +489,15 @@ script_lines.append(script_line)
 
 ### intermezzo
 script_line =   """
-                    In this rally, we have seen a serve and topspin backhands only; let's verify that ATMAN also automatically recognized
+                    In this rally, we have seen a serve and topspin backhands only; let's verify that ATMAN also automatically recognizes
                     forehands, and is able to tell a topspin shot from a slice.
-                """
+                """ ### 10 secs
 intermezzo_early_end = 25
 start, stop = segBFs[seg_idx].last()[0], segBFs[seg_idx + 1].first()[0] - intermezzo_early_end
 interStm = Stream(cap, start, stop - 1)
 # interStm.show()
 interFrms = interStm.decap().frames
-interFrms = vis_ut.speed_up_frames_progressively(interFrms)
+interFrms = vis_ut.speed_up_frames_progressively(interFrms, ramp_up_frames = 100)
 interFrms = interFrms.rescale(3)
 # DecapStream(interFrms, 0, 100).show()
 
@@ -499,6 +505,7 @@ all_frames.append(interFrms)
 script_lines.append(script_line)
 
 ### intermezzo slow down
+script_line = ""
 start, stop = stop, stop + intermezzo_early_end
 interStm = Stream(cap, start, stop - 1)
 # interStm.show()
@@ -513,7 +520,7 @@ script_lines.append(script_line)
 
 ### next rally
 script_line =   """
-                    Serve recognized...
+                    The serve is recognized...
                 """
 duration = 20
 start, stop = 0, duration
@@ -525,7 +532,7 @@ script_lines.append(script_line)
 
 
 script_line =   """
-                    Forehand recognized...
+                    The topspin forehand return is also recognized...
                 """
 duration = 25
 start, stop = stop, stop + duration
@@ -536,9 +543,10 @@ all_frames.append(currFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    Slice recognized (with a small hiccup); in the windup, the model thinks it sees a low-confidence topspin backhand, but then quickly corrects to slice.
-                """
-duration = 30
+                    The slice is recognized, but with a small hiccup: 
+                    in the windup, the model thinks it sees a low-confidence topspin backhand, but then quickly corrects to slice.
+                """ # 9 seconds
+duration = 33
 start, stop = stop, stop + duration
 currFrms = regFrms2[start: stop]
 currFrms = currFrms.slow(2).slow(2).slow(2)
@@ -548,9 +556,9 @@ script_lines.append(script_line)
 
 
 script_line =   """
-                    Slice recognized...
+                    The next slice is flawlessy recognized, with the highest certainty coming around the time of impact.
                 """
-duration = 35
+duration = 32
 start, stop = stop, stop + duration
 currFrms = regFrms2[start: stop]
 currFrms = currFrms.slow(2).slow(2).slow(2)
@@ -560,7 +568,7 @@ script_lines.append(script_line)
 
 
 script_line =   """
-                    Slice recognized (despite small hiccup)...
+                    Once more, the slice recognized, despite some uncertainty in the windup.
                 """
 duration = 40
 start, stop = stop, stop + duration
@@ -588,11 +596,10 @@ currFrms = currFrms.slow(2)
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-
-script_line = "We now have all the ingredients necessary to reconstruct the trajectory of the ball in flight."
-fadeFrms = vs.interpolate_frames(currFrms[-1], currFrms[-1].zero(), 100)
+script_line = "We now have all the ingredients necessary to reconstruct the trajectory of the ball in flight." # 5 seconds
+fadeFrms = vs.interpolate_frames(currFrms[-1], currFrms[-1].zero(), 150)
 
 all_frames.append(fadeFrms)
 script_lines.append(script_line)
 
-show(all_frames)
+vis_ut.show(all_frames)
