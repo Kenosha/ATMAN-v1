@@ -1,4 +1,4 @@
-
+import os
 import numpy as np
 import pandas as pd
         
@@ -26,6 +26,16 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'balls'
+SAVE_FOLDER = 'atman_capabilities'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+#########################################
 
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
@@ -106,7 +116,7 @@ mixFrms = mixFrms.rescale(3)
 all_frames.append(mixFrms)
 script_lines.append(script_line)
 
-DecapStream(mixFrms, 0, 100).show()
+# DecapStream(mixFrms, 0, 100).show()
 
 ### the filtered motion mask
 script_line = "Naturally, the players and their shadows are in motion but have already been detected: We filter them out."
@@ -122,7 +132,7 @@ currFrms = Stream(cap, start, stop - 1).decap().frames
 
 mixFrms = currFrms.mask(joinMask) + currFrms.mask(~joinMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
-DecapStream(mixFrms, 0, 100).show()
+# DecapStream(mixFrms, 0, 100).show()
 
 all_frames.append(mixFrms)
 script_lines.append(script_line)
@@ -146,14 +156,14 @@ joinMask = cntMask & ~shadMask
 
 mixFrms = currFrms_with_contours.mask(joinMask) + currFrms.mask(~joinMask) * dim_factor
 mixFrms = mixFrms.rescale(3).slow(2)
-DecapStream(mixFrms, 0, 100).show()
+# DecapStream(mixFrms, 0, 100).show()
 
 all_frames.append(mixFrms)
 script_lines.append(script_line)
 
 ### the SVM
 # -> idea: show a few frames in super-slo mo with ball probabilities.
-script_line = "To this end, we train a support vector machine (SVM) to recognize shapes that look like a ball."
+script_line = "To this end, we train a support vector machine to recognize shapes that look like a ball."
 
 duration = 15
 start, stop = stop, stop + duration
@@ -221,7 +231,7 @@ for i in range(duration):
     out_frames.append(mixFrms)
 
 probFrms = BGRFrames.from_frames(out_frames)
-DecapStream(probFrms, 0, 100).show()
+# DecapStream(probFrms, 0, 100).show()
 
 del out_frames
 
@@ -303,7 +313,7 @@ for i in range(duration):
     current_num_frames += frames_repeat
 
 interFrms = BGRFrames.from_frames(out_frames)
-DecapStream(interFrms, 0, 100).show()
+# DecapStream(interFrms, 0, 100).show()
 
 del out_frames
 
@@ -323,7 +333,8 @@ all_frames.append(joint_pre_interFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    To remove those ball shapes that the SVM erroneously believes to look like a ball, we implement a Particle Filter. 
+                    To remove those ball shapes that the support vector machine erroneously believes to look like a ball, 
+                    we implement a Particle Filter. 
                     The Particle Filter simulates particles that tracks candidate ball shapes on the screen;
                     these particles obey simple laws of motion, 
                     and therefore stay close to the ball shapes that actually behave like a ball in flight.
@@ -403,7 +414,7 @@ part_frames = [subFrm.put(particles_to_points(partArr, N), color = part_color, s
 partFrms = BGRFrames.from_single_frames(part_frames)
 
 del part_frames
-DecapStream(partFrms, 0, 100).show()
+# DecapStream(partFrms, 0, 100).show()
 
 all_frames.append(partFrms)
 script_lines.append(script_line)
@@ -443,10 +454,10 @@ partArrs_resc_slow = np.array([perturb_array(partArr, N = N, scale = scale) for 
 
 part_frames = [subFrm.put(particles_to_points(partArr, N), color = kita_color, size = 0) for subFrm, partArr in zip(subFrms_slow_resc, partArrs_resc_slow)]
 partFrms = BGRFrames.from_single_frames(part_frames)
-DecapStream(partFrms, 0, 100).show()
+# DecapStream(partFrms, 0, 100).show()
 
 all_frames.append(partFrms)
-script_lines.append(script_lines)
+script_lines.append(script_line)
 
 script_line =   """
                     With the support vector machine finding ball candidates based on how they look, 
@@ -482,7 +493,7 @@ for pnt, frm in zip(sub_pntSF.values(), subFrms):
     out_frames.append(ball_frm)
     
 ballFrms = BGRFrames.from_single_frames(out_frames).slow(2)
-DecapStream(ballFrms, 0, 100).show()
+# DecapStream(ballFrms, 0, 100).show()
 
 ### Intermezzo to the next step: sound recognition.
 how_many_frames_in_sound = 750
@@ -499,3 +510,16 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+for idx, script_line in enumerate(script_lines):
+    with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+        f.write(script_line)

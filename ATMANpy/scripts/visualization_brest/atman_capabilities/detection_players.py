@@ -1,4 +1,4 @@
-
+import os
 import numpy as np
 import pandas as pd
         
@@ -116,7 +116,7 @@ my_segBF = segBFs[1] ### on to the next point!
 ### fade out the lines!
 script_line =   """
                     ATMAN first synthesizes a background image; a still frame of the court only, 
-                    against which we can easily detect foreground objects, such as the players. 
+                    against which we can easily detect foreground objects.
                 """
 duration = 50
 
@@ -166,8 +166,7 @@ script_lines.append(script_line)
 
 ### fade players back in
 script_line =   """
-                    Large size foreground objects, such as the players, the ball kids and the line judges, 
-                    are then clearly visibly against this background.
+                    The players, the ball kids and the line judges are then clearly visibly against this background.
                 """
 duration = 100
 start, stop = stop, stop + duration 
@@ -201,7 +200,7 @@ script_lines.append(script_line)
 
 ### now, show how we use this to find the players
 script_line =   """
-                    Notice how the player's shadows are still visible against the background.
+                    Notice how the player's shadows are still detected as foreground.
                 """
 duration = 2
 start, stop = stop, stop + duration 

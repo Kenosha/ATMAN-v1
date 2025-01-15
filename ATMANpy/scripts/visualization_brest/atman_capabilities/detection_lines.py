@@ -253,6 +253,7 @@ script_lines.append(script_line)
 script_line =   """
                     These matrices combine to form a projection matrix, which determines how the camera transforms points in 3-D space into 
                     a 2-D representation on a screen.
+                    Understanding the broadcast camera tremendously eases the visual recognition of all subsequent features.
                 """
 
 prjFrm = vis_ut.render_over_frames(prjTab, mixFrms[[-1]], tlPt = extPt // 2)
@@ -264,7 +265,6 @@ script_lines.append(script_line)
 
 # show net
 script_line =   """
-                    Understanding the broadcast camera tremendously eases the visual recognition of all subsequent features.
                     For example, we can immediately reconstruct the location of the net.
                 """
 
@@ -400,7 +400,7 @@ rotFrms = BGRFrames.from_frames([anim_rot(cam3, cam2a),
                                  ])
 # DecapStream(rotFrms, 0, 100).show()
 
-num_rots = 3
+num_rots = 1 ### 3 rotations is too much!
 rotFrms_rep = BGRFrames.from_frames([rotFrms for _ in range(num_rots)])
 # DecapStream(rotFrms_rep, 0, 100).show()
 
@@ -410,7 +410,7 @@ all_frames.append(rotFrms_joint)
 script_lines.append(script_line)
 
 ### rotate back to starting position, in time for detection_player to start.
-script_line = "Having detected the lines and the net, we move on to detecting the players."
+script_line = "Let's see how ATMAN detects the players on the field."
 
 start, stop = fs_adj+6*step_frames, fs_adj+9*step_frames
 currFrms = myDtm.conform(start, stop - 1).frames.rescale(3)
