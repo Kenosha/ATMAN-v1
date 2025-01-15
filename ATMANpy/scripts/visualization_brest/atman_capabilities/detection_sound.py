@@ -1,4 +1,4 @@
-
+import os
 import numpy as np
 import pandas as pd
 import sounddevice as sd
@@ -27,6 +27,16 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'sound'
+SAVE_FOLDER = 'atman_capabilities'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+#########################################
 
 def fade_in(some_wave, exp = 1):
     wavelen = len(some_wave)
@@ -747,3 +757,28 @@ wave_forms.append(wave_form)
 
 ### intermezzo
 vis_ut.show(all_frames)
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+for idx, script_line in enumerate(script_lines):
+    with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+        f.write(script_line)
+
+# d) Save waveforms
+import soundfile as sf
+for idx, waveform in enumerate(wave_forms):
+    if waveform is not None:
+        sf.write(os.path.join(fullPath, f'wave_{idx}.mp3'), waveform, samplerate = 44100)
+
+
+len(all_frames)
+len(script_lines)
+len(wave_forms)
+
