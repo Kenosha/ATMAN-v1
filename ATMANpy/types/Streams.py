@@ -429,7 +429,7 @@ class Stream:
         myFrms = framesType.from_single_frames(frmList)
         return DecapStream(myFrms, self.start_frame, self.stop_frame) ### features are not appended! they are now on the frame.
 
-    def generator(self, ms_between_frames = 25, frame_counter = False, 
+    def generator(self, ms_between_frames = 40, frame_counter = False, 
                   quiet_and_uninterruptable = False ### this function is needed only when we are decapping with features
                                                     ### it guarantees that everything is decapped and does not show the rendered frame.
                   ): ### cv_funcs.video_stream
@@ -497,7 +497,7 @@ class Stream:
         else:
             yield self.conform(chunk_start, chunk_stop).decap() ### yield one last time
 
-    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
         frmNum, myFrm, myDict = next(gen) ### prime the generator
         drawFunc = draw(self.features.get_features(), textRegion = text_region)
@@ -883,7 +883,7 @@ class StillStream:
         
     #     return DecapStream(expFrms, self.start_frame, self.stop_frame, self.features)
     
-    def generator(self, ms_between_frames = 25, frame_counter = False):
+    def generator(self, ms_between_frames = 40, frame_counter = False):
         
         frmNum = self.start_frame
     
@@ -909,7 +909,7 @@ class StillStream:
         else:
             cv.destroyAllWindows()
     
-    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         return Stream.show(self,  ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
     
     def extract(self, featureFunc, **kwargs):
@@ -1058,7 +1058,7 @@ class MulStream:
         else:
             yield self.conform(chunk_start, chunk_stop).decap() ### yield one last time
             
-    def generator(self, ms_between_frames = 25, frame_counter = False):
+    def generator(self, ms_between_frames = 40, frame_counter = False):
         def continue_generators(generator_states):
             if all(generator_states):
                 return True
@@ -1333,7 +1333,7 @@ class StreamList:
         cap = self[0].cap ### needs generalisation...
         return NCStream(cap, frameList, features = concSF)
     
-    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         for myStm in self:
             myStm.show(ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
     
@@ -1475,7 +1475,7 @@ class DecapStream:
     def decap(self):
         return self ### needed, so that chunking can be done with simple chunk_generator functions
     
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
     
         for idx, myFrm in enumerate(self.frames):
             frmNum = self.start_frame + idx
@@ -1495,7 +1495,7 @@ class DecapStream:
         else:
             cv.destroyAllWindows()
            
-    def show(self, ms_between_frames = 30, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
            
     def extract(self, featureFunc, **kwargs):
@@ -1607,7 +1607,7 @@ class NCDecapStream:
     def decap(self):
         return self ### needed, so that chunking can be done with simple chunk_generator functions
     
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
     
         for frmNum, myFrm in zip(self.frmNums, self.frames):
             myDict = self.features.maybe_get(frmNum)
@@ -1624,7 +1624,7 @@ class NCDecapStream:
         else:
             cv.destroyAllWindows()
     
-    def show(self, ms_between_frames = 30, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         return Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
            
     def extract(self, featureFunc, **kwargs):
@@ -1805,7 +1805,7 @@ class CachedStream(Stream):
             else:
                 return frmNum
             
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
             # 2) the featCache -> current feature at center, with future and past features around   
@@ -1977,7 +1977,7 @@ class CachedStream(Stream):
         return DecapCachedStream(myFrms, self.start_frame, self.stop_frame, self.features, 
                                  cache_size = self.cache_size, name = self.name)
 
-    def show(self, ms_between_frames = 30, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         self.decache().show(ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = None)
     
     
@@ -2009,7 +2009,7 @@ class DecapCachedStream(DecapStream):
     def decap(self):
         return self ### needed, so that chunking can be done with simple chunk_generator functions
     
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
             # 2) the featCache -> current feature at center, with future and past features around    
@@ -2087,7 +2087,7 @@ class RandStream(Stream):
                                       name = self.name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
 
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
             
         frmNum = randrange(self.start_frame, self.stop_frame)
         frames_yielded = 0
@@ -2221,7 +2221,7 @@ class NCStream:
                                       name = self.name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
 
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
     
         for frmNum in self.frmNums:
             
@@ -2273,7 +2273,7 @@ class NCStream:
             chunkNums = self.frmNums[slice_start: slice_stop]
             yield self.conform(chunkNums).decap()
 
-    def show(self, ms_between_frames = 25, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         Stream.show(self, ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
           
     def extract(self, featureFunc, **kwargs): ### cv_funcs.get_stream_features
@@ -2329,7 +2329,7 @@ class NCRandStream(NCStream):
                                       name = self.name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
 
-    def generator(self, ms_between_frames = 25, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
             
         sampled_frames = sample(self.frmNums, self.number_of_frames) ### TODO: this is without replacement, RandStream is with!!!
                                                                         # -> make explicit whether we want with or without.
