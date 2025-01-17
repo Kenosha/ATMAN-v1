@@ -1066,7 +1066,7 @@ class Line3D:
                 radius = self.thickness / 2
                 ### 6 points around a circle, scaled up with resolution and the thickness
                 # -> the thicker the line, the farther out the points, so we need more.
-                num_circle_points = int(radius * resolution * 6)
+                num_circle_points = max(1, int(radius * resolution * 6))
                 radList = np.linspace(-np.pi, np.pi, num = num_circle_points, endpoint = False) 
                 ### turn into 2D -> n x dim
                 radArr = radList[:, np.newaxis] 
