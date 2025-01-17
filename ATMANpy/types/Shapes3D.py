@@ -660,6 +660,7 @@ class Ball3D(Point3D):
     
     limit_phi: Optional[tuple] = None
     limit_theta: Optional[tuple] = None
+    offset: Optional[float] = 0.5 ### this is for pseudo-rotations in the rasterization pattern
     
     name: str = 'Ball3D'
     
@@ -683,9 +684,9 @@ class Ball3D(Point3D):
             return rad_eq and phi_eq and tht_eq
         
     @staticmethod
-    def from_point3D(myPnt, radius = 1, limit_phi = None, limit_theta = None, name = 'Ball3D'):
+    def from_point3D(myPnt, radius = 1, limit_phi = None, limit_theta = None, offset = 0.5, name = 'Ball3D'):
         return Ball3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha, 
-                      radius = radius, limit_phi = limit_phi, limit_theta = limit_theta,
+                      radius = radius, limit_phi = limit_phi, limit_theta = limit_theta, offset = offset,
                       name = name)
 
     @classmethod
@@ -696,7 +697,7 @@ class Ball3D(Point3D):
     def get_point(self):
         return Point3D(self.coords)
     
-    def rasterize(self, resolution, offset = 0.5):
+    def rasterize(self, resolution):
         ### resolution -> points in a area of 1 sq. unit size 
         ## area, not volume, since we're only rasterizing surfaces! -> everything pictured is hollow!
         limit_phi = self.limit_phi
@@ -705,7 +706,7 @@ class Ball3D(Point3D):
         surface = 4 * np.pi * self.radius ** 2 
         num_points = int(surface * resolution) + 1 ### ceiling function
         
-        indices = np.arange(0, num_points, dtype = float) + offset
+        indices = np.arange(0, num_points, dtype = float) + self.offset
         
         ### sunflower spacing (i.e. fibonacci spacing), from:
             # https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere
