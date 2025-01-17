@@ -162,6 +162,50 @@ class Point3D:
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
     
+    def reoffset(self, new_offset):
+        updDict = {'offset': new_offset}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def rerot_x(self, new_rot_x):
+        updDict = {'rot_x': new_rot_x}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def rerot_y(self, new_rot_y):
+        updDict = {'rot_y': new_rot_y}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def rerot_z(self, new_rot_z):
+        updDict = {'rot_z': new_rot_z}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+    
+    def rotate_x(self, rot_x):
+        try:
+            self.rot_x
+        except AttributeError:
+            return self
+        else:
+            return self.rerot_x(self.rot_x + rot_x)
+
+    def rotate_y(self, rot_y):
+        try:
+            self.rot_y
+        except AttributeError:
+            return self
+        else:
+            return self.rerot_y(self.rot_y + rot_y)
+    
+    def rotate_z(self, rot_z):
+        try:
+            self.rot_z
+        except AttributeError:
+            return self
+        else:
+            return self.rerot_z(self.rot_z + rot_z)
+    
     def interpolate(self, otherPt, itpl_lambda = 0.5):
         avg_coords = interpolate_tuples(self.coords, otherPt.coords, itpl_lambda = itpl_lambda)
         avg_color = interpolate_tuples(self.color, otherPt.color, itpl_lambda = itpl_lambda)
@@ -445,7 +489,6 @@ class AnnotatedPoint3D(Point3D):
 class Circle3D(Point3D):
     """
     A circle: tuple of integers, signifying x, y and z coordinates of the center, plus a radius
-    ### TODO: for the moment, the circle is flat on the ground -> generalize!
     """
     _DEFAULT_COLOR = const.BGR['bright_grey']
     _DEFAULT_ALPHA = 1
@@ -455,6 +498,10 @@ class Circle3D(Point3D):
     alpha: float = _DEFAULT_ALPHA
     limit_theta: tuple = None
     fixed_dimension: str = 'z' ### this is the dimension along which the circle is flat
+
+    rot_x: float = 0
+    rot_y: float = 0
+    rot_z: float = 0
     
     name: str = 'Circle3D'
     
@@ -478,11 +525,13 @@ class Circle3D(Point3D):
             return rad_eq and lim_eq and fix_eq
 
     @staticmethod
-    def from_point3D(myPnt, radius = 1, limit_theta = None, fixed_dimension = 'z', name = 'Circle3D'):
+    def from_point3D(myPnt, radius = 1, limit_theta = None, fixed_dimension = 'z', name = 'Circle3D', 
+                     rot_x = 0, rot_y = 0, rot_z = 0):
         if limit_theta is None:
             limit_theta = (0, 2 * np.pi)
         return Circle3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
                         radius = radius, limit_theta = limit_theta, fixed_dimension = fixed_dimension,
+                        rot_x = rot_x, rot_y = rot_y, rot_z = rot_z,
                         name = name)
 
     @classmethod
@@ -511,7 +560,10 @@ class Circle3D(Point3D):
 
     def rasterize(self, resolution):
         ### resolution: number of points on one arc length
-        limit_theta = self.limit_theta
+        if self.limit_theta is None:
+            limit_theta = (0, 2 * np.pi)
+        else:
+            limit_theta = self.limit_theta
         
         circumference = 2 * np.pi * self.radius
         num_points = int(circumference * resolution) + 1 ### ceiling function
@@ -534,6 +586,32 @@ class Circle3D(Point3D):
         if self.fixed_dimension == 'z':
             unit_circle = np.array([np.cos(theta_filtered), np.sin(theta_filtered), zeros_filtered]).T
 
+        ### rotate around three axes, to customize angle if needed
+        # 1) x
+        g = self.rot_x
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[1    , 0     , 0     ],
+                      [0    , cg    , -sg   ],
+                      [0    , sg    , cg    ]])
+        unit_circle = np.einsum('ij, ni -> nj', R, unit_circle)
+
+        # 2) y
+        g = self.rot_y
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[cg   , 0     , sg    ],
+                      [0    , 1     , 0     ],
+                      [-sg  , 0     , cg    ]])
+        unit_circle = np.einsum('ij, ni -> nj', R, unit_circle)
+
+        # 3) z        
+        g = self.rot_z
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[cg   , -sg   , 0     ],
+                      [sg   , cg    , 0     ],
+                      [0    , 0     , 1     ]])
+        unit_circle = np.einsum('ij, ni -> nj', R, unit_circle)
+
+        ### translate the unit circle coordinates by the center, and stretch by radius
         coordArr = np.array(self.coords)
 
         if len(coordArr.shape) == 1: ### in this case, we have a simple point -> self.coords is a tuple
@@ -562,7 +640,10 @@ class Ellipse3D(Point3D):
     alpha: Optional[float] = _DEFAULT_ALPHA
     limit_angle: Optional[tuple] = None
     fixed_dimension: str = 'z' ### this is the dimension along which the circle is flat
-    
+    rot_x: float = 0
+    rot_y: float = 0
+    rot_z: float = 0
+
     name: str = 'Ellipse3D'
     
     def __post_init__(self):
@@ -587,10 +668,13 @@ class Ellipse3D(Point3D):
             return rad_long_eq and rad_short_eq and tht_eq and lim_eq and fix_eq
         
     @staticmethod
-    def from_point3D(myPnt, radius_long = 1, radius_short = 1, theta = 0, limit_angle = None, fixed_dimension = 'z', name = 'Ellipse3D'):
+    def from_point3D(myPnt, radius_long = 1, radius_short = 1, theta = 0, limit_angle = None, fixed_dimension = 'z', 
+                     rot_x = 0, rot_y = 0, rot_z = 0,
+                     name = 'Ellipse3D'):
         return Ellipse3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
                             radius_long = radius_long, radius_short = radius_short, theta = theta,
                             limit_angle = limit_angle, fixed_dimension = fixed_dimension,
+                            rot_x = rot_x, rot_y = rot_y, rot_z = rot_z,
                             name = name)
 
     @classmethod
@@ -636,6 +720,32 @@ class Ellipse3D(Point3D):
         if self.fixed_dimension == 'z':
             base_ellipse = np.array([d1, d2, zeros_filtered]).T
 
+        ### rotate around three axes, to customize angle if needed
+        # 1) x
+        g = self.rot_x
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[1    , 0     , 0     ],
+                      [0    , cg    , -sg   ],
+                      [0    , sg    , cg    ]])
+        base_ellipse = np.einsum('ij, ni -> nj', R, base_ellipse)
+
+        # 2) y
+        g = self.rot_y
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[cg   , 0     , sg    ],
+                      [0    , 1     , 0     ],
+                      [-sg  , 0     , cg    ]])
+        base_ellipse = np.einsum('ij, ni -> nj', R, base_ellipse)
+
+        # 3) z        
+        g = self.rot_z
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[cg   , -sg   , 0     ],
+                      [sg   , cg    , 0     ],
+                      [0    , 0     , 1     ]])
+        base_ellipse = np.einsum('ij, ni -> nj', R, base_ellipse)
+    
+        ### translate the ellipse coordinates by the center
         coordArr = np.array(self.coords)
 
         if len(coordArr.shape) == 1: ### in this case, we have a simple point -> self.coords is a tuple
@@ -661,6 +771,10 @@ class Ball3D(Point3D):
     limit_phi: Optional[tuple] = None
     limit_theta: Optional[tuple] = None
     offset: Optional[float] = 0.5 ### this is for pseudo-rotations in the rasterization pattern
+
+    rot_x: float = 0
+    rot_y: float = 0
+    rot_z: float = 0
     
     name: str = 'Ball3D'
     
@@ -684,9 +798,12 @@ class Ball3D(Point3D):
             return rad_eq and phi_eq and tht_eq
         
     @staticmethod
-    def from_point3D(myPnt, radius = 1, limit_phi = None, limit_theta = None, offset = 0.5, name = 'Ball3D'):
+    def from_point3D(myPnt, radius = 1, limit_phi = None, limit_theta = None, offset = 0.5, 
+                     rot_x = 0, rot_y = 0, rot_z = 0,
+                     name = 'Ball3D'):
         return Ball3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha, 
                       radius = radius, limit_phi = limit_phi, limit_theta = limit_theta, offset = offset,
+                      rot_x = rot_x, rot_y = rot_y, rot_z = rot_z,
                       name = name)
 
     @classmethod
@@ -733,6 +850,33 @@ class Ball3D(Point3D):
         theta_filtered = theta[angle_filter]
         
         unit_circle = np.array([np.cos(theta_filtered) * np.sin(phi_filtered), np.sin(theta_filtered) * np.sin(phi_filtered), np.cos(phi_filtered)]).T
+
+        ### rotate around three axes, to customize angle if needed
+        # 1) x
+        g = self.rot_x
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[1    , 0     , 0     ],
+                      [0    , cg    , -sg   ],
+                      [0    , sg    , cg    ]])
+        unit_circle = np.einsum('ij, ni -> nj', R, unit_circle)
+
+        # 2) y
+        g = self.rot_y
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[cg   , 0     , sg    ],
+                      [0    , 1     , 0     ],
+                      [-sg  , 0     , cg    ]])
+        unit_circle = np.einsum('ij, ni -> nj', R, unit_circle)
+
+        # 3) z        
+        g = self.rot_z
+        cg, sg = np.cos(g), np.sin(g)
+        R = np.array([[cg   , -sg   , 0     ],
+                      [sg   , cg    , 0     ],
+                      [0    , 0     , 1     ]])
+        unit_circle = np.einsum('ij, ni -> nj', R, unit_circle)
+
+        ### translate the unit ball coordinates by the center, and stretch by radius
         coordArr = np.array(self.coords)
 
         if len(coordArr.shape) == 1: ### in this case, we have a simple point -> self.coords is a tuple
@@ -1730,11 +1874,28 @@ if __name__ == '__main__':
     ### Testing Circles
     coords = (300, 500, 0)
     r = 50
-    myCrc = Circle3D(coords, radius = r, limit_theta = (0, 1 * np.pi))
-    
+    baseCrc = Circle3D(coords, radius = r)
+
+    myCrc = baseCrc
+    myScn = courtScn.put(myCrc)
+    View.make(myCam, myScn, resolution = 1).snap().show()
+
+    myCrc = baseCrc.retheta((0, 1 * np.pi))
+    myScn = courtScn.put(myCrc)
+    View.make(myCam, myScn, resolution = 1).snap().show()
+
+    myCrc = baseCrc.rerot_x(0.25 * np.pi)
     myScn = courtScn.put(myCrc)
     View.make(myCam, myScn, resolution = 1).snap().show()
     
+    myCrc = baseCrc.rerot_y(0.25 * np.pi)
+    myScn = courtScn.put(myCrc)
+    View.make(myCam, myScn, resolution = 1).snap().show()
+
+    myCrc = baseCrc.rerot_z(0.25 * np.pi)
+    myScn = courtScn.put(myCrc)
+    View.make(myCam, myScn, resolution = 1).snap().show()
+
 
     ### Testing Containers
     regLn = Line3D(Point3D((270, 340, 0)), Point3D((340, 990, 0)))
@@ -1815,6 +1976,17 @@ if __name__ == '__main__':
     
     myScn = courtScn.put(myEll)
     View.make(myCam, myScn, resolution = resolution).snap().show()
+
+
+
+
+
+
+
+
+
+
+
 
 
     ### BELOW TODO: Not implemented yet if thickness > 0
