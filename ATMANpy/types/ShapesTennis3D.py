@@ -147,29 +147,107 @@ class Arrow(Lines3D):
     _ARROW_NAME = 'Arrow'
     _ARROW_THICKNESS = 0
 
-    def make(startPt, endPt, gamma = np.pi / 4, theta = 0, hat_length = 1,
-             color = _ARROW_COLOR, alpha = _ARROW_ALPHA, thickness = _ARROW_THICKNESS, name = _ARROW_NAME):
-        arrowLn = Line3D(startPt, endPt, thickness = thickness)
+    def make(startPt, endPt, hat_length = 1, hat_angle = np.pi / 4, rot_angle = 0, 
+            color = _ARROW_COLOR, alpha = _ARROW_ALPHA, thickness = _ARROW_THICKNESS, 
+            name = _ARROW_NAME):
 
-        dir_hori, dir_vert = arrowLn.reverse().find_orientation_hori_vert()
-        line_gamma, line_theta = dir_hori * np.pi, dir_vert * np.pi
+        ### imagine a stilyzed arrow, pointing straight up, with the tip at the origin
+        ### see notes 18.01.25 in red notebook
 
-        g1, g2 = line_gamma - gamma, line_gamma + gamma
-        t1, t2 = line_theta - theta, line_theta + theta
+        ### rotation angle around the end point
+        r1, r2 = rot_angle, rot_angle + np.pi
+        p1x, p1y, p1z = np.cos(r1), np.sin(r1), 0
+        p2x, p2y, p2z = np.cos(r2), np.sin(r2), 0
+
+        ### figure out how to incline these points downward with the hat angle
+        a = np.sin(hat_angle)
+        z = - np.cos(hat_angle)
+        h1x, h1y, h1z = a * p1x, a * p1y, z
+        h2x, h2y, h2z = a * p2x, a * p2y, z
+
+        h1 = np.array([h1x, h1y, h1z])
+        h2 = np.array([h2x, h2y, h2z])
+
+        ### rotate the hat points to match the direction of the arrow
+        # a) calculate the starting point if end point is (0, 0, 0)
+        L = startPt.distance_to(endPt)
+        spx, spy, spz = (startPt - endPt).coords # prime coordinates
+        spnx, spny, spnz = spx / L, spy / L, spz / L  # normed prime coordinates
         
-        x1 = np.cos(g1) * np.sin(t1)
-        y1 = np.sin(g1) * np.sin(t1)
-        z1 = np.cos(t1)
+        ### deal with simple cases where one rotation suffices
+        ### this avoids division by (near-)zero 
+        ### clumsy but ok.
+        epsilon = 0.0001
+        if np.isclose(np.abs(spnx), 1, rtol = epsilon):
+            ### rotation about y-axis by 90 deg or 270 deg suffices
+            s = np.sign(spnx) 
+            R = np.array([  [0, 0, -s],
+                            [0, 1, 0 ],
+                            [s, 0, 0 ]]
+                            )
+            hr1 = R @ h1
+            hr2 = R @ h2
+        
+        elif np.isclose(np.abs(spny), 1, rtol = epsilon):
+            ### rotation about x-axis by 90 deg or 270 deg suffices
+            s = np.sign(spny) 
+            R = np.array([  [1, 0, 0 ],
+                            [0, 0, -s],
+                            [0, s, 0 ]]
+                            )
+            hr1 = R @ h1
+            hr2 = R @ h2
 
-        x2 = np.cos(g2) * np.sin(t2)
-        y2 = np.sin(g2) * np.sin(t2)
-        z2 = np.cos(t2)
+        elif np.isclose(np.abs(spnz), 1, rtol = epsilon):
+            ### this is either the identity or a flip at the z-axis
+            s = np.sign(spnz) 
+            R = np.array([  [1, 0, 0 ],
+                            [0, 1, 0 ],
+                            [0, 0, -s]]
+                            )
+            hr1 = R @ h1
+            hr2 = R @ h2
 
-        p1 = Point3D((x1, y1, z1)) * hat_length
-        p2 = Point3D((x2, y2, z2)) * hat_length
+        else: ### otherwise, we need two rotations
+            t1, t2 = np.arcsin(spny), np.pi - np.arcsin(spny) ### -> one of these two is correct! ### if the first rotation (along the z-axis) would have to be larger than 180 degrees, we do not find it!
+            c1, c2 = np.cos(t1), np.cos(t2)
 
-        l1 = Line3D(endPt, endPt + p1, thickness = thickness)
-        l2 = Line3D(endPt, endPt + p2, thickness = thickness)
+            g1 = np.arcsin(-spnx / c1)
+            g2 = np.arcsin(-spnx / c2)
+            
+            i_is_close = np.isclose(-c1 * np.sin(g1), spnx)
+            iii_is_close = np.isclose(-c1 * np.cos(g1), spnz) 
+
+            if i_is_close and iii_is_close:
+                t = t1
+                g = g1
+            else:
+                t = t2
+                g = g2
+
+            Rx = np.array([[1, 0, 0],
+                        [0, np.cos(t), -np.sin(t)],
+                        [0, np.sin(t), np.cos(t)]])
+
+            Ry = np.array([[np.cos(g), 0, np.sin(g)],
+                            [0, 1, 0],
+                            [-np.sin(g), 0, np.cos(g)]])
+
+            hr1 = Ry @ Rx @ h1
+            hr2 = Ry @ Rx @ h2
+
+            # print(Ry @ Rx @ np.array([0, 0, -1]))
+            # print(spnx, spny, spnz)
+            ### for testing -> these two have to be equal           
+
+        ### scale up by hat length and translate to match end point       
+        hr1Pt = Point3D(tuple(hr1))
+        hr2Pt = Point3D(tuple(hr2))
+
+        l1 = Line3D(endPt, endPt + hr1Pt * hat_length, thickness = thickness)
+        l2 = Line3D(endPt, endPt + hr2Pt * hat_length, thickness = thickness)
+
+        arrowLn = Line3D(startPt, endPt, thickness = thickness)
 
         return Arrow([arrowLn, l1, l2], name = name, color = color, alpha = alpha)
 
@@ -381,7 +459,81 @@ if __name__ == '__main__':
     startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
     endPt = startPt.up(100).front(100).left(10)
 
-    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 4, theta = 0)
+    # myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+    # myScene = Scene.make_court().put(myArrow)
+
+    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+
+    
+    # myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = 0, thickness = 0.5)
+    # myScene = Scene.make_court().put(myArrow)
+
+    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+
+
+    # myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = np.pi / 3, thickness = 0.5)
+    # myScene = Scene.make_court().put(myArrow)
+
+    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+
+    # myArrow = Arrow.make(startPt, startPt.up(100).right(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = 0, thickness = 0.5)
+    # myScene = Scene.make_court().put(myArrow)
+
+    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+    
+    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    # myView.snap().show()
+
+    myArrow = Arrow.make(startPt, startPt.down(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myArrow = Arrow.make(startPt, startPt.back(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+    myScene = Scene.make_court().put(myArrow)
+
+    myView = View.make(backCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myView = View.make(topCam, myScene, resolution = RESOLUTION)
+    myView.snap().show()
+    
+    myArrow = Arrow.make(startPt, startPt.back(100).down(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
     myScene = Scene.make_court().put(myArrow)
 
     myView = View.make(backCam, myScene, resolution = RESOLUTION)
@@ -394,10 +546,7 @@ if __name__ == '__main__':
     myView.snap().show()
 
 
-    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
-    endPt = startPt.up(100).back(100).left(10)
-
-    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 4, theta = 0, thickness = 2)
+    myArrow = Arrow.make(startPt, startPt.back(100).down(100).left(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
     myScene = Scene.make_court().put(myArrow)
 
     myView = View.make(backCam, myScene, resolution = RESOLUTION)
@@ -409,11 +558,9 @@ if __name__ == '__main__':
     myView = View.make(topCam, myScene, resolution = RESOLUTION)
     myView.snap().show()
 
-    
-    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
-    endPt = startPt.up(100).back(100).left(10)
 
-    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 8, theta = 0, thickness = 2)
+
+    myArrow = Arrow.make(startPt, startPt.front(100).up(100).right(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
     myScene = Scene.make_court().put(myArrow)
 
     myView = View.make(backCam, myScene, resolution = RESOLUTION)
@@ -425,11 +572,9 @@ if __name__ == '__main__':
     myView = View.make(topCam, myScene, resolution = RESOLUTION)
     myView.snap().show()
 
-    
-    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
-    endPt = startPt.up(100).back(100).left(10)
 
-    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = 0, theta = np.pi / 8, thickness = 1)
+
+    myArrow = Arrow.make(startPt, startPt.back(100).up(100).right(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
     myScene = Scene.make_court().put(myArrow)
 
     myView = View.make(backCam, myScene, resolution = RESOLUTION)
@@ -441,34 +586,3 @@ if __name__ == '__main__':
     myView = View.make(topCam, myScene, resolution = RESOLUTION)
     myView.snap().show()
 
-    
-    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
-    endPt = startPt.back(100)
-
-    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 8, theta = 0, thickness = 1)
-    myScene = Scene.make_court().put(myArrow)
-
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-
-    
-    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 100)
-    endPt = startPt.right(100)
-
-    myArrow = Arrow.make(startPt, endPt, hat_length = 10, gamma = np.pi / 8, theta = 0, thickness = 1)
-    myScene = Scene.make_court().put(myArrow)
-
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
