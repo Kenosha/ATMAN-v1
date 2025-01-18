@@ -778,7 +778,3 @@ for idx, waveform in enumerate(wave_forms):
         sf.write(os.path.join(fullPath, f'wave_{idx}.mp3'), waveform, samplerate = 44100)
 
 
-len(all_frames)
-len(script_lines)
-len(wave_forms)
-

@@ -24,6 +24,7 @@ content to convey the technical things with:
 
 """
 
+import os
 import numpy as np
 import pandas as pd
 import sounddevice as sd
@@ -54,6 +55,16 @@ from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
 from ATMANpy.types.Abstract import Points, Shots, read_in_data_tables, read_in_placeholder_tables
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'visual_engine'
+SAVE_FOLDER = 'atman_capabilities'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+#########################################
 
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
@@ -144,8 +155,8 @@ bsl_sideCam = baseline_side_cam(which = 'Ad', side = 'Top', width = 200)
 behindCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
 
 ### animation parameters
-back_res = 1
-shape_res = 1
+back_res = 1 ##1
+shape_res = 1 ##1
 
 ######################
 ###### ANIMATION #####
@@ -168,7 +179,7 @@ script_lines.append(script_line)
 
 ### fade in trajectories from above
 script_line =   """
-                    Alternatively, we can take a deeper look at the return trajectories and characteristics.
+                    Alternatively, we can take a deeper look at a certain aspect of the return trajectories.
                 """
 from ATMANpy.types.Shapes3D import Lines3D
 def full_splines_until_bounce(myShot, spline_thickness = 0.5):
@@ -183,26 +194,25 @@ splnFrms, _ = vs.animate_static(splnLns, static_cam = topCam, num_frames = 1, ba
                                 argument_resolution = shape_res, background_resolution = back_res)
 
 interFrms = vs.interpolate_frames(myFrms[-1], splnFrms[0], 100) ### is this too lazy for fade-in fade-out? it looks okay. 
+# DecapStream(interFrms, 0, 100).show()
 
-all_frames.append(interFrms)
-script_lines.append(script_line)
-
-DecapStream(interFrms, 0, 100).show()
 
 animFrms1, _ = vs.animate_cam_motion(splnLns, start_cam = topCam, stop_cam = cnt_sideCam, background_scene = courtScn,
                                 interpolate_func = vs.interpolate_camera_naive, 
                                 num_frames = 50, argument_resolution = shape_res, background_resolution = back_res)
+# DecapStream(animFrms1, 0, 100).show()
 
-all_frames.append(animFrms1)
+jointFrms = BGRFrames.from_frames([interFrms, animFrms1])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
-script_line = "For example, let's take a quick look at the typical point of impact."
+script_line = "For example, let's find the typical point of impact."
 
 animFrms2, animDict = vs.animate_cam_motion(splnLns, start_cam = cnt_sideCam, stop_cam = behindCam, background_scene = courtScn,
                                 interpolate_func = vs.interpolate_camera_naive, 
                                 num_frames = 50, argument_resolution = shape_res, background_resolution = back_res)
-# animFrms = BGRFrames.from_frames([animFrms1, animFrms2])
-# DecapStream(animFrms, 0, 100).show()
+# DecapStream(animFrms2, 0, 100).show()
 
 ### make little lines indicating height of average hitting point and depth of average hitting point.
 from ATMANpy.types.Shapes3D import Point3D, Line3D, Ball3D
@@ -268,7 +278,7 @@ script_lines.append(script_line)
 script_line =   """
                     We can also calculate the return launch angle with ease. 
                     To visualize it, we make as if all shots had originated from the mean impact point...
-                """
+                """ # 9 seconds
 
 reanchored_trajs = [shot.shotTraj.reanchor(meanPt) for shot in retShots_rect_in]
 reanchored_splnLns = [full_splines_until_bounce(myTraj) for myTraj in reanchored_trajs]
@@ -285,7 +295,7 @@ animFrms3, _ = vs.animate_sequence(itplScns, start_cam = behindCam, stop_cam = b
 statFrms0, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
                                 previous_foreground_scene = dash_and_ball_scene, annotated_points = [annPnt_up, annPnt_in],
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 50)
+                                num_frames = 100)
 
 statFrms1, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
                                 previous_foreground_scene = dash_and_ball_scene, annotated_points = [annPnt_up],
@@ -313,7 +323,7 @@ statFrms5, animDict = vs.animate_static(itplScns[-1], static_cam = behindCam, ba
                                 num_frames = 10)
 
 remFrms = BGRFrames.from_frames([animFrms3, statFrms0, statFrms1, statFrms2, statFrms3, statFrms4, statFrms5])
-DecapStream(remFrms, 0, 100).show()
+# DecapStream(remFrms, 0, 100).show()
 
 all_frames.append(remFrms)
 script_lines.append(script_line)
@@ -368,12 +378,12 @@ angFrms, animDict = vs.animate_sequence(angScns, start_cam = ax_sideCam, stop_ca
 # DecapStream(angFrms, 0, 100).show()
 
 jntFrms = BGRFrames.from_frames([moveFrms, axisFrms, angFrms])
-DecapStream(jntFrms, 0, 100).show()
+# DecapStream(jntFrms, 0, 100).show()
 
 all_frames.append(jntFrms)
 script_lines.append(script_line)
 
-script_line = ""
+script_line = "In this case, the average launch angle of returns on these ad-side, out-wide serves is 8.9 degrees."
 
 from ATMANpy.types.Shapes3D import Circle3D
 degCrc = Circle3D.from_point3D(meanPt, radius = 0.85 * z_len, limit_theta = (0, mean_rad), fixed_dimension = 'x')
@@ -386,7 +396,7 @@ degScns = vs.interpolate_scenes(nullScn, degScn, num_frames = 25)
 angFrms_stat, animDict = vs.animate_sequence(degScns, start_cam = ax_sideCam, stop_cam = ax_sideCam, background_scene = courtScn,
                                             argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
                                             **animDict)
-DecapStream(angFrms_stat, 0, 100).show()
+# DecapStream(angFrms_stat, 0, 100).show()
 
 ### annotate angle
 degPnt = meanPt.back(0.82 * z_len).up(0.75).annotate(f'Launch Angle: {mean_angle:.1f} deg.')
@@ -400,7 +410,6 @@ jointFrms = BGRFrames.from_frames([angFrms_stat, degFrms])
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
-
 
 ### TODO: need a fazit. for comparison, here's what we say in the beginning.
 """
@@ -424,3 +433,17 @@ script_lines.append(script_line)
 
 
 vis_ut.show(all_frames)
+
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+for idx, script_line in enumerate(script_lines):
+    with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+        f.write(script_line)

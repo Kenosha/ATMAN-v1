@@ -27,7 +27,7 @@ then, filter return shots. --> has to be to player!
 
 """
 
-
+import os
 import numpy as np
 import pandas as pd
 import sounddevice as sd
@@ -57,6 +57,16 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'filtering'
+SAVE_FOLDER = 'atman_capabilities'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+#########################################
 
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
@@ -174,7 +184,7 @@ table_data = {'All': row0,
 
 myTab = Table(table_data, **kwargs, null_rows = 3)
 tabFrm1 = myTab.render()
-tabFrm1.show()
+# tabFrm1.show()
 
 table_data = {'All': row0,
                 ' ... Brandon Nakashima returns ...': row1,
@@ -182,7 +192,7 @@ table_data = {'All': row0,
 
 myTab = Table(table_data, **kwargs, null_rows = 2)
 tabFrm2 = myTab.render()
-tabFrm2.show()
+# tabFrm2.show()
 
 table_data = {'All': row0,
                 ' ... Brandon Nakashima returns ...': row1,
@@ -191,7 +201,7 @@ table_data = {'All': row0,
 
 myTab = Table(table_data, **kwargs, null_rows = 1)
 tabFrm3 = myTab.render()
-tabFrm3.show()
+# tabFrm3.show()
 
 table_data = {'All': row0,
                 ' ... Brandon Nakashima returns ...': row1,
@@ -201,7 +211,7 @@ table_data = {'All': row0,
 
 myTab = Table(table_data, **kwargs)
 tabFrm4 = myTab.render()
-tabFrm4.show()
+# tabFrm4.show()
 
 ### AGG TABLES ###
 
@@ -231,20 +241,20 @@ row3 = {col_name: f'{avg_ret_wins * 100:.0f}% ({cnt_ret_wins} of {all_ret_wins})
 table_data = {  'Speed': row0}
 aggTab1 = Table(table_data, **kwargs, null_rows = 3)
 aggFrm1 = aggTab1.render()
-aggFrm1.show()
+# aggFrm1.show()
 
 table_data = {  'Speed': row0,
                 'Spin': row1}
 aggTab2 = Table(table_data, **kwargs, null_rows = 2)
 aggFrm2 = aggTab2.render()
-aggFrm2.show()
+# aggFrm2.show()
 
 table_data = {  'Speed': row0,
                 'Spin': row1,
                 'Dist. to Baseline': row2}
 aggTab3 = Table(table_data, **kwargs, null_rows = 1)
 aggFrm3 = aggTab3.render()
-aggFrm3.show()
+# aggFrm3.show()
 
 table_data = {  'Speed': row0,
                 'Spin': row1,
@@ -252,7 +262,7 @@ table_data = {  'Speed': row0,
                 'Returner Win%': row3}
 aggTab4 = Table(table_data, **kwargs, null_rows = 0)
 aggFrm4 = aggTab4.render()
-aggFrm4.show()
+# aggFrm4.show()
 
 
 ### TABLE POSITIONING ###
@@ -336,9 +346,9 @@ script_lines.append(script_line)
 ### move the table into the corner
 script_line =   """
                     Having filtered with ease, Let's quickly check the remaining serves and returns.
-                """
+                """ ### 5 seconds
 
-itplPts = [tlPt_tab * (1 - lmbd) + tlPt_tab_corner * lmbd for lmbd in np.linspace(0, 1, 50, endpoint = True)]
+itplPts = [tlPt_tab * (1 - lmbd) + tlPt_tab_corner * lmbd for lmbd in np.linspace(0, 1, 125, endpoint = True)]
 itplPts = [itplPt.round_point() for itplPt in itplPts]
 itpl_frames = []
 for tlPt in itplPts:
@@ -352,7 +362,7 @@ script_lines.append(script_line)
 
 ### show rasters of returns made
 script_line =   f"""
-                    Since there are {p4} points that match our filter, we show them in groups of three.
+                    Since there are {p4} points that match our filter, we show them in nine groups of three.
                 """
 
 myRst = FramesRaster(2, 2)
@@ -380,10 +390,10 @@ script_lines.append(script_line)
 ### aggregates
 script_line =   """
                     On our filtered data, we can easily produce aggregate statistics...
-                """
+                """ ### 4 seconds
 
 from ATMANpy.types.Overlays import reverse_cascade
-_, revFrms = reverse_cascade(myRst)
+_, revFrms = reverse_cascade(myRst, frames_per_element = 25)
 all_frames.append(revFrms)
 script_lines.append(script_line)
 
@@ -417,11 +427,11 @@ script_lines.append(script_line)
 
 script_line =   """
                     Beyond these simple numeric averages, ATMAN enables us to display visual representations of data.
-                """
+                """ ### 7 seconds
 ### fade in a point up until moment of return that has Brandon Nakashima on far side.
 pt_idx = 9
 ls_frame = 18
-pre_frames = 150
+pre_frames = 160
 total_frames = ls_frame + pre_frames
 
 # the spline
@@ -457,14 +467,14 @@ markScn = markScn_in.combine(markScn_out)
 markFrms, _ = vs.animate_static(markScn, static_cam = myCam.resize(3), num_frames = 25,
                                 animate_over = lsFrm.dim(0.25))
 
-markFrms_itpl = vs.interpolate_frames(lsFrm, markFrms[0], 100)
+markFrms_itpl = vs.interpolate_frames(lsFrm, markFrms[0], 100) ### ok to freeze at end here.
 
 all_frames.append(markFrms_itpl)
 script_lines.append(script_line)
 
 script_line =   """
                     Heatmaps can also be created with ease.
-                """
+                """ # 3 secodns
 
 ### two regions -> opponents court, and behind the own baseline... a bit clumsy, but hey
 from ATMANpy.types.Lines import CourtLines, Region
@@ -496,7 +506,7 @@ script_lines.append(script_line)
 ### now, as a last step, fade into the court view, to introduce the visual engine
 
 script_line =   """
-                    These and more visualizations can be rendered onto the broadcast screen directly in ATMAN.
+                    Many more visualizations can be rendered onto the broadcast screen directly in ATMAN.
                 """
 all_frames.append(heatFrms)
 script_lines.append(script_line)
@@ -516,3 +526,16 @@ script_lines.append(script_line)
 
 vis_ut.show(all_frames)
 
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+for idx, script_line in enumerate(script_lines):
+    with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+        f.write(script_line)

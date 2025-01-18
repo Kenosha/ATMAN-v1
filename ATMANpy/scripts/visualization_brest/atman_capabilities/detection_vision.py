@@ -28,6 +28,16 @@ import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'vision'
+SAVE_FOLDER = 'atman_capabilities'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+#########################################
+
 prm_mod = ppl.parameter_files.default
 cnf_mod = ppl.config_files.default
     
@@ -207,7 +217,7 @@ for frame in fs_plySF:
         frameList.append(currFrm_over)
 
 regFrms = BGRFrames.from_single_frames(frameList)
-DecapStream(regFrms, 0, 100).show(ms_between_frames = 100)
+# DecapStream(regFrms, 0, 100).show(ms_between_frames = 100)
 
 ############################################
 ####### REGION STREAMS (SECOND SEG.) #######
@@ -374,7 +384,7 @@ for frame in ls_plySF:
         frameList.append(currFrm_over)
 
 regFrms2 = BGRFrames.from_single_frames(frameList)
-DecapStream(regFrms2, 0, 100).show(ms_between_frames = 100)
+# DecapStream(regFrms2, 0, 100).show(ms_between_frames = 100)
 ### TODO: Issue here: Slice is not unambiguous for top player! (fix by enforcing the detected shot at the time of hit for the detection around it?)
 ### FIXED! Done with the confusion avoider above! (which mirrors what happens once the visual swing info is joined with timing of hit and ball flight.)
 
@@ -603,3 +613,16 @@ all_frames.append(fadeFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+for idx, script_line in enumerate(script_lines):
+    with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+        f.write(script_line)
