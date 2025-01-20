@@ -175,86 +175,121 @@ rstFrms2 = myRst.render()
 
 # rstFrms2[-1].show()
 
-### SIMULATION ANIMATION ###
-from ATMANpy.types.Shapes3D import Point3D, Ball3D, Circle3D
+def ball_scene( ballPt, radius = 5, 
+                ball_color = const.BGR['ball_yellow'], ball_dim_factor = 0.75, 
+                line_color = const.BGR['bright_grey'], line_dim_factor = 1):
+    # idea for rotation: two circles at 1/4 and 3/4 height of the ball 
+    #   -> these rotate with the ball, and look like the lines on the ball
+    #       (even though the lines on the ball are not circles.)
+    #           like in these pictures: https://www.decathlon.de/p/tennisball-tb-jumbo-ball/_/R-p-3244
 
-# idea for rotation: two circles at 1/4 and 3/4 height of the ball 
-#   -> these rotate with the ball, and look like the lines on the ball
-#       (even though the lines on the ball are not circles.)
-#           like in these pictures: https://www.decathlon.de/p/tennisball-tb-jumbo-ball/_/R-p-3244
+    line_lim_phi_1 = (0.25*np.pi, 0.3*np.pi)
+    line_lim_phi_2 = (0.75*np.pi, 0.8*np.pi)
+    
+    myBall = Ball3D.from_point3D(ballPt, radius = radius, offset = 0).recolor(ball_color).dim(ball_dim_factor)
+    secBall_1 = Ball3D.from_point3D(ballPt, radius = 1.001 * radius, offset = 0, limit_phi = line_lim_phi_1, rot_x = 0).recolor(line_color).dim(line_dim_factor)
+    secBall_2 = Ball3D.from_point3D(ballPt, radius = 1.001 * radius, offset = 0, limit_phi = line_lim_phi_2, rot_x = 0).recolor(line_color).dim(line_dim_factor)
+    ballScn = Scene([myBall, secBall_1, secBall_2])
+    return ballScn
 
-origPt = Point3D((100, 100, 100))
-ballPt = Point3D((100, 200, 200))
-r = 5
-line_lim_phi_1 = (0.25*np.pi, 0.3*np.pi)
-line_lim_phi_2 = (0.75*np.pi, 0.8*np.pi)
-myCam = Camera.from_to(ballPt.right(100), ballPt)
+def animate_example_trajectory(ypf, zpf, rpf, ballScn, sim_frames = 62, sim_res = 5, staticCam = None):
+    ### ypf, zpf, rpf are y displacement, z displacement, and rotation per frame
+    currScn = ballScn
+    out_frames = []
+    prevScn = Scene([])
+    for idx in range(sim_frames):
+        
+        y = ypf * np.exp(-0.01 * idx)
+        z = zpf * np.exp(-0.05 * idx)
+        r = rpf
+
+        currBall = currScn[0]
+        currPt = currBall.center_point()
+        
+        ### create the camera, or hold it at center
+        if staticCam is None:
+            if idx <= sim_frames // 2:
+                currCam = Camera.from_to(currPt.right(100), currPt)
+            else:
+                currCam = currCam
+        else:
+            currCam = staticCam
+
+        currView = View.make(currCam, currScn.combine(prevScn), resolution = sim_res)
+        currFrm = currView.snap()
+        out_frames.append(currFrm)
+
+        new_shapes = []
+        for shape in currScn:
+            new_shapes.append(shape.front(y).up(z).rotate_x(r))
+        currScn = Scene(new_shapes)
+        
+        if idx % 5 == 0:
+            prevScn = prevScn.combine(currScn)
+
+    outFrms = BGRFrames.from_single_frames(out_frames)
+
+    return outFrms, prevScn, currCam
+
+### parameters
 sim_res = 5
-
-myBall = Ball3D.from_point3D(ballPt, radius = r, offset = 0).recolor(const.BGR['ball_yellow']).dim(0.75)
-ballScn = Scene([myBall])
-ballView = View.make(myCam, ballScn)
-# ballView.snap().show()
-
-secBall_1 = Ball3D.from_point3D(ballPt, radius = 1.001 * r, offset = 0, limit_phi = line_lim_phi_1, rot_x = 0).recolor(const.BGR['bright_grey'])
-secBall_2 = Ball3D.from_point3D(ballPt, radius = 1.001 * r, offset = 0, limit_phi = line_lim_phi_2, rot_x = 0).recolor(const.BGR['bright_grey'])
-ballScn = Scene([myBall, secBall_1, secBall_2])
-ballView = View.make(myCam, ballScn, resolution = sim_res)
-# ballView.snap().show()
-
-
-currScn = ballScn
-
 sim_frames = 62
-y_per_frame = 3.25
-z_per_frame = 3
-r_per_frame = -0.1 * np.pi
-out_frames = []
-prevScn = Scene([])
-for idx in range(sim_frames):
-    
-    y = y_per_frame * np.exp(-0.01 * idx)
-    z = z_per_frame * np.exp(-0.05 * idx)
-    r = r_per_frame
 
-    currBall = currScn[0]
-    currPt = currBall.center_point()
-    
-    ### create the camera, or hold it at center
-    if idx <= sim_frames // 2:
-        currCam = Camera.from_to(currPt.right(100), currPt)
-    else:
-        currCam = currCam
+### SIMULATION ANIMATION ###
+from ATMANpy.types.Shapes3D import Point3D, Ball3D
 
-    currView = View.make(currCam, currScn.combine(prevScn), resolution = sim_res)
-    currFrm = currView.snap()
-    out_frames.append(currFrm)
+all_frames = []
+script_lines = []
 
-    new_shapes = []
-    for shape in currScn:
-        new_shapes.append(shape.front(y).up(z).rotate_x(r))
-    currScn = Scene(new_shapes)
-    
-    if idx % 5 == 0:
-        prevScn = prevScn.combine(currScn)
+script_line = "Trajectories are detected by evaluating all the empirical information we have gathered so far within a physical simulation."
 
-outFrms = BGRFrames.from_single_frames(out_frames)
-DecapStream(outFrms, 0, 100).show(ms_between_frames = 40)
-outFrms[-1].show()
+ypf, zpf, rpf = 3.5, 3, -0.1 * np.pi
+ballPt = Point3D((100, 200, 200))
 
+ballScn = ball_scene(ballPt, ball_dim_factor = 0.75, line_dim_factor = 1)
+exFrms0, prevScn, currCam = animate_example_trajectory(ypf, zpf, rpf, ballScn, sim_res = sim_res, sim_frames = 62)
+DecapStream(exFrms0, 0, 100).show(ms_between_frames = 40)
+exFrms0[-1].show()
+
+all_frames.append(exFrms0)
+script_lines.append(script_line)
+
+script_line = "The physical simulation takes into account all the forces acting on a ball in flight ..."
 middle_idx = len(prevScn) // 3 // 2 * 3
-
 middleScn = Scene(prevScn[middle_idx:middle_idx+3])
 
 dimmed_prevScn = prevScn.dim(0.5)
 dimmed_prevScn = dimmed_prevScn.drop(middle_idx).drop(middle_idx).drop(middle_idx)
 
 dimFrm = View.make(currCam, dimmed_prevScn.combine(middleScn), resolution = sim_res).snap()
-
-# The physical simulation takes into account all the forces acting on a ball in flight
-itplFrms = vs.interpolate_frames(outFrms[-1], dimFrm, 25)
-
+itplFrms = vs.interpolate_frames(exFrms0[-1], dimFrm, 25)
 DecapStream(itplFrms, 0, 100).show()
+
+all_frames.append(itplFrms)
+script_lines.append(script_line)
+
+### LEGENDS
+from ATMANpy.types.Overlays import Legend, LegendRow
+
+grav_color = const.BGR['light_brown']
+drag_color = const.BGR['strong_pink']
+lift_color = const.BGR['marine_blue']
+row_params = {'text_size': 2, 'text_thickness': 1, 'text_horizontal_offset': 1, 'text_vertical_offset': 0.3}
+leg_params = {'resolution': 10, 'header_offset': 5.13, 'header_text': 'Forces', 'legend_dimensions': (600, 400), 'borders': False}
+
+nRow = LegendRow()
+gRow = LegendRow('Gravity', grav_color, **row_params)
+dRow = LegendRow('Drag', drag_color, **row_params)
+lRow = LegendRow('Lift', lift_color, **row_params)
+
+l1 = Legend([gRow, nRow, nRow], **leg_params)
+l2 = Legend([gRow, dRow, nRow], **leg_params)
+l3 = Legend([gRow, dRow, lRow], **leg_params)
+
+l1Frm = l1.render()
+l2Frm = l2.render()
+l3Frm = l3.render()
+# l3Frm.show()
 
 ### ARROWS
 from ATMANpy.types.ShapesTennis3D import Arrow
@@ -262,32 +297,46 @@ middleBall = middleScn[0]
 middlePt = middleBall.center_point()
 arr_len = 25
 arr_params = {'hat_length': 3, 'thickness': 0.25, 'hat_angle': np.pi / 6, 'rot_angle': np.pi / 2}
-grav_color = const.BGR['light_brown']
-drag_color = const.BGR['strong_pink']
-lift_color = const.BGR['marine_blue']
 
-# gravity
+script_line = '... gravity ...'
 gravArr = Arrow.make(middlePt, middlePt.down(arr_len), **arr_params, color = grav_color)
 arrScn = dimmed_prevScn.combine(middleScn).put(gravArr)
-View.make(currCam, arrScn, resolution = sim_res).snap().show()
+arrFrm = View.make(currCam, arrScn, resolution = sim_res).snap()
+arrFrm = overlay(arrFrm, l1Frm, top_left_point = Point2D((50, 50)))
+arrFrm.show()
 
-# drag
-y = y_per_frame * np.exp(-0.01 * sim_frames / 2) * arr_len / 2
-z = z_per_frame * np.exp(-0.05 * sim_frames / 2) * arr_len / 2
-# z = 0
+arrFrms = BGRFrames.from_frame(arrFrm, 100)
+all_frames.append(arrFrms)
+script_lines.append(script_line)
+
+script_line = '... drag ...'
+y = ypf * np.exp(-0.01 * sim_frames / 2) * arr_len / 2
+z = zpf * np.exp(-0.05 * sim_frames / 2) * arr_len / 2
 
 dragArr = Arrow.make(middlePt, middlePt.back(y).down(z), **arr_params, color = drag_color)
 arrScn = dimmed_prevScn.combine(middleScn).put(gravArr).put(dragArr)
-View.make(currCam, arrScn, resolution = sim_res).snap().show()
+arrFrm = View.make(currCam, arrScn, resolution = sim_res).snap()
+arrFrm = overlay(arrFrm, l2Frm, top_left_point = Point2D((50, 50)))
+arrFrm.show()
+
+arrFrms = BGRFrames.from_frame(arrFrm, 100)
+all_frames.append(arrFrms)
+script_lines.append(script_line)
+
+script_line =   """ 
+                    ... and lift. 
+                    Lift is caused by the spin imparted on the ball: 
+                    if we reverse the spin from backspin to topspin, 
+                    the lift is reversed accordingly.
+                """
 
 ### for lift: make the ball rotate, and adapt the arrow accordingly.
-currScn = middleScn
-sim_frames = 100
+sim_frames = 350
 
+currScn = middleScn
 rs_per_frame = np.sin(np.linspace(0, 3 * np.pi / 2, num = sim_frames))
 
 out_frames = []
-prevScn = Scene([])
 for r in rs_per_frame:
     
     new_shapes = []
@@ -306,55 +355,237 @@ for r in rs_per_frame:
 
     currView = View.make(currCam, putScn, resolution = sim_res)
     currFrm = currView.snap()
+    currFrm = overlay(currFrm, l3Frm, top_left_point = Point2D((50, 50)))
+
     out_frames.append(currFrm)
 
+rotFrms = BGRFrames.from_single_frames(out_frames)
+DecapStream(rotFrms, 0, 100).show(ms_between_frames = 40)
+rotFrms[-1].show()
 
-outFrms = BGRFrames.from_single_frames(out_frames)
-DecapStream(outFrms, 0, 100).show(ms_between_frames = 40)
-outFrms[-1].show()
-
-from ATMANpy.types.Overlays import Legend, LegendRow
-
-gRow = LegendRow('Gravity', )
-dRow = LegendRow('Drag', )
-lRow = LegendRow('Lift', const.BGR['marine_blue'])
-
-l3 = Legend([gRow, dRow, lRow]).render().show()
-
-
-##### ANIMATION ######
-
-all_frames = []
-script_lines = []
+all_frames.append(rotFrms)
+script_lines.append(script_line)
 
 script_line =   """
-                    Trajectories are detected by evaluating all the empirical information we have gathered so far within a physical simulation.
-                    The physical simulation takes into account all the forces acting on a ball in flight - gravity, drag, and lift.
-                    Lift is caused by the spin imparted on the ball: if we reverse the spin from backspin to topspin, the lift is reversed, and the trajectory drops faster.
+                    Using this physical simulation, ATMAN calculates the path of around 4 to 5 million candidate trajectories.
+                    In this schematic example, we show just a few.
+                """
+### -> for this line: 
+    # 1) fade out arrows and legend, one by one
+    # 2) show faintly other ball flight trajectories
+# 1)
+frms = 10
+dropFrms = BGRFrames.from_frames([  BGRFrames.from_frame(currFrm, frms),
+                                    BGRFrames.from_frame(View.make(currCam, putScn, resolution = sim_res).snap(), frms),
+                                    BGRFrames.from_frame(View.make(currCam, putScn.drop(-1), resolution = sim_res).snap(), frms),
+                                    BGRFrames.from_frame(View.make(currCam, putScn.drop(-1).drop(-1), resolution = sim_res).snap(), frms),
+                                    BGRFrames.from_frame(View.make(currCam, putScn.drop(-1).drop(-1).drop(-1), resolution = sim_res).snap(), frms),
+                                ])
 
-                    Using this physical simulation, ATMAN calculated all possible trajectories of the ball. 
-                     
+fadeFrms = vs.interpolate_frames(dropFrms[-1], exFrms0[-1], num_frames = frms)
+
+DecapStream(dropFrms, 0, 100).show()
+dropFrms[-1].show()
+
+# 2)
+sim_frames = 62
+exFrms0_ls = BGRFrames.from_frame(exFrms0[-1], sim_frames)
+dist_1 = 10
+dist_2 = 20
+dist_3 = 30
+
+dist_1 = 5
+dist_2 = 10
+dist_3 = 15
+
+# 2a) inner ring
+exPt = ballPt.up(dist_1)
+exScn = ball_scene(exPt, ball_dim_factor = 0.6, line_dim_factor = 0.9)
+ex_ypf, ex_zpf, ex_rpf = ypf - 0.1, zpf + 0.5, 0.5 * np.pi
+exFrms_up, prevScn1, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
+
+exPt = ballPt.down(dist_1)
+exScn = ball_scene(exPt, ball_dim_factor = 0.6, line_dim_factor = 0.9)
+ex_ypf, ex_zpf, ex_rpf = ypf + 0.1, zpf - 0.5, 0.5 * np.pi
+exFrms_down, prevScn2, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
+
+exFrms_inner = exFrms0_ls + exFrms_up + exFrms_down
+DecapStream(exFrms_inner, 0, 100).show()
+
+exFrms_inner_ls = BGRFrames.from_frame(exFrms_inner[-1], sim_frames)
+
+# 2b) outer ring
+exPt = ballPt.up(dist_2)
+exScn = ball_scene(exPt, ball_dim_factor = 0.45, line_dim_factor = 0.75)
+ex_ypf, ex_zpf, ex_rpf = ypf - 0.3, zpf + 1.25, 0.5 * np.pi
+exFrms_up, prevScn3, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
+
+exPt = ballPt.down(dist_2)
+exScn = ball_scene(exPt, ball_dim_factor = 0.45, line_dim_factor = 0.75)
+ex_ypf, ex_zpf, ex_rpf = ypf + 0.3, zpf - 1.25, 0.5 * np.pi
+exFrms_down, prevScn4, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
+
+exFrms_outer = exFrms_inner_ls + exFrms_up + exFrms_down
+DecapStream(exFrms_outer, 0, 100).show()
+
+exFrms_outer_ls = BGRFrames.from_frame(exFrms_outer[-1], sim_frames)
+
+# 2c) even outer ring
+exPt = ballPt.up(dist_3)
+exScn = ball_scene(exPt, ball_dim_factor = 0.3, line_dim_factor = 0.6)
+ex_ypf, ex_zpf, ex_rpf = ypf - 0.5, zpf + 2.25, 0.5 * np.pi
+exFrms_up, prevScn5, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
+
+exPt = ballPt.down(dist_3)
+exScn = ball_scene(exPt, ball_dim_factor = 0.3, line_dim_factor = 0.6)
+ex_ypf, ex_zpf, ex_rpf = ypf + 0.5, zpf - 2.25, 0.5 * np.pi
+exFrms_down, prevScn6, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
+
+exFrms_outer2 = exFrms_outer_ls + exFrms_up + exFrms_down
+DecapStream(exFrms_outer2, 0, 100).show()
+
+jointFrms = BGRFrames.from_frames([dropFrms, fadeFrms, exFrms_inner, exFrms_outer, exFrms_outer2])
+DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+### Focus on the one trajectory that is best, ostensibly.
+def color_dim(my_ballScn, dim_factor = 0.5):
+    rectScn = Scene([])
+    for idx in range(len(my_ballScn)):
+        if idx % 3 == 0:
+            rectScn = rectScn.put(my_ballScn[idx].recolor(const.BGR['ball_yellow']))
+        else:
+            rectScn = rectScn.put(my_ballScn[idx].recolor(const.BGR['bright_grey']))
+    return rectScn.dim(dim_factor)
+
+cand_scenes = [prevScn, prevScn1, prevScn2, prevScn3, prevScn4, prevScn5, prevScn6]
+choice_idx = 3
+df1 = 0.4
+df2 = 0.2
+
+script_line =   """
                     The actual trajectory is then chosen among these possible trajectories as the one with which empirical evidence agrees with the most.
-
                     In this way, we get a trajectory that fits what ATMAN sees and hears, and also obeys the laws of physics.
-                    
-                    As a nice by-product, the speed, spin and launch angle of the ball can be directly read out as the initial conditions that uniquely describe the chosen trajectory.
-                """ ### 45 seconds
-pre_frames = 250
+                """
+dimmed_candScn = Scene([])
+for idx in range(len(cand_scenes)):
+    curr_candScn = color_dim(cand_scenes[idx], dim_factor = df1) if idx != choice_idx else color_dim(cand_scenes[idx], dim_factor = 1)
+    dimmed_candScn = dimmed_candScn.combine(curr_candScn)
+
+postFrm = View.make(currCam, dimmed_candScn).snap()
+postFrm.show()
+
+itplFrms = vs.interpolate_frames(exFrms_outer2[-1], postFrm, num_frames = 50)
+DecapStream(itplFrms, 0, 100).show()
+
+# -> here, we move to the starting point of the chosen candidate trajectory, and show angle, speed and spin
+choiceScn = cand_scenes[choice_idx]
+choiceBall = choiceScn[0]
+choicePt = choiceBall.get_point()
+newCam = Camera.from_to(choicePt.right(70), choicePt)
+
+very_dimmed_candScn = Scene([])
+for idx in range(len(cand_scenes)):
+    curr_candScn = color_dim(cand_scenes[idx], dim_factor = df2) if idx != choice_idx else color_dim(cand_scenes[idx], dim_factor = 1)
+    very_dimmed_candScn = very_dimmed_candScn.combine(curr_candScn)
+
+dimScns = vs.interpolate_scenes(dimmed_candScn, very_dimmed_candScn, 50)
+
+movFrms, _ = vs.animate_sequence(dimScns, start_cam = currCam, stop_cam = newCam, argument_resolution = sim_res)
+DecapStream(movFrms, 0, 100).show()
+
+jointFrms = BGRFrames.from_frames([itplFrms, movFrms])
+DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = "As a nice by-product..."
+interFrms = BGRFrames.from_frame(jointFrms[-1], 25)
+all_frames.append(interFrms)
+script_lines.append(script_line)
+
+script_line = "... the speed ..."
+
+shape_color = const.BGR['intense_red']
+lsScn = dimScns[-1]
+nextBall = choiceScn[3]
+nextPt = nextBall.get_point()
+speedArr = Arrow.make(choicePt, nextPt, **arr_params, color = shape_color)
+speedArr_pt = choicePt.annotate('Speed').recolor(shape_color).up(10).front(3.75)
+
+arrScn = lsScn.put(speedArr)
+diaFrm0 = View.make(newCam, arrScn, annotatedPoints = [speedArr_pt]).snap()
+diaFrm0.show()
+diaFrms0 = BGRFrames.from_frame(diaFrm0, 25)
+
+all_frames.append(diaFrms0)
+script_lines.append(script_line)
+
+script_line = "... spin ..."
+
+from ATMANpy.types.Shapes3D import Circle3D
+rotCrc = Circle3D(choicePt.coords, color = shape_color, radius = 6, fixed_dimension = 'x', limit_theta = (-np.pi / 2, np.pi / 2))
+
+crcArr = rotCrc.rasterize(100)
+lsPt0 = Point3D((tuple(crcArr[-2])))
+lsPt1 = Point3D((tuple(crcArr[-1])))
+
+rotArr = Arrow.make(lsPt0, lsPt1, hat_length = 1, thickness = 0, hat_angle = np.pi / 6, rot_angle = np.pi / 2, color = shape_color)
+rotArr_pt = choicePt.annotate('Spin').recolor(shape_color).back(6.5).up(5)
+
+rotScn = arrScn.put(rotCrc).put(rotArr)
+diaFrm1 = View.make(newCam, rotScn, annotatedPoints = [speedArr_pt, rotArr_pt]).snap()
+diaFrm1.show()
+diaFrms1 = BGRFrames.from_frame(diaFrm1, 25)
+
+all_frames.append(diaFrms1)
+script_lines.append(script_line)
+
+script_line =   """ 
+                    ... and launch angle of the ball can be directly read out 
+                    as the initial conditions that uniquely describe the chosen trajectory.
+                """
+
+from ATMANpy.types.Shapes3D import Circle3D
+angCrc = Circle3D(choicePt.coords, color = shape_color, radius = 10, fixed_dimension = 'x', limit_theta = (3 * np.pi / 4, np.pi))
+angCrc_pt = choicePt.annotate('Angle').recolor(shape_color).front(5.5).up(2.5)
+
+crcScn = rotScn.put(angCrc).put(rotCrc).put(rotArr)
+diaFrm2 = View.make(newCam, crcScn, annotatedPoints = [speedArr_pt, angCrc_pt, rotArr_pt]).snap()
+diaFrm2.show()
+diaFrms2 = BGRFrames.from_frame(diaFrm2, 25)
+
+all_frames.append(diaFrms2)
+script_lines.append(script_line)
+
+script_line = ""
+back_diaFrms = BGRFrames.from_frames([  BGRFrames.from_frame(diaFrm2, 10), 
+                                        BGRFrames.from_frame(diaFrm1, 10),
+                                        BGRFrames.from_frame(diaFrm0, 10),
+                                        BGRFrames.from_frame(jointFrms[-1], 10),
+                                        BGRFrames.from_frame(jointFrms[-1].dim(0), 10)])
+all_frames.append(back_diaFrms)
+script_lines.append(script_line)
+
+vis_ut.show(all_frames)
+
+##### REST OF THE ANIMATION ######
+script_line =   """
+                   Let's see the trajectory detection in action.
+                """ 
+pre_frames = 100
 preFrms = stm0.widen(pre_frames).decap().frames[:pre_frames]
 preArr_dimmed = np.stack([f.dim((idx / pre_frames) ** 2).array for idx, f in enumerate(preFrms)], axis = 0)
-preFrms_dimmed = BGRFrames(preArr_dimmed).slow(2).slow(2)
-
-zeroArr = np.zeros((360, 640, 3), dtype = 'uint8')
-zeroFrm = BGRFrame(zeroArr)
-zeroFrms = BGRFrames.from_frame(zeroFrm, 200)
-
-preFrms_dimmed = BGRFrames.from_frames([zeroFrms, preFrms_dimmed])
+preFrms_dimmed = BGRFrames(preArr_dimmed).slow(2)
 
 dimRst = FramesRaster(2, 2)
 dimRst.add(preFrms_dimmed, 0, 0)
 rstFrms_init = dimRst.render()
 rstFrms_init = rstFrms_init.rescale(1.5)
+DecapStream(rstFrms_init, 0, 100).show()
 
 all_frames.append(rstFrms_init)
 script_lines.append(script_line)
