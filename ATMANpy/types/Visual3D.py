@@ -167,7 +167,15 @@ class Scene:
             return Scene([*self.shapes, someShape])
         
     def drop(self, index):
-        assert index < len(self)
+        if index < -len(self):
+            raise IndexError(f'Index {index} not in Scene of length {len(self)}')
+        elif index < 0:
+            index = len(self) + index
+        elif index < len(self):
+            pass
+        else:
+            raise IndexError(f'Index {index} not in Scene of length {len(self)}')
+
         new_shapes = [shape for idx, shape in enumerate(self) if idx != index]
         return Scene(new_shapes)
 
