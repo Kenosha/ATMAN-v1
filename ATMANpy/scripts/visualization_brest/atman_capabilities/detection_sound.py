@@ -334,7 +334,7 @@ wave_forms = []
 rescale_ratio = 0.4
 myRst = FramesRaster(2, 2)
 myRst_static = FrameRaster(2, 2)
-tl_x, tl_y = int((1 - rescale_ratio) * 1920) - 1, 0
+tl_x, tl_y = int((1 - rescale_ratio) * 1920), 0
 tlPt = Point2D((tl_x, tl_y))
 
 fsFrm = Stream(cap, fs_wave, fs_wave).decap().frames[0].rescale(3)
@@ -729,7 +729,7 @@ script_line =   """
                     actually being hit, we analyse the hitting motion of both players visually.
                 """
 
-start, stop = stop, segBFs[5].first()[0] - how_many_frames_in_vision
+start, stop = stop, segBFs[5].first()[0] - how_many_frames_in_vision + 1
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
 myStm = Stream(cap, start, stop - 1)
@@ -755,7 +755,6 @@ all_frames.append(overFrms)
 script_lines.append(script_line)
 wave_forms.append(wave_form)
 
-### intermezzo
 vis_ut.show(all_frames)
 
 from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder

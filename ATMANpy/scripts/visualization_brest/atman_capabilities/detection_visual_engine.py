@@ -88,7 +88,7 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 
 myCam = Camera.calibrated_brest_behind()
 
-courtScn = Scene.make_court()
+courtScn = Scene.make_court(singles_net = False)
 
 ball_color = const.BGR['ball_yellow']
 
@@ -207,7 +207,7 @@ jointFrms = BGRFrames.from_frames([interFrms, animFrms1])
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
-script_line = "For example, let's find the typical point of impact."
+script_line = "For example, let's find the typical point where the return is hit."
 
 animFrms2, animDict = vs.animate_cam_motion(splnLns, start_cam = cnt_sideCam, stop_cam = behindCam, background_scene = courtScn,
                                 interpolate_func = vs.interpolate_camera_naive, 
@@ -230,7 +230,7 @@ meanBall = Ball3D(meanPt.coords, color = const.BGR['intense_red'], radius = 1)
 upLn = Line3D(meanPt_on_floor, meanPt)
 inLn = Line3D(meanPt_on_floor, meanPt_on_baseline)
 
-num_dashes = 20
+num_dashes = 25
 frames_per_dash = 4 
 
 upLn_dashed = upLn.dash(num_dashes).recolor(const.BGR['rose_orange'])
@@ -246,6 +246,14 @@ dashFrms, _ = vs.animate_sequence(dash_scenes, start_cam = behindCam, stop_cam =
                                     argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res)
 # DecapStream(dashFrms, 0, 100).show()
 
+anim_and_dashFrms = BGRFrames.from_frames([animFrms2, dashFrms[:50]])
+
+all_frames.append(anim_and_dashFrms)
+script_lines.append(script_line)
+
+### annotate height and depth
+script_line = "We can extract average hit height and depth, for example."
+
 dash_and_ball_scene = dash_scenes[-1].put(meanBall)
 
 dnbFrms, _ = vs.animate_static(dash_and_ball_scene, static_cam = behindCam, background_scene = courtScn, 
@@ -253,32 +261,30 @@ dnbFrms, _ = vs.animate_static(dash_and_ball_scene, static_cam = behindCam, back
                                 num_frames = 10,
                                 **animDict)
 
-anim_and_dashFrms = BGRFrames.from_frames([animFrms2, dashFrms, dnbFrms])
-
-all_frames.append(anim_and_dashFrms)
-script_lines.append(script_line)
-
-### annotate height and depth
-script_line = "We can extract average hit height and depth, for example."
 h = upLn.length() / const.SCALE * const.FOOT_TO_METER
 d = inLn.length() / const.SCALE * const.FOOT_TO_METER
-
 annPnt_up = upLn.center_point().left(5).annotate(f'Average Return Hit Height: {h:.2f} m.').recolor(const.BGR['rose_orange']).rethicken(1)
 annPnt_in = inLn.center_point().left(5).annotate(f'Average Return Hit Depth: {d:.2f} m.').recolor(const.BGR['rose_orange']).rethicken(1)
 
 annFrms, _ = vs.animate_static(dash_and_ball_scene, static_cam = behindCam, background_scene = courtScn, 
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 25,
+                                num_frames = 50,
                                 annotated_points = [annPnt_up, annPnt_in], **animDict)
 
-all_frames.append(annFrms)
+dash_and_annFrms = BGRFrames.from_frames([dashFrms[50:], dnbFrms, annFrms])
+
+all_frames.append(dash_and_annFrms)
 script_lines.append(script_line)
 
 ### splines rectified to average hitting point
 script_line =   """
                     We can also calculate the return launch angle with ease. 
-                    To visualize it, we make as if all shots had originated from the mean impact point...
-                """ # 9 seconds
+                """
+
+all_frames.append(annFrms)
+script_lines.append(script_line)
+
+script_line = "To visualize it, we make as if all shots had originated from the mean impact point..."
 
 reanchored_trajs = [shot.shotTraj.reanchor(meanPt) for shot in retShots_rect_in]
 reanchored_splnLns = [full_splines_until_bounce(myTraj) for myTraj in reanchored_trajs]
@@ -292,37 +298,42 @@ animFrms3, _ = vs.animate_sequence(itplScns, start_cam = behindCam, stop_cam = b
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res)
 # DecapStream(animFrms3, 0, 100).show()
 
-statFrms0, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
-                                previous_foreground_scene = dash_and_ball_scene, annotated_points = [annPnt_up, annPnt_in],
-                                argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 100)
+ann_and_animFrms = BGRFrames.from_frames([annFrms, animFrms3])
+all_frames.append(ann_and_animFrms)
+script_lines.append(script_line)
+
+script_line = ""
+# statFrms0, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
+#                                 previous_foreground_scene = dash_and_ball_scene, annotated_points = [annPnt_up, annPnt_in],
+#                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
+#                                 num_frames = 25)
 
 statFrms1, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
                                 previous_foreground_scene = dash_and_ball_scene, annotated_points = [annPnt_up],
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 25)
+                                num_frames = 20)
 
 statFrms2, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
                                 previous_foreground_scene = dash_and_ball_scene,
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 20)
+                                num_frames = 17)
 
 statFrms3, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
                                 previous_foreground_scene = dash_and_ball_scene.drop(2),
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 17)
+                                num_frames = 13)
 
 statFrms4, _ = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
                                 previous_foreground_scene = dash_and_ball_scene.drop(2).drop(0),
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 13)
+                                num_frames = 10)
 
 statFrms5, animDict = vs.animate_static(itplScns[-1], static_cam = behindCam, background_scene = courtScn,
                                 previous_foreground_scene = dash_and_ball_scene.drop(2).drop(0).drop(0),
                                 argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                num_frames = 10)
+                                num_frames = 5)
 
-remFrms = BGRFrames.from_frames([animFrms3, statFrms0, statFrms1, statFrms2, statFrms3, statFrms4, statFrms5])
+remFrms = BGRFrames.from_frames([statFrms1, statFrms2, statFrms3, statFrms4, statFrms5])
 # DecapStream(remFrms, 0, 100).show()
 
 all_frames.append(remFrms)

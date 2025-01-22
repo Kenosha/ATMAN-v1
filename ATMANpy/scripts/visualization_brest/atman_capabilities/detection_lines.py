@@ -128,14 +128,13 @@ script_lines.append(script_line)
 
 script_line =   """
                     In this video, we break down how ATMAN does all of these things step-by-step. 
-                    To this end, let's take as an example the first point of a challenger tournament match between Richard Gasquet and Thomas Fabbiano.
-                """
-all_frames.append(preFrms_dimmed)
+                """ # 5 seconds
+all_frames.append(preFrms_dimmed[:200])
 script_lines.append(script_line)
 
 script_line =   """
                     Lines are detected using the simple, but robust probabilistic hough line finding algorithm. 
-                """
+                """ # 6 seconds
 
 ### recreate the line finding steps
 zeroFrm = BGRFrame(np.zeros((360, 640, 3), dtype = 'uint8'))
@@ -183,7 +182,7 @@ currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms2 = lineFrms.mask(lineMask) + currFrms.mask(~lineMask) * dim_factor
 mixFrms2 = mixFrms2.rescale(3)
 
-mixFrms = BGRFrames.from_frames([mixFrms0, mixFrms1, mixFrms2])
+mixFrms = BGRFrames.from_frames([preFrms_dimmed[200:], mixFrms0, mixFrms1, mixFrms2])
 
 all_frames.append(mixFrms)
 script_lines.append(script_line)
@@ -274,7 +273,7 @@ net_alpha = 0.75
 myNet = Net.make_doubles(color = net_color, alpha = net_alpha)
 myNet_null = Net.make_doubles(color = net_color, alpha = 0)
 
-netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 100)
+netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 150)
 
 netFrms, _ = vs.animate_sequence(netScns, start_cam = cam0, stop_cam = cam0, animate_over = transFrm[-1])
 # DecapStream(netFrms, 0, 100).show()
@@ -294,7 +293,7 @@ from ATMANpy.auxil.court import cnt_2D, courtLines
 cnt_3D = Point3D.from_point2D(cnt_2D, z = 0)
 
 # court
-courtScn = Scene.make_court(make_net = True, line_color = line_color, net_color = net_color)
+courtScn = Scene.make_court(make_net = True, singles_net = False, line_color = line_color, net_color = net_color)
 courtLines3D = Lines3D.from_lines2D(courtLines, z = 0, name = 'CourtLines3D')
 
 # corner points
@@ -355,7 +354,7 @@ cam4a = Camera.from_to(oPt4a, cnt_3D, f = f).tilt(tilt)
 ## animate transition from court to abstract
 num_frames_rot = 50
 num_frames_trans = 100
-res = 0.1
+res = 1
 itpl_func = vs.interpolate_camera_naive
 
 ## over frame(s)
@@ -419,7 +418,6 @@ currFrms = currFrms.dim_progressively(0.1, dim_factor, exp = 1)
 
 axScns_itpl_back = vs.interpolate_scenes(axScn, axScn_null, num_frames = currFrms.length())
 
-res = 1
 transFrms, _ = vs.animate_sequence(axScns_itpl_back, start_cam = cam3, stop_cam = cam0, interpolate_func = itpl_func,
                                     background_scene = courtScn,
                                     argument_resolution = res, background_resolution = res, animate_over = currFrms)
@@ -442,7 +440,8 @@ currFrms = Stream(cap, start, stop - 1).decap().frames
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
 
-mixFrms, _ = vs.animate_sequence([netScns[-1] for _ in range(currFrms.length())], start_cam = cam0, stop_cam = cam0, animate_over = mixFrms)
+mixFrms, _ = vs.animate_sequence([netScns[-1] for _ in range(currFrms.length())], start_cam = cam0, stop_cam = cam0, animate_over = mixFrms, 
+                                 argument_resolution = res, background_resolution = res)
 
 jointFrms = BGRFrames.from_frames([transFrms, mixFrms])
 # DecapStream(jointFrms, 0, 100).show()

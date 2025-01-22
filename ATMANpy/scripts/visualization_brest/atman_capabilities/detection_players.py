@@ -133,11 +133,11 @@ courtMask = courtFrms.to_grey() > 1
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 currFrms = currFrms * dim_factor
 
-netFrms, _ = vs.animate_sequence([Scene([myNet]) for _ in mixFrms], start_cam = brestCam, stop_cam = brestCam, animate_over = mixFrms)
+netFrms, _ = vs.animate_sequence([Scene([myNet]) for _ in mixFrms], start_cam = brestCam_resized, stop_cam = brestCam_resized, animate_over = mixFrms.rescale(3))
 
 lambdas = np.linspace(0, 1, duration)[:, np.newaxis, np.newaxis, np.newaxis]
-backFrms0 = currFrms * lambdas + netFrms * (1 - lambdas)
-backFrms0 = backFrms0.rescale(3)
+backFrms0 = currFrms.rescale(3) * lambdas + netFrms * (1 - lambdas)
+DecapStream(backFrms0, 0, 100).show()
 
 ### show the removal of foreground objects (by fading between the static background image and the action)
 

@@ -477,7 +477,7 @@ script_lines.append(script_line)
 
 ### serve + 2
 script_line =   """
-                    Thomas Fabbiano's topspin backhand is recognized as such also, at 99% certainty around the moment of impact.
+                    Thomas Fabbiano's topspin backhand is recognized at 99% certainty around the moment of impact.
                     In this way, visual analysis of player motion supplements ball flight and sound information, 
                     and tells us additionally what kind of shot is being hit.  
                 """ ### 15 seconds
@@ -499,7 +499,7 @@ script_lines.append(script_line)
 
 ### intermezzo
 script_line =   """
-                    In this rally, we have seen a serve and topspin backhands only; let's verify that ATMAN also automatically recognizes
+                    In this rally, we have seen a serve and topspin backhands only; let's verify that ATMAN also recognizes
                     forehands, and is able to tell a topspin shot from a slice.
                 """ ### 10 secs
 intermezzo_early_end = 25
@@ -568,7 +568,7 @@ script_lines.append(script_line)
 script_line =   """
                     The next slice is flawlessy recognized, with the highest certainty coming around the time of impact.
                 """
-duration = 32
+duration = 40
 start, stop = stop, stop + duration
 currFrms = regFrms2[start: stop]
 currFrms = currFrms.slow(2).slow(2).slow(2)
@@ -576,11 +576,10 @@ currFrms = currFrms.slow(2).slow(2).slow(2)
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-
 script_line =   """
                     Once more, the slice recognized, despite some uncertainty in the windup.
-                """
-duration = 40
+                """ #5 seconds
+duration = 32 
 start, stop = stop, stop + duration
 currFrms = regFrms2[start: stop]
 currFrms = currFrms.slow(2).slow(2).slow(2)
@@ -607,7 +606,7 @@ all_frames.append(currFrms)
 script_lines.append(script_line)
 
 script_line = "We now have all the ingredients necessary to reconstruct the trajectory of the ball in flight." # 5 seconds
-fadeFrms = vs.interpolate_frames(currFrms[-1], currFrms[-1].zero(), 150)
+fadeFrms = vs.interpolate_frames(currFrms[-1], currFrms[-1].zero(), 250)
 
 all_frames.append(fadeFrms)
 script_lines.append(script_line)

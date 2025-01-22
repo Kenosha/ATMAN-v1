@@ -79,7 +79,7 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 
 myCam = Camera.calibrated_brest_behind()
 
-courtScn = Scene.make_court()
+courtScn = Scene.make_court(singles_net = False)
 
 ball_color = const.BGR['ball_yellow']
 
@@ -172,7 +172,8 @@ row4 = {pStr: p4, sStr: s4}
 
 tab_dims = (1920 // 2, 1080 // 2)
 kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 2, 'skeleton_shrinkage': 0.025,
-            'dimensions': tab_dims, 'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2}
+            'dimensions': tab_dims, 'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2,
+            'automatic_vertical_offset_text_line_height': 0.3}
 
 table_data = {'All': row0}
 myTab = Table(table_data, **kwargs, null_rows = 4)
@@ -230,7 +231,8 @@ avg_ret_wins = cnt_ret_wins / all_ret_wins
 
 tab_dims = (1920 // 2, 1080 // 2)
 kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 1, 'skeleton_shrinkage': 0.025,
-            'dimensions': tab_dims, 'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2}
+            'dimensions': tab_dims, 'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2,
+            'automatic_vertical_offset_text_line_height': 0.3}
 
 col_name = 'Return Statistics\n(Simple Averages)'
 row0 = {col_name: f'{avg_speed:.0f} km/h'}
@@ -294,6 +296,9 @@ script_line =   """
                     is imperative to be able to search and filter the database easily.
 
                     Luckily, this is possible directly within ATMAN.
+
+                    To showcase how, consider a simple use case: let's say we are interested in the return behaviour of one specific
+                    player, for example Brandon Nakashima. 
                 """
 
 overFrm = overlay(zeroFrm, tabFrm0, top_left_point = tlPt_tab)
@@ -302,10 +307,11 @@ all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    To showcase how, consider a simple use case: let's say we are interested in the return behaviour of one specific
-                    player, for example Brandon Nakashima. This, and a myriad more filters can be done in a single line of code.
+                    This, and a myriad more filters can be done in a single line of code.
                     Should the user wish to add a filter, he can easily do so due to the intuitive representation
                     of Trajectories, Players, Shots and Points in the dataclass system of ATMAN.
+
+                    Let us further narrow down the scope of the exercise by concentrating on valid first serves...
                 """
 
 overFrm = overlay(zeroFrm, tabFrm1, top_left_point = tlPt_tab)
@@ -314,7 +320,7 @@ all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    Let us further narrow down the scope of the exercise by concentrating on valid first serves...
+                    From the ad side...
                 """
 
 overFrm = overlay(zeroFrm, tabFrm2, top_left_point = tlPt_tab)
@@ -323,8 +329,8 @@ all_frames.append(overFrms)
 script_lines.append(script_line)
 
 
-script_line =   """
-                    From the ad side...
+script_line =   f"""
+                    That are targeted out wide, at Nakashima's backhand.
                 """
 
 overFrm = overlay(zeroFrm, tabFrm3, top_left_point = tlPt_tab)
@@ -334,7 +340,7 @@ script_lines.append(script_line)
 
 
 script_line =   f"""
-                    That are targeted out wide, at Nakashima's backhand. This leaves us with {p4} points.
+                    This leaves us with {p4} points.
                 """
 
 overFrm = overlay(zeroFrm, tabFrm4, top_left_point = tlPt_tab)
@@ -401,25 +407,25 @@ script_line =   """
                     ... such as, for example, the average return speed...
                 """
 overFrm = overlay(zeroFrm, aggFrm1, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 25)
+overFrms = BGRFrames.from_frame(overFrm, 30)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line = "  ... spin ... "
 overFrm = overlay(zeroFrm, aggFrm2, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 25)
+overFrms = BGRFrames.from_frame(overFrm, 30)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line = " ... depth ... "
 overFrm = overlay(zeroFrm, aggFrm3, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 25)
+overFrms = BGRFrames.from_frame(overFrm, 30)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line = " and find out how many of these 27 points Brandon Nakashima won. "
 overFrm = overlay(zeroFrm, aggFrm4, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 25)
+overFrms = BGRFrames.from_frame(overFrm, 150)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
@@ -451,7 +457,7 @@ all_frames.append(prexFrms_dimmed)
 script_lines.append(script_line)
 
 script_line =   """
-                    In this simple example, we can for example show the bounce points of all returns made,
+                    In this simple example, we can for instance show the bounce points of all returns made,
                     after rectifying them to be all on one side of the court. 
                     Note that two bounce points on the other side of the court stem from mishit returns that were practically aces.
                 """
@@ -465,16 +471,21 @@ markScn_out = vs.scatter_markmap(retShots_rect_out, mark_size = 5, one_color = c
 markScn = markScn_in.combine(markScn_out)
 
 markFrms, _ = vs.animate_static(markScn, static_cam = myCam.resize(3), num_frames = 25,
-                                animate_over = lsFrm.dim(0.25))
+                                animate_over = lsFrm.dim(0.25), argument_resolution = 10)
 
 markFrms_itpl = vs.interpolate_frames(lsFrm, markFrms[0], 100) ### ok to freeze at end here.
 
 all_frames.append(markFrms_itpl)
 script_lines.append(script_line)
 
+script_line = "" ### let the marks marinate for a bit
+markFrms_itpl_ls = BGRFrames.from_frame(markFrms_itpl[-1], 50)
+all_frames.append(markFrms_itpl_ls)
+script_lines.append(script_line)
+
 script_line =   """
                     Heatmaps can also be created with ease.
-                """ # 3 secodns
+                """ # 3 seconds
 
 ### two regions -> opponents court, and behind the own baseline... a bit clumsy, but hey
 from ATMANpy.types.Lines import CourtLines, Region
@@ -482,9 +493,10 @@ courtLines = CourtLines.make().add_singles_netline()
 oppReg = courtLines.get_half_region(side = 'Top').scale(1.55)
 ownReg_behind = Region.from_lines([courtLines['Bottom Baseline'], courtLines['Bottom Baseline'].down(300)])
 
-in_res = 2
-bh_res = 2.5
-opp_res = 1.5
+factor = 1
+in_res = factor * 1
+bh_res = factor * 1.25
+opp_res = factor * 3/4
 
 heatScn_in = vs.kde_heatmap(retShots_rect_in, one_color = const.BGR['leafy_green'], zero_color = const.BGR['leafy_green'],
                             bandwidth = 60, resolution = in_res)

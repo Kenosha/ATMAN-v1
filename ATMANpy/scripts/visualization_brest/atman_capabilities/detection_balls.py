@@ -245,7 +245,7 @@ script_line =   """
                     it believes shapes to be the ball which in fact are not the ball. 
                     For example, in this frame, it considers both the tip of the racket and the ball itself to look sufficiently like a ball in flight. 
                 """
-duration = 45
+duration = 15
 start, stop = stop, stop + duration
 
 cand_color = const.BGR['leafy_green']
@@ -323,7 +323,7 @@ pre_interFrms = interFrms[:first_dupe_idx]
 post_interFrms = interFrms[first_dupe_idx:]
 stat_interFrm = interFrms[first_dupe_idx]
 
-stat_interFrms = BGRFrames.from_frame(stat_interFrm, 100)
+stat_interFrms = BGRFrames.from_frame(stat_interFrm, 160)
 joint_pre_interFrms = BGRFrames.from_frames([pre_interFrms, stat_interFrms])
 joint_post_interFrms = BGRFrames.from_frames([stat_interFrms, post_interFrms]) ### mostly to gain a few seconds. adjust length as needed
 
@@ -335,12 +335,19 @@ script_lines.append(script_line)
 script_line =   """
                     To remove those ball shapes that the support vector machine erroneously believes to look like a ball, 
                     we implement a Particle Filter. 
-                    The Particle Filter simulates particles that tracks candidate ball shapes on the screen;
-                    these particles obey simple laws of motion, 
-                    and therefore stay close to the ball shapes that actually behave like a ball in flight.
-                """ ## 18 seconds
+                """ ### 7 seconds
 all_frames.append(joint_post_interFrms)
 script_lines.append(script_line)
+
+script_line = """
+                    The Particle Filter simulates particles that track candidate ball shapes on the screen.
+                    These particles obey simple laws of motion, 
+                    and therefore stay close to the ball shapes that actually behave like a travelling ball.
+
+                    In flight, the particles consistently gather around the ball, and therefore confirm its position;
+                    However, whenever the ball is hit, the particles scatter for a short moment until the ball is re-located.
+                    This scattering is eliminated by Kitagawa Smoothing.
+            """ ## 27 seconds
 
 ### The Particle Filter in Action.
 hitcntSF = StreamFeature.from_store(vid, sto, featname = 'hitCnt')
@@ -391,13 +398,7 @@ scale = (10, 10, 1, 1) ### standard deviation for kitagawa perturbation
 part_color = const.BGR['fair_yellow']
 kita_color = const.BGR['ball_yellow']
 
-script_line =   """
-                    In flight, the particles consistently gather around the travelling ball, and therefore confirm its position;
-                    However, whenever the ball is hit by either player, the subsequent flight of the ball is uncertain:
-                    The particles scatter for a short moment until the ball is re-located.
-                    This scattering can be reduced using a technique called Kitagawa Smoothing.
-                """ ## 20 seconds
-duration = 65
+duration = 95
 start, stop = stop, stop + duration
 
 subStm = Stream(cap, start, stop - 1)
@@ -449,7 +450,10 @@ def perturb_array(partArr, N = 100, scale = (10, 10, 1, 1)):
 
     return np.array(randArrs)
 
-scale = (10, 10, 1, 1)
+# scale = (10, 10, 1, 1)
+loc_scale = partArrs_resc[:, :, :2].std(axis = (0, 1)).mean() ** 0.4
+vel_scale = partArrs_resc[:, :, 2:].std(axis = (0, 1)).mean() ** 0.4
+scale = (loc_scale, loc_scale, vel_scale, vel_scale)
 partArrs_resc_slow = np.array([perturb_array(partArr, N = N, scale = scale) for partArr in partArrs_resc_slow])
 
 part_frames = [subFrm.put(particles_to_points(partArr, N), color = kita_color, size = 0) for subFrm, partArr in zip(subFrms_slow_resc, partArrs_resc_slow)]

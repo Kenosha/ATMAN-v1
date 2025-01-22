@@ -249,7 +249,7 @@ ballPt = Point3D((100, 200, 200))
 ballScn = ball_scene(ballPt, ball_dim_factor = 0.75, line_dim_factor = 1)
 exFrms0, prevScn, currCam = animate_example_trajectory(ypf, zpf, rpf, ballScn, sim_res = sim_res, sim_frames = 62)
 DecapStream(exFrms0, 0, 100).show(ms_between_frames = 40)
-exFrms0[-1].show()
+# exFrms0[-1].show()
 
 all_frames.append(exFrms0)
 script_lines.append(script_line)
@@ -263,7 +263,7 @@ dimmed_prevScn = dimmed_prevScn.drop(middle_idx).drop(middle_idx).drop(middle_id
 
 dimFrm = View.make(currCam, dimmed_prevScn.combine(middleScn), resolution = sim_res).snap()
 itplFrms = vs.interpolate_frames(exFrms0[-1], dimFrm, 25)
-DecapStream(itplFrms, 0, 100).show()
+# DecapStream(itplFrms, 0, 100).show()
 
 all_frames.append(itplFrms)
 script_lines.append(script_line)
@@ -303,7 +303,7 @@ gravArr = Arrow.make(middlePt, middlePt.down(arr_len), **arr_params, color = gra
 arrScn = dimmed_prevScn.combine(middleScn).put(gravArr)
 arrFrm = View.make(currCam, arrScn, resolution = sim_res).snap()
 arrFrm = overlay(arrFrm, l1Frm, top_left_point = Point2D((50, 50)))
-arrFrm.show()
+# arrFrm.show()
 
 arrFrms = BGRFrames.from_frame(arrFrm, 100)
 all_frames.append(arrFrms)
@@ -317,7 +317,7 @@ dragArr = Arrow.make(middlePt, middlePt.back(y).down(z), **arr_params, color = d
 arrScn = dimmed_prevScn.combine(middleScn).put(gravArr).put(dragArr)
 arrFrm = View.make(currCam, arrScn, resolution = sim_res).snap()
 arrFrm = overlay(arrFrm, l2Frm, top_left_point = Point2D((50, 50)))
-arrFrm.show()
+# arrFrm.show()
 
 arrFrms = BGRFrames.from_frame(arrFrm, 100)
 all_frames.append(arrFrms)
@@ -360,8 +360,8 @@ for r in rs_per_frame:
     out_frames.append(currFrm)
 
 rotFrms = BGRFrames.from_single_frames(out_frames)
-DecapStream(rotFrms, 0, 100).show(ms_between_frames = 40)
-rotFrms[-1].show()
+# DecapStream(rotFrms, 0, 100).show(ms_between_frames = 40)
+# rotFrms[-1].show()
 
 all_frames.append(rotFrms)
 script_lines.append(script_line)
@@ -384,8 +384,8 @@ dropFrms = BGRFrames.from_frames([  BGRFrames.from_frame(currFrm, frms),
 
 fadeFrms = vs.interpolate_frames(dropFrms[-1], exFrms0[-1], num_frames = frms)
 
-DecapStream(dropFrms, 0, 100).show()
-dropFrms[-1].show()
+# DecapStream(dropFrms, 0, 100).show()
+# dropFrms[-1].show()
 
 # 2)
 sim_frames = 62
@@ -410,7 +410,7 @@ ex_ypf, ex_zpf, ex_rpf = ypf + 0.1, zpf - 0.5, 0.5 * np.pi
 exFrms_down, prevScn2, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
 
 exFrms_inner = exFrms0_ls + exFrms_up + exFrms_down
-DecapStream(exFrms_inner, 0, 100).show()
+# DecapStream(exFrms_inner, 0, 100).show()
 
 exFrms_inner_ls = BGRFrames.from_frame(exFrms_inner[-1], sim_frames)
 
@@ -426,7 +426,7 @@ ex_ypf, ex_zpf, ex_rpf = ypf + 0.3, zpf - 1.25, 0.5 * np.pi
 exFrms_down, prevScn4, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
 
 exFrms_outer = exFrms_inner_ls + exFrms_up + exFrms_down
-DecapStream(exFrms_outer, 0, 100).show()
+# DecapStream(exFrms_outer, 0, 100).show()
 
 exFrms_outer_ls = BGRFrames.from_frame(exFrms_outer[-1], sim_frames)
 
@@ -442,10 +442,10 @@ ex_ypf, ex_zpf, ex_rpf = ypf + 0.5, zpf - 2.25, 0.5 * np.pi
 exFrms_down, prevScn6, _ = animate_example_trajectory(ex_ypf, ex_zpf, ex_rpf, exScn, sim_frames = sim_frames, sim_res = sim_res, staticCam = currCam)
 
 exFrms_outer2 = exFrms_outer_ls + exFrms_up + exFrms_down
-DecapStream(exFrms_outer2, 0, 100).show()
+# DecapStream(exFrms_outer2, 0, 100).show()
 
 jointFrms = BGRFrames.from_frames([dropFrms, fadeFrms, exFrms_inner, exFrms_outer, exFrms_outer2])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -475,10 +475,10 @@ for idx in range(len(cand_scenes)):
     dimmed_candScn = dimmed_candScn.combine(curr_candScn)
 
 postFrm = View.make(currCam, dimmed_candScn).snap()
-postFrm.show()
+# postFrm.show()
 
 itplFrms = vs.interpolate_frames(exFrms_outer2[-1], postFrm, num_frames = 50)
-DecapStream(itplFrms, 0, 100).show()
+# DecapStream(itplFrms, 0, 100).show()
 
 # -> here, we move to the starting point of the chosen candidate trajectory, and show angle, speed and spin
 choiceScn = cand_scenes[choice_idx]
@@ -494,10 +494,10 @@ for idx in range(len(cand_scenes)):
 dimScns = vs.interpolate_scenes(dimmed_candScn, very_dimmed_candScn, 50)
 
 movFrms, _ = vs.animate_sequence(dimScns, start_cam = currCam, stop_cam = newCam, argument_resolution = sim_res)
-DecapStream(movFrms, 0, 100).show()
+# DecapStream(movFrms, 0, 100).show()
 
 jointFrms = BGRFrames.from_frames([itplFrms, movFrms])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -518,7 +518,7 @@ speedArr_pt = choicePt.annotate('Speed').recolor(shape_color).up(10).front(3.75)
 
 arrScn = lsScn.put(speedArr)
 diaFrm0 = View.make(newCam, arrScn, annotatedPoints = [speedArr_pt]).snap()
-diaFrm0.show()
+# diaFrm0.show()
 diaFrms0 = BGRFrames.from_frame(diaFrm0, 25)
 
 all_frames.append(diaFrms0)
@@ -538,7 +538,7 @@ rotArr_pt = choicePt.annotate('Spin').recolor(shape_color).back(6.5).up(5)
 
 rotScn = arrScn.put(rotCrc).put(rotArr)
 diaFrm1 = View.make(newCam, rotScn, annotatedPoints = [speedArr_pt, rotArr_pt]).snap()
-diaFrm1.show()
+# diaFrm1.show()
 diaFrms1 = BGRFrames.from_frame(diaFrm1, 25)
 
 all_frames.append(diaFrms1)
@@ -555,7 +555,7 @@ angCrc_pt = choicePt.annotate('Angle').recolor(shape_color).front(5.5).up(2.5)
 
 crcScn = rotScn.put(angCrc).put(rotCrc).put(rotArr)
 diaFrm2 = View.make(newCam, crcScn, annotatedPoints = [speedArr_pt, angCrc_pt, rotArr_pt]).snap()
-diaFrm2.show()
+# diaFrm2.show()
 diaFrms2 = BGRFrames.from_frame(diaFrm2, 25)
 
 all_frames.append(diaFrms2)
@@ -574,9 +574,11 @@ vis_ut.show(all_frames)
 
 ##### REST OF THE ANIMATION ######
 script_line =   """
-                   Let's see the trajectory detection in action.
-                """ 
-pre_frames = 100
+                   Let's see the trajectory detection in action. 
+                   Each of the rally's three shots occupies its own panel, with the panel in the lower right
+                   showing the calculated speed, spin and angle of the shot. 
+                """  # 10 seconds
+pre_frames = 200
 preFrms = stm0.widen(pre_frames).decap().frames[:pre_frames]
 preArr_dimmed = np.stack([f.dim((idx / pre_frames) ** 2).array for idx, f in enumerate(preFrms)], axis = 0)
 preFrms_dimmed = BGRFrames(preArr_dimmed).slow(2)
@@ -591,32 +593,33 @@ all_frames.append(rstFrms_init)
 script_lines.append(script_line)
 
 script_line =   """
-                    The serve is recognized as more of a kick serve than a flat serve; the landing location very well detected, however. 
+                    The serve is recognized as more of a kick serve than a flat serve; the landing location is very well detected, however. 
                     The serve is generally more challenging to recognize since it flies faster; 
                     therefore there are fewer frames for the ball to be tracked in, and the balls are blurry within the frames.
-                """ ### 18 seconds
+                    This would very likely be much less of an issue at image qualities higher than the 640-by-360, low-bitrate video analyzed here.
+                """ ### 22 seconds
 rstFrms_slow = rstFrms0.slow(2)
-rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 420)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 600)
 rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
 
 all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
 
 script_line =   """
-                    The return is well recognized as a backhand slice at 77 km/h, 2500 RPM and a launch angle of 10.8 degrees.
-                """ # 8 seconds
+                    Despite these limitations, the return is well recognized as a backhand slice at 77 km/h, 2500 RPM and a launch angle of 10.8 degrees.
+                """ # 10 seconds
 rstFrms_slow = rstFrms1.slow(2)
-rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 150)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 200)
 rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
 
 all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
 
 script_line =   """
-                    The server's forehand is tracked perfectly, flying out of the court at 111 km/h at a considerable topspin rate of 3750 RPM.
+                    The server's subsequent forehand is tracked perfectly, flying out of the court at 111 km/h at a considerable topspin rate of 3750 RPM.
                 """ # 11 seconds
 rstFrms_slow = rstFrms2.slow(2)
-rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 250)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 260)
 rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
 
 all_frames.append(rstFrms_slow_all)
@@ -735,7 +738,10 @@ start, stop = stm_p2.stop_frame, stm_p2.stop_frame + 100
 transStm3 = Stream(cap, start, stop - 1)
 transFrms = transStm3.decap().frames.rescale(3)
 
-all_frames.append(transFrms)
+transFrms_dimmed = transFrms.dim_progressively(fs_dim_factor = 1, ls_dim_factor = 0)
+# DecapStream(transFrms_dimmed, 0, 100).show()
+
+all_frames.append(transFrms_dimmed)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
