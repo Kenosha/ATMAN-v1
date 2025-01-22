@@ -392,7 +392,7 @@ class Frames:
     def dim(self, dim_factor):
         return self * dim_factor
 
-    def dim_progressively(self, fs_dim_factor, ls_dim_factor, exp = 1):
+    def dim_progressively(self, fs_dim_factor = 1, ls_dim_factor = 0, exp = 1):
         framesType = self.__class__
         frms_len = self.length()
         lmbds = np.linspace(0, 1, num = frms_len) ** exp
