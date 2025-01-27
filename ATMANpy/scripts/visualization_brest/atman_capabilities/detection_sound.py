@@ -142,6 +142,7 @@ chart_dims = (1920 // 2, 1080 // 2)
 wav_color = const.BGR['bluey_green']
 hit_color = const.BGR['rose_orange']
 bnc_color = const.BGR['soft_yellow']
+now_color = const.BGR['bright_blue']
 now_line_points = 400
 
 start_seconds = 0
@@ -159,7 +160,7 @@ for frame in range(fs_wave, ls_wave + 1):
     xs = np.linspace(0, 1, num = len(snippet))
     waveChart = ScatterChart(xs, snippet, color = wav_color)
 
-    nowChart = ScatterChart(np.ones(now_line_points) * 0.5, np.linspace(-1, 1, now_line_points), color = const.BGR['intense_red'])
+    nowChart = ScatterChart(np.ones(now_line_points) * 0.5, np.linspace(-1, 1, now_line_points), color = now_color)
 
     waveGraph = Graph([waveChart, nowChart], make_default_x_labels = False, as_density = False, resolution = 20,
                         tick_label_size = 0, color = const.BGR['bright_grey'], dimensions = chart_dims, offset = 0.25,
@@ -168,7 +169,7 @@ for frame in range(fs_wave, ls_wave + 1):
     waveScn, annPnts = waveGraph.preview()
     waveScn = waveScn.drop(1) ### drop the y axis
 
-    now_annPnt = annPnts[2].retext('Now').back(12.3).right(2.3).recolor(const.BGR['intense_red'])
+    now_annPnt = annPnts[2].retext('Now').back(12.3).right(2.3).recolor(now_color)
     annPnts.append(now_annPnt)
 
     waveView = View.make(waveGraph.cam, waveScn, annotatedPoints = annPnts, resolution = 20)
@@ -211,7 +212,7 @@ for frame in range(fs_wave, ls_wave + 1):
     hitChart = LineChart(inf_xs, hitArr, color = hit_color, thickness = 0.05)
     bncChart = LineChart(inf_xs, bncArr, color = bnc_color, thickness = 0.05)
     
-    nowChart = ScatterChart(np.ones(now_line_points) * 0.5, np.linspace(0, 1, now_line_points), color = const.BGR['intense_red'])
+    nowChart = ScatterChart(np.ones(now_line_points) * 0.5, np.linspace(0, 1, now_line_points), color = now_color)
 
     probGraph = Graph([hitChart, bncChart, nowChart], make_default_x_labels = False, as_density = False, resolution = 30,
                     tick_label_size = 1, color = const.BGR['bright_grey'], dimensions = chart_dims, offset = 0.25,
@@ -221,7 +222,7 @@ for frame in range(fs_wave, ls_wave + 1):
 
     probScn = probScn.drop(1) ### drop y axis
 
-    now_annPnt = annPnts[0].retext('Now').right(10.4).back(1).resize(2).recolor(const.BGR['intense_red'])
+    now_annPnt = annPnts[0].retext('Now').right(10.4).back(1).resize(2).recolor(now_color)
     annPnts.append(now_annPnt)
 
     probView = View.make(probGraph.cam, probScn, annotatedPoints = annPnts, resolution = 20)
@@ -317,7 +318,7 @@ legFrm = legFrm.pad(to_height = 1080 // 2, to_width = 1920 // 2)
 
 #### Params ####
 sound_fade_exp = 1
-sound_softly_factor = 0.5
+sound_softly_factor = 0
 
 #### BEGIN ANIMATING ###
 all_frames = []
@@ -687,11 +688,10 @@ script_lines.append(script_line)
 wave_forms.append(wave_form)
 
 script_line =   """
-                    Note that the serve we saw just now is a let: the sound of the umpire declaring the let is not detected,
-                    even though a model could be trained for it, and integrated into the detection pipeline.
+                    Note that the serve we saw just now is a let: the sound of the umpire declaring the let is not detected.
+                    Should the need arise, a neural network could be trained for it, and easily integrated into the detection pipeline.
                 """
-duration = 250
-start, stop = stop, stop + duration
+start, stop = stop, segBFs[5].first()[0] - how_many_frames_in_vision + 1
 start_rect, stop_rect = start - fs_wave, stop - fs_wave
 
 myStm = Stream(cap, start, stop - 1)
@@ -714,11 +714,14 @@ overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 ### FADE OUT SLOWED SOUND SOFTLY
 start_sample, stop_sample = round(start_rect / 25 * sr),  round(stop_rect / 25 * sr)
 wave_form = my_wave[start_sample:stop_sample]
-wave_form = slow(wave_form, by = 2)
 wave_form = fade_out(wave_form, exp = sound_fade_exp)
 wave_form = wave_form * sound_softly_factor
 
-all_frames.append(overFrms)
+extFrms = BGRFrames.from_frame(overFrms[-1], 100)
+
+jointFrms = BGRFrames.from_frames([overFrms, extFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 wave_forms.append(wave_form)
 
@@ -729,29 +732,7 @@ script_line =   """
                     actually being hit, we analyse the hitting motion of both players visually.
                 """
 
-start, stop = stop, segBFs[5].first()[0] - how_many_frames_in_vision + 1
-start_rect, stop_rect = start - fs_wave, stop - fs_wave
-
-myStm = Stream(cap, start, stop - 1)
-myFrms = myStm.decap().frames
-myFrms_full = myFrms.rescale(3)
-# DecapStream(myFrms_full, 0, 100).show()
-
-curr_wave_graphFrms = wave_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
-curr_spec_graphFrms = specFrms_over_with_line[start_rect:stop_rect].rescale(rescale_ratio)
-curr_prob_graphFrms = prob_graphFrms[start_rect:stop_rect].rescale(rescale_ratio)
-curr_legFrm = legFrm.rescale(rescale_ratio)
-myRst.add(curr_wave_graphFrms, 0, 0, set_size = True)
-myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
-myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
-myRst.add(curr_legFrm, 1, 1, set_size = True)
-
-showFrms = myRst.render()
-overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
-
-wave_form = None
-
-all_frames.append(overFrms)
+all_frames.append(extFrms)
 script_lines.append(script_line)
 wave_forms.append(wave_form)
 

@@ -207,6 +207,7 @@ for i in range(duration):
     x_offset = 10
     y_offset = 5
 
+    pStrs = [] ### this is so we can save the probability strings and their location to put them onto the resized frame
     for cnt, prb in zip(cnts, probs):
         cntPnt = cnt.center()
         
@@ -221,11 +222,18 @@ for i in range(duration):
 
         regMask = regMask | regMask.within_region(reg)
         # currFrm = currFrm.put(reg, color = ball_color, thickness = 2).put(pStr, where = (x, y))
-        currFrm = currFrm.put(pStr, where = (x, y))
+        # currFrm = currFrm.put(pStr, where = (x, y))
+
+        pStrs.append((pStr, (x, y)))
 
     mixFrm = currFrm_undimmed.mask(regMask) + currFrm.mask(~regMask)
 
     mixFrm = mixFrm.rescale(3)
+
+    for pStr, where in pStrs:
+        x, y = where
+        mixFrm = mixFrm.put(pStr, where = (3*x, 3*y), size = 2)
+
     mixFrms = BGRFrames.from_frame(mixFrm, 25)
 
     out_frames.append(mixFrms)
@@ -261,7 +269,7 @@ sub_shadStm = shadStms[2].conform(start, stop) ### (so we can filter out the con
 
 initial_frames_per_frame = 25
 min_frames_per_frame = 4 # 1
-decay_rate = 0.03
+decay_rate = 0.025 #0.03 
 
 current_num_frames = 0
 out_frames = []

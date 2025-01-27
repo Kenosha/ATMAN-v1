@@ -270,8 +270,9 @@ script_line =   """
 from ATMANpy.types.ShapesTennis3D import Net
 net_color = const.BGR['salmon_pink']
 net_alpha = 0.75
-myNet = Net.make_doubles(color = net_color, alpha = net_alpha)
-myNet_null = Net.make_doubles(color = net_color, alpha = 0)
+net_mesh_density = 0.65
+myNet = Net.make_doubles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
+myNet_null = Net.make_doubles(color = net_color, alpha = 0, net_mesh_density = net_mesh_density)
 
 netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 150)
 
@@ -293,7 +294,8 @@ from ATMANpy.auxil.court import cnt_2D, courtLines
 cnt_3D = Point3D.from_point2D(cnt_2D, z = 0)
 
 # court
-courtScn = Scene.make_court(make_net = True, singles_net = False, line_color = line_color, net_color = net_color)
+courtScn = Scene.make_court(make_net = True, singles_net = False, line_color = line_color, 
+                            net_color = net_color, net_alpha = net_alpha, net_mesh_density = net_mesh_density)
 courtLines3D = Lines3D.from_lines2D(courtLines, z = 0, name = 'CourtLines3D')
 
 # corner points

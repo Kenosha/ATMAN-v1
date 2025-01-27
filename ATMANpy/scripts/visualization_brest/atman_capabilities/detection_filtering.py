@@ -57,7 +57,6 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
-
 ########################################
 ########### SAVE FOLDER ################
 ########################################
@@ -77,9 +76,11 @@ confs = [cnf_mod.get_conf(vid) for vid in avail_vids]
 vid, sto = confs[0]['video_id'], confs[0]['store_name']
 P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 
-myCam = Camera.calibrated_brest_behind()
+myCam_small = Camera.calibrated_brest_behind()
+myCam = myCam_small.resize(1.5)
+myCam_full = myCam_small.resize(3)
 
-courtScn = Scene.make_court(singles_net = False)
+courtScn = Scene.make_court(singles_net = False, net_alpha = 0.3)
 
 ball_color = const.BGR['ball_yellow']
 
@@ -118,6 +119,8 @@ top_retShots = retShots.filter('is_topspin_visual')
 # TODO: return has been observed
 # TODO: serve bounces in other half of the court (two pathological serves...)
 
+line_thickness = 1.5
+
 filtered_spline_frames = []
 for idx, myPnt in enumerate(filtPnts4):
     idx_num = idx + 1
@@ -125,29 +128,30 @@ for idx, myPnt in enumerate(filtPnts4):
     ### SERVE
     srvShot = myPnt[0]
     srvStm = srvShot.stream(confs = confs)
-    srvFrms = srvStm.decap().frames
+    srvFrms = srvStm.decap().frames.rescale(1.5)
     srv_splns = srvShot.feat_spline_cumul(which_endpoint = 'penultimate').values()
-    srvScns = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)]) for splns in srv_splns]
-    srv_spln_frms, _ = vs.animate_sequence(srvScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = srvFrms)
+    srvScns = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)]) for splns in srv_splns]
+    srv_spln_frms, _ = vs.animate_sequence(srvScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = srvFrms,
+                                            argument_resolution = 1)
 
     ### RETURN
     try:
         retShot = myPnt[1]
     except IndexError:
         retStm = Stream(srvStm.cap, srvStm.stop_frame, srvStm.stop_frame + 20)
-        retFrms = retStm.decap().frames
+        retFrms = retStm.decap().frames.rescale(1.5)
         ret_spln_frms = retFrms
     else:
         retStm = retShot.stream(confs = confs)
-        retFrms = retStm.decap().frames
+        retFrms = retStm.decap().frames.rescale(1.5)
         ret_splns = retShot.feat_spline_cumul(which_endpoint = 'penultimate').values()
-        retScns = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)]) for splns in ret_splns]
+        retScns = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)]) for splns in ret_splns]
         
         retFrms = retFrms[:len(retScns)]
-        ret_spln_frms, _ = vs.animate_sequence(retScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = retFrms)
+        ret_spln_frms, _ = vs.animate_sequence(retScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = retFrms,
+                                                argument_resolution = 1)
 
     splnFrms = BGRFrames.from_frames([srv_spln_frms, ret_spln_frms])
-    splnFrms = splnFrms.rescale(1.5)
      ### add indices later, after sorting, so that we display the correct order.
     # splnFrms_with_text = BGRFrames.from_single_frames([splnFrm.put(f'{idx_num:.0f}', size = 2) for splnFrm in splnFrms])
     # DecapStream(splnFrms, 0, 100).show()
@@ -161,7 +165,7 @@ p2, s2 = len(filtPnts2), sum([len(p) for p in filtPnts2])
 p3, s3 = len(filtPnts3), sum([len(p) for p in filtPnts3])
 p4, s4 = len(filtPnts4), sum([len(p) for p in filtPnts4])
 
-pStr, sStr = 'Num. Points', 'Num. Shots'
+pStr, sStr = 'Points', 'Shots'
 row0 = {pStr: p0, sStr: s0}
 row1 = {pStr: p1, sStr: s1}
 row2 = {pStr: p2, sStr: s2}
@@ -171,9 +175,16 @@ row4 = {pStr: p4, sStr: s4}
 ##### COUNT TABLES ###
 
 tab_dims = (1920 // 2, 1080 // 2)
-kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 2, 'skeleton_shrinkage': 0.025,
+# tab_dims = (round(1920 * 2/3), round(1080 * 2/3))
+kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 2, 'skeleton_shrinkage': 0.125,
             'dimensions': tab_dims, 'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2,
-            'automatic_vertical_offset_text_line_height': 0.3}
+            'automatic_vertical_offset_text_line_height': 0.3, 'header_offset': 2.5,
+            'title': '2021 Brest Challenger', 'title_horizontal_offset': 8.2, 'title_vertical_offset': -0.4, 'title_color': const.BGR['bright_grey']}
+
+table_data = {'': {}}
+myTab = Table(table_data, **kwargs, null_rows = 4)
+tabFrm_null = myTab.render()
+# tabFrm_null.show()
 
 table_data = {'All': row0}
 myTab = Table(table_data, **kwargs, null_rows = 4)
@@ -181,34 +192,34 @@ tabFrm0 = myTab.render()
 # tabFrm0.show()
 
 table_data = {'All': row0,
-                ' ... Brandon Nakashima returns.': row1}
+                ' Brandon Nakashima returns.': row1}
 
 myTab = Table(table_data, **kwargs, null_rows = 3)
 tabFrm1 = myTab.render()
 # tabFrm1.show()
 
 table_data = {'All': row0,
-                ' ... Brandon Nakashima returns ...': row1,
-                ' ... a (valid) first serve.': row2}
+                ' Brandon Nakashima returns...': row1,
+                ' ...a (valid) first serve.': row2}
 
 myTab = Table(table_data, **kwargs, null_rows = 2)
 tabFrm2 = myTab.render()
 # tabFrm2.show()
 
 table_data = {'All': row0,
-                ' ... Brandon Nakashima returns ...': row1,
-                ' ... a (valid) first serve ...': row2,
-                ' ... from the ad side.': row3}
+                ' Brandon Nakashima returns...': row1,
+                ' ...a (valid) first serve...': row2,
+                ' ...from the ad side.': row3}
 
 myTab = Table(table_data, **kwargs, null_rows = 1)
 tabFrm3 = myTab.render()
 # tabFrm3.show()
 
 table_data = {'All': row0,
-                ' ... Brandon Nakashima returns ...': row1,
-                ' ... a (valid) first serve ...': row2,
-                ' ... from the ad side ...': row3,
-                ' ... served out wide.': row4}
+                ' Brandon Nakashima returns...': row1,
+                ' ...a (valid) first serve...': row2,
+                ' ...from the ad side...': row3,
+                ' ...served out wide.': row4}
 
 myTab = Table(table_data, **kwargs)
 tabFrm4 = myTab.render()
@@ -280,18 +291,24 @@ tlPt_tab_corner = Point2D((0, 0))
 all_frames = []
 script_lines = []
 
-script_line =   f"""
+script_line =   """
                     Having detected lines, players and trajectories of the ball, and having segmented every Match into 
                     distinct Points and Shots, we now show how the data gathered is accessed directly within the ATMAN framework.
-
-                    We have analysed 20 matches played in the course of the 2021 Brest challenger tournament; 
-                    in the course of these 20 matches, {p0} points and {s0} distinct shots have been played and detected. 
                 """
 zeroFrms = BGRFrames.from_frame(zeroFrm, 25)
 all_frames.append(zeroFrms)
 script_lines.append(script_line)
 
-script_line =   """
+script_line =   "We have analysed 20 matches played in the course of the 2021 Brest challenger tournament."
+
+overFrm = overlay(zeroFrm, tabFrm_null, top_left_point = tlPt_tab)
+overFrms = BGRFrames.from_frame(overFrm, 25)
+all_frames.append(overFrms)
+script_lines.append(script_line)
+
+script_line =   f"""
+                    In the course of these 20 matches, {p0} points and {s0} distinct shots have been played and detected. 
+
                     In the face of this large amount of data even for just a single tournament, 
                     is imperative to be able to search and filter the database easily.
 
@@ -307,10 +324,6 @@ all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    This, and a myriad more filters can be done in a single line of code.
-                    Should the user wish to add a filter, he can easily do so due to the intuitive representation
-                    of Trajectories, Players, Shots and Points in the dataclass system of ATMAN.
-
                     Let us further narrow down the scope of the exercise by concentrating on valid first serves...
                 """
 
@@ -341,6 +354,10 @@ script_lines.append(script_line)
 
 script_line =   f"""
                     This leaves us with {p4} points.
+
+                    These (and a myriad more filters) can be applied in a single line of code.
+                    Should these not suffice, custom filters are can be easily created due to the intuitive representation
+                    of Trajectories, Players, Shots and Points in the dataclass system of ATMAN.
                 """
 
 overFrm = overlay(zeroFrm, tabFrm4, top_left_point = tlPt_tab)
@@ -470,7 +487,7 @@ markScn_in = vs.scatter_markmap(retShots_rect_in, mark_size = 5, one_color = con
 markScn_out = vs.scatter_markmap(retShots_rect_out, mark_size = 5, one_color = const.BGR['intense_red'])
 markScn = markScn_in.combine(markScn_out)
 
-markFrms, _ = vs.animate_static(markScn, static_cam = myCam.resize(3), num_frames = 25,
+markFrms, _ = vs.animate_static(markScn, static_cam = myCam_full, num_frames = 25,
                                 animate_over = lsFrm.dim(0.25), argument_resolution = 10)
 
 markFrms_itpl = vs.interpolate_frames(lsFrm, markFrms[0], 100) ### ok to freeze at end here.
@@ -493,10 +510,13 @@ courtLines = CourtLines.make().add_singles_netline()
 oppReg = courtLines.get_half_region(side = 'Top').scale(1.55)
 ownReg_behind = Region.from_lines([courtLines['Bottom Baseline'], courtLines['Bottom Baseline'].down(300)])
 
-factor = 1
+factor = 2
 in_res = factor * 1
 bh_res = factor * 1.25
 opp_res = factor * 3/4
+
+back_res = 10 ##1
+shape_res = 5 ##1
 
 heatScn_in = vs.kde_heatmap(retShots_rect_in, one_color = const.BGR['leafy_green'], zero_color = const.BGR['leafy_green'],
                             bandwidth = 60, resolution = in_res)
@@ -506,7 +526,7 @@ heatScn_out2 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_
                             bandwidth = 30, showReg = oppReg, resolution = opp_res)
 heatScn = heatScn_in.combine(heatScn_out1).combine(heatScn_out2)
 
-heatFrms, _ = vs.animate_static(heatScn, num_frames = 25, static_cam = myCam.resize(3), animate_over = lsFrm_no_traj.dim(0.25))
+heatFrms, _ = vs.animate_static(heatScn, num_frames = 25, static_cam = myCam_full, animate_over = lsFrm_no_traj.dim(0.25))
 # heatFrms[-1].show()
 
 heatFrms_itpl = vs.interpolate_frames(markFrms[-1], heatFrms[1], num_frames = 100)
@@ -524,11 +544,12 @@ all_frames.append(heatFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    However, the 3D engine contained is so general as to allow us to abstract away from the TV camera,
-                    the lines, the players, and the ball; we can also render and animate all of these directly in virtual space.
+                    However, the 3D engine contained is so general as to allow us to abstract away from the TV camera. 
+                    We can also render and animate directly in virtual space.
                 """
 
-outFrms, _ = vs.animate_static(heatScn, static_cam = myCam.resize(3), background_scene = courtScn, num_frames = 1)
+outFrms, _ = vs.animate_static(heatScn, static_cam = myCam_full, background_scene = courtScn, num_frames = 1,
+                               argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
 
 itplFrms = vs.interpolate_frames(heatFrms[-1], outFrms[0], num_frames = 150)
 # DecapStream(itplFrms, 0, 100).show(ms_between_frames = 40)

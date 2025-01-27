@@ -88,7 +88,7 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 
 myCam = Camera.calibrated_brest_behind()
 
-courtScn = Scene.make_court(singles_net = False)
+courtScn = Scene.make_court(singles_net = False, net_alpha = 0.3)
 
 ball_color = const.BGR['ball_yellow']
 
@@ -155,8 +155,8 @@ bsl_sideCam = baseline_side_cam(which = 'Ad', side = 'Top', width = 200)
 behindCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
 
 ### animation parameters
-back_res = 1 ##1
-shape_res = 1 ##1
+back_res = 10 ##1
+shape_res = 5 ##1
 
 ######################
 ###### ANIMATION #####
@@ -167,9 +167,9 @@ script_lines = []
 script_line =   """
                     In this example, it might be more instructive to look at the heatmap from above.
                 """
-myFrms, _ = vs.animate_cam_motion(heatScn, start_cam = myCam.resize(3), stop_cam = topCam, 
+myFrms, _ = vs.animate_cam_motion(heatScn, start_cam = myCam.resize(3), stop_cam = topCam, num_frames = 50, 
                                 background_scene = courtScn, interpolate_func = vs.interpolate_camera_naive,
-                                num_frames = 50, argument_resolution = shape_res, background_resolution = back_res)
+                                argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
 
 # DecapStream(myFrms, 0, 100).show(ms_between_frames = 40)
 # myFrms[-1].show()
@@ -182,7 +182,7 @@ script_line =   """
                     Alternatively, we can take a deeper look at a certain aspect of the return trajectories.
                 """
 from ATMANpy.types.Shapes3D import Lines3D
-def full_splines_until_bounce(myShot, spline_thickness = 0.5):
+def full_splines_until_bounce(myShot, spline_thickness = 0.25):
     bnc_frame = myShot.get_bounce_frames()[0]
     splnSF = myShot.feat_spline_cumul()
     spline_list = [spln.resize(spline_thickness) for spln in splnSF[bnc_frame] if not vis_ut.has_nan_point_or_is_none(spln)]
@@ -191,15 +191,15 @@ def full_splines_until_bounce(myShot, spline_thickness = 0.5):
 splnLns = [full_splines_until_bounce(myShot) for myShot in retShots_rect_in]
 
 splnFrms, _ = vs.animate_static(splnLns, static_cam = topCam, num_frames = 1, background_scene = courtScn,
-                                argument_resolution = shape_res, background_resolution = back_res)
+                                argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
 
 interFrms = vs.interpolate_frames(myFrms[-1], splnFrms[0], 100) ### is this too lazy for fade-in fade-out? it looks okay. 
 # DecapStream(interFrms, 0, 100).show()
 
 
 animFrms1, _ = vs.animate_cam_motion(splnLns, start_cam = topCam, stop_cam = cnt_sideCam, background_scene = courtScn,
-                                interpolate_func = vs.interpolate_camera_naive, 
-                                num_frames = 50, argument_resolution = shape_res, background_resolution = back_res)
+                                interpolate_func = vs.interpolate_camera_naive, num_frames = 50, 
+                                argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
 # DecapStream(animFrms1, 0, 100).show()
 
 jointFrms = BGRFrames.from_frames([interFrms, animFrms1])
@@ -210,8 +210,8 @@ script_lines.append(script_line)
 script_line = "For example, let's find the typical point where the return is hit."
 
 animFrms2, animDict = vs.animate_cam_motion(splnLns, start_cam = cnt_sideCam, stop_cam = behindCam, background_scene = courtScn,
-                                interpolate_func = vs.interpolate_camera_naive, 
-                                num_frames = 50, argument_resolution = shape_res, background_resolution = back_res)
+                                interpolate_func = vs.interpolate_camera_naive, num_frames = 50, 
+                                argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
 # DecapStream(animFrms2, 0, 100).show()
 
 ### make little lines indicating height of average hitting point and depth of average hitting point.
@@ -263,7 +263,7 @@ dnbFrms, _ = vs.animate_static(dash_and_ball_scene, static_cam = behindCam, back
 
 h = upLn.length() / const.SCALE * const.FOOT_TO_METER
 d = inLn.length() / const.SCALE * const.FOOT_TO_METER
-annPnt_up = upLn.center_point().left(5).annotate(f'Average Return Hit Height: {h:.2f} m.').recolor(const.BGR['rose_orange']).rethicken(1)
+annPnt_up = upLn.center_point().left(8).annotate(f'Average Return   Hit Height: {h:.2f} m.').recolor(const.BGR['rose_orange']).rethicken(1)
 annPnt_in = inLn.center_point().left(5).annotate(f'Average Return Hit Depth: {d:.2f} m.').recolor(const.BGR['rose_orange']).rethicken(1)
 
 annFrms, _ = vs.animate_static(dash_and_ball_scene, static_cam = behindCam, background_scene = courtScn, 
@@ -346,9 +346,9 @@ ax_sideCam = Camera.from_to(meanPt.right(50), meanPt)
 moveFrms, animDict = vs.animate_cam_motion(Scene([meanBall]), start_cam = behindCam, stop_cam = ax_sideCam,
                                         background_scene = courtScn, interpolate_func = vs.interpolate_camera_naive,
                                         argument_resolution = shape_res, background_resolution = back_res,
+                                        foreground_resolution = shape_res,
                                         num_frames = 50,
                                         **animDict)
-### shape_res has to equal ball_res! (which is shape_res!) 
 # DecapStream(moveFrms, 0, 100).show(ms_between_frames = 100)
 
 y_len = 35
@@ -364,7 +364,7 @@ axisScns = vs.interpolate_scenes(nullScn, lineScn, num_frames = 25)
 axisScns = [myScn.put(meanBall) for myScn in axisScns] ### avoid the transparification of the ball
 
 axisFrms, animDict = vs.animate_sequence(axisScns, start_cam = ax_sideCam, stop_cam = ax_sideCam, background_scene = courtScn,
-                                        cumulative_foreground_transparence = 0.95, 
+                                        cumulative_foreground_transparence = 0.925, 
                                         argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
                                         **animDict
                                         ) 
@@ -377,10 +377,12 @@ y_unit, z_unit = np.cos(mean_rad), np.sin(mean_rad)
 y, z = y_unit * z_len * 1.1, z_unit * z_len * 1.1
 angPt = meanPt.back(y).up(z)
 
+ang_color = const.BGR['bright_blue']
+
 angLn = Line3D(meanPt, angPt)
 
-nullScn = Scene([nullLn])
-angScn = Scene([angLn])
+nullScn = Scene([nullLn.recolor(ang_color).resize(0.15)])
+angScn = Scene([angLn.recolor(ang_color).resize(0.15)])
 angScns = vs.interpolate_scenes(nullScn, angScn, num_frames = 50)
 
 angFrms, animDict = vs.animate_sequence(angScns, start_cam = ax_sideCam, stop_cam = ax_sideCam, background_scene = courtScn,
@@ -394,11 +396,11 @@ jntFrms = BGRFrames.from_frames([moveFrms, axisFrms, angFrms])
 all_frames.append(jntFrms)
 script_lines.append(script_line)
 
-script_line = "In this case, the average launch angle of returns on these ad-side, out-wide serves is 8.9 degrees."
+script_line = "... to find that the average launch angle of returns on these ad-side, out-wide serves is 8.9 degrees."
 
 from ATMANpy.types.Shapes3D import Circle3D
-degCrc = Circle3D.from_point3D(meanPt, radius = 0.85 * z_len, limit_theta = (0, mean_rad), fixed_dimension = 'x')
-nullCrc = Circle3D.from_point3D(meanPt, radius = 0.85 * z_len, limit_theta = (0, 0), fixed_dimension = 'x')
+degCrc = Circle3D.from_point3D(meanPt, radius = 0.85 * z_len, limit_theta = (0, mean_rad), fixed_dimension = 'x').recolor(ang_color)
+nullCrc = Circle3D.from_point3D(meanPt, radius = 0.85 * z_len, limit_theta = (0, 0), fixed_dimension = 'x').recolor(ang_color)
 
 degScn = Scene([degCrc])
 nullScn = Scene([nullCrc])
@@ -410,41 +412,53 @@ angFrms_stat, animDict = vs.animate_sequence(degScns, start_cam = ax_sideCam, st
 # DecapStream(angFrms_stat, 0, 100).show()
 
 ### annotate angle
-degPnt = meanPt.back(0.82 * z_len).up(0.75).annotate(f'Launch Angle: {mean_angle:.1f} deg.')
+degPnt = meanPt.back(0.82 * z_len).up(0.75).annotate(f'Launch Angle: {mean_angle:.1f} deg.').recolor(ang_color)
 
-degFrms, _ = vs.animate_static(degScns[-1], static_cam = ax_sideCam, background_scene = courtScn, 
-                                annotated_points = [degPnt],
-                                argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
-                                **animDict)
+degFrms, animDict = vs.animate_static(degScns[-1], static_cam = ax_sideCam, background_scene = courtScn, 
+                                    annotated_points = [degPnt],
+                                    argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
+                                    **animDict)
 
 jointFrms = BGRFrames.from_frames([angFrms_stat, degFrms])
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
-### TODO: need a fazit. for comparison, here's what we say in the beginning.
-"""
-    The Automated Tennis Match Annotator (ATMAN) automatically recognizes the lines, the players, the ball
-    (how fast the ball is, how much spin it has, where it bounces) to be able to summarize a match set by set, game by game,
-    point by point, shot by shot.
-    Match data can be easily combined with other matches that have been visually recognized by ATMAN.
-    The system then allows all matches at hand to be easily searched, filtered and aggregated 
-    to reveal patterns in the style of play of a player, understand how he or she wins matches, or where he or she is vulnerable. 
-    ATMAN also includes a 3D engine that is used to visualize insights from the matches at hand.
-"""
-### what more can we say in the end?
+script_line =   """
+                    ATMAN, as we have shown, is a start-to-end-framework for the analysis of tennis matches, 
+                    a system that, even when fed with comparatively low-quality video of tennis matches, 
+                    is able to deal with visual recognition, data search, filtering and analysis, and the visualization of results and insights.
+                    To see examples of the framework employed in actual case studies, 
+                    check out the two analyses on serve and return behaviour supplied along with this video.  
+                """
+## for this: rotate camera to a bird's eye view of the court.
 
-# -> ATMAN, as we have shown, is a start-to-end system, allowing to do everything within one framework.
-# everything being: visual recognition; data search, filtering and aggregation; visualization/presentation of results and insights.  
-# to see examples of the framework in action, to see what it can find out (with a limited set of data) -> check out analysis videos!
+from ATMANpy.auxil.court import cnt_2D
 
-"""
+dPt = Point3D.from_point2D(cnt_2D, z = 0)
+oPt = Point3D.from_point2D(cnt_2D, z = 500)
+cntCam = Camera.from_to(oPt, dPt).rotate(0.5)
 
-"""
+# View.make(cntCam, courtScn, resolution = 5).snap().show()
 
+finalScn = Scene([])
+finalScn = itplScns[-1]
+animDict_no_text = {**animDict}
+animDict_no_text['previous_annotated_points'] = []
+
+start_alpha = animDict['previous_foreground_scene'][0].alpha
+rebrightenScns = vs.interpolate_scenes(finalScn.realpha(start_alpha), finalScn, num_frames = 100)
+
+finalFrms, _ = vs.animate_sequence(rebrightenScns, start_cam = ax_sideCam, stop_cam = cntCam, background_scene = courtScn, 
+                                    argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
+                                    cumulative_foreground_transparence = 0.95, interpolate_func = vs.interpolate_camera_naive,
+                                    **animDict_no_text)
+# DecapStream(finalFrms, 0, 100).show()
+
+all_frames.append(finalFrms)
+script_lines.append(script_line)
 
 vis_ut.show(all_frames)
-
 
 from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
 saveFolder = DESCRIPTOR + '_' + str(make_timestamp())

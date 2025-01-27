@@ -407,7 +407,7 @@ script_lines.append(script_line)
 
 ### serve
 # TODO: ADJUST PLAYER REGIONS WITH PROBABILITIES SO THEY START A BIT EARLIER -> serve is detected too late because segBF is too tight.
-script_line = "The neural network correctly identifies the serve (with the highest degree of confidence roughly at the moment of impact)."
+script_line = "The neural network correctly identifies the serve (with the highest degree of confidence at the moment of impact)."
 duration = 25
 start, stop = 0, duration
 currFrms = regFrms[start:stop]
@@ -600,7 +600,7 @@ script_line =   ""
 duration = 10
 start, stop = stop, stop + duration
 currFrms = regFrms2[start: stop]
-currFrms = currFrms.slow(2)
+currFrms = currFrms.slow(2).slow(2)
 
 all_frames.append(currFrms)
 script_lines.append(script_line)

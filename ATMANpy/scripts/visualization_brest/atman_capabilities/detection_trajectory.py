@@ -82,6 +82,8 @@ frms0, frms1, frms2 = stm0.decap().frames.rescale(1.5), stm1.decap().frames.resc
 
 ### get ball splines
 
+line_thickness = 1.5
+
 ball_color = const.BGR['ball_yellow']
 
 splns0 = sht0.feat_spline_cumul(which_endpoint = 'penultimate').values()
@@ -93,9 +95,9 @@ myCam_small = Camera.calibrated_brest_behind()
 myCam = Camera.calibrated_brest_behind().resize(1.5)
 myCam_full = Camera.calibrated_brest_behind().resize(3)
 
-scns0 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns0]
-scns1 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns1]
-scns2 = [Scene([spln.recolor(ball_color).resize(1.5) for spln in splns if spln is not None]) for splns in splns2]
+scns0 = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns if spln is not None]) for splns in splns0]
+scns1 = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns if spln is not None]) for splns in splns1]
+scns2 = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns if spln is not None]) for splns in splns2]
 
 from ATMANpy.funcs.vis_funcs import animate_sequence
 
@@ -112,6 +114,13 @@ ls_frm_dim1 = spln_frms1[-1].dim(dim_factor)
 ls_frm_dim2 = spln_frms2[-1].dim(dim_factor)
 frms0_ls, frms1_ls, frms2_ls = BGRFrames.from_frame(ls_frm_dim0, 25), BGRFrames.from_frame(ls_frm_dim1, 25), BGRFrames.from_frame(ls_frm_dim2, 25)
 
+### pre_frames for spln_frms0, 1, 2
+widen_by = 15
+pre_frms0 = sht0.stream(cap).widen(widen_by).decap().frames[:widen_by].rescale(1.5) ### this is not needed, has its own pre_frms later!
+pre_frms1 = sht1.stream(cap).widen(widen_by).decap().frames[:widen_by].rescale(1.5)
+pre_frms2 = sht2.stream(cap).widen(widen_by).decap().frames[:widen_by].rescale(1.5)
+
+### data for tables
 myShot = sht0
 def get_data_string(myShot):
     velo = myShot.get_initial_speed()
@@ -133,43 +142,48 @@ tab_params = {  'index_offset': 1, 'index_col_width': 0.5, 'dimensions': (960, 5
                 'null_columns': 0
                 }
 
-tab_data0 = {'1st Shot': {'Description': str0, 'Data': dat0}}
-tab_data1 = {'1st Shot': {'Description': str0, 'Data': dat0}, '2nd Shot': {'Description': str1, 'Data': dat1}}
-tab_data2 = {'1st Shot': {'Description': str0, 'Data': dat0}, '2nd Shot': {'Description': str1, 'Data': dat1}, '3rd Shot': {'Description': str2, 'Data': dat2}}
+tab_data0 = {'': {'Description': '', 'Data': ''}}
+tab_data1 = {'1st Shot': {'Description': str0, 'Data': dat0}}
+tab_data2 = {'1st Shot': {'Description': str0, 'Data': dat0}, '2nd Shot': {'Description': str1, 'Data': dat1}}
+tab_data3 = {'1st Shot': {'Description': str0, 'Data': dat0}, '2nd Shot': {'Description': str1, 'Data': dat1}, '3rd Shot': {'Description': str2, 'Data': dat2}}
 
 tab0 = Table(tab_data0, **tab_params, null_rows = 2)
-tab1 = Table(tab_data1, **tab_params, null_rows = 1)
-tab2 = Table(tab_data2, **tab_params, null_rows = 0)
+tab1 = Table(tab_data1, **tab_params, null_rows = 2)
+tab2 = Table(tab_data2, **tab_params, null_rows = 1)
+tab3 = Table(tab_data3, **tab_params, null_rows = 0)
 
 tab_frm0 = tab0.render()
 tab_frm1 = tab1.render()
 tab_frm2 = tab2.render()
+tab_frm3 = tab3.render()
 
 tab_frms0 = BGRFrames.from_frame(tab_frm0, 25)
 tab_frms1 = BGRFrames.from_frame(tab_frm1, 25)
 tab_frms2 = BGRFrames.from_frame(tab_frm2, 25)
+tab_frms3 = BGRFrames.from_frame(tab_frm3, 25)
 
 # tab_frm0.show()
 # tab_frm1.show()
 # tab_frm2.show()
+# tab_frm3.show()
 
 ### THE RASTER ###
 myRst = FramesRaster(2, 2)
 
 myRst.add(spln_frms0, 0, 0)
-myRst.add(tab_frms0, 1, 1)
+myRst.add(tab_frms1, 1, 1)
 rstFrms0 = myRst.render()
 # DecapStream(rstFrms0, 0, 100).show(ms_between_frames = 100)
 
 myRst.add(frms0_ls, 0, 0)
-myRst.add(spln_frms1, 0, 1)
-myRst.add(tab_frms1, 1, 1)
+myRst.add(pre_frms1.join(spln_frms1), 0, 1)
+myRst.add(tab_frms2, 1, 1)
 rstFrms1 = myRst.render()
 # DecapStream(rstFrms1, 0, 100).show(ms_between_frames = 100)
 
 myRst.add(frms1_ls, 0, 1)
-myRst.add(spln_frms2, 1, 0)
-myRst.add(tab_frms2, 1, 1)
+myRst.add(pre_frms2.join(spln_frms2), 1, 0)
+myRst.add(tab_frms3, 1, 1)
 rstFrms2 = myRst.render()
 # DecapStream(rstFrms2, 0, 100).show(ms_between_frames = 100)
 
@@ -232,7 +246,7 @@ def animate_example_trajectory(ypf, zpf, rpf, ballScn, sim_frames = 62, sim_res 
     return outFrms, prevScn, currCam
 
 ### parameters
-sim_res = 5
+sim_res = 25
 sim_frames = 62
 
 ### SIMULATION ANIMATION ###
@@ -248,7 +262,7 @@ ballPt = Point3D((100, 200, 200))
 
 ballScn = ball_scene(ballPt, ball_dim_factor = 0.75, line_dim_factor = 1)
 exFrms0, prevScn, currCam = animate_example_trajectory(ypf, zpf, rpf, ballScn, sim_res = sim_res, sim_frames = 62)
-DecapStream(exFrms0, 0, 100).show(ms_between_frames = 40)
+# DecapStream(exFrms0, 0, 100).show(ms_between_frames = 40)
 # exFrms0[-1].show()
 
 all_frames.append(exFrms0)
@@ -274,8 +288,8 @@ from ATMANpy.types.Overlays import Legend, LegendRow
 grav_color = const.BGR['light_brown']
 drag_color = const.BGR['strong_pink']
 lift_color = const.BGR['marine_blue']
-row_params = {'text_size': 2, 'text_thickness': 1, 'text_horizontal_offset': 1, 'text_vertical_offset': 0.3}
-leg_params = {'resolution': 10, 'header_offset': 5.13, 'header_text': 'Forces', 'legend_dimensions': (600, 400), 'borders': False}
+row_params = {'text_size': 2, 'text_thickness': 1, 'text_horizontal_offset': 1, 'text_vertical_offset': 0.3, 'shape_offset': 0.15}
+leg_params = {'resolution': 5000, 'header_offset': 5.13, 'header_text': 'Forces', 'legend_dimensions': (600, 400), 'borders': False}
 
 nRow = LegendRow()
 gRow = LegendRow('Gravity', grav_color, **row_params)
@@ -298,20 +312,20 @@ middlePt = middleBall.center_point()
 arr_len = 25
 arr_params = {'hat_length': 3, 'thickness': 0.25, 'hat_angle': np.pi / 6, 'rot_angle': np.pi / 2}
 
-script_line = '... gravity ...'
+script_line = '... like gravity ...'
 gravArr = Arrow.make(middlePt, middlePt.down(arr_len), **arr_params, color = grav_color)
 arrScn = dimmed_prevScn.combine(middleScn).put(gravArr)
 arrFrm = View.make(currCam, arrScn, resolution = sim_res).snap()
 arrFrm = overlay(arrFrm, l1Frm, top_left_point = Point2D((50, 50)))
 # arrFrm.show()
 
-arrFrms = BGRFrames.from_frame(arrFrm, 100)
+arrFrms = BGRFrames.from_frame(arrFrm, 25)
 all_frames.append(arrFrms)
 script_lines.append(script_line)
 
 script_line = '... drag ...'
-y = ypf * np.exp(-0.01 * sim_frames / 2) * arr_len / 2
-z = zpf * np.exp(-0.05 * sim_frames / 2) * arr_len / 2
+y = ypf * np.exp(-0.01 * sim_frames / 2) * arr_len / 4
+z = zpf * np.exp(-0.05 * sim_frames / 2) * arr_len / 4
 
 dragArr = Arrow.make(middlePt, middlePt.back(y).down(z), **arr_params, color = drag_color)
 arrScn = dimmed_prevScn.combine(middleScn).put(gravArr).put(dragArr)
@@ -319,7 +333,7 @@ arrFrm = View.make(currCam, arrScn, resolution = sim_res).snap()
 arrFrm = overlay(arrFrm, l2Frm, top_left_point = Point2D((50, 50)))
 # arrFrm.show()
 
-arrFrms = BGRFrames.from_frame(arrFrm, 100)
+arrFrms = BGRFrames.from_frame(arrFrm, 25)
 all_frames.append(arrFrms)
 script_lines.append(script_line)
 
@@ -344,7 +358,7 @@ for r in rs_per_frame:
         new_shapes.append(shape.rotate_x(r))
     
     currScn = Scene(new_shapes)
-    putScn = currScn.combine(arrScn)
+    putScn = currScn.combine(dimmed_prevScn).put(gravArr).put(dragArr)
 
     up_force = r * y
     back_force = r * z
@@ -367,7 +381,7 @@ all_frames.append(rotFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    Using this physical simulation, ATMAN calculates the path of around 4 to 5 million candidate trajectories.
+                    ATMAN simulates around 4 to 5 million candidate trajectories.
                     In this schematic example, we show just a few.
                 """
 ### -> for this line: 
@@ -462,8 +476,8 @@ def color_dim(my_ballScn, dim_factor = 0.5):
 
 cand_scenes = [prevScn, prevScn1, prevScn2, prevScn3, prevScn4, prevScn5, prevScn6]
 choice_idx = 3
-df1 = 0.4
-df2 = 0.2
+df1 = 0.25
+df2 = 0.15
 
 script_line =   """
                     The actual trajectory is then chosen among these possible trajectories as the one with which empirical evidence agrees with the most.
@@ -474,11 +488,13 @@ for idx in range(len(cand_scenes)):
     curr_candScn = color_dim(cand_scenes[idx], dim_factor = df1) if idx != choice_idx else color_dim(cand_scenes[idx], dim_factor = 1)
     dimmed_candScn = dimmed_candScn.combine(curr_candScn)
 
-postFrm = View.make(currCam, dimmed_candScn).snap()
+postFrm = View.make(currCam, dimmed_candScn, resolution = sim_res).snap()
 # postFrm.show()
 
-itplFrms = vs.interpolate_frames(exFrms_outer2[-1], postFrm, num_frames = 50)
+itplFrms = vs.interpolate_frames(exFrms_outer2[-1], postFrm, num_frames = 100)
 # DecapStream(itplFrms, 0, 100).show()
+
+stopFrms = BGRFrames.from_frame(itplFrms[-1], 100)
 
 # -> here, we move to the starting point of the chosen candidate trajectory, and show angle, speed and spin
 choiceScn = cand_scenes[choice_idx]
@@ -496,7 +512,7 @@ dimScns = vs.interpolate_scenes(dimmed_candScn, very_dimmed_candScn, 50)
 movFrms, _ = vs.animate_sequence(dimScns, start_cam = currCam, stop_cam = newCam, argument_resolution = sim_res)
 # DecapStream(movFrms, 0, 100).show()
 
-jointFrms = BGRFrames.from_frames([itplFrms, movFrms])
+jointFrms = BGRFrames.from_frames([itplFrms, stopFrms, movFrms])
 # DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
@@ -517,7 +533,7 @@ speedArr = Arrow.make(choicePt, nextPt, **arr_params, color = shape_color)
 speedArr_pt = choicePt.annotate('Speed').recolor(shape_color).up(10).front(3.75)
 
 arrScn = lsScn.put(speedArr)
-diaFrm0 = View.make(newCam, arrScn, annotatedPoints = [speedArr_pt]).snap()
+diaFrm0 = View.make(newCam, arrScn, annotatedPoints = [speedArr_pt], resolution = sim_res).snap()
 # diaFrm0.show()
 diaFrms0 = BGRFrames.from_frame(diaFrm0, 25)
 
@@ -537,7 +553,7 @@ rotArr = Arrow.make(lsPt0, lsPt1, hat_length = 1, thickness = 0, hat_angle = np.
 rotArr_pt = choicePt.annotate('Spin').recolor(shape_color).back(6.5).up(5)
 
 rotScn = arrScn.put(rotCrc).put(rotArr)
-diaFrm1 = View.make(newCam, rotScn, annotatedPoints = [speedArr_pt, rotArr_pt]).snap()
+diaFrm1 = View.make(newCam, rotScn, annotatedPoints = [speedArr_pt, rotArr_pt], resolution = sim_res).snap()
 # diaFrm1.show()
 diaFrms1 = BGRFrames.from_frame(diaFrm1, 25)
 
@@ -554,7 +570,7 @@ angCrc = Circle3D(choicePt.coords, color = shape_color, radius = 10, fixed_dimen
 angCrc_pt = choicePt.annotate('Angle').recolor(shape_color).front(5.5).up(2.5)
 
 crcScn = rotScn.put(angCrc).put(rotCrc).put(rotArr)
-diaFrm2 = View.make(newCam, crcScn, annotatedPoints = [speedArr_pt, angCrc_pt, rotArr_pt]).snap()
+diaFrm2 = View.make(newCam, crcScn, annotatedPoints = [speedArr_pt, angCrc_pt, rotArr_pt], resolution = sim_res).snap()
 # diaFrm2.show()
 diaFrms2 = BGRFrames.from_frame(diaFrm2, 25)
 
@@ -565,12 +581,18 @@ script_line = ""
 back_diaFrms = BGRFrames.from_frames([  BGRFrames.from_frame(diaFrm2, 10), 
                                         BGRFrames.from_frame(diaFrm1, 10),
                                         BGRFrames.from_frame(diaFrm0, 10),
-                                        BGRFrames.from_frame(jointFrms[-1], 10),
-                                        BGRFrames.from_frame(jointFrms[-1].dim(0), 10)])
+                                        BGRFrames.from_frame(jointFrms[-1], 10)])
 all_frames.append(back_diaFrms)
 script_lines.append(script_line)
 
-vis_ut.show(all_frames)
+# fade to black
+script_line = ""
+zeroFrm = BGRFrame.make_black()
+fadeFrms = vs.interpolate_frames(back_diaFrms[-1], zeroFrm, num_frames = 25)
+all_frames.append(fadeFrms)
+script_lines.append(script_line)
+
+# vis_ut.show(all_frames)
 
 ##### REST OF THE ANIMATION ######
 script_line =   """
@@ -584,10 +606,10 @@ preArr_dimmed = np.stack([f.dim((idx / pre_frames) ** 2).array for idx, f in enu
 preFrms_dimmed = BGRFrames(preArr_dimmed).slow(2)
 
 dimRst = FramesRaster(2, 2)
-dimRst.add(preFrms_dimmed, 0, 0)
+dimRst.add(preFrms_dimmed.rescale(1.5), 0, 0)
+dimRst.add(tab_frms0, 1, 1)
 rstFrms_init = dimRst.render()
-rstFrms_init = rstFrms_init.rescale(1.5)
-DecapStream(rstFrms_init, 0, 100).show()
+# DecapStream(rstFrms_init, 0, 100).show()
 
 all_frames.append(rstFrms_init)
 script_lines.append(script_line)
@@ -609,8 +631,10 @@ script_line =   """
                     Despite these limitations, the return is well recognized as a backhand slice at 77 km/h, 2500 RPM and a launch angle of 10.8 degrees.
                 """ # 10 seconds
 rstFrms_slow = rstFrms1.slow(2)
+rstFrms_slow_pre = BGRFrames.from_frame(rstFrms_slow[0], 25)
 rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 200)
-rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
+
+rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow_pre, rstFrms_slow, rstFrms_slow_add])
 
 all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
@@ -619,8 +643,9 @@ script_line =   """
                     The server's subsequent forehand is tracked perfectly, flying out of the court at 111 km/h at a considerable topspin rate of 3750 RPM.
                 """ # 11 seconds
 rstFrms_slow = rstFrms2.slow(2)
-rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 260)
-rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
+rstFrms_slow_pre = BGRFrames.from_frame(rstFrms_slow[0], 25)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 250)
+rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow_pre, rstFrms_slow, rstFrms_slow_add])
 
 all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
@@ -694,12 +719,12 @@ script_line = ""
 
 point_splns = nextPnt1.feat_spline_cumul(which_endpoint = 'penultimate').values()
 point_splns = [[spln for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)] for splns in point_splns ]
-scns = [Scene([spln.recolor(ball_color).resize(1) for spln in splns]) for splns in point_splns]
+scns = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns]) for splns in point_splns]
 
-frms = stm_p1.decap().frames[:-1]
+frms = stm_p1.decap().frames[:-1].rescale(3)
 
-splnFrms1, _ = animate_sequence(scns, start_cam = myCam_small, stop_cam = myCam_small, cumulate_argument = False, animate_over = frms)
-splnFrms1 = splnFrms1.rescale(3)
+splnFrms1, _ = animate_sequence(scns, start_cam = myCam_full, stop_cam = myCam_full, cumulate_argument = False, animate_over = frms,
+                                argument_resolution = 3)
 # DecapStream(splnFrms1, 0, 100).show()
 
 all_frames.append(splnFrms1)
@@ -720,12 +745,12 @@ script_line = ""
 
 point_splns = nextPnt2.feat_spline_cumul(which_endpoint = 'penultimate').values()
 point_splns = [[spln for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)] for splns in point_splns ]
-scns = [Scene([spln.recolor(ball_color).resize(1) for spln in splns]) for splns in point_splns]
+scns = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns]) for splns in point_splns]
 
-frms = stm_p2.decap().frames[:-1]
+frms = stm_p2.decap().frames[:-1].rescale(3)
 
-splnFrms2, _ = animate_sequence(scns, start_cam = myCam_small, stop_cam = myCam_small, cumulate_argument = False, animate_over = frms)
-splnFrms2 = splnFrms2.rescale(3)
+splnFrms2, _ = animate_sequence(scns, start_cam = myCam_full, stop_cam = myCam_full, cumulate_argument = False, animate_over = frms,
+                                argument_resolution = 3)
 # DecapStream(splnFrms2, 0, 100).show()
 
 all_frames.append(splnFrms2)
