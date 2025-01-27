@@ -138,7 +138,7 @@ class Scene:
         return Scene([])
     
     @staticmethod
-    def make_court(courtLines = None, make_net = True, singles_net = True, 
+    def make_court(courtLines = None, make_net = True, singles_net = True, net_mesh_density = 1, 
                    line_color = const.BGR['bright_grey'], line_alpha = 1, 
                    net_color = const.BGR['smokey_grey'], net_alpha = 1):
         
@@ -147,10 +147,10 @@ class Scene:
 
         if make_net:
             if singles_net:
-                net3D = Net.make_singles(color = net_color, alpha = net_alpha)
+                net3D = Net.make_singles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
                 myScn = myScn.put(net3D)
             else:
-                net3D = Net.make_doubles(color = net_color, alpha = net_alpha)
+                net3D = Net.make_doubles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
                 myScn = myScn.put(net3D)
 
         return myScn

@@ -58,7 +58,7 @@ class Court(Regions3D):
     
     
 @dataclass(frozen = True, repr = False, eq = False)
-class Net(Regions3D):
+class NetRegions(Regions3D):
     _NET_COLOR = const.BGR['bright_blue'] ### a nice aquamarine
     _NET_ALPHA = 1
     
@@ -98,7 +98,74 @@ class Net(Regions3D):
         p1, p2, p3, p4 = leftLn.high_point(), rightLn.high_point(), leftLn.low_point(), rightLn.low_point()
         return Region3D.from_points3D(p1, p2, p3, p4)
     
+@dataclass(frozen = True, repr = False, eq = False)
+class Net(Lines3D):
+    _NET_COLOR = const.BGR['bright_blue'] ### a nice aquamarine
+    _NET_ALPHA = 1
     
+    @staticmethod
+    def _on_line(ground_netLn, color = _NET_COLOR, alpha = _NET_ALPHA, height_post = 28, height_middle = 24, net_mesh_density = 1):
+        lPt, cPt, rPt = ground_netLn.subdivide(3)
+        lPt_up, cPt_up, rPt_up = lPt.up(height_post), cPt.up(height_middle), rPt.up(height_post)
+
+        ### horizontal lines        
+        num_horizontal_lines = max(6, round(cPt.distance_to(cPt_up) * net_mesh_density))
+
+        left_postLn = Line3D(lPt, lPt_up)
+        midLn = Line3D(cPt, cPt_up)
+        right_postLn = Line3D(rPt, rPt_up)
+
+        lPts = left_postLn.subdivide(num_horizontal_lines // 2)
+        cPts = midLn.subdivide(num_horizontal_lines // 2)
+        rPts = right_postLn.subdivide(num_horizontal_lines // 2)
+
+        lLns_hori = Lines3D([Line3D(lPt, cPt) for lPt, cPt in zip(lPts, cPts)])
+        rLns_hori = Lines3D([Line3D(cPt, rPt) for cPt, rPt in zip(cPts, rPts)])
+
+        ### vertical lines
+        num_vertical_lines = max(10, round(lPt.distance_to(rPt) * net_mesh_density))
+
+        left_topLn = Line3D(lPt_up, cPt_up)
+        right_topLn = Line3D(cPt_up, rPt_up)
+        left_botLn = Line3D(lPt, cPt)
+        right_botLn = Line3D(cPt, rPt)
+
+        ltPts = left_topLn.subdivide(num_vertical_lines // 2)
+        rtPts = right_topLn.subdivide(num_vertical_lines // 2)
+        lbPts = left_botLn.subdivide(num_vertical_lines // 2)
+        rbPts = right_botLn.subdivide(num_vertical_lines // 2)
+
+        lLns_vert = Lines3D([Line3D(tPt, bPt) for tPt, bPt in zip(ltPts, lbPts)])
+        rLns_vert = Lines3D([Line3D(tPt, bPt) for tPt, bPt in zip(rtPts, rbPts)])
+
+        allLns = lLns_vert.join(lLns_hori).join(rLns_hori).join(rLns_vert) ### order is important for get_rectangular_net_region
+        # allLns = lLns_vert.join(rLns_vert)
+
+        return Net(allLns, name = 'Net', color = color, alpha = alpha)
+
+    @staticmethod
+    def make_singles(color = _NET_COLOR, alpha = _NET_ALPHA, net_mesh_density = 1):
+        courtLines = CourtLines.make()
+        netLn = Line3D.from_line2D(courtLines.add_singles_netline()['Net Line'], z = 0)
+        return Net._on_line(netLn, height_middle = courtLines.net_height_middle, height_post = courtLines.net_height_post,
+                                color = color, alpha = alpha, 
+                                net_mesh_density = net_mesh_density)
+        
+    @staticmethod
+    def make_doubles(color = _NET_COLOR, alpha = _NET_ALPHA, net_mesh_density = 1):
+        courtLines = CourtLines.make()
+        netLn = Line3D.from_line2D(courtLines.add_doubles_netline()['Net Line'], z = 0)
+        return Net._on_line(netLn, height_middle = courtLines.net_height_middle, height_post = courtLines.net_height_post,
+                                color = color, alpha = alpha, 
+                                net_mesh_density = net_mesh_density)
+        
+    def get_rectangular_net_region(self):
+        ### this is a region approximating the full net -> rectangular, without the dip in the middle.
+        leftLn, rightLn = self.shapeList[0], self.shapeList[-1]
+        p1, p2, p3, p4 = leftLn.high_point(), rightLn.high_point(), leftLn.low_point(), rightLn.low_point()
+        return Region3D.from_points3D(p1, p2, p3, p4)
+
+
 @dataclass(frozen = True, repr = False, eq = False)
 class Ball(Ball3D):
     _RADIUS_IN_FEET = 0.108  ### what is the correct default radius? 
@@ -456,133 +523,160 @@ if __name__ == '__main__':
 
     RESOLUTION = 1
 
-    startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
-    endPt = startPt.up(100).front(100).left(10)
+    TEST_ARROWS = False
+    TEST_NET = True
 
-    # myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
-    # myScene = Scene.make_court().put(myArrow)
+    if TEST_ARROWS:
+        startPt = Point3D.from_point2D(courtLines.get_center_point(), z = 0)
+        endPt = startPt.up(100).front(100).left(10)
 
-    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
+        myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
 
-    
-    # myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = 0, thickness = 0.5)
-    # myScene = Scene.make_court().put(myArrow)
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
 
-    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
+        
+        myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
 
-
-    # myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = np.pi / 3, thickness = 0.5)
-    # myScene = Scene.make_court().put(myArrow)
-
-    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-
-    # myArrow = Arrow.make(startPt, startPt.up(100).right(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = 0, thickness = 0.5)
-    # myScene = Scene.make_court().put(myArrow)
-
-    # myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-    
-    # myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    # myView.snap().show()
-
-    myArrow = Arrow.make(startPt, startPt.down(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
-    myScene = Scene.make_court().put(myArrow)
-
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myArrow = Arrow.make(startPt, startPt.back(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
-    myScene = Scene.make_court().put(myArrow)
-
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myArrow = Arrow.make(startPt, startPt.back(100).down(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
-    myScene = Scene.make_court().put(myArrow)
-
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
 
 
-    myArrow = Arrow.make(startPt, startPt.back(100).down(100).left(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
-    myScene = Scene.make_court().put(myArrow)
+        myArrow = Arrow.make(startPt, startPt.up(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = np.pi / 3, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
 
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+
+        myArrow = Arrow.make(startPt, startPt.up(100).right(100), hat_length = 10, hat_angle = np.pi / 6, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
+
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+
+        myArrow = Arrow.make(startPt, startPt.down(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
+
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myArrow = Arrow.make(startPt, startPt.back(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
+
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myArrow = Arrow.make(startPt, startPt.back(100).down(100), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
+
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
 
 
+        myArrow = Arrow.make(startPt, startPt.back(100).down(100).left(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
 
-    myArrow = Arrow.make(startPt, startPt.front(100).up(100).right(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
-    myScene = Scene.make_court().put(myArrow)
-
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
 
 
 
-    myArrow = Arrow.make(startPt, startPt.back(100).up(100).right(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
-    myScene = Scene.make_court().put(myArrow)
+        myArrow = Arrow.make(startPt, startPt.front(100).up(100).right(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
 
-    myView = View.make(backCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(sideCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
-    
-    myView = View.make(topCam, myScene, resolution = RESOLUTION)
-    myView.snap().show()
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+
+
+
+        myArrow = Arrow.make(startPt, startPt.back(100).up(100).right(50), hat_length = 10, hat_angle = np.pi / 4, rot_angle = 0, thickness = 0.5)
+        myScene = Scene.make_court().put(myArrow)
+
+        myView = View.make(backCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(sideCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+        
+        myView = View.make(topCam, myScene, resolution = RESOLUTION)
+        myView.snap().show()
+
+    if TEST_NET:
+
+        courtScn = Scene.make_court(net_mesh_density = 1, net_alpha = 1)
+
+        View.make(backCam, courtScn, resolution = 1).snap().show()
+        View.make(backCam, courtScn, resolution = 5).snap().show()
+        View.make(backCam, courtScn, resolution = 10).snap().show()
+
+        courtScn = Scene.make_court(net_mesh_density = 1, net_alpha = 0.5)
+
+        View.make(backCam, courtScn, resolution = 1).snap().show()
+        View.make(backCam, courtScn, resolution = 5).snap().show()
+        View.make(backCam, courtScn, resolution = 10).snap().show()
+
+        courtScn = Scene.make_court(net_mesh_density = 1, net_alpha = 0.15)
+
+        View.make(backCam, courtScn, resolution = 1).snap().show()
+        View.make(backCam, courtScn, resolution = 5).snap().show()
+        View.make(backCam, courtScn, resolution = 10).snap().show()
+
+        netReg = courtScn[-1].get_rectangular_net_region()
+        View.make(backCam, Scene([netReg]), resolution = 5).snap().show()
 
