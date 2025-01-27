@@ -1048,7 +1048,7 @@ class Line3D:
         avg_rightPt = self.rightPt.interpolate(otherLn.rightPt, itpl_lambda = itpl_lambda)
         avg_color = interpolate_tuples(self.color, otherLn.color, itpl_lambda = itpl_lambda)
         avg_alpha = self.alpha * (1 - itpl_lambda) + otherLn.alpha * itpl_lambda
-        avg_thickness = round(self.thickness * (1 - itpl_lambda) + otherLn.thickness * itpl_lambda)
+        avg_thickness = self.thickness * (1 - itpl_lambda) + otherLn.thickness * itpl_lambda
 
         updDict = {'leftPt': avg_leftPt,
                    'rightPt': avg_rightPt,
