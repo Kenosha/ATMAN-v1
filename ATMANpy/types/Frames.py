@@ -652,6 +652,10 @@ class MaskFrame(Frame):
     def get_color(cls):
         return 'mask'
     
+    @staticmethod
+    def make_black(cols = 1920, rows = 1080):
+        return BGRFrame(np.zeros((rows, cols), dtype = 'uint8'))
+
     def zero(self):
         return MaskFrame(np.zeros(self.shape, dtype = 'uint8'), name = self.name)
 
@@ -770,6 +774,10 @@ class GreyFrame(Frame):
     @classmethod
     def get_color(cls):
         return 'grey'
+    
+    @staticmethod
+    def make_black(cols = 1920, rows = 1080):
+        return GreyFrame(np.zeros((rows, cols), dtype = 'uint8'))
     
     ### TRANSFORMS ###
     def to_BGR(self):
@@ -942,6 +950,10 @@ class BGRFrame(Frame):
         arr = np.stack(arrList, axis = -1)
         return BGRFrame(arr, name = name)
     
+    @staticmethod
+    def make_black(cols = 1920, rows = 1080):
+        return BGRFrame(np.zeros((rows, cols, 3), dtype = 'uint8'))
+
     @classmethod
     def get_converter(cls):
         return 'to_BGR'
@@ -1038,6 +1050,12 @@ class HSVFrame(Frame):
             arrList.append(arr)
         arr = np.stack(arrList, axis = -1)
         return HSVFrame(arr, name = name)
+    
+    
+    @staticmethod
+    def make_black(cols = 1920, rows = 1080):
+        return HSVFrame(np.zeros((rows, cols, 3), dtype = 'uint8'))
+
     ####################
     
     @classmethod
