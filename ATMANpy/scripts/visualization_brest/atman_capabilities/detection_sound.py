@@ -312,7 +312,7 @@ from ATMANpy.types.Overlays import Legend, LegendRow
 hitRow = LegendRow('... Hit', hit_color, text_size = 2, text_color = (255, 255, 255))
 bncRow = LegendRow('... Bounce', bnc_color, text_size = 2, text_color = (255, 255, 255))
 myLeg = Legend([hitRow, bncRow], legend_dimensions = (1920 // 3, 1080 // 3), borders = False, header_text = 'Sound identified as...',
-                header_offset = 4.3, header_thickness = 1, resolution = 200)
+                header_offset = 4.3, header_thickness = 1, resolution = 5000)
 legFrm = myLeg.render()
 legFrm = legFrm.pad(to_height = 1080 // 2, to_width = 1920 // 2)
 

@@ -85,8 +85,9 @@ courtLines = sa.find_courtlines(H).drop('Net Line')
 ### ... and the net
 from ATMANpy.types.ShapesTennis3D import Net
 net_color = const.BGR['salmon_pink']
-net_alpha = 0.3
-myNet = Net.make_doubles(color = net_color, alpha = net_alpha)
+net_alpha = 0.75
+net_mesh_density = 0.65
+myNet = Net.make_doubles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
 
 ### Cams
 brestCam = Camera.calibrated_brest_behind()

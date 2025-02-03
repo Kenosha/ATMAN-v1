@@ -155,8 +155,8 @@ bsl_sideCam = baseline_side_cam(which = 'Ad', side = 'Top', width = 200)
 behindCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
 
 ### animation parameters
-back_res = 10 ##1
-shape_res = 5 ##1
+back_res = 12 ##1
+shape_res = 7.5 ##1
 
 ######################
 ###### ANIMATION #####
@@ -171,10 +171,14 @@ myFrms, _ = vs.animate_cam_motion(heatScn, start_cam = myCam.resize(3), stop_cam
                                 background_scene = courtScn, interpolate_func = vs.interpolate_camera_naive,
                                 argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
 
+stopFrms = BGRFrames.from_frame(myFrms[-1], 125)
+
+joinFrms = BGRFrames.from_frames([myFrms, stopFrms])
+
 # DecapStream(myFrms, 0, 100).show(ms_between_frames = 40)
 # myFrms[-1].show()
 
-all_frames.append(myFrms)
+all_frames.append(joinFrms)
 script_lines.append(script_line)
 
 ### fade in trajectories from above
@@ -404,7 +408,7 @@ nullCrc = Circle3D.from_point3D(meanPt, radius = 0.85 * z_len, limit_theta = (0,
 
 degScn = Scene([degCrc])
 nullScn = Scene([nullCrc])
-degScns = vs.interpolate_scenes(nullScn, degScn, num_frames = 25)
+degScns = vs.interpolate_scenes(nullScn.combine(angScn), degScn.combine(angScn), num_frames = 25)
 
 angFrms_stat, animDict = vs.animate_sequence(degScns, start_cam = ax_sideCam, stop_cam = ax_sideCam, background_scene = courtScn,
                                             argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
@@ -415,7 +419,7 @@ angFrms_stat, animDict = vs.animate_sequence(degScns, start_cam = ax_sideCam, st
 degPnt = meanPt.back(0.82 * z_len).up(0.75).annotate(f'Launch Angle: {mean_angle:.1f} deg.').recolor(ang_color)
 
 degFrms, animDict = vs.animate_static(degScns[-1], static_cam = ax_sideCam, background_scene = courtScn, 
-                                    annotated_points = [degPnt],
+                                    annotated_points = [degPnt], num_frames = 200,
                                     argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
                                     **animDict)
 

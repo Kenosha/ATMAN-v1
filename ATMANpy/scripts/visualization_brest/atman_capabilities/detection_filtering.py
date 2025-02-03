@@ -292,7 +292,7 @@ all_frames = []
 script_lines = []
 
 script_line =   """
-                    Having detected lines, players and trajectories of the ball, and having segmented every Match into 
+                    Having detected lines, players and ball trajectories, and having segmented every Match into 
                     distinct Points and Shots, we now show how the data gathered is accessed directly within the ATMAN framework.
                 """
 zeroFrms = BGRFrames.from_frame(zeroFrm, 25)
@@ -310,7 +310,7 @@ script_line =   f"""
                     In the course of these 20 matches, {p0} points and {s0} distinct shots have been played and detected. 
 
                     In the face of this large amount of data even for just a single tournament, 
-                    is imperative to be able to search and filter the database easily.
+                    it is imperative to be able to search and filter the database easily.
 
                     Luckily, this is possible directly within ATMAN.
 
@@ -355,8 +355,8 @@ script_lines.append(script_line)
 script_line =   f"""
                     This leaves us with {p4} points.
 
-                    These (and a myriad more filters) can be applied in a single line of code.
-                    Should these not suffice, custom filters are can be easily created due to the intuitive representation
+                    Such filters, and a myriad more, can be applied in a single line of code.
+                    Should these not suffice, custom filters can be easily created due to the intuitive representation
                     of Trajectories, Players, Shots and Points in the dataclass system of ATMAN.
                 """
 
@@ -424,25 +424,25 @@ script_line =   """
                     ... such as, for example, the average return speed...
                 """
 overFrm = overlay(zeroFrm, aggFrm1, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 30)
+overFrms = BGRFrames.from_frame(overFrm, 50)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line = "  ... spin ... "
 overFrm = overlay(zeroFrm, aggFrm2, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 30)
+overFrms = BGRFrames.from_frame(overFrm, 25)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
 script_line = " ... depth ... "
 overFrm = overlay(zeroFrm, aggFrm3, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 30)
+overFrms = BGRFrames.from_frame(overFrm, 25)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
-script_line = " and find out how many of these 27 points Brandon Nakashima won. "
+script_line = " and find out how many of these 27 points Brandon Nakashima won."
 overFrm = overlay(zeroFrm, aggFrm4, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 150)
+overFrms = BGRFrames.from_frame(overFrm, 200)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
@@ -515,8 +515,9 @@ in_res = factor * 1
 bh_res = factor * 1.25
 opp_res = factor * 3/4
 
-back_res = 10 ##1
-shape_res = 5 ##1
+### animation parameters
+back_res = 12 ##1
+shape_res = 7.5 ##1
 
 heatScn_in = vs.kde_heatmap(retShots_rect_in, one_color = const.BGR['leafy_green'], zero_color = const.BGR['leafy_green'],
                             bandwidth = 60, resolution = in_res)
@@ -544,8 +545,8 @@ all_frames.append(heatFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    However, the 3D engine contained is so general as to allow us to abstract away from the TV camera. 
-                    We can also render and animate directly in virtual space.
+                    Moreover, the 3D engine contained is so general as to allow us to abstract away from the TV camera. 
+                    We can render and animate directly in virtual space.
                 """
 
 outFrms, _ = vs.animate_static(heatScn, static_cam = myCam_full, background_scene = courtScn, num_frames = 1,
