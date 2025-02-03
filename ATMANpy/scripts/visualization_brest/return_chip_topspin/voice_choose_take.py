@@ -20,9 +20,9 @@ from shutil import copyfile
 
 SAMPLE_RATE = 44100
 PROJECT_NAME = 'return_chip_topspin'
-VIDEOS = ['intro_20241010_175050', 'descriptive_20241011_173710']
+VIDEOS = ['intro_20241103_165952', 'descriptive_20241105_200855', 'inference_20241109_191055']
 
-IDX = 1
+IDX = 2
 VIDEO = VIDEOS[IDX]
 
 ### Paths

@@ -9,7 +9,7 @@ import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.vis_funcs as vs
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
-from ATMANpy.types.Abstract import Points, Shots, read_in_data_tables, read_in_all_placeholder_tables
+from ATMANpy.types.Abstract import Points, Shots, read_in_data_tables, read_in_placeholder_tables
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.Lines import CourtLines, Line
@@ -46,7 +46,7 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 ######### READ IN DATA ############
 ###################################
 dataTable = read_in_data_tables(confs)
-nullTable = read_in_all_placeholder_tables(confs)
+nullTable = read_in_placeholder_tables(confs)
 
 dataPnts = Points.from_datatable(dataTable, split_by_match = False)
 nullPnts = Points.from_placeholder_table(nullTable)
