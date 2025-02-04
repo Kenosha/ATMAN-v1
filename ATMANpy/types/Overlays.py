@@ -679,7 +679,7 @@ class Diagram:
                  text_size = 1, text_thickness = 1, text_color = const.BGR['leafy_green'], 
                  text_horizontal_offset = 0, text_vertical_offset = 0,
                  text_skip_after_how_many_symbols = None,
-                 arrow_gamma = np.pi / 4, arrow_theta = 0, arrow_hat_length = 1, 
+                 arrow_hat_angle = np.pi / 4, arrow_rot_angle = 0, arrow_hat_length = 1, 
                  arrow_color = const.BGR['strong_blue'], arrow_alpha = 1, arrow_thickness = 0,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
         ### diagram text array is an irregular array (an arbitrary list of lists) 
@@ -753,7 +753,7 @@ class Diagram:
                         row_arrows.append(None)
                     else:
                         myArrow = Arrow.make(origin_point, target_point, 
-                                             gamma = arrow_gamma, theta = arrow_theta, hat_length = arrow_hat_length,
+                                             hat_angle = arrow_hat_angle, rot_angle = arrow_rot_angle, hat_length = arrow_hat_length,
                                              color = arrow_color, alpha = arrow_alpha, thickness = arrow_thickness)
                         row_arrows.append(myArrow)
                 else:
@@ -774,7 +774,7 @@ class Diagram:
     def deepcopy(self):
         return deepcopy(self)
 
-    def render(self, over_array = None):
+    def preview(self):
         diaRegs = []
         annPnts = []
         diagArrows = []
@@ -783,22 +783,28 @@ class Diagram:
             for diagShape in row:
                 if diagShape is not None:
                     outReg, outPnt = diagShape.render()
-                    diaRegs.append(outReg)
-                    annPnts.append(outPnt)
+
+                    if outReg not in diaRegs:
+                        diaRegs.append(outReg)
+                    if outPnt not in annPnts:
+                        annPnts.append(outPnt)
 
         ### technically, we can have the same shape multiple times and the same annPnt multiple times 
         # because the row_shapes may contain duplicate references to the same shape!
         # alleviate by filtering duplicate annotated points and shapes
-
         for row in self.arrows:
             for arrow in row:
                 if arrow is not None:
-                    diagArrows.append(arrow)
+                    if arrow not in diagArrows:
+                        diagArrows.append(arrow)
 
         myScn = Scene(diaRegs).put(diagArrows)
+        return myScn, annPnts
+
+    def render(self, over_array = None):
+        myScn, annPnts = self.preview()
         myView = View.make(self.tabCam, myScn, annotatedPoints = annPnts, resolution = self.resolution)
         myFrm = myView.snap(over_array = over_array)
-
         return myFrm
 
 class LegendRow:
