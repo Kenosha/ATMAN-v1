@@ -952,7 +952,8 @@ class Legend:
 
         return legFrm
 
-def overlay(baseFrm, legFrm, top_left_point = None):
+def overlay(baseFrm, overFrm, top_left_point = None, 
+            start_alpha = 1, stop_alpha = 1, alpha_exp = 1):
     from ATMANpy.types.Frames import BGRFrame
     from ATMANpy.types.MultiFrames import BGRFrames
     
@@ -967,11 +968,11 @@ def overlay(baseFrm, legFrm, top_left_point = None):
     elif isinstance(baseFrm, BGRFrames):
         bs_t, bs_row, bs_col, _ = baseFrm.array.shape
     
-    if isinstance(legFrm, BGRFrame):
-        lg_row, lg_col, _ = legFrm.array.shape
+    if isinstance(overFrm, BGRFrame):
+        lg_row, lg_col, _ = overFrm.array.shape
         lg_t = None
-    elif isinstance(legFrm, BGRFrames):
-        lg_t, lg_row, lg_col, _ = legFrm.array.shape
+    elif isinstance(overFrm, BGRFrames):
+        lg_t, lg_row, lg_col, _ = overFrm.array.shape
     
     if lg_t is not None: ### if we have a legend with a time dimension...
         assert bs_t == lg_t
@@ -979,7 +980,7 @@ def overlay(baseFrm, legFrm, top_left_point = None):
     assert tl_col + lg_col <= bs_col and tl_row + lg_row <= bs_row
 
     combArr = baseFrm.array.copy()
-    legArr = legFrm.array.copy()
+    legArr = overFrm.array.copy()
 
     ### bring to have four dims, so we can add in, and squeeze later
     if len(combArr.shape) == 3:
@@ -987,12 +988,31 @@ def overlay(baseFrm, legFrm, top_left_point = None):
     if len(legArr.shape) == 3:
         legArr = legArr[np.newaxis]
 
-    combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col] = legArr
+    t = combArr.shape[0]
 
-    if combArr.shape[0] == 1:    
+    ### use alphas to fade out or in if necessary
+    itpl_alphas = np.linspace(start_alpha, stop_alpha, num = t) ** alpha_exp
+    itpl_alphas = itpl_alphas[:, np.newaxis, np.newaxis, np.newaxis]
+    
+    subArr = combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col]
+    legArr_alpha = (legArr * itpl_alphas)
+    subArr_alpha = subArr * (1 - itpl_alphas)
+
+    combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col] = (legArr_alpha + subArr_alpha).astype('uint8')
+
+    if t == 1:    
         return BGRFrame(combArr[0])
     else:
         return BGRFrames(combArr)
+
+def overlay_center(baseFrm, overFrm, start_alpha = 1, stop_alpha = 1, alpha_exp = 1):
+    try:
+        rs, cs = (baseFrm.rows - overFrm.rows) // 2, (baseFrm.cols - overFrm.cols) // 2
+    except:
+        rs, cs = (baseFrm.rows() - overFrm.rows()) // 2, (baseFrm.cols() - overFrm.cols()) // 2
+    outFrm = overlay(baseFrm, overFrm, top_left_point = Point2D((cs, rs)),
+                    start_alpha = start_alpha, stop_alpha = stop_alpha, alpha_exp = alpha_exp)
+    return outFrm
 
 class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and columns
     def __init__(self, rows, cols, borders = None):
