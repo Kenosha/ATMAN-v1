@@ -430,7 +430,14 @@ class Frame:
         
         return InstClass(outArr, name = self.name)
         
-    
+    def framed(self, thickness, color):
+        rs, cs = self.rows, self.cols
+        eps = thickness
+
+        a, b, c, d = Point2D((eps, eps)), Point2D((cs - eps, eps)), Point2D((eps, rs - eps)), Point2D((cs - eps, rs - eps))
+        boundReg = Region.from_points(a, b, c, d)
+        
+        return self.put(boundReg, thickness = thickness, color = color)
     ###############
 
 @dataclass(frozen = True)
