@@ -359,6 +359,17 @@ class DummyScene:
     
         return DummyScene(cmb_r, cmb_c, cmb_a)
         
+    def consolidate(self):
+        premul_alpha = np.zeros_like(self.alphaArrs[0])
+        premul_color = np.zeros_like(self.colArrs[0])
+
+        for rastArr, colArr, alphaArr in zip(self.rastArrs, self.colArrs, self.alphaArrs):
+            premul_alpha = premul_alpha * (1 - alphaArr) + alphaArr
+            premul_color = premul_color * (1 - alphaArr) + colArr * alphaArr
+
+        rastArr = self.rastArrs[0]
+
+        return DummyScene([rastArr], [premul_color], [premul_alpha])
 
     def rasterize(self, resolution, alpha_threshold = 0.05, 
                   camera_point = None, resnorm_point = None, adaptive_resolution_exponent = 0): ### TODO: adaptive resolution -> necessary for dummy scenes?
