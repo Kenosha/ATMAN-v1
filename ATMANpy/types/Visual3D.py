@@ -283,11 +283,11 @@ class DummyScene:
                 return False
             else:
                 for idx in range(len(self)):
-                    if not (self.rastArrs[idx] != otherScn.rastArrs[idx]).all():
+                    if not (self.rastArrs[idx] == otherScn.rastArrs[idx]).all():
                         return False
-                    if not (self.colArrs[idx] != otherScn.colArrs[idx]).all():
+                    if not (self.colArrs[idx] == otherScn.colArrs[idx]).all():
                         return False
-                    if not (self.alphaArrs[idx] != otherScn.alphaArrs[idx]).all():
+                    if not (self.alphaArrs[idx] == otherScn.alphaArrs[idx]).all():
                         return False
                 return True
 
