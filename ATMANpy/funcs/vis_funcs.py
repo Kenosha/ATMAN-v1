@@ -192,8 +192,11 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
     else:
-        previous_dummy_scene = Scene([shape for shape in previous_dummy_scene if shape not in animation_sequence_objects])
-    
+        previous_dummy_scenes = [prevScn for prevScn in previous_dummy_scene if prevScn not in animation_sequence_objects]
+        previous_dummy_scene = DummyScene.make_empty()
+        for scn in previous_dummy_scenes:
+            previous_dummy_scene = previous_dummy_scene.combine(scn)
+
     ### create joint_annotated_points -> previous points and current foreground point
     if annotated_points is None: annotated_points = []
     if previous_annotated_points is None: previous_annotated_points = []
@@ -310,7 +313,10 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
     else:
-        previous_dummy_scene = Scene([shape for shape in previous_dummy_scene if shape not in static_scene])
+        previous_dummy_scenes = [prevScn for prevScn in previous_dummy_scene if prevScn not in static_scene]
+        previous_dummy_scene = DummyScene.make_empty()
+        for scn in previous_dummy_scenes:
+            previous_dummy_scene = previous_dummy_scene.combine(scn)
     
     ### dim or lumify scenes based on whether they're argument or previous
     static_scene_brightened = static_scene.dim(argument_luminosity)
@@ -404,7 +410,10 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
     if previous_dummy_scene is None:
         previous_dummy_scene = DummyScene.make_empty()
     else:
-        previous_dummy_scene = Scene([shape for shape in previous_dummy_scene if shape not in static_scene])
+        previous_dummy_scenes = [prevScn for prevScn in previous_dummy_scene if prevScn not in static_scene]
+        previous_dummy_scene = DummyScene.make_empty()
+        for scn in previous_dummy_scenes:
+            previous_dummy_scene = previous_dummy_scene.combine(scn)
     
     ### dim or lumify scenes based on whether they're argument or previous
     static_scene_brightened = static_scene.dim(argument_luminosity)
