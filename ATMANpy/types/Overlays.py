@@ -592,7 +592,7 @@ class Table:
     def __getitem__(self, item):
         return self.tabSket.__getitem__(item)
 
-    def render(self, over_array = None):
+    def preview(self):
         allLns = self.get_lines()
         tabScn = Scene(allLns)
 
@@ -644,6 +644,10 @@ class Table:
                                       )
                 annPnts.append(textPt)
 
+        return tabScn, annPnts
+
+    def render(self, over_array = None):
+        tabScn, annPnts = self.preview()
         tabView = View.make(self.tabCam, tabScn, resolution = self.resolution, annotatedPoints = annPnts)
         tabFrm = tabView.snap(over_array = over_array)
         return tabFrm
@@ -1048,6 +1052,15 @@ class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and colu
             self.output_dims = el_cols * self.cols, el_rows * self.rows
         
         self[row, col] = someFrm
+
+    def to_frames_raster(self, num_frames = 50):
+        outRst = FramesRaster(self.rows, self.cols, borders = self.borders)
+        for row_idx, rows in enumerate(self.raster):
+            for col_idx, someFrm in enumerate(rows):
+                if someFrm is not None:
+                    someFrms = BGRFrames.from_frame(someFrm, num_frames)
+                    outRst.add(someFrms, row_idx, col_idx)
+        return outRst
 
     def render(self):
         ### idea: get all the element MultiFrames to have the target dimensions and the target length
