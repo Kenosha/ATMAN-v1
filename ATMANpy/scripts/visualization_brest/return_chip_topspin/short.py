@@ -502,7 +502,7 @@ script_line =   """
                     as long as they're played low ...
                 """ # 8 sec
 
-startRst.add(resFrm_simple1, 0, 1)
+startRst.add(resFrm_simple1_framed, 0, 1)
 rstFrm = startRst.render()
 rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
@@ -515,7 +515,7 @@ script_line =   """
                     ... and with sufficient depth and width ...
                 """ # 3 sec
 
-startRst.add(resFrm_simple1a, 0, 1)
+startRst.add(resFrm_simple1a_framed, 0, 1)
 rstFrm = startRst.render()
 rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
@@ -527,7 +527,7 @@ script_line =   """
                     ... to the server's forehand.
                 """ # 3 sec
 
-startRst.add(resFrm_simple1b, 0, 1)
+startRst.add(resFrm_simple1b_framed, 0, 1)
 rstFrm = startRst.render()
 rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
@@ -540,7 +540,7 @@ script_line =   """
                     the chip return represents a high-risk/high-reward alternative to the topspin return...
                 """ # 10 sec
 
-startRst.add(resFrm_simple1c, 0, 1)
+startRst.add(resFrm_simple1c_framed, 0, 1)
 rstFrm = startRst.render()
 rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
@@ -552,7 +552,7 @@ script_line =   """
                     ... with one exception.       
                 """ # 3 sec
 
-startRst.add(resFrm_simple2, 0, 1)
+startRst.add(resFrm_simple2_framed, 0, 1)
 rstFrm = startRst.render()
 rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
@@ -566,7 +566,7 @@ script_line =   """
                     the model prefers the topspin return strictly over the chip return.          
                 """ # 14 sec
     
-startRst.add(resFrm_simple3, 0, 1)
+startRst.add(resFrm_simple3_framed, 0, 1)
 rstFrm = startRst.render()
 rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
@@ -1133,8 +1133,8 @@ side, where = 'deuce', 'wide'
 i, j = 1, 1
 
 # frames to render on
-preFrms = wideDict[side + '_' + where]
-realFrms = realDict[side + '_' + where]
+preFrms = wideDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
+realFrms = realDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
 realFrms_last = BGRFrames.from_frame(realFrms[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
 
 # heatmap and zone dictionary
@@ -1201,7 +1201,7 @@ script_line =   """
                 """ # 22 sec
 
 # dim and fade in target area
-itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES).framed(FRAME_THICKNESS, FRAME_COLOR)
 itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
 
 myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
@@ -1271,7 +1271,7 @@ transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = hal
 moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = fullScn, 
                                     num_frames = TRANSITION_FRAMES, **prmDict_annot_heat)
 
-postFrms1 = BGRFrames.from_frames([transFrms, moveFrms])
+postFrms1 = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 movRst.add(postFrms1, i, j)
 rastFrms = movRst.render()
@@ -1318,7 +1318,7 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 
-postFrms2 = BGRFrames.from_frames([lineFrms, statFrms])
+postFrms2 = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 movRst.add(postFrms2, i, j)
 
 rastFrms = movRst.render()
@@ -1333,8 +1333,8 @@ side, where = 'deuce', 'middle'
 i, j = 0, 1
 
 # frames to render on
-preFrms = wideDict[side + '_' + where]
-realFrms = realDict[side + '_' + where]
+preFrms = wideDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
+realFrms = realDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
 realFrms_last = BGRFrames.from_frame(realFrms[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
 
 # heatmap and zone dictionary
@@ -1387,7 +1387,7 @@ script_line =   """
                 """ # 8 sec
 
 # dim and fade in target area
-itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES).framed(FRAME_THICKNESS, FRAME_COLOR)
 itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
 
 myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
@@ -1440,7 +1440,7 @@ transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = hal
 moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = fullScn, 
                                     num_frames = TRANSITION_FRAMES, **prmDict_annot_heat)
 
-postFrms = BGRFrames.from_frames([transFrms, moveFrms])
+postFrms = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
@@ -1493,7 +1493,7 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 
-postFrms = BGRFrames.from_frames([lineFrms, statFrms])
+postFrms = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
@@ -1508,8 +1508,8 @@ side, where = 'ad', 'middle'
 i, j = 0, 0
 
 # frames to render on
-preFrms = wideDict[side + '_' + where]
-realFrms = realDict[side + '_' + where]
+preFrms = wideDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
+realFrms = realDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
 realFrms_last = BGRFrames.from_frame(realFrms[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
 
 # heatmap and zone dictionary
@@ -1564,7 +1564,7 @@ script_line =   """
                 """ # 17 sec
 
 # dim and fade in target area
-itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES).framed(FRAME_THICKNESS, FRAME_COLOR)
 itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
 
 myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
@@ -1617,7 +1617,7 @@ transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = hal
 moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = fullScn, 
                                     num_frames = TRANSITION_FRAMES, **prmDict_annot_heat)
 
-postFrms = BGRFrames.from_frames([transFrms, moveFrms])
+postFrms = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
@@ -1662,7 +1662,7 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 
-postFrms = BGRFrames.from_frames([lineFrms, statFrms])
+postFrms = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
@@ -1677,8 +1677,8 @@ side, where = 'ad', 'wide'
 i, j = 1, 0
 
 # frames to render on
-preFrms = wideDict[side + '_' + where]
-realFrms = realDict[side + '_' + where]
+preFrms = wideDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
+realFrms = realDict[side + '_' + where].framed(FRAME_THICKNESS, FRAME_COLOR)
 realFrms_last = BGRFrames.from_frame(realFrms[-1], STATIC_FRAMES) ### for the first case, we only need the static case.
 
 # heatmap and zone dictionary
@@ -1735,7 +1735,7 @@ script_line =   """
                 """ # 22 sec
 
 # dim and fade in target area
-itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES)
+itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES).framed(FRAME_THICKNESS, FRAME_COLOR)
 itplScns = vs.interpolate_dummy_scenes(zoneDict['tp'].transparify(0), zoneDict['tp'], TRANSITION_FRAMES)
 
 myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCam, **prmDict_annot, animate_over = itplFrms)
@@ -1772,7 +1772,7 @@ script_line =   """
                 """ # 25 sec
 
 # fade in hi chip target area
-zoneScn = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
+zoneScn = zoneDict['tp'].combine(zoneDict['hi']).combine(zoneDict['lo']).consolidate()
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = itplFrms[-1], num_frames = 50)
 prevRst.add(myFrms, i, j)
 rastFrms = prevRst.render()
@@ -1794,7 +1794,7 @@ transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = hal
 moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = fullScn, 
                                     num_frames = TRANSITION_FRAMES, **prmDict_annot_heat)
 
-postFrms = BGRFrames.from_frames([transFrms, moveFrms])
+postFrms = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
@@ -1841,7 +1841,7 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 
-postFrms = BGRFrames.from_frames([lineFrms, statFrms])
+postFrms = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
@@ -1858,7 +1858,148 @@ vis_ut.show(all_frames)
 
 ### INTERPRETATION ###
 
+# 1) Results are surprising and not common practice
+    # a) surprising: on aggregate, the chip return has a worse win rate
+    # b) not common practice: if a chip return is done, it goes mostly to the backhand (like topspin returns).
 
+
+#################################
+###### ATTRIBUTION TABLES #######
+#################################
+from ATMANpy.types.Overlays import Table, Graph
+
+### a) unweighted
+chips_naive, tops_naive, attrib_naive = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = None)
+### b) PSM-weighted
+chips_smart, tops_smart, attrib_smart = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_topspin')
+### c) PSM and Balance-Weighted
+chips_smart_bal, tops_smart_bal, attrib_smart_bal = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_pred')
+
+### d1) PSM and Balance and Len-Weighted
+# chips_smart_bal_len, tops_smart_bal_len, attrib_smart_bal_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins', 
+#                                                                      bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_len_pred',
+#                                                                      assert_digits = 1)
+
+### d2) PSM and Balance and Len-Weighted (outcome method)
+chips_smart_bal_len, tops_smart_bal_len, attrib_smart_bal_len = vis_ut.calculate_attribution(regFrm, chip_col = 'is_chipped', outcome_col = 'ret_wins_weighted', 
+                                                                     bounce_col = 'must_have_bounced_in', weight_col = 'weight_bal_pred',
+                                                                     assert_digits = 1)
+
+
+### b) len weighted
+print(f'Topspin Returns:')
+print(f'   No len adj: {tops_smart["cond"]:.2f}; len adj: {chips_smart_bal_len["cond"]:.2f}')
+print(f'Chipped Returns:')
+print(f'   No len adj: {chips_smart["cond"]:.2f}; len adj: {chips_smart_bal_len["cond"]:.2f}')
+
+###########################################
+### Tables with incremental adjustments ###
+###########################################
+
+x, y = DIMENSIONS_THIRD
+index_name_t = 'Topspin Returns (on first serve)'
+index_name_c = 'Chipped Returns (on first serve)'
+index_name_a = 'Total' ### weirdly, need two extra spaces...
+title = 'Returner Point Win%'
+
+table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
+                        'skip_after_how_many_symbols': 15, 'dimensions': (x, y),
+                        'skeleton_shrinkage': 0.2, 'skeleton_vertical_offset': 1, 
+                        'title_vertical_offset': 0, 'title_horizontal_offset': 3.5,
+                        'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1, 'resolution': TABLE_RESOLUTION,
+                        }
+
+table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False, 
+                        'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
+                        'skip_after_how_many_symbols': 15, 'dimensions': (int(2.7 * x), int(2.7 * y)),
+                        'skeleton_shrinkage': 0.15, 'skeleton_vertical_offset': 1,
+                        'title_vertical_offset': -2, 'title_horizontal_offset': 19,
+                        'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
+                        'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2,
+                        'title_color': const.BGR['bright_grey'], 'resolution': TABLE_RESOLUTION,
+                        }
+
+t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
+c0, c1, c2, c3 = chips_naive['total'], chips_smart['total'], chips_smart_bal['total'], chips_smart_bal_len['total']
+
+tdict = {'Unadjusted': t0}
+cdict = {'Unadjusted': c0}
+table_data = {index_name_t: tdict, index_name_c: cdict}
+
+initial_naive_table = Table(table_data, **table_kwargs_small, title = title, header_text_size = 0)
+# initial_naive_table.render().show()
+
+naive_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 3)
+naive_frm = naive_table.render()
+naive_frm.show()
+
+tdict = {'Unadjusted': t0, '+Choice Adj.': t1}
+cdict = {'Unadjusted': c0, '+Choice Adj.': c1}
+table_data = {index_name_t: tdict, index_name_c: cdict}
+
+smart_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 2)
+smart_frm = smart_table.render()
+smart_frm.show()
+
+
+tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2}
+cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2}
+table_data = {index_name_t: tdict, index_name_c: cdict}
+
+smart_bal_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 1)
+smart_bal_frm = smart_bal_table.render()
+smart_bal_frm.show()
+
+tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2, '+Attrib. Adj.': t3}
+cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2, '+Attrib. Adj.': c3}
+table_data = {index_name_t: tdict, index_name_c: cdict}
+
+smart_bal_len_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 0)
+smart_bal_len_frm = smart_bal_len_table.render()
+smart_bal_len_frm.show()
+
+r_f, c_f = 1080, 1920
+r_t, c_t, _ = naive_frm.shape
+r_d, c_d = (r_f - r_t) // 2, (c_f - c_t) // 2
+table_offsetPt = Point2D((c_d, r_d))
+
+### Tables with Arrows
+# a) naive table
+tabScn, annPnts = naive_table.preview()
+
+topsPt, chipPt = annPnts[-2].right(1.25).back(0.5), annPnts[-1].right(1.25).front(1)
+deltArr = Arrow.make(topsPt, chipPt, color = const.BGR['intense_red'])
+tabScn = tabScn.put(deltArr)
+
+delStr = f'{c0 - t0:.1%}'
+deltPt = (topsPt + chipPt) / 2
+deltPt = deltPt.right(0.1)
+deltPt = deltPt.annotate(delStr).resize(2).recolor(const.BGR['intense_red'])
+
+annPnts = [*annPnts, deltPt]
+
+naive_frm_with_arrow = View.make(naive_table.tabCam, tabScn, annPnts).snap()
+naive_frm_with_arrow.show()
+
+# b) final table
+tabScn, annPnts = smart_bal_len_table.preview()
+
+topsPt, chipPt = annPnts[-5].right(1.25).back(0.5), annPnts[-1].right(1.25).front(1)
+deltArr = Arrow.make(topsPt, chipPt, color = const.BGR['intense_red'])
+tabScn = tabScn.put(deltArr)
+
+delStr = f'{c3 - t3:.1%}'
+deltPt = (topsPt + chipPt) / 2
+deltPt = deltPt.right(0.1)
+deltPt = deltPt.annotate(delStr).resize(2).recolor(const.BGR['intense_red'])
+
+annPnts = [*annPnts, deltPt]
+
+smart_bal_len_frm_with_arrow = View.make(smart_bal_len_table.tabCam, tabScn, annPnts).snap()
+smart_bal_len_frm_with_arrow.show()
 
 
 
