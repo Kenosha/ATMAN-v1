@@ -10,6 +10,8 @@ import ATMANpy.auxil.constants as const
 from ATMANpy.types.Lines import CourtLines, Line
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Shapes3D import Point3D
+from ATMANpy.types.Streams import DecapStream
+from ATMANpy.types.MultiFrames import BGRFrames
 
 from ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils import is_out_wide, is_down_middle
 
@@ -23,6 +25,12 @@ TOPS_COLOR = const.BGR['light_brown']
 courtLines = CourtLines.make().add_singles_netline()
 botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
 topReg = courtLines.get_half_region(side = 'Top', width = 'Singles')
+
+###############################
+########## SHOW ###############
+###############################
+def show(all_frames, ms_between_frames = 25):
+    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
 
 ##########################################
 ########### POINT APPLICATORS ############
