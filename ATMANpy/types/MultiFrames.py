@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 from ATMANpy.funcs.util_funcs import shift_array
 from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
+from ATMANpy.types.Points import Point2D
+from ATMANpy.types.Lines import Region
 from ATMANpy.types.Contours import Contour, Contours
 from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame, MaskFrame
 
@@ -596,7 +598,15 @@ class Frames:
         framesType = self.__class__
         return framesType.from_single_frames([subFrm.put(anyObj, **kwargs) for subFrm in self])
 
-    
+    def framed(self, thickness, color):
+        rs, cs = self.rows(), self.cols()
+        eps = thickness
+
+        a, b, c, d = Point2D((eps, eps)), Point2D((cs - eps, eps)), Point2D((eps, rs - eps)), Point2D((cs - eps, rs - eps))
+        boundReg = Region.from_points(a, b, c, d)
+
+        return self.put(boundReg, thickness = thickness, color = color)
+
 @dataclass(frozen = True)
 class BGRFrames(Frames):
     name: str = 'bgr_frames'
