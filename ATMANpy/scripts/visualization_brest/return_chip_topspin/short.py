@@ -20,12 +20,11 @@ from ATMANpy.types.Lines import CourtLines, Line
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Features import ConstFeature
 from ATMANpy.types.Visual3D import View, Scene, DummyScene, Camera
-from ATMANpy.types.Shapes3D import Point3D, Line3D, Circle3D, Circles3D
+from ATMANpy.types.Shapes3D import Point3D, Line3D, Circle3D, Circles3D, Region3D
 from ATMANpy.types.ShapesTennis3D import Player
 from ATMANpy.types.Overlays import FrameRaster, FramesRaster, Table, overlay, overlay_center, make_text_in
 
 from ATMANpy.funcs.util_funcs import interpolate_tuples
-
 
 def show(all_frames, ms_between_frames = 25):
     DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
@@ -149,6 +148,12 @@ DESCRIPTOR = 'short'
 SAVE_FOLDER = 'return_chip_topspin'
 savePath = get_folder_struct('results_video')[SAVE_FOLDER]
 
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+current_idx = 0
+
 #######################################
 ####### PARANETERS ####################
 #######################################
@@ -229,10 +234,10 @@ titleReg = Region.from_points(a, b, c, d)
 titleStr = 'On the Effectiveness of the Chipped Return'
 
 titleFrm = BGRFrame.make_black(*title_dims).put(titleStr, size = 2, where = (50, round(0.575 * title_y)))
-titleFrm.show()
+# titleFrm.show()
 
 titleFrm_framed = titleFrm.framed(FRAME_THICKNESS, FRAME_COLOR)
-titleFrm_framed.show()
+# titleFrm_framed.show()
 
 ### THE DATA ###
 x, y = DIMENSIONS_HALF
@@ -269,17 +274,17 @@ headerPt = annPnts[0]
 
 headerFrm = View.make(sampleTab.tabCam, Scene([]), annotatedPoints = [headerPt]).snap()
 headerFrm = headerFrm.put('THE DATA', color = const.BGR['bright_grey'], size = 2, thickness = 2)
-headerFrm.show()
+# headerFrm.show()
 
 tabFrm = sampleTab.render()
 tabFrm = tabFrm.put('THE DATA', color = const.BGR['bright_grey'], size = 2, thickness = 2)
-tabFrm.show()
+# tabFrm.show()
 
 headerFrm_framed = headerFrm.framed(FRAME_THICKNESS, FRAME_COLOR)
-headerFrm_framed.show()
+# headerFrm_framed.show()
 
 tabFrm_framed = tabFrm.framed(FRAME_THICKNESS, FRAME_COLOR)
-tabFrm_framed.show()
+# tabFrm_framed.show()
 
 #### THE MODEL ###
 from ATMANpy.types.Overlays import Diagram, DiagramShape
@@ -348,26 +353,26 @@ from ATMANpy.types.Visual3D import View
 diagView = View.make(modDiag_0.tabCam, myScn_0, annotatedPoints = annPnts_shifted_0, resolution = modDiag_0.resolution)
 diagFrm_0 = diagView.snap()
 diagFrm_0 = diagFrm_0.put('THE MODEL', color = const.BGR['bright_grey'], size = 2, thickness = 2)
-diagFrm_0.show()
+# diagFrm_0.show()
 
 diagFrm_0_framed = diagFrm_0.framed(FRAME_THICKNESS, FRAME_COLOR)
-diagFrm_0_framed.show()
+# diagFrm_0_framed.show()
 
 diagView = View.make(modDiag_1.tabCam, myScn_1, annotatedPoints = annPnts_shifted_1, resolution = modDiag_1.resolution)
 diagFrm_1 = diagView.snap()
 diagFrm_1 = diagFrm_1.put('THE MODEL', color = const.BGR['bright_grey'], size = 2, thickness = 2)
-diagFrm_1.show()
+# diagFrm_1.show()
 
 diagFrm_1_framed = diagFrm_1.framed(FRAME_THICKNESS, FRAME_COLOR)
-diagFrm_1_framed.show()
+# diagFrm_1_framed.show()
 
 diagView = View.make(modDiag_2.tabCam, myScn_2, annotatedPoints = annPnts_shifted_2, resolution = modDiag_2.resolution)
 diagFrm_2 = diagView.snap()
 diagFrm_2 = diagFrm_2.put('THE MODEL', color = const.BGR['bright_grey'], size = 2, thickness = 2)
-diagFrm_2.show()
+# diagFrm_2.show()
 
 diagFrm_2_framed = diagFrm_2.framed(FRAME_THICKNESS, FRAME_COLOR)
-diagFrm_2_framed.show()
+# diagFrm_2_framed.show()
 
 ### RESULT TEXT ###
 resFrm = BGRFrame.make_black(*DIMENSIONS_HALF)
@@ -409,12 +414,14 @@ resFrm_simple1c_framed = resFrm_simple1c.framed(FRAME_THICKNESS, FRAME_COLOR)
 resFrm_simple2_framed = resFrm_simple2.framed(FRAME_THICKNESS, FRAME_COLOR)
 resFrm_simple3_framed = resFrm_simple3.framed(FRAME_THICKNESS, FRAME_COLOR)
 
-resFrm_simple3_framed.show()
+# resFrm_simple3_framed.show()
 
 ### INITIAL RASTER ###
-
 all_frames = []
 script_lines = []
+
+current_idx = 0
+
 STILL_FRAMES = 10
 
 script_line =   """
@@ -434,6 +441,7 @@ black_with_titleFrms = BGRFrames.from_frame(black_with_titleFrm, STILL_FRAMES)
 
 all_frames.append(black_with_titleFrms)
 script_lines.append(script_line)
+# del black_with_titleFrms
 
 script_line =   """
                     To this end, we estimate a statistical model...
@@ -448,6 +456,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)
+# del rstFrms
     
 script_line =   """
                     ... that takes into account a great variety of relevant variables ...
@@ -460,6 +469,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)
+# del rstFrms
 
 script_line =   """
                     ... and spits out an estimated probability that the returner wins the point.
@@ -472,6 +482,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)
+# del rstFrms
 
 script_line =   """
                     The model is estimated based on 20 matches played in the course of the 2021 Brest Challenger tournament.
@@ -484,6 +495,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)
+# del rstFrms
 
 script_line =   """
                     In the course of this tournament, ATMAN has recognized 1.451 first serve returns, of which 1.044 were played with topspin, and 407 were chipped.
@@ -496,6 +508,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)
+# del rstFrms
 
 script_line =   """
                     We find that, according to the model, chip returns are a viable alternative to the topspin return, 
@@ -509,7 +522,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)
-
+# del rstFrms
 
 script_line =   """
                     ... and with sufficient depth and width ...
@@ -522,6 +535,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)         
+# del rstFrms
 
 script_line =   """
                     ... to the server's forehand.
@@ -534,6 +548,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)  
+# del rstFrms
 
 script_line =   """
                     The topspin return is always liked by our model; however, if these three guidelines are followed,
@@ -547,6 +562,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)  
+# del rstFrms
 
 script_line =   """
                     ... with one exception.       
@@ -559,6 +575,7 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)  
+# del rstFrms
 
 script_line =   """
                     In case of a serve out wide from the server's backhand side, that is, 
@@ -573,9 +590,25 @@ rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
 script_lines.append(script_line)  
+# del rstFrms
+
+vis_ut.show(all_frames)
+
+### Saving the separate MultiFrame objects and the Joint Script
+assert len(script_lines) == len(all_frames)
+
+# b) Save segments
+for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+    subFrms, script_line = frames_and_script
+    running_idx = current_idx + idx
+    subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
+    
+    with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
+        f.write(script_line)
+
+current_idx = current_idx + len(all_frames)
 
 ### -> total: 93 seconds of text.
-
 
 ##### UNUSED YET
 script_line =   """
@@ -601,6 +634,15 @@ script_line =   """
                         - impatience on chip return serve + 1
                         - run around backhands.
                 """
+
+
+
+
+
+all_frames = []
+script_lines = []
+
+
 
 ### PARAMS FOR ANIMATION ###
 def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None):
@@ -1112,6 +1154,10 @@ movRst.add(tlFrms_dim_last, 0, 0)
 movRst.add(trFrms_dim_last, 0, 1)
 movRst.add(blFrms_dim_last, 1, 0)
 
+# del tlFrms, trFrms, blFrms
+# del tlFrms_dim, trFrms_dim, blFrms_dim
+# del tlFrms_dim_last, trFrms_dim_last, blFrms_dim_last
+
 ####
 dim_factor = 0.25
 annot_color = const.BGR['bright_grey']
@@ -1190,6 +1236,7 @@ joint_rastFrms = BGRFrames.from_frames([rastFrms1, rastFrms2, rastFrms3])
 
 all_frames.append(joint_rastFrms)
 script_lines.append(script_line)
+# del joint_rastFrms, rastFrms1, rastFrms2, rastFrms3
 
 script_line =   """
                     The orange area shows the target zone for the returning player on a topspin shot.
@@ -1208,14 +1255,17 @@ myFrms, _ = vs.animate_sequence(itplScns, start_cam = halfCam, stop_cam = halfCa
 movRst.add(myFrms, i, j)
 rastFrms = movRst.render()
 rastFrms = overlay(rastFrms, leg1Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del rastFrms, myFrms
 
 script_line = "" ### a little pause before the next segment
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
+
 all_frames.append(rastFrms_static)
 script_lines.append(script_line)
-
+# del rastFrms_static
 
 script_line =   """
                     As for a low chip return, the model likes the cross-court return again. 
@@ -1232,8 +1282,11 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 movRst.add(myFrms, i, j)
 rastFrms = movRst.render()
 rastFrms = overlay(rastFrms, leg2Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del rastFrms
+
 
 script_line =   """
                     ... the high chip is a floating return hit with underspin; it has a high arc and a high bounce.
@@ -1252,8 +1305,10 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 movRst.add(myFrms, i, j)
 rastFrms = movRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line =   """
                     Let's zoom in on the target zones a bit more closely.
@@ -1271,13 +1326,15 @@ transFrms, _ = vs.animate_sequence(zoneScns, start_cam = halfCam, stop_cam = hal
 moveFrms, _ = vs.animate_cam_motion(zoneScn, start_cam = halfCam, stop_cam = heatCam, background_scene = fullScn, 
                                     num_frames = TRANSITION_FRAMES, **prmDict_annot_heat)
 
-postFrms1 = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
+postFrms = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
 
-movRst.add(postFrms1, i, j)
+movRst.add(postFrms, i, j)
 rastFrms = movRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del transFrms, moveFrms, postFrms, rastFrms
 
 script_line =   """
                     The flags indicate the highest returner win probability spot within the target zone,
@@ -1318,13 +1375,15 @@ statFrms, _ = vs.animate_static(combScn, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 
-postFrms2 = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
-movRst.add(postFrms2, i, j)
+postFrms = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, FRAME_COLOR)
+movRst.add(postFrms, i, j)
 
 rastFrms = movRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del lineFrms, statFrms, postFrms, rastFrms
 
 prevRst = movRst.to_frame_raster().to_frames_raster(25)
 
@@ -1380,6 +1439,7 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del rastFrms, rastFrms1, rastFrms2, rastFrms3
 
 script_line =   """
                     For the topspin return, the model indicates a very generous target zone, 
@@ -1397,12 +1457,15 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "" ### a little pause before the next segment
 
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
+
 all_frames.append(rastFrms_static)
 script_lines.append(script_line)
+# del rastFrms_static
 
 script_line = "On the other hand, the model still recommends to play the low chip cross-court to the forehand." # 5 sec
 
@@ -1412,8 +1475,10 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 prevRst.add(myFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "Again, the high chip has the smallest target zone, requiring depth and width on the server's forehand side." # 7 sec
 
@@ -1423,8 +1488,10 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 prevRst.add(myFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "Let's zoom in." # 2 sec
 
@@ -1445,8 +1512,10 @@ postFrms = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del transFrms, moveFrms, postFrms, rastFrms
 
 script_line =   """
                     Again, a well-placed low chip has a higher probability of winning the point than a topspin return;
@@ -1498,8 +1567,10 @@ postFrms = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, F
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del lineFrms, statFrms, postFrms, rastFrms
 
 prevRst = prevRst.to_frame_raster().to_frames_raster(25)
 
@@ -1556,6 +1627,7 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del rastFrms, rastFrms1, rastFrms2, rastFrms3
 
 script_line =   """
                     In this situation, the model likes a topspin return played anywhere from down the line to the server's feet. 
@@ -1574,12 +1646,14 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "" ### a little pause before the next segment
-
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
+
 all_frames.append(rastFrms_static)
 script_lines.append(script_line)
+# del rastFrms_static
 
 script_line = "The recipe for a good low chip is bizarrely consistent: target the server's forehand with good width." # 7 sec
 
@@ -1589,8 +1663,10 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 prevRst.add(myFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "No change also in the high-chip strategy; the target zone remains woefully small, deep on the forehand side." # 7 sec
 
@@ -1600,8 +1676,10 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 prevRst.add(myFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "Let's take a look at peak returner win probabilities." # 4 sec
 
@@ -1622,8 +1700,10 @@ postFrms = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del transFrms, moveFrms, postFrms, rastFrms
 
 script_line =   """
                     Again, the risk-reward tradeoff between low chip and topspin returns is apparent.
@@ -1667,8 +1747,10 @@ postFrms = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, F
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del lineFrms, statFrms, postFrms, rastFrms
 
 prevRst = prevRst.to_frame_raster().to_frames_raster(25)
 
@@ -1724,6 +1806,7 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del rastFrms, rastFrms1, rastFrms2, rastFrms3
 
 script_line =   """
                     Here, the model recommends playing the topspin return strictly cross-court. 
@@ -1745,12 +1828,15 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "" ### a little pause before the next segment
-
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
+
 all_frames.append(rastFrms_static)
 script_lines.append(script_line)
+# del rastFrms_static
+
 script_line =   """
                     As before, the model thinks it best to send the low chip return down the line, to the server's forehand.
                     However, the target zone is decidedly smaller than usual.
@@ -1761,8 +1847,10 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 prevRst.add(myFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line =   """
                     In this isolated case, the high-chip target zone is actually larger than the low-chip zone:
@@ -1777,8 +1865,10 @@ myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, an
 prevRst.add(myFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del myFrms, rastFrms
 
 script_line = "Let's zoom in again." # 2 sec
 
@@ -1799,8 +1889,10 @@ postFrms = BGRFrames.from_frames([transFrms, moveFrms]).framed(FRAME_THICKNESS, 
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del transFrms, moveFrms, postFrms, rastFrms
 
 script_line =   """
                     In this situation alone, the topspin return is strictly preferred by the model:
@@ -1846,22 +1938,54 @@ postFrms = BGRFrames.from_frames([lineFrms, statFrms]).framed(FRAME_THICKNESS, F
 prevRst.add(postFrms, i, j)
 rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
 all_frames.append(rastFrms)
 script_lines.append(script_line)
+# del lineFrms, statFrms, postFrms, rastFrms
 
 prevRst = prevRst.to_frame_raster().to_frames_raster(25)
 
 ### total section seconds: 314
 ### total so far: 314 + 97 = 407
 
+sript_line =    """
+                    That the chip return is a viable alternative to the topspin return 
+                    if played to the server's forehand is both an unintuitive and uncommon strategy.
+                    Unintuitive, because, in the aggregate, it appears that the chip return is a bad choice.
+                """ # 15 sec
+
+statFrms = BGRFrames.from_frame(rastFrms[-1], 300)
+statFrms = statFrms.dim_progressively()
+
+all_frames.append(statFrms)
+script_lines.append(script_line)
+# del statFrms
+
+
 vis_ut.show(all_frames)
 
+### Saving the separate MultiFrame objects and the Joint Script
+assert len(script_lines) == len(all_frames)
+
+# b) Save segments
+for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+    subFrms, script_line = frames_and_script
+    running_idx = current_idx + idx
+    subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
+    
+    with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
+        f.write(script_line)
+
+current_idx = current_idx + len(all_frames)
+
 ### INTERPRETATION ###
+
+all_frames = []
+script_lines = []
 
 # 1) Results are surprising and not common practice
     # a) surprising: on aggregate, the chip return has a worse win rate
     # b) not common practice: if a chip return is done, it goes mostly to the backhand (like topspin returns).
-
 
 #################################
 ###### ATTRIBUTION TABLES #######
@@ -1925,16 +2049,21 @@ table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False,
 t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
 c0, c1, c2, c3 = chips_naive['total'], chips_smart['total'], chips_smart_bal['total'], chips_smart_bal_len['total']
 
-tdict = {'Unadjusted': t0}
-cdict = {'Unadjusted': c0}
+tdict = {'': t0}
+cdict = {'': c0}
 table_data = {index_name_t: tdict, index_name_c: cdict}
+table_data_half = {index_name_t: tdict}
 
 initial_naive_table = Table(table_data, **table_kwargs_small, title = title, header_text_size = 0)
 # initial_naive_table.render().show()
 
+naive_table_half = Table(table_data_half, **table_kwargs_large, title = title, null_columns = 3, null_rows = 1)
+naive_frm_half = naive_table_half.render()
+# naive_frm_half.show()
+
 naive_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 3)
 naive_frm = naive_table.render()
-naive_frm.show()
+# naive_frm.show()
 
 tdict = {'Unadjusted': t0, '+Choice Adj.': t1}
 cdict = {'Unadjusted': c0, '+Choice Adj.': c1}
@@ -1942,8 +2071,7 @@ table_data = {index_name_t: tdict, index_name_c: cdict}
 
 smart_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 2)
 smart_frm = smart_table.render()
-smart_frm.show()
-
+# smart_frm.show()
 
 tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2}
 cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2}
@@ -1951,7 +2079,7 @@ table_data = {index_name_t: tdict, index_name_c: cdict}
 
 smart_bal_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 1)
 smart_bal_frm = smart_bal_table.render()
-smart_bal_frm.show()
+# smart_bal_frm.show()
 
 tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2, '+Attrib. Adj.': t3}
 cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2, '+Attrib. Adj.': c3}
@@ -1959,15 +2087,47 @@ table_data = {index_name_t: tdict, index_name_c: cdict}
 
 smart_bal_len_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 0)
 smart_bal_len_frm = smart_bal_len_table.render()
-smart_bal_len_frm.show()
+# smart_bal_len_frm.show()
 
 r_f, c_f = 1080, 1920
 r_t, c_t, _ = naive_frm.shape
 r_d, c_d = (r_f - r_t) // 2, (c_f - c_t) // 2
 table_offsetPt = Point2D((c_d, r_d))
 
+script_line = "Over our entire sample, the returner's win percentage is ..."
+
+tabScn, annPnts = naive_table.preview()
+headerPt = annPnts[0]
+
+headerFrm = View.make(naive_table.tabCam, Scene([]), annotatedPoints = [headerPt]).snap()
+headerFrm_large = overlay(BGRFrame.make_black(), headerFrm, top_left_point = table_offsetPt)
+headerFrms_large = BGRFrames.from_frame(headerFrm_large, 50)
+
+all_frames.append(headerFrms_large)
+script_lines.append(script_line)
+# del headerFrms_large
+
+script_line = "... 39.6 % when returning with topspin ..."
+naive_frm_half_large = overlay(BGRFrame.make_black(), naive_frm_half, top_left_point = table_offsetPt)
+naiveFrms_half_large = BGRFrames.from_frame(naive_frm_half_large, 50)
+
+all_frames.append(naiveFrms_half_large)
+script_lines.append(script_line)
+# del naiveFrms_half_large
+
+script_line = "... but only 19.9% when playing a chip."
+naive_frm_large = overlay(BGRFrame.make_black(), naive_frm, top_left_point = table_offsetPt)
+naiveFrms_large = BGRFrames.from_frame(naive_frm_large, 50)
+
+all_frames.append(naiveFrms_large)
+script_lines.append(script_line)
+# del naiveFrms_large
+
 ### Tables with Arrows
+
 # a) naive table
+script_line = "A seemingly insurmountable deficit of almost 20%."
+
 tabScn, annPnts = naive_table.preview()
 
 topsPt, chipPt = annPnts[-2].right(1.25).back(0.5), annPnts[-1].right(1.25).front(1)
@@ -1981,10 +2141,31 @@ deltPt = deltPt.annotate(delStr).resize(2).recolor(const.BGR['intense_red'])
 
 annPnts = [*annPnts, deltPt]
 
-naive_frm_with_arrow = View.make(naive_table.tabCam, tabScn, annPnts).snap()
-naive_frm_with_arrow.show()
+naive_frm_with_arrow = View.make(naive_table.tabCam, tabScn, annPnts, resolution = TABLE_RESOLUTION).snap()
+# naive_frm_with_arrow.show()
+
+naive_frm_with_arrow_large = overlay(BGRFrame.make_black(), naive_frm_with_arrow, top_left_point = table_offsetPt)
+naiveFrms_with_arrow_large = BGRFrames.from_frame(naive_frm_with_arrow_large, 50)
+
+all_frames.append(naiveFrms_with_arrow_large)
+script_lines.append(script_line)
+# del naiveFrms_with_arrow_large
 
 # b) final table
+script_line =   """
+                    Even when applying some adjustments that serve to negate 
+                    some statistical biases in the naive average; the difference in win rate is still around 12%.
+                """
+
+smart_frm_large = overlay(BGRFrame.make_black(), smart_frm, top_left_point = table_offsetPt)
+smartFrms_large = BGRFrames.from_frame(smart_frm_large, 50)
+
+smart_bal_frm_large = overlay(BGRFrame.make_black(), smart_bal_frm, top_left_point = table_offsetPt)
+smart_balFrms_large = BGRFrames.from_frame(smart_bal_frm_large, 50)
+
+smart_bal_len_frm_large = overlay(BGRFrame.make_black(), smart_bal_len_frm, top_left_point = table_offsetPt)
+smart_bal_lenFrms_large = BGRFrames.from_frame(smart_bal_len_frm_large, 50)
+
 tabScn, annPnts = smart_bal_len_table.preview()
 
 topsPt, chipPt = annPnts[-5].right(1.25).back(0.5), annPnts[-1].right(1.25).front(1)
@@ -1998,84 +2179,657 @@ deltPt = deltPt.annotate(delStr).resize(2).recolor(const.BGR['intense_red'])
 
 annPnts = [*annPnts, deltPt]
 
-smart_bal_len_frm_with_arrow = View.make(smart_bal_len_table.tabCam, tabScn, annPnts).snap()
-smart_bal_len_frm_with_arrow.show()
+smart_bal_len_frm_with_arrow = View.make(smart_bal_len_table.tabCam, tabScn, annPnts, resolution = TABLE_RESOLUTION).snap()
+# smart_bal_len_frm_with_arrow.show()
 
+smart_bal_len_frm_large_with_arrow = overlay(BGRFrame.make_black(), smart_bal_len_frm_with_arrow, top_left_point = table_offsetPt)
+smart_bal_lenFrms_large_with_arrow = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 50)
 
+jointFrms = BGRFrames.from_frames([naiveFrms_large, smartFrms_large, smart_balFrms_large, 
+                                   smart_bal_lenFrms_large, smart_bal_lenFrms_large_with_arrow])
 
-### First Example ###
-scale_factor = 1.5
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+# del jointFrms, naiveFrms_large, smartFrms_large, smart_balFrms_large, smart_bal_lenFrms_large, smart_bal_lenFrms_large_with_arrow
 
-retPnts_in
+# DecapStream(jointFrms, 0, 100).show()
 
+### ZONE MAPS 
 retShots = retPnts_in.get_returns()
 retShots_rectified = vis_ut.rectify_shots(retShots)
 chip_retShots_rectified = retShots_rectified.filter('is_slice_visual')
 tops_retShots_rectified = retShots_rectified.filter('is_slice_visual', negate = True)
 
-dirFrm = regFrm[(regFrm['is_top_to_bot'])]
-low_pred_exFrm = dirFrm[dirFrm.is_chipped].sort_values('pred_is_chipped').iloc[:8]
-idx = int(low_pred_exFrm.index[0])
-myShots = retPnts[idx][:2]
+script_line =   """
+                    Beyond being unintuitive, targeting the forehand on a chip return is also slightly uncommon.
+                """
 
-### Flight Splines
-serveSF = myShots[0].feat_spline_cumul(which_endpoint = 'penultimate')
-returnSF = myShots[1].feat_spline_cumul(which_endpoint = 'penultimate')
+fadeFrms = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 100).dim_progressively()
 
-serve_scenes = [Scene([spLn.recolor(BALL_COLOR).resize(1.5) for spLn in splines if spLn is not None]) for splines in serveSF.values()]
-return_scenes = [Scene([spLn.recolor(BALL_COLOR).resize(1.5) for spLn in splines if spLn is not None]) for splines in returnSF.values()]
-spline_scenes = [*serve_scenes, *return_scenes]
-splnScn = spline_scenes[-1]
-bPt = splnScn[0].leftPt
+all_frames.append(fadeFrms)
+script_lines.append(script_line)
+# del fadeFrms
 
-# get topspin and chip dists, with axes
-kwargDict = {'bandwidth': 2,
-             'resolution': 1000,
-             'axis_length': 40,
-             'axis_origin_point': bPt,
-             'x_unit_vector': Point3D((0, -1, 0)), 
-             'y_unit_vector': Point3D((0, 0, 1)),
-             'normalize_density': False, 
-             'stretch_density': 4.5}
+script_line =   """
+                    Taking a look where the chip return typically lands...
+                """
 
-weightArr = regFrm_in.loc[regFrm_in.is_chipped == 1, 'weight_topspin'].values
-weightArr_preds = 1 - regFrm_in.loc[regFrm_in.is_chipped == 1, 'pred_is_chipped'].values
+headerFrm = BGRFrame.make_black().put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
+headerFrms = BGRFrames.from_frame(headerFrm, 50)
 
-tops_angleScn, tops_modes = vs.kde_angle_distribution(tops_retShots_rectified, **kwargDict, color = TOPS_COLOR)
-chip_angleScn, chip_modes = vs.kde_angle_distribution(chip_retShots_rectified, **kwargDict, weight_func_or_arr = weightArr_preds, color = CHIP_COLOR)
+all_frames.append(headerFrms)
+script_lines.append(script_line)
+# del headerFrms
 
-chip_mode_lo, chip_mode_hi = chip_modes[[4, 10]]
+### a) Chip Shares
+script_line =   """
+                    ... we see a clear preference for the backhand side on aggregate:
+                """
+a, b, c, d, dc, ad = vis_ut.get_court_sectors(side = 'Top')
+shrSer = vis_ut.shares_in_sector(chip_retShots_rectified, side = 'Top')
+shrStrs = [f'{share:>3.0%}' for share in shrSer.values]
 
-### find similar shot of original, with higher launch angle V2 -> trajectory metrics
-devArr_ang = chip_retShots_rectified.get_launch_angle() - chip_mode_hi
-devArr_spd = chip_retShots_rectified.get_initial_speed() - myShots[1].get_initial_speed()
-devArr_hgt = chip_retShots_rectified.get_ball_hit_height() - myShots[1].get_ball_hit_height()
-devArr_spn = chip_retShots_rectified.get_initial_spin() - myShots[1].get_initial_spin()
+myRegs = [  Region3D.from_region2D(a, z = 0), Region3D.from_region2D(b, z = 0), 
+            Region3D.from_region2D(c, z = 0), Region3D.from_region2D(d, z = 0), 
+            Region3D.from_region2D(dc, z = 0), Region3D.from_region2D(ad, z = 0)]
+myLns = [regLn.recolor(CHIP_COLOR).resize(1) for reg in myRegs for regLn in reg.lineList]
 
-std_ang = (devArr_ang ** 2).mean() ** 0.5
-std_spd = (devArr_spd ** 2).mean() ** 0.5
-std_hgt = (devArr_hgt ** 2).mean() ** 0.5
-std_spn = (devArr_spn ** 2).mean() ** 0.5
+centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(CHIP_COLOR).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
+annotPts = [*centerPts, fhPt_annot_heat.resize(2), bhPt_annot_heat.resize(2)]
 
-dev_metric = np.abs(devArr_ang / std_ang) + np.abs(devArr_spd / std_spd) + np.abs(devArr_hgt / std_hgt) + np.abs(devArr_spn / std_spn)
-dev_metric = dev_metric / 4 ### average standard deviations away from original shot
+zoneFrms, animDict = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam.resize(2), **prmDict_nolum,
+                                    annotated_points = annotPts)
 
-small_to_large = np.argsort(dev_metric)
-best_idx = int(small_to_large[3]) #int(np.argmin(dev_metric)) ### not necessarily the smallest since we want a top to bot point!
-dev_metric[best_idx]
+zoneFrms = zoneFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
 
-bestShot = chip_retShots_rectified[best_idx]
-mtc_idx, pnt_idx = bestShot.get_match_index(), bestShot.get_point_index()
+all_frames.append(zoneFrms)
+script_lines.append(script_line)
+# del zoneFrms
 
-bestPnt = retPnts.get(mtc_idx, pnt_idx)
-bestShots = bestPnt[:2]
-bestStm = bestShots.stream(confs = confs)
+### lines converging to show 40/60 split
+script_line =   """
+                    only 40% of returns land in the forehand half of the server's court.
+                """
+x, y, z = 1, 1, 3
+s = x + y + z
+shorten_factor = 0.125
+line_color = const.BGR['bright_grey']
 
-frames = bestStm.frmNums
-new_frames = list(range(min(frames) - STATIC_FRAMES, min(frames)))
-early_bestStm = bestStm.conform(new_frames)
-early_bestDtm = early_bestStm.decap()
-early_best_scaledFrms = early_bestDtm.frames.rescale(scale_factor)
+c0, c1, c2, c3, c4, c5 = centerPts
 
-early_bestStm.show()
+c0 = c0.right(10).back(5)
+c1 = c1.right(7).back(5)
+c4 = c4.right(5).front(5)
+
+c2 = c2.right(10).back(5)
+c3 = c3.right(7).back(5)
+c5 = c5.right(5).front(5)
+
+midlfPt = (c0 * x + c1 * y + c4 * z) // s
+midrtPt = (c2 * x + c3 * y + c5 * z) // s
+
+l0 = Line3D(c0, midlfPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l1 = Line3D(c1, midlfPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l2 = Line3D(c2, midrtPt).shorten_by(shorten_factor, which = 'right').recolor(line_color) 
+l3 = Line3D(c3, midrtPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l4 = Line3D(c4, midlfPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l5 = Line3D(c5, midrtPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+
+midlfPt_annot = midlfPt.annotate('40%').recolor(CHIP_COLOR).resize(2).rethicken(2).left(5).back(2)
+midrtPt_annot = midrtPt.annotate('60%').recolor(CHIP_COLOR).resize(2).rethicken(2).left(5).back(2)
+
+annotPts_mid = [*annotPts, midlfPt_annot, midrtPt_annot]
+
+l0_null = Line3D(c0, c0).recolor(line_color)
+l1_null = Line3D(c1, c1).recolor(line_color)
+l2_null = Line3D(c2, c2).recolor(line_color)
+l3_null = Line3D(c3, c3).recolor(line_color)
+l4_null = Line3D(c4, c4).recolor(line_color)
+l5_null = Line3D(c5, c5).recolor(line_color)
+
+nullScn = Scene([l0_null, l1_null, l2_null, l3_null, l4_null, l5_null])
+lineScn = Scene([l0, l1, l2, l3, l4, l5])
+
+itplScns = vs.interpolate_scenes(nullScn, lineScn, num_frames = 50)
+
+itplFrms, _ = vs.animate_sequence(itplScns, start_cam = heatCam.resize(2), stop_cam = heatCam.resize(2),
+                                annotated_points = annotPts, background_scene = courtScn,
+                                **prmDict_nolum, **animDict)
+itplFrms = itplFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
+
+
+statFrms, _ = vs.animate_static(Scene([l0, l1, l2, l3, l4, l5]), static_cam = heatCam.resize(2),
+                              annotated_points = annotPts_mid, background_scene = courtScn,
+                              **prmDict_nolum, **animDict)
+statFrms = statFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
+
+jointFrms = BGRFrames.from_frames([itplFrms, statFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+# del jointFrms, itplFrms, statFrms
+
+script_line = ""
+statFrms_dim = BGRFrames.from_frame(statFrms[-1], 50).dim_progressively()
+
+all_frames.append(statFrms_dim)
+script_lines.append(script_line)
+
+### b) Topspin Shares
+script_line = "For topspin returns, we see virtually the same overall distribution:"
+
+a, b, c, d, dc, ad = vis_ut.get_court_sectors(side = 'Top')
+shrSer = vis_ut.shares_in_sector(tops_retShots_rectified, side = 'Top')
+shrStrs = [f'{share:>3.0%}' for share in shrSer.values]
+
+myRegs = [  Region3D.from_region2D(a, z = 0), Region3D.from_region2D(b, z = 0), 
+            Region3D.from_region2D(c, z = 0), Region3D.from_region2D(d, z = 0), 
+            Region3D.from_region2D(dc, z = 0), Region3D.from_region2D(ad, z = 0)]
+myLns = [regLn.recolor(TOPS_COLOR).resize(1) for reg in myRegs for regLn in reg.lineList]
+
+centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(TOPS_COLOR).left(10) for reg, shrStr in zip(myRegs, shrStrs)]
+annotPts = [*centerPts, fhPt_annot_heat.resize(2), bhPt_annot_heat.resize(2)]
+
+zoneFrms, animDict = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam.resize(2), **prmDict_nolum,
+                                    annotated_points = annotPts)
+
+zoneFrms = zoneFrms.put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
+
+all_frames.append(zoneFrms)
+script_lines.append(script_line)
+# del zoneFrms
+
+
+### lines converging to show 40/60 split
+script_line =   """
+                    Again, the split is 60/40 in favor of the backhand side.
+                    However, only for chip returns, this split is inconsistent with our model results.
+                """
+                    
+x, y, z = 1, 1, 3
+s = x + y + z
+shorten_factor = 0.125
+line_color = const.BGR['bright_grey']
+
+c0, c1, c2, c3, c4, c5 = centerPts
+
+c0 = c0.right(10).back(5)
+c1 = c1.right(7).back(5)
+c4 = c4.right(5).front(5)
+
+c2 = c2.right(10).back(5)
+c3 = c3.right(7).back(5)
+c5 = c5.right(5).front(5)
+
+midlfPt = (c0 * x + c1 * y + c4 * z) // s
+midrtPt = (c2 * x + c3 * y + c5 * z) // s
+
+l0 = Line3D(c0, midlfPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l1 = Line3D(c1, midlfPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l2 = Line3D(c2, midrtPt).shorten_by(shorten_factor, which = 'right').recolor(line_color) 
+l3 = Line3D(c3, midrtPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l4 = Line3D(c4, midlfPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+l5 = Line3D(c5, midrtPt).shorten_by(shorten_factor, which = 'right').recolor(line_color)
+
+midlfPt_annot = midlfPt.annotate('40%').recolor(TOPS_COLOR).resize(2).rethicken(2).left(5).back(2)
+midrtPt_annot = midrtPt.annotate('60%').recolor(TOPS_COLOR).resize(2).rethicken(2).left(5).back(2)
+
+annotPts_mid = [*annotPts, midlfPt_annot, midrtPt_annot]
+
+l0_null = Line3D(c0, c0).recolor(line_color)
+l1_null = Line3D(c1, c1).recolor(line_color)
+l2_null = Line3D(c2, c2).recolor(line_color)
+l3_null = Line3D(c3, c3).recolor(line_color)
+l4_null = Line3D(c4, c4).recolor(line_color)
+l5_null = Line3D(c5, c5).recolor(line_color)
+
+nullScn = Scene([l0_null, l1_null, l2_null, l3_null, l4_null, l5_null])
+lineScn = Scene([l0, l1, l2, l3, l4, l5])
+
+itplScns = vs.interpolate_scenes(nullScn, lineScn, num_frames = 50)
+
+itplFrms, _ = vs.animate_sequence(itplScns, start_cam = heatCam.resize(2), stop_cam = heatCam.resize(2),
+                                annotated_points = annotPts, background_scene = courtScn,
+                                **prmDict_nolum, **animDict)
+itplFrms = itplFrms.put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
+
+
+statFrms, _ = vs.animate_static(Scene([l0, l1, l2, l3, l4, l5]), static_cam = heatCam.resize(2),
+                              annotated_points = annotPts_mid, background_scene = courtScn,
+                              **prmDict_nolum, **animDict)
+statFrms = statFrms.put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
+
+jointFrms = BGRFrames.from_frames([itplFrms, statFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+# del jointFrms, itplFrms, statFrms
+
+script_line =   """
+                    So chipping returns to the forehand is unintuitive and uncommon. 
+                    Nevertheless, three factors lead our model to consider it a viable alternative to the topspin return.
+                """
+statFrms_dim = BGRFrames.from_frame(statFrms[-1], 50).dim_progressively()
+
+all_frames.append(statFrms_dim)
+script_lines.append(script_line)
+
+# DecapStream(jointFrms, 0, 100).show()
+
+### idea for a "agreement" metric: to what extent does empirical behaviour agree with model results
+### -> = loc % / peak % ----> how much of the win% is not realized.
+
+### idea for interpretation "teaser": 
+# -> show three factors (repositioning, impatience, run-around) in 3x3 raster
+# top left: bullet points for intepretation
+# as each of the three factor bullets lights up, show 8 examples of actual play.
+
+from ATMANpy.funcs.util_funcs import interpolate_tuples
+
+text_color = const.BGR['bright_grey']
+bright_color = const.BGR['leafy_green']
+dark_color = interpolate_tuples(bright_color, (0, 0, 0), itpl_lambda = 0.4)
+
+itpRst = FramesRaster(3, 3)
+
+bulletFrm = BGRFrame.make_black(*DIMENSIONS_THIRD)
+
+bulletFrm = bulletFrm.put('', color = const.BGR['bright_grey'], size = 2, thickness = 2)
+
+y = 60
+i = 30
+
+text1 = "Chip returns to the forehand are\nunintuitive and uncommon.\n\nBut they can be explained:"
+
+text1a = "   1) Run-around threat"
+text1b = "   2) Time to reposition"
+text1c = "   3) Impatience on chip return"
+
+bulletFrm1 = bulletFrm.put(text1, where = (50, y), size = 2, color = text_color)
+
+bulletFrm1a = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, color = bright_color)
+
+bulletFrm1b = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, color = dark_color)
+bulletFrm1b = bulletFrm1b.put(text1b, where = (50, round(y+6.5*i)), size = 2, color = bright_color)
+
+bulletFrm1c = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, color = dark_color)
+bulletFrm1c = bulletFrm1c.put(text1b, where = (50, round(y+6.5*i)), size = 2, color = dark_color)
+bulletFrm1c = bulletFrm1c.put(text1c, where = (50, round(y+8.5*i)), size = 2, color = bright_color)
+
+# bulletFrm1.show()
+# bulletFrm1a.show()
+# bulletFrm1b.show()
+# bulletFrm1c.show()
+
+bulletFrms1 = BGRFrames.from_frame(bulletFrm1, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
+bulletFrms1a = BGRFrames.from_frame(bulletFrm1a, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
+bulletFrms1b = BGRFrames.from_frame(bulletFrm1b, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
+bulletFrms1c = BGRFrames.from_frame(bulletFrm1c, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
+
+script_line =   """
+                    A chip return, especially when played with a higher launch angle, 
+                    travels for longer than a typical topspin return. 
+                """
+
+exRst = FramesRaster(3, 3)
+exRst.add(bulletFrms1, 0, 0)
+exFrms = exRst.render()
+
+all_frames.append(exFrms)
+script_lines.append(script_line)
+# del exFrms, bulletFrms1
+
+### find 8 examples for each bullet point.
+def get_example_spline_frames(myPnt):
+    from ATMANpy.auxil.court import bot_a, bot_b, bot_c, bot_d
+    from ATMANpy.types.Visual3D import Camera
+
+    ### splines
+    serve_splines = myPnt[0].feat_spline_cumul(which_endpoint = 'penultimate').values()
+    return_splines = myPnt[1].feat_spline_cumul(which_endpoint = 'penultimate').values()
+    third_splines = myPnt[2].feat_spline_cumul(which_endpoint = 'penultimate').values()
+
+    serveScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in serve_splines]
+    returnScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in return_splines]
+    thirdScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in third_splines]
+    splnScns = serveScns + returnScns + thirdScns
+
+    ### real frames
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames
+
+    ### pad splines to length
+    to_pad = realFrms.length() - len(splnScns)
+    splnScns_pad = [Scene([]) for _ in range(to_pad)]
+    splnScns = [*splnScns, *splnScns_pad]
+
+    ### render    
+    myCam = Camera.calibrated_brest_behind()
+    myFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
+                                    animate_over = realFrms, 
+                                    background_resolution = 1, argument_resolution = 0.5, 
+                                    foreground_resolution = 0.5, argument_luminosity = 1)
+
+    return myFrms
+
+def shot_lands_in_or_near_area(myPnt, shot_idx = 0, num_subdivisions = 4):
+    from ATMANpy.auxil.court import topReg, botReg
+
+    try:
+        myShot = myPnt[shot_idx]
+    except IndexError:
+        return None
+    else:
+        x, y = myShot.get_first_bounce_position()
+        if x is None and y is None:
+            return None
+        else:
+            bncPt = Point2D((x, y))
+
+            if myShot.get_hit_side() == 'Top':
+                myRegs = reversed(botReg.subdivide(num_subdivisions, how = 'vertical').regList)
+            else:
+                myRegs = list(topReg.subdivide(num_subdivisions, how = 'vertical').regList)
+
+            center_points = [myReg.centroid() for myReg in myRegs]
+            voronoi_dists = [bncPt.distance_to(myPt) for myPt in center_points]
+
+            min_idx = np.argmin(voronoi_dists)
+            area_nums = list(range(1, num_subdivisions + 1))
+            return area_nums[min_idx]
+
+def shot_is_where(myPnt, shot_idx, areas):
+    return shot_lands_in_or_near_area(myPnt, shot_idx = shot_idx, num_subdivisions = 4) in areas
+
+def at_least_three_shots(myPnt):
+    return len(myPnt) >= 3
+
+def return_is_chipped(myPnt):
+    return myPnt.get_return().is_slice_visual()
+
+def play(myPnts):
+    import time
+    for idx, pt in enumerate(myPnts):
+        print(idx)
+        try:
+            exFrms = get_example_spline_frames(pt)
+        except:
+            continue
+        DecapStream(exFrms.rescale(2), 0, 100).show()
+        time.sleep(2)
+        print('___')
+
+t2bPnts = dataPnts.filter('is_top_to_bot').filter(vis_ut.server_is_right_handed)
+lenPnts = t2bPnts.filter(at_least_three_shots)
+chipPnts = lenPnts.filter(return_is_chipped)
+
+# a) run around threat
+checkPnts = chipPnts.filter(shot_is_where, shot_idx = 1, areas = [3, 4])
+
+def third_is_fore(myPnt):
+    return myPnt[2].is_fore()
+
+checkPnts = checkPnts.filter(third_is_fore)
+
+checkPnts = checkPnts.filter(shot_is_where, shot_idx = 2, areas = [1, 4])
+
+# play(checkPnts)
+
+# candidates: found from play:
+cands_a = [3, 4, 6, 9, 13, 16, 18, 20, 22, 32, 34, 37, 39, 41]
+candPnts = [checkPnts[idx] for idx in cands_a]
+# play(candPnts)
+
+cands_a = [4, 9, 13, 16, 18, 20, 32, 39]
+candPnts = [checkPnts[idx] for idx in cands_a]
+
+script_line =   """
+                    This allows chip returns to the backhand to be run around,
+                    allowing the server to go for a forehand inside-out or inside-in. 
+                """
+
+rast_frames = []
+row, col = 0, 0
+
+exRst = FramesRaster(3, 3)
+exRst.add(bulletFrms1a, col, row)
+exFrms = exRst.render()
+rast_frames.append(exFrms)
+
+i = 1
+for myPnt in candPnts:
+    exFrms = get_example_spline_frames(myPnt)
+    exFrms = exFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
+
+    ### freeze raster
+    exRst = exRst.to_frame_raster().to_frames_raster(num_frames = 1)
+    
+    ### add new element
+    row, col = i % 3, i // 3
+    exRst.add(exFrms, col, row)
+
+    exFrms = exRst.render()
+    rast_frames.append(exFrms)
+
+    i += 1
+
+exFrms_last = BGRFrames.from_frame(exFrms[-1], 50)
+rast_frames.append(exFrms_last)
+
+rstFrms = BGRFrames.from_frames(rast_frames)
+# DecapStream(rstFrms, 0, 100).show()
+
+all_frames.append(rstFrms)
+script_lines.append(script_line)
+# del exFrms, bulletFrms1a, rstFrms
+
+from ATMANpy.types.Overlays import reverse_cascade
+acc, frms = 1.25, 15
+
+script_line = ""
+revRst, revFrms = reverse_cascade(exRst, keep_which = (0, 0), acceleration = acc, frames_per_element = frms)
+
+all_frames.append(rstFrms)
+script_lines.append(script_line)
+
+# b) time to reposition
+def hi_launch(myPnt, threshold = 14):
+    return myPnt.get_return().get_launch_angle() > threshold
+
+def serve_ad(myPnt):
+    return myPnt.is_serve_ad()
+
+ad_dtlPnts1 = chipPnts.filter('is_serve_ad').filter(shot_is_where, shot_idx = 1, areas = [1])
+dc_dtlPnts1 = chipPnts.filter('is_serve_deuce').filter(shot_is_where, shot_idx = 1, areas = [4])
+
+# play(ad_dtlPnts1)
+# play(dc_dtlPnts1)
+
+ad_cands_b = [0, 4]
+dc_cands_b = [5, 6, 8]
+
+candPnts = [ad_dtlPnts1[idx] for idx in ad_cands_b]
+# play(candPnts)
+
+candPnts = [dc_dtlPnts1[idx] for idx in dc_cands_b]
+# play(candPnts)
+
+ad_dtlPnts2 = chipPnts.filter('is_serve_ad').filter(shot_is_where, shot_idx = 1, areas = [2])
+dc_dtlPnts2 = chipPnts.filter('is_serve_deuce').filter(shot_is_where, shot_idx = 1, areas = [3])
+
+ad_cands_b = [4, 5, 11, 13, 15]
+dc_cands_b = [6, 12, 24, 25, 32]
+
+candPnts = [ad_dtlPnts2[idx] for idx in ad_cands_b]
+# play(candPnts)
+
+candPnts = [dc_dtlPnts2[idx] for idx in dc_cands_b]
+# play(candPnts)
+
+# play(ad_dtlPnts2)
+# play(dc_dtlPnts2)
+
+ad_cands_b1 = [0, 4]
+dc_cands_b1 = [5, 8]
+
+ad_cands_b2 = [5, 13]
+dc_cands_b2 = [24, 32]
+
+candPnts = [*[ad_dtlPnts1[idx] for idx in ad_cands_b1], *[dc_dtlPnts1[idx] for idx in dc_cands_b1],
+            *[ad_dtlPnts2[idx] for idx in ad_cands_b2], *[dc_dtlPnts2[idx] for idx in dc_cands_b2]]
+
+script_line =   """
+                    On the plus side, longer travel time means more time for the returner to reposition,
+                    making the chip return down the line more viable especially on serves out wide.
+                    By contrast, the topspin return has to go cross-court on serves out wide, according to our model.
+                """
+
+rast_frames = []
+row, col = 0, 0
+
+exRst = FramesRaster(3, 3)
+exRst.add(bulletFrms1b, col, row)
+exFrms = exRst.render()
+rast_frames.append(exFrms)
+
+i = 1
+for myPnt in candPnts:
+    exFrms = get_example_spline_frames(myPnt)
+    exFrms = exFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
+
+    ### freeze raster
+    exRst = exRst.to_frame_raster().to_frames_raster(num_frames = 1)
+    
+    ### add new element
+    row, col = i % 3, i // 3
+    exRst.add(exFrms, col, row)
+
+    exFrms = exRst.render()
+    rast_frames.append(exFrms)
+
+    i += 1
+
+exFrms_last = BGRFrames.from_frame(exFrms[-1], 50)
+rast_frames.append(exFrms_last)
+
+rstFrms = BGRFrames.from_frames(rast_frames)
+# DecapStream(rstFrms, 0, 100).show()
+
+all_frames.append(rstFrms)
+script_lines.append(script_line)
+# del exFrms, rstFrms, bulletFrms1b
+
+script_line = ""
+revRst, revFrms = reverse_cascade(exRst, keep_which = (0, 0), acceleration = acc, frames_per_element = frms)
+
+all_frames.append(rstFrms)
+script_lines.append(script_line)
+
+# c) impatience; premature aggression
+
+def third_is_fault(myPnt):
+    try:
+        nextShot = myPnt[3]
+    except:
+        nextShot = None
+    return myPnt[2].is_fault(nextShot)
+
+def third_is_in_net(myPnt):
+    return myPnt[2].is_in_net()
+
+ftPnts1 = chipPnts.filter(shot_is_where, shot_idx = 1, areas = [1, 2]).filter(third_is_fault)
+ntPnts1 = chipPnts.filter(shot_is_where, shot_idx = 1, areas = [1, 2]).filter(third_is_in_net)
+
+# play(ftPnts1)
+# play(ntPnts1)
+
+ftPnts2 = chipPnts.filter(shot_is_where, shot_idx = 1, areas = [3]).filter(third_is_fault)
+ntPnts2 = chipPnts.filter(shot_is_where, shot_idx = 1, areas = [3]).filter(third_is_in_net)
+
+# play(ftPnts2)
+# play(ntPnts2)
+
+ftPnts3 = chipPnts.filter(shot_is_where, shot_idx = 1, areas = [4]).filter(third_is_fault)
+ntPnts3 = chipPnts.filter(shot_is_where, shot_idx = 1, areas = [4]).filter(third_is_in_net)
+
+# play(ftPnts3)
+# play(ntPnts3)
+
+ft_cands_b1 = [5, 6]
+nt_cands_b1 = [1]
+
+ft_cands_b2 = [2, 3]
+nt_cands_b2 = [0, 1]
+
+ft_cands_b3 = [4]
+nt_cands_b3 = []
+
+candPnts = [*[ftPnts1[idx] for idx in ft_cands_b1], *[ntPnts1[idx] for idx in nt_cands_b1],
+            *[ftPnts2[idx] for idx in ft_cands_b2], *[ntPnts2[idx] for idx in nt_cands_b2],
+            *[ftPnts3[idx] for idx in ft_cands_b3], *[ntPnts3[idx] for idx in nt_cands_b3],]
+
+
+script_line =   """
+                    Finally, there is evidence for the server typically being somewhat too impatient on
+                    chip return serves + 1. The model believes that a chip return to the forehand can goad the
+                    server into premature aggression, and entice an error by the server.
+                """
+
+rast_frames = []
+row, col = 0, 0
+
+exRst = FramesRaster(3, 3)
+exRst.add(bulletFrms1c, col, row)
+exFrms = exRst.render()
+rast_frames.append(exFrms)
+
+i = 1
+for myPnt in candPnts:
+    exFrms = get_example_spline_frames(myPnt)
+    exFrms = exFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
+
+    ### freeze raster
+    exRst = exRst.to_frame_raster().to_frames_raster(num_frames = 1)
+    
+    ### add new element
+    row, col = i % 3, i // 3
+    exRst.add(exFrms, col, row)
+
+    exFrms = exRst.render()
+    rast_frames.append(exFrms)
+
+    i += 1
+
+exFrms_last = BGRFrames.from_frame(exFrms[-1], 50)
+rast_frames.append(exFrms_last)
+
+rstFrms = BGRFrames.from_frames(rast_frames)
+# DecapStream(rstFrms, 0, 100).show()
+
+all_frames.append(rstFrms)
+script_lines.append(script_line)
+# del exFrms, rstFrms, bulletFrms1c
+
+script_line = ""
+revRst, revFrms = reverse_cascade(exRst, acceleration = acc, frames_per_element = frms)
+
+all_frames.append(rstFrms)
+script_lines.append(script_line)
+
+### TODO: fade out, caveats, conclusion.
+
+vis_ut.show(all_frames)
+
+### Saving the separate MultiFrame objects and the Joint Script
+assert len(script_lines) == len(all_frames)
+
+# b) Save segments
+for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+    subFrms, script_line = frames_and_script
+    running_idx = current_idx + idx
+    subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
+    
+    with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
+        f.write(script_line)
+
+current_idx = current_idx + len(all_frames)
 
