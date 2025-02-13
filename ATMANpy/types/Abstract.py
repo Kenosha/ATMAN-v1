@@ -636,11 +636,11 @@ class Trajectory:
         ballSF = self.feat_ball(how = how, which_endpoint = which_endpoint).rename('ball_curr')
         ballSF_before = ballSF.shift(offset = 1).rename('ball_bef')
         def make_spline(ball_bef, ball_curr):
-            if ball_bef is None:
+            if ball_bef is None or ball_curr is None:
                 spLn = None
             else:
                 spLn = Line3D(ball_bef.get_point(), ball_curr.get_point(), contains_endpoint = False)
-                return spLn
+            return spLn
         return ballSF_before.merge(ballSF).apply(make_spline)
     
     def feat_spline_cumul(self, how = 'trajectory', which_endpoint = 'smooth'):
