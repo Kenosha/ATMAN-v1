@@ -1278,6 +1278,23 @@ class Line3D:
         subPnts = self.subdivide(num_dashes * 2)
         subLns = Lines3D([Line3D(subPnts[idx], subPnts[idx + 1]) for idx in range(len(subPnts) - 1)])
         return subLns[::2]
+    
+    def shorten_by(self, factor, N = 100, which = 'left'):
+        assert which in ['both', 'left', 'right']
+        assert 0 < factor < 1
+
+        subPnts = self.subdivide(N)
+
+        factor_idx = max(1, round(factor * N)) - 1
+        factor_idx_left = factor_idx if which in ['both', 'left'] else 0
+        factor_idx_right = -factor_idx if which in ['both', 'right'] else 0
+
+        cutPt_left = subPnts[factor_idx_left]
+        cutPt_right = subPnts[factor_idx_right]
+
+        updDict = {'leftPt': cutPt_left, 'rightPt': cutPt_right}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return Line3D(**newDict)
 
 @dataclass(frozen = True)
 class Region3D():
