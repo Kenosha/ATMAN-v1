@@ -610,7 +610,29 @@ class CourtLines(Lines):
         p3 = self[f'{side} Singles Deuce Line'].weak_intersect(self[f'{side} Service Line'])
         p4 = self[f'{side} Singles Ad Line'].weak_intersect(self[f'{side} Service Line'])
         return Region.from_points(p1, p2, p3, p4)
-    
+            
+    def get_abcd_sectors(self, side = 'Top', width = 'Singles', handedness = 'right'):
+        halfReg = self.get_half_region(side, width = width)
+        lflf, lf, rt, rtrt = halfReg.subdivide(4, how = 'vertical')
+
+        if side == 'Top' and handedness == 'right' or side == 'Bot' and handedness == 'left':
+            a, b, c, d = lflf, lf, rt, rtrt
+        else:
+            a, b, c, d = rtrt, rt, lf, lflf
+
+        return a, b, c, d 
+
+    def get_ad_deuce_sectors(self, side = 'Top', width = 'Singles'):
+        halfReg = self.get_half_region(side, width = width)
+        lfReg, rtReg = halfReg.subdivide(2, how = 'vertical')
+
+        if side == 'Top':
+            dc, ad = lfReg, rtReg
+        else:
+            dc, ad = rtReg, lfReg
+
+        return dc, ad
+
     def get_half_line(self):
         return Line(self['Top Baseline'].center(), self['Bottom Baseline'].center())
     
