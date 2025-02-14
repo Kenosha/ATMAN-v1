@@ -228,8 +228,6 @@ from ATMANpy.types.Lines import Region
 title_dims = (850, 100)
 eps = 2
 title_x, title_y = title_dims
-a, b, c, d = Point2D((eps, eps)), Point2D((title_x - eps, eps)), Point2D((eps, title_y - eps)), Point2D((title_x - eps, title_y - eps))
-titleReg = Region.from_points(a, b, c, d)
 
 titleStr = 'On the Effectiveness of the Chipped Return'
 
@@ -416,6 +414,26 @@ resFrm_simple3_framed = resFrm_simple3.framed(FRAME_THICKNESS, FRAME_COLOR)
 
 # resFrm_simple3_framed.show()
 
+footnoteStr = 'test footnote'
+footnoteStr = 'test footnote\ntwo lines'
+footnoteStr = 'test footnote\ntwo lines\nthree lines'
+timeStr = '12:00-13:00:'
+
+def overlay_footnote(someFrms, timeStr, footnoteStr):
+    footnote_where = (50, 950)
+    footnote_dims = (500, 100)
+    
+    blackFrm = BGRFrame.make_black(*footnote_dims)
+
+    footnoteFrm = blackFrm.put(timeStr, size = 1, where = (30, 40), color = const.BGR['grass_green'])
+    footnoteFrm = footnoteFrm.put(footnoteStr, size = 1, where = (150, 40), color = const.BGR['grass_green'])
+
+    footnoteFrm_framed = footnoteFrm.framed(FRAME_THICKNESS, FRAME_COLOR)
+    # footnoteFrm_framed.show()
+
+    return overlay(someFrms, footnoteFrm_framed, top_left_point = Point2D(footnote_where))
+    
+
 ### INITIAL RASTER ###
 all_frames = []
 script_lines = []
@@ -432,7 +450,11 @@ script_line =   """
                     to understand the effectiveness of the chip return as compared to the topspin return; 
                     to understand when a chip return could be attempted, 
                     and where it should be placed.
-                """  ### 22 sec
+
+                    Note that this is the short version of a longer in-depth video.
+                    Whenever a result is referenced that we go into greater detail of in the longer version, 
+                    the corresponding timestamp will flash onto the screen in the bottom right, like so.
+                """  ### 22 sec until 'placed'
 
 blackFrm = BGRFrame.make_black(*DIMENSIONS)
 black_with_titleFrm = overlay_center(blackFrm, titleFrm)
@@ -443,8 +465,16 @@ all_frames.append(black_with_titleFrms)
 script_lines.append(script_line)
 # del black_with_titleFrms
 
+script_line = ""
+
+footFrm = overlay_footnote(black_with_titleFrms[-1], "5:40-6:25:", "Example Footnote")
+footFrms = BGRFrames.from_frame(footFrm, 75)
+
+all_frames.append(footFrms)
+script_lines.append(script_line)
+
 script_line =   """
-                    To this end, we estimate a statistical model...
+                    The engine of our analysis is a statistical model...
                 """ # 3 sec
 
 startRst = FrameRaster(2, 2)
@@ -1240,12 +1270,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     The orange area shows the target zone for the returning player on a topspin shot.
-                    The target zone is where the model suggests to aim the return; if the ball
-                    lands within the target zone, the returning player has a probability of winning the subsequent
-                    point greater than 50%.
-
-                    In this situation, our model believes it is best to hit the topspin return cross-court.
-                """ # 22 sec
+                """
 
 # dim and fade in target area
 itplFrms = vs.interpolate_frames(realFrms[-1], realFrms[-1].dim(dim_factor), num_frames = TRANSITION_FRAMES).framed(FRAME_THICKNESS, FRAME_COLOR)
@@ -1259,6 +1284,23 @@ rastFrms = overlay(rastFrms, leg1Frm, top_left_point = tlPt)
 all_frames.append(rastFrms)
 script_lines.append(script_line)
 # del rastFrms, myFrms
+
+script_line =   """
+                    The target zone is where the model suggests to aim the return; if the ball
+                    lands within the target zone, the returning player has a probability of winning the subsequent
+                    point greater than 50%.
+                """
+rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
+
+rastFrms_static = overlay_footnote(rastFrms_static, "XX:XX-XX:XX:", "For more info on the construction\nand interpretation of target zones.")
+
+all_frames.append(rastFrms_static)
+script_lines.append(script_line)
+# del rastFrms_static
+
+script_line =   """
+                    In this situation, our model believes it is best to hit the topspin return cross-court.
+                """ 
 
 script_line = "" ### a little pause before the next segment
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
@@ -1290,14 +1332,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     ... the high chip is a floating return hit with underspin; it has a high arc and a high bounce.
-                    We differentiate between these two kinds of chip return 
-                    because our data shows that the low chip and the high chip return are distinct shots 
-                    that are employed with purpose; 
-                    for a closer look at their differences, and some examples, consult the longer version of this video.
-
-                    In any case, the target zone for the high chip is considerably smaller than either the topspin return or the low chip.
-                    The high chip needs much more depth than the low chip; it may not land as shallow in the court.
-                """ # 34 sec
+                """
 
 # fade in lo chip target area
 zoneScn = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
@@ -1309,6 +1344,29 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 all_frames.append(rastFrms)
 script_lines.append(script_line)
 # del myFrms, rastFrms
+
+script_line =   """
+                    We differentiate between these two kinds of chip return 
+                    because our data shows that the low chip and the high chip return are distinct shots 
+                    that are employed with purpose.
+                """
+
+rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
+
+rastFrms_static = overlay_footnote(rastFrms_static, "XX:XX-XX:XX:", "For more info on the difference\nbetween low and high chip returns.")
+
+all_frames.append(rastFrms_static)
+script_lines.append(script_line)
+
+script_line =   """
+                    In any case, the target zone for the high chip is considerably smaller than either the topspin return or the low chip.
+                    The high chip needs much more depth than the low chip; it may not land as shallow in the court.
+                """ 
+
+rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
+
+all_frames.append(rastFrms)
+script_lines.append(script_line)
 
 script_line =   """
                     Let's zoom in on the target zones a bit more closely.
@@ -1518,7 +1576,7 @@ script_lines.append(script_line)
 # del transFrms, moveFrms, postFrms, rastFrms
 
 script_line =   """
-                    Again, a well-placed low chip has a higher probability of winning the point than a topspin return;
+                    As before, well-placed low chip has a higher probability of winning the point than a topspin return;
                     However, the target zone for the low chip is smaller than the topspin return. 
                     In this sense, the chip return is a high-risk/high-reward strategy: 
                     As long as the chip has required depth and width, it promises high reward, 
@@ -1854,9 +1912,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     In this isolated case, the high-chip target zone is actually larger than the low-chip zone:
-                    though the returner would play himself out of position going down-the-line, the model takes into account
-                    that the high-chip affords the returner with plenty of time to recover to almost anywhere along the baseline; 
-                    As we show in the longer version of this video, this is especially useful on the down-the-line return on a serve out wide.
+                    though the returner would play himself out of position going down-the-line... 
                 """ # 25 sec
 
 # fade in hi chip target area
@@ -1867,6 +1923,19 @@ rastFrms = prevRst.render()
 rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 
 all_frames.append(rastFrms)
+script_lines.append(script_line)
+# del myFrms, rastFrms
+
+script_line =   """
+                    ... the model takes into account that 
+                    the high-chip affords the returner with plenty of time to recover 
+                    to almost anywhere along the baseline; 
+                """ # 25 sec
+
+rastFrm_static = overlay_footnote(rastFrms[-1], "XX:XX-XX:XX:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
+rastFrms_static = BGRFrames.from_frame(rastFrm_static, 50)
+
+all_frames.append(rastFrms_static)
 script_lines.append(script_line)
 # del myFrms, rastFrms
 
@@ -2153,8 +2222,8 @@ script_lines.append(script_line)
 
 # b) final table
 script_line =   """
-                    Even when applying some adjustments that serve to negate 
-                    some statistical biases in the naive average; the difference in win rate is still around 12%.
+                    Even when applying adjustments that serve to negate 
+                    some statistical biases in the naive average...
                 """
 
 smart_frm_large = overlay(BGRFrame.make_black(), smart_frm, top_left_point = table_offsetPt)
@@ -2182,14 +2251,21 @@ annPnts = [*annPnts, deltPt]
 smart_bal_len_frm_with_arrow = View.make(smart_bal_len_table.tabCam, tabScn, annPnts, resolution = TABLE_RESOLUTION).snap()
 # smart_bal_len_frm_with_arrow.show()
 
-smart_bal_len_frm_large_with_arrow = overlay(BGRFrame.make_black(), smart_bal_len_frm_with_arrow, top_left_point = table_offsetPt)
-smart_bal_lenFrms_large_with_arrow = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 50)
-
 jointFrms = BGRFrames.from_frames([naiveFrms_large, smartFrms_large, smart_balFrms_large, 
-                                   smart_bal_lenFrms_large, smart_bal_lenFrms_large_with_arrow])
+                                   smart_bal_lenFrms_large])
+
+jointFrms = overlay_footnote(jointFrms, "XX:XX-XX:XX:", "For more info on these statistical\nadjustments.")
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
+
+script_line = "... the difference in win rate is still around 12%."
+smart_bal_len_frm_large_with_arrow = overlay(BGRFrame.make_black(), smart_bal_len_frm_with_arrow, top_left_point = table_offsetPt)
+smart_bal_lenFrms_large_with_arrow = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 50)
+
+all_frames.append(smart_bal_lenFrms_large_with_arrow)
+script_lines.append(script_line)
+
 # del jointFrms, naiveFrms_large, smartFrms_large, smart_balFrms_large, smart_bal_lenFrms_large, smart_bal_lenFrms_large_with_arrow
 
 # DecapStream(jointFrms, 0, 100).show()
@@ -2316,7 +2392,15 @@ all_frames.append(statFrms_dim)
 script_lines.append(script_line)
 
 ### b) Topspin Shares
-script_line = "For topspin returns, we see virtually the same overall distribution:"
+script_line = "For topspin returns ..."
+
+headerFrm = BGRFrame.make_black().put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
+headerFrms = BGRFrames.from_frame(headerFrm, 50)
+
+all_frames.append(headerFrms)
+script_lines.append(script_line)
+
+script_line = "... we see virtually the same overall distribution."
 
 a, b, c, d, dc, ad = vis_ut.get_court_sectors(side = 'Top')
 shrSer = vis_ut.shares_in_sector(tops_retShots_rectified, side = 'Top')
@@ -2583,8 +2667,7 @@ cands_a = [4, 9, 13, 16, 18, 20, 32, 39]
 candPnts = [checkPnts[idx] for idx in cands_a]
 
 script_line =   """
-                    This allows chip returns to the backhand to be run around,
-                    allowing the server to go for a forehand inside-out or inside-in. 
+                    This allows chip returns to the backhand to be run around...
                 """
 
 rast_frames = []
@@ -2593,6 +2676,13 @@ row, col = 0, 0
 exRst = FramesRaster(3, 3)
 exRst.add(bulletFrms1a, col, row)
 exFrms = exRst.render()
+rast_frames.append(exFrms)
+
+script_line =   """
+                    ... allowing the server to go for a forehand inside-out or inside-in. 
+                """
+
+exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nthe run-around serve+1")
 rast_frames.append(exFrms)
 
 i = 1
@@ -2608,6 +2698,10 @@ for myPnt in candPnts:
     exRst.add(exFrms, col, row)
 
     exFrms = exRst.render()
+
+    if i < 6:
+        exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nthe run-around serve+1")
+
     rast_frames.append(exFrms)
 
     i += 1
@@ -2626,9 +2720,9 @@ from ATMANpy.types.Overlays import reverse_cascade
 acc, frms = 1.25, 15
 
 script_line = ""
-revRst, revFrms = reverse_cascade(exRst, keep_which = (0, 0), acceleration = acc, frames_per_element = frms)
+revRst, revFrms = reverse_cascade(exRst, keep_which = [(0, 0)], acceleration = acc, frames_per_element = frms)
 
-all_frames.append(rstFrms)
+all_frames.append(revFrms)
 script_lines.append(script_line)
 
 # b) time to reposition
@@ -2691,6 +2785,9 @@ exRst.add(bulletFrms1b, col, row)
 exFrms = exRst.render()
 rast_frames.append(exFrms)
 
+exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
+rast_frames.append(exFrms)
+
 i = 1
 for myPnt in candPnts:
     exFrms = get_example_spline_frames(myPnt)
@@ -2704,6 +2801,10 @@ for myPnt in candPnts:
     exRst.add(exFrms, col, row)
 
     exFrms = exRst.render()
+    
+    if i < 6:
+        exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
+
     rast_frames.append(exFrms)
 
     i += 1
@@ -2719,9 +2820,9 @@ script_lines.append(script_line)
 # del exFrms, rstFrms, bulletFrms1b
 
 script_line = ""
-revRst, revFrms = reverse_cascade(exRst, keep_which = (0, 0), acceleration = acc, frames_per_element = frms)
+revRst, revFrms = reverse_cascade(exRst, keep_which = [(0, 0)], acceleration = acc, frames_per_element = frms)
 
-all_frames.append(rstFrms)
+all_frames.append(revFrms)
 script_lines.append(script_line)
 
 # c) impatience; premature aggression
@@ -2770,8 +2871,7 @@ candPnts = [*[ftPnts1[idx] for idx in ft_cands_b1], *[ntPnts1[idx] for idx in nt
 
 script_line =   """
                     Finally, there is evidence for the server typically being somewhat too impatient on
-                    chip return serves + 1. The model believes that a chip return to the forehand can goad the
-                    server into premature aggression, and entice an error by the server.
+                    chip return serves + 1. 
                 """
 
 rast_frames = []
@@ -2780,6 +2880,14 @@ row, col = 0, 0
 exRst = FramesRaster(3, 3)
 exRst.add(bulletFrms1c, col, row)
 exFrms = exRst.render()
+rast_frames.append(exFrms)
+
+script_line =   """
+                    The model believes that a chip return to the forehand can goad the
+                    server into premature aggression, and entice an error by the server.
+                """
+
+exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on premature aggression\nagainst chip returns.")
 rast_frames.append(exFrms)
 
 i = 1
@@ -2795,6 +2903,10 @@ for myPnt in candPnts:
     exRst.add(exFrms, col, row)
 
     exFrms = exRst.render()
+    
+    if i < 6:
+        exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on premature aggression\nagainst chip returns.")
+
     rast_frames.append(exFrms)
 
     i += 1
@@ -2812,7 +2924,7 @@ script_lines.append(script_line)
 script_line = ""
 revRst, revFrms = reverse_cascade(exRst, acceleration = acc, frames_per_element = frms)
 
-all_frames.append(rstFrms)
+all_frames.append(revFrms)
 script_lines.append(script_line)
 
 ### TODO: fade out, caveats, conclusion.
