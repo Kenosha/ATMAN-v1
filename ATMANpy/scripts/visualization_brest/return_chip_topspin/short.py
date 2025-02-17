@@ -382,8 +382,8 @@ i = 30
 text1 = "Chipped Returns are a (mostly) viable strategy,\nas long as they're played ..."
 
 text1a = "   ... low ..."
-text1b = "   ... to the server's forehand ..."
-text1c = "   ... with sufficient depth and width."
+text1b = "   ... with sufficient depth and width."
+text1c = "   ... to the server's forehand ..."
 
 text2 = "Chip returns are high-risk/high-reward, except ..."
 text2a = "    - The typical chip return has a smaller target zone than the typical topspin return."
@@ -397,7 +397,7 @@ resFrm_simple1 = resFrm.put(text1, where = (50, y), size = 2)
 resFrm_simple1a = resFrm_simple1.put(text1a, where = (50, y+3*i), size = 2)
 resFrm_simple1b = resFrm_simple1a.put(text1b, where = (50, y+5*i), size = 2)
 resFrm_simple1c = resFrm_simple1b.put(text1c, where = (50, y+7*i), size = 2)
-# resFrm_simple1c.show()
+# resFrm_simple1c.show() 
 
 resFrm_simple2 = resFrm_simple1c.put(text2, where = (50, y+round(9.5*i)), size = 2)
 # resFrm_simple2.show()
@@ -453,7 +453,7 @@ script_line =   """
 
                     Note that this is the short version of a longer in-depth video.
                     Whenever a result is referenced that we go into greater detail of in the longer version, 
-                    the corresponding timestamp will flash onto the screen in the bottom right, like so.
+                    the corresponding timestamp will flash onto the screen in the bottom left, like so.
                 """  ### 22 sec until 'placed'
 
 blackFrm = BGRFrame.make_black(*DIMENSIONS)
@@ -640,39 +640,8 @@ current_idx = current_idx + len(all_frames)
 
 ### -> total: 93 seconds of text.
 
-##### UNUSED YET
-script_line =   """
-                    That a chip return should be played to the server's forehand is somewhat unintuitive.
-                    However, this result is fairly consistent across different model specifications.
-                    We will attempt to explain why the model likes the chip return to the forehand later;
-                    for the moment
-                """
-
-script_line =   """
-                    for the moment, we will issue the following caveat: 
-                    these results hold across many different players; it might be that any specific player struggles
-                    with the chip to the backhand side, or another player's serve should not be chipped back altogether.
-                    Though such an individualized analysis is much more actionable and interesting, 
-                    it would require much more data. 
-                    However, if we had that data, the statistical tools used here would apply exactly the same.
-                """
-
-script_line =   """
-                    Explanations for chip to forehand
-                        - with chip it is not so important to play yourself into position -> longer airtime
-                            (most extreme with high chip)
-                        - impatience on chip return serve + 1
-                        - run around backhands.
-                """
-
-
-
-
-
 all_frames = []
 script_lines = []
-
-
 
 ### PARAMS FOR ANIMATION ###
 def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None):
@@ -784,15 +753,15 @@ def get_wide_frames(myPnt, pre_frames = 150):
     preFrms_dimmed = BGRFrames(preArr_dimmed).rescale(1.5)
     return preFrms_dimmed
 
-def get_spline_and_player_scene(myPnt):
+def get_spline_and_player_scene(myPnt, player_color = const.BGR['smokey_grey']):
     _, serve_splines = myPnt[0].feat_spline_cumul(which_endpoint = 'penultimate').last()
     outScn = Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in serve_splines if spln is not None])
     
     x0, y0 = myPnt[0].get_player_hit_position()
     x1, y1 = myPnt[1].get_player_hit_position()
 
-    srvPly = Player.make((x0, y0), color = const.BGR['light_brown'])
-    recPly = Player.make((x1, y1), color = const.BGR['light_brown'])
+    srvPly = Player.make((x0, y0), color = player_color)
+    recPly = Player.make((x1, y1), color = player_color)
 
     return outScn.put(srvPly).put(recPly) 
 
@@ -815,6 +784,8 @@ myScn = get_spline_and_player_scene(bPnt)
 realDict['deuce_wide'] = myFrms
 wideDict['deuce_wide'] = preFrms
 sceneDict['deuce_wide'] = myScn
+
+View.make(halfCam, myScn.combine(courtScn)).snap().show()
 
 # b) deuce, down middle
 relPnts = retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_deuce').filter(is_return_topspin)
@@ -1329,7 +1300,6 @@ all_frames.append(rastFrms)
 script_lines.append(script_line)
 # del rastFrms
 
-
 script_line =   """
                     ... the high chip is a floating return hit with underspin; it has a high arc and a high bounce.
                 """
@@ -1576,7 +1546,7 @@ script_lines.append(script_line)
 # del transFrms, moveFrms, postFrms, rastFrms
 
 script_line =   """
-                    As before, well-placed low chip has a higher probability of winning the point than a topspin return;
+                    As before, a well-placed low chip has a higher probability of winning the point than a topspin return;
                     However, the target zone for the low chip is smaller than the topspin return. 
                     In this sense, the chip return is a high-risk/high-reward strategy: 
                     As long as the chip has required depth and width, it promises high reward, 
@@ -1584,7 +1554,7 @@ script_line =   """
                     On the other hand, the topspin return is more forgiving: 
                     The ball can land in a larger area and still at least equalize the rally.  
 
-                    The high chip, on the other hand, having both the lowest peak and the smallest zone,
+                    The high chip, having both the lowest peak and the smallest zone,
                     is not recommended by the model in this situation.
                 """ # 38 sec
 
@@ -2017,7 +1987,7 @@ prevRst = prevRst.to_frame_raster().to_frames_raster(25)
 ### total section seconds: 314
 ### total so far: 314 + 97 = 407
 
-sript_line =    """
+script_line =    """
                     That the chip return is a viable alternative to the topspin return 
                     if played to the server's forehand is both an unintuitive and uncommon strategy.
                     Unintuitive, because, in the aggregate, it appears that the chip return is a bad choice.
@@ -2263,6 +2233,8 @@ script_line = "... the difference in win rate is still around 12%."
 smart_bal_len_frm_large_with_arrow = overlay(BGRFrame.make_black(), smart_bal_len_frm_with_arrow, top_left_point = table_offsetPt)
 smart_bal_lenFrms_large_with_arrow = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 50)
 
+smart_bal_lenFrms_large_with_arrow = overlay_footnote(smart_bal_lenFrms_large_with_arrow, "XX:XX-XX:XX:", "For more info on these statistical\nadjustments.")
+
 all_frames.append(smart_bal_lenFrms_large_with_arrow)
 script_lines.append(script_line)
 
@@ -2314,7 +2286,7 @@ centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(CHIP_COLOR).l
 annotPts = [*centerPts, fhPt_annot_heat.resize(2), bhPt_annot_heat.resize(2)]
 
 zoneFrms, animDict = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam.resize(2), **prmDict_nolum,
-                                    annotated_points = annotPts)
+                                    annotated_points = annotPts, num_frames = 150)
 
 zoneFrms = zoneFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
 
@@ -2376,7 +2348,7 @@ itplFrms = itplFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, th
 
 statFrms, _ = vs.animate_static(Scene([l0, l1, l2, l3, l4, l5]), static_cam = heatCam.resize(2),
                               annotated_points = annotPts_mid, background_scene = courtScn,
-                              **prmDict_nolum, **animDict)
+                              **prmDict_nolum, **animDict, num_frames = 150)
 statFrms = statFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
 
 jointFrms = BGRFrames.from_frames([itplFrms, statFrms])
@@ -2415,7 +2387,7 @@ centerPts = [reg.center_point().annotate(shrStr).resize(2).recolor(TOPS_COLOR).l
 annotPts = [*centerPts, fhPt_annot_heat.resize(2), bhPt_annot_heat.resize(2)]
 
 zoneFrms, animDict = vs.animate_static(myLns, background_scene = courtScn, static_cam = heatCam.resize(2), **prmDict_nolum,
-                                    annotated_points = annotPts)
+                                    annotated_points = annotPts, num_frames = 150)
 
 zoneFrms = zoneFrms.put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
 
@@ -2479,7 +2451,7 @@ itplFrms = itplFrms.put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2,
 
 
 statFrms, _ = vs.animate_static(Scene([l0, l1, l2, l3, l4, l5]), static_cam = heatCam.resize(2),
-                              annotated_points = annotPts_mid, background_scene = courtScn,
+                              annotated_points = annotPts_mid, background_scene = courtScn, num_frames = 150,
                               **prmDict_nolum, **animDict)
 statFrms = statFrms.put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
 
@@ -2921,13 +2893,18 @@ all_frames.append(rstFrms)
 script_lines.append(script_line)
 # del exFrms, rstFrms, bulletFrms1c
 
-script_line = ""
-revRst, revFrms = reverse_cascade(exRst, acceleration = acc, frames_per_element = frms)
+script_line =   """
+                    All these factors lead our model to like the forehand side chip return as a viable alternative to the topspin return. 
+                    However, before concluding, one caveat must be given: these results hold on aggregate, 
+                    across all players that participated in the 2021 Brest Challenger tournament. 
+                    For any specific player, a different return strategy may be optimal. 
+                    Though an individualized analysis would be much more actionable, it would require much more data.
+                    The statistical tools and models used here, however, would apply in exactly the same way. 
+                """
+revRst, revFrms = reverse_cascade(exRst, acceleration = acc, frames_per_element = frms * 3)
 
 all_frames.append(revFrms)
 script_lines.append(script_line)
-
-### TODO: fade out, caveats, conclusion.
 
 vis_ut.show(all_frames)
 
@@ -2944,4 +2921,3 @@ for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
         f.write(script_line)
 
 current_idx = current_idx + len(all_frames)
-
