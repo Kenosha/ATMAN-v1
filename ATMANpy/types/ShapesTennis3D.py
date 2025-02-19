@@ -279,8 +279,8 @@ class Arrow(Lines3D):
             t1, t2 = np.arcsin(spny), np.pi - np.arcsin(spny) ### -> one of these two is correct! ### if the first rotation (along the z-axis) would have to be larger than 180 degrees, we do not find it!
             c1, c2 = np.cos(t1), np.cos(t2)
 
-            g1 = np.arcsin(-spnx / c1)
-            g2 = np.arcsin(-spnx / c2)
+            g1 = np.arcsin(max(-1, min(-spnx / c1, 1))) ### have to bind them below and above
+            g2 = np.arcsin(max(-1, min(-spnx / c2, 1))) ### in case of small floating point issues
             
             i_is_close = np.isclose(-c1 * np.sin(g1), spnx)
             iii_is_close = np.isclose(-c1 * np.cos(g1), spnz) 
