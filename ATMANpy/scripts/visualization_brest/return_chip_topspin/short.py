@@ -26,6 +26,8 @@ from ATMANpy.types.Overlays import FrameRaster, FramesRaster, Table, overlay, ov
 
 from ATMANpy.funcs.util_funcs import interpolate_tuples
 
+SAVE = True
+
 def show(all_frames, ms_between_frames = 25):
     DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
 
@@ -477,14 +479,19 @@ script_line =   """
                     The engine of our analysis is a statistical model...
                 """ # 3 sec
 
+
 startRst = FrameRaster(2, 2)
 
 startRst.add(diagFrm_0_framed, 0, 0)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
-all_frames.append(rstFrms)
+itplFrms = vs.interpolate_frames(footFrm, rstFrm, 50)
+
+jointFrms = BGRFrames.from_frames([itplFrms, rstFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 # del rstFrms
     
@@ -494,7 +501,7 @@ script_line =   """
 
 startRst.add(diagFrm_1_framed, 0, 0)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -507,7 +514,7 @@ script_line =   """
 
 startRst.add(diagFrm_2_framed, 0, 0)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -520,7 +527,7 @@ script_line =   """
 
 startRst.add(headerFrm_framed, 1, 0)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -533,7 +540,7 @@ script_line =   """
 
 startRst.add(tabFrm_framed, 1, 0)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -547,7 +554,7 @@ script_line =   """
 
 startRst.add(resFrm_simple1_framed, 0, 1)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -560,7 +567,7 @@ script_line =   """
 
 startRst.add(resFrm_simple1a_framed, 0, 1)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -573,7 +580,7 @@ script_line =   """
 
 startRst.add(resFrm_simple1b_framed, 0, 1)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -587,7 +594,7 @@ script_line =   """
 
 startRst.add(resFrm_simple1c_framed, 0, 1)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -600,7 +607,7 @@ script_line =   """
 
 startRst.add(resFrm_simple2_framed, 0, 1)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -615,7 +622,7 @@ script_line =   """
     
 startRst.add(resFrm_simple3_framed, 0, 1)
 rstFrm = startRst.render()
-rstFrm = overlay_center(rstFrm, titleFrm_framed)
+# rstFrm = overlay_center(rstFrm, titleFrm_framed)
 rstFrms = BGRFrames.from_frame(rstFrm, STILL_FRAMES)
 
 all_frames.append(rstFrms)
@@ -624,19 +631,20 @@ script_lines.append(script_line)
 
 vis_ut.show(all_frames)
 
-### Saving the separate MultiFrame objects and the Joint Script
-assert len(script_lines) == len(all_frames)
+if SAVE:
+    ### Saving the separate MultiFrame objects and the Joint Script
+    assert len(script_lines) == len(all_frames)
 
-# b) Save segments
-for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
-    subFrms, script_line = frames_and_script
-    running_idx = current_idx + idx
-    subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
-    
-    with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
-        f.write(script_line)
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
+        running_idx = current_idx + idx
+        subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
+            f.write(script_line)
 
-current_idx = current_idx + len(all_frames)
+    current_idx = current_idx + len(all_frames)
 
 ### -> total: 93 seconds of text.
 
@@ -785,7 +793,7 @@ realDict['deuce_wide'] = myFrms
 wideDict['deuce_wide'] = preFrms
 sceneDict['deuce_wide'] = myScn
 
-View.make(halfCam, myScn.combine(courtScn)).snap().show()
+# View.make(halfCam, myScn.combine(courtScn)).snap().show()
 
 # b) deuce, down middle
 relPnts = retPnts_in.filter(vis_ut.is_serve_down_middle).filter('is_serve_deuce').filter(is_return_topspin)
@@ -1218,13 +1226,15 @@ script_line =   """
 dimRst.add(preFrms, i, j)
 rastFrms = dimRst.render()
 
-# fade out title frame
-titleFrms = BGRFrames.from_frame(titleFrm, pre_frames)
-titleFrms_framed = BGRFrames.from_frame(titleFrm_framed, pre_frames)
+# # fade out title frame
+# titleFrms = BGRFrames.from_frame(titleFrm, pre_frames)
+# titleFrms_framed = BGRFrames.from_frame(titleFrm_framed, pre_frames)
 
-# overlay the title with fade out
-rastFrms1 = overlay_center(rastFrms, titleFrms_framed, start_alpha = 1, stop_alpha = 0, alpha_exp = 4)
-# DecapStream(rastFrms, 0, 100).show()
+# # overlay the title with fade out
+# rastFrms1 = overlay_center(rastFrms, titleFrms_framed, start_alpha = 1, stop_alpha = 0, alpha_exp = 4)
+# # DecapStream(rastFrms, 0, 100).show()
+
+rastFrms1 = rastFrms
 
 movRst.add(realFrms, i, j)
 rastFrms2 = movRst.render()
@@ -2004,18 +2014,19 @@ script_lines.append(script_line)
 vis_ut.show(all_frames)
 
 ### Saving the separate MultiFrame objects and the Joint Script
-assert len(script_lines) == len(all_frames)
+if SAVE:
+    assert len(script_lines) == len(all_frames)
 
-# b) Save segments
-for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
-    subFrms, script_line = frames_and_script
-    running_idx = current_idx + idx
-    subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
-    
-    with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
-        f.write(script_line)
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
+        running_idx = current_idx + idx
+        subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
+            f.write(script_line)
 
-current_idx = current_idx + len(all_frames)
+    current_idx = current_idx + len(all_frames)
 
 ### INTERPRETATION ###
 
@@ -2536,10 +2547,7 @@ script_lines.append(script_line)
 # del exFrms, bulletFrms1
 
 ### find 8 examples for each bullet point.
-def get_example_spline_frames(myPnt):
-    from ATMANpy.auxil.court import bot_a, bot_b, bot_c, bot_d
-    from ATMANpy.types.Visual3D import Camera
-
+def get_example_spline_scenes(myPnt, third_color = BALL_COLOR):
     ### splines
     serve_splines = myPnt[0].feat_spline_cumul(which_endpoint = 'penultimate').values()
     return_splines = myPnt[1].feat_spline_cumul(which_endpoint = 'penultimate').values()
@@ -2547,25 +2555,16 @@ def get_example_spline_frames(myPnt):
 
     serveScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in serve_splines]
     returnScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in return_splines]
-    thirdScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in third_splines]
+    thirdScns = [Scene([spln.recolor(third_color).resize(1.5) for spln in splns if spln is not None]) for splns in third_splines]
     splnScns = serveScns + returnScns + thirdScns
 
-    ### real frames
-    realFrms = myPnt[:3].stream(confs = confs).decap().frames
-
     ### pad splines to length
-    to_pad = realFrms.length() - len(splnScns)
+    to_length = myPnt[:3].get_frames()[2][-1] - myPnt[:3].get_frames()[0][0] - 2 ### adjust for overlaps
+    to_pad = to_length - len(splnScns)
     splnScns_pad = [Scene([]) for _ in range(to_pad)]
     splnScns = [*splnScns, *splnScns_pad]
 
-    ### render    
-    myCam = Camera.calibrated_brest_behind()
-    myFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
-                                    animate_over = realFrms, 
-                                    background_resolution = 1, argument_resolution = 0.5, 
-                                    foreground_resolution = 0.5, argument_luminosity = 1)
-
-    return myFrms
+    return splnScns
 
 def shot_lands_in_or_near_area(myPnt, shot_idx = 0, num_subdivisions = 4):
     from ATMANpy.auxil.court import topReg, botReg
@@ -2606,8 +2605,17 @@ def play(myPnts):
     import time
     for idx, pt in enumerate(myPnts):
         print(idx)
-        try:
-            exFrms = get_example_spline_frames(pt)
+        try:            
+            ### real frames
+            realFrms = pt[:3].stream(confs = confs).decap().frames
+            ### splines
+            splnScns = get_example_spline_scenes(pt)
+            ### render    
+            myCam = Camera.calibrated_brest_behind()
+            exFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
+                                            animate_over = realFrms, 
+                                            background_resolution = 1, argument_resolution = 0.5, 
+                                            foreground_resolution = 0.5, argument_luminosity = 1)
         except:
             continue
         DecapStream(exFrms.rescale(2), 0, 100).show()
@@ -2657,9 +2665,69 @@ script_line =   """
 exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nthe run-around serve+1")
 rast_frames.append(exFrms)
 
+def get_return_motion(myPnt, color = const.BGR['intense_red'], cumulative_transparence = 0.95, max_hat_len = 20, which = 'rec'):
+    if which == 'rec':
+        playerFrm = myPnt[1].recPlayer.playerFrm[['x', 'y']]
+    else:
+        playerFrm = myPnt[1].hitPlayer.playerFrm[['x', 'y']]
+
+    playerFrm = playerFrm[:-1] ### last entry is next
+    playerFrm = playerFrm.rolling(window = 15, min_periods = 1).mean()
+    max_idx = playerFrm.index[-1]
+
+    pt_scenes = []
+    prevScn = Scene.make_empty()
+    prevPt = None
+    for idx, coordSer in playerFrm.iterrows():
+        hat_len = idx / max_idx * max_hat_len
+
+        x, y = coordSer
+        plPt = Point3D((x, y, 0))
+        
+        # plCrc = Circle3D.from_point3D(plPt, radius = 1).recolor(const.BGR['intense_red'])
+        # prevScn = prevScn.dim(dim_factor).put(plCrc)
+        # pt_scenes.append(prevScn)
+
+        if prevPt is not None:
+            myLn = Line3D(prevPt, plPt).recolor(color)
+
+            if myLn.length() > 0:
+                myArr = Arrow.make(myLn.leftPt, myLn.rightPt, hat_length = hat_len, rot_angle = 0, color = color)
+            else:
+                myArr = myLn ### ugly but doesn't matter
+
+            if not prevScn.is_empty():
+                prevScn = prevScn.drop(-1) ### drop the arrow
+            
+            prevScn = prevScn.transparify(cumulative_transparence).put(myLn).put(myArr)
+
+        pt_scenes.append(prevScn)
+        prevPt = plPt
+
+    # View.make(myCam, pt_scenes[-1]).snap().show()
+
+    pt_scenes = [*[Scene([]) for _ in myPnt[0].get_frames()[:-1]], 
+                 *pt_scenes,
+                 *[pt_scenes[-1] for _ in myPnt[2].get_frames()[:-1]]]
+
+    return pt_scenes
+
 i = 1
 for myPnt in candPnts:
-    exFrms = get_example_spline_frames(myPnt)
+    ### splines
+    splnScns = get_example_spline_scenes(myPnt)
+    ### other shapes
+    othrScns = get_return_motion(myPnt, color = const.BGR['intense_red'], cumulative_transparence = 0.95, max_hat_len = 20, which = 'rec')
+    ### combine
+    jointScns = [splnScn.combine(othrScn) for splnScn, othrScn in zip(splnScns, othrScns)]
+    ### render    
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames
+    myCam = Camera.calibrated_brest_behind()
+    exFrms, _ = vs.animate_sequence(jointScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
+                                    animate_over = realFrms, 
+                                    background_resolution = 1, argument_resolution = 1, 
+                                    foreground_resolution = 0.5, argument_luminosity = 1)
+    
     exFrms = exFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
 
     ### freeze raster
@@ -2762,7 +2830,20 @@ rast_frames.append(exFrms)
 
 i = 1
 for myPnt in candPnts:
-    exFrms = get_example_spline_frames(myPnt)
+    ### splines
+    splnScns = get_example_spline_scenes(myPnt)
+    ### other shapes
+    othrScns = get_return_motion(myPnt, color = const.BGR['intense_red'], cumulative_transparence = 0.95, max_hat_len = 20, which = 'hit')
+    ### combine
+    jointScns = [splnScn.combine(othrScn) for splnScn, othrScn in zip(splnScns, othrScns)]
+    ### render    
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames
+    myCam = Camera.calibrated_brest_behind()
+    exFrms, _ = vs.animate_sequence(jointScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
+                                    animate_over = realFrms, 
+                                    background_resolution = 1, argument_resolution = 2, 
+                                    foreground_resolution = 0.5, argument_luminosity = 1)
+    
     exFrms = exFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
 
     ### freeze raster
@@ -2864,7 +2945,16 @@ rast_frames.append(exFrms)
 
 i = 1
 for myPnt in candPnts:
-    exFrms = get_example_spline_frames(myPnt)
+    ### splines
+    splnScns = get_example_spline_scenes(myPnt, third_color = const.BGR['intense_red'])
+    ### render    
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames
+    myCam = Camera.calibrated_brest_behind()
+    exFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
+                                    animate_over = realFrms, 
+                                    background_resolution = 1, argument_resolution = 2, 
+                                    foreground_resolution = 0.5, argument_luminosity = 1)
+    
     exFrms = exFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
 
     ### freeze raster
@@ -2909,15 +2999,16 @@ script_lines.append(script_line)
 vis_ut.show(all_frames)
 
 ### Saving the separate MultiFrame objects and the Joint Script
-assert len(script_lines) == len(all_frames)
+if SAVE:
+    assert len(script_lines) == len(all_frames)
 
-# b) Save segments
-for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
-    subFrms, script_line = frames_and_script
-    running_idx = current_idx + idx
-    subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
-    
-    with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
-        f.write(script_line)
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        subFrms, script_line = frames_and_script
+        running_idx = current_idx + idx
+        subFrms.save(fullPath, f'seg_{running_idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{running_idx}.txt'), mode = 'w') as f:
+            f.write(script_line)
 
-current_idx = current_idx + len(all_frames)
+    current_idx = current_idx + len(all_frames)
