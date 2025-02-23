@@ -387,7 +387,7 @@ text1a = "   ... low ..."
 text1b = "   ... with sufficient depth and width ..."
 text1c = "   ... to the server's forehand."
 
-text2 = ' --> High-Risk / High-Reward'
+text2 = '    High-Risk / High-Reward'
 
 # text2 = "Chip returns are high-risk/high-reward, except ..."
 # text2a = "    - The typical chip return has a smaller target zone than the typical topspin return."
@@ -403,7 +403,13 @@ resFrm_simple1b = resFrm_simple1a.put(text1b, where = (50, y+5*i), size = 2, col
 resFrm_simple1c = resFrm_simple1b.put(text1c, where = (50, y+7*i), size = 2, color = const.BGR['leafy_green'])
 # resFrm_simple1c.show() 
 
-resFrm_simple2 = resFrm_simple1c.put(text2, where = (50, y+round(9.5*i)), size = 2, color = const.BGR['leafy_green'])
+txt_coords = (50, y+round(9.5*i))
+txtPt = Point2D(txt_coords).up(10)
+
+resFrm_simple2 = resFrm_simple1c.put(Line(txtPt, txtPt.right(40)), color = const.BGR['leafy_green'])
+resFrm_simple2 = resFrm_simple2.put(Line(txtPt.right(40), txtPt.right(30).up(7)), color = const.BGR['leafy_green']) 
+resFrm_simple2 = resFrm_simple2.put(Line(txtPt.right(40), txtPt.right(30).down(7)), color = const.BGR['leafy_green']) 
+resFrm_simple2 = resFrm_simple2.put(text2, where = txt_coords, size = 2, color = const.BGR['leafy_green'])
 # resFrm_simple2.show()
 
 # resFrm_simple3 = resFrm_simple2.put(text3, where = (50, y+12*i), size = 2)
@@ -424,13 +430,16 @@ footnoteStr = 'test footnote\ntwo lines\nthree lines'
 timeStr = '12:00-13:00:'
 
 def overlay_footnote(someFrms, timeStr, footnoteStr):
+    header_text = 'Reference to longer video'
     footnote_where = (50, 950)
     footnote_dims = (500, 100)
+    x1, x2, y1, y2 = 30, 150, 25, 50
     
     blackFrm = BGRFrame.make_black(*footnote_dims)
-
-    footnoteFrm = blackFrm.put(timeStr, size = 1, where = (30, 40), color = const.BGR['grass_green'])
-    footnoteFrm = footnoteFrm.put(footnoteStr, size = 1, where = (150, 40), color = const.BGR['grass_green'])
+    
+    footnoteFrm = blackFrm.put(header_text, size = 1, thickness = 1, where = (x1, y1), color = const.BGR['grass_green'])
+    footnoteFrm = footnoteFrm.put(timeStr, size = 1, where = (x1, y2), color = const.BGR['grass_green'])
+    footnoteFrm = footnoteFrm.put(footnoteStr, size = 1, where = (x2, y2), color = const.BGR['grass_green'])
 
     footnoteFrm_framed = footnoteFrm.framed(FRAME_THICKNESS, FRAME_COLOR)
     # footnoteFrm_framed.show()
@@ -1147,7 +1156,7 @@ color_dict = {'tp': TOPS_COLOR,
               'hi': CHIP_HI_COLOR}
 
 TRANS_FACTOR = 0.5
-DIM_FACTOR_REDGREEN = 0.5
+DIM_FACTOR_REDGREEN = 0.25
 FRAME_COLOR_GREEN = const.BGR['leafy_green']
 FRAME_COLOR_RED = const.BGR['intense_red']
 
@@ -1387,6 +1396,29 @@ all_frames.append(rastFrms)
 script_lines.append(script_line)
 # del lineFrms, statFrms, postFrms, rastFrms
 
+def put_desc(someFrms, descStr, side, color = const.BGR['leafy_green'], thickness = 2):
+    assert side in ['left', 'right']
+    if side == 'left':
+        where = (50, 50)
+    else:
+        where = (570, 50)
+    
+    textFrms = someFrms.put(descStr, where = where, thickness = thickness, color = color).framed(FRAME_THICKNESS, FRAME_COLOR)
+
+    return textFrms
+
+descStr = 'Forehand Side Serve Out Wide'
+side = 'right'
+textFrms = put_desc(statFrms[:10], descStr, side)
+
+movRst.add(textFrms, i, j)
+
+rastFrms = movRst.render()
+rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
+
+all_frames.append(rastFrms)
+script_lines.append(script_line)
+
 ## for later
 combScn_trans = combScn.transparify(TRANS_FACTOR)
 
@@ -1396,6 +1428,7 @@ statFrms_tops, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_tops, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_tops = statFrms_tops.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_tops = put_desc(statFrms_tops, descStr, side)
 
 # -> only chip zones lit up
 zoneScn_chip = zoneDict_trans['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
@@ -1403,6 +1436,7 @@ statFrms_chip, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_chip, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_chip = statFrms_chip.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_chip = put_desc(statFrms_chip, descStr, side)
 
 # -> only flags lit up
 zoneScn_zone = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
@@ -1410,10 +1444,11 @@ statFrms_zone, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_zone, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_zone = statFrms_zone.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_zone = put_desc(statFrms_zone, descStr, side)
 
 # -> framed with color
-statFrms_green = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR_GREEN)
-statFrms_red = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
+statFrms_green = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR_GREEN)
+statFrms_red = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
 
 prevRst_tops.add(statFrms_tops, i, j)
 prevRst_tops_wide.add(statFrms_tops, i, j)
@@ -1556,12 +1591,20 @@ prevRst.add(postFrms, i, j)
 
 rastFrms_g = prevRst.render()
 
+descStr = 'Forehand Side Serve Down The Middle'
+side = 'right'
+textFrms = put_desc(statFrms[:10], descStr, side)
+
+prevRst.add(textFrms, i, j)
+
+rastFrms_h = prevRst.render()
+rastFrms_h = overlay(rastFrms_h, leg3Frm, top_left_point = tlPt)
+
 jointFrms = BGRFrames.from_frames([rastFrms_a, rastFrms_b, rastFrms_c, 
                                    rastFrms_d, rastFrms_e, rastFrms_f, 
-                                   rastFrms_g])
+                                   rastFrms_g, rastFrms_h])
 jointFrms = overlay(jointFrms, leg3Frm, top_left_point = tlPt)
-
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -1575,6 +1618,7 @@ statFrms_tops, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_tops, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_tops = statFrms_tops.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_tops = put_desc(statFrms_tops, descStr, side)
 
 # -> only chip zones lit up
 zoneScn_chip = zoneDict_trans['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
@@ -1582,6 +1626,7 @@ statFrms_chip, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_chip, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_chip = statFrms_chip.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_chip = put_desc(statFrms_chip, descStr, side)
 
 # -> only flags lit up
 zoneScn_zone = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
@@ -1589,10 +1634,10 @@ statFrms_zone, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_zone, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_zone = statFrms_zone.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_zone = put_desc(statFrms_zone, descStr, side)
 
-# -> framed with color
-statFrms_green = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR_GREEN)
-statFrms_red = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
+statFrms_green = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR_GREEN)
+statFrms_red = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
 
 prevRst_tops.add(statFrms_tops, i, j)
 prevRst_tops_wide.add(statFrms_tops.dim(DIM_FACTOR_REDGREEN), i, j)
@@ -1734,15 +1779,23 @@ prevRst.add(postFrms, i, j)
 
 rastFrms_g = prevRst.render()
 
+descStr = 'Backhand Side Serve Down The Middle'
+side = 'left'
+textFrms = put_desc(statFrms[:10], descStr, side)
+
+prevRst.add(textFrms, i, j)
+
+rastFrms_h = prevRst.render()
+rastFrms_h = overlay(rastFrms_h, leg3Frm, top_left_point = tlPt)
+
 jointFrms = BGRFrames.from_frames([rastFrms_a, rastFrms_b, rastFrms_c, 
                                    rastFrms_d, rastFrms_e, rastFrms_f, 
-                                   rastFrms_g])
+                                   rastFrms_g, rastFrms_h])
 jointFrms = overlay(jointFrms, leg3Frm, top_left_point = tlPt)
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
-
-DecapStream(jointFrms, 0, 100).show()
 
 ## for later
 combScn_trans = combScn.transparify(TRANS_FACTOR)
@@ -1753,6 +1806,7 @@ statFrms_tops, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_tops, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_tops = statFrms_tops.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_tops = put_desc(statFrms_tops, descStr, side)
 
 # -> only chip zones lit up
 zoneScn_chip = zoneDict_trans['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
@@ -1760,6 +1814,7 @@ statFrms_chip, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_chip, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_chip = statFrms_chip.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_chip = put_desc(statFrms_chip, descStr, side)
 
 # -> only flags lit up
 zoneScn_zone = zoneDict['tp'].combine(zoneDict['lo']).combine(zoneDict['hi']).consolidate()
@@ -1767,10 +1822,10 @@ statFrms_zone, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_zone, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_zone = statFrms_zone.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_zone = put_desc(statFrms_zone, descStr, side)
 
-# -> framed with color
-statFrms_green = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR_GREEN)
-statFrms_red = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
+statFrms_green = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR_GREEN)
+statFrms_red = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
 
 prevRst_tops.add(statFrms_tops, i, j)
 prevRst_tops_wide.add(statFrms_tops.dim(DIM_FACTOR_REDGREEN), i, j)
@@ -1911,15 +1966,23 @@ prevRst.add(postFrms, i, j)
 
 rastFrms_g = prevRst.render()
 
+descStr = 'Backhand Side Serve Out Wide'
+side = 'left'
+textFrms = put_desc(statFrms[:10], descStr, side)
+
+prevRst.add(textFrms, i, j)
+
+rastFrms_h = prevRst.render()
+rastFrms_h = overlay(rastFrms_h, leg3Frm, top_left_point = tlPt)
+
 jointFrms = BGRFrames.from_frames([rastFrms_a, rastFrms_b, rastFrms_c, 
                                    rastFrms_d, rastFrms_e, rastFrms_f, 
-                                   rastFrms_g])
+                                   rastFrms_g, rastFrms_h])
 jointFrms = overlay(jointFrms, leg3Frm, top_left_point = tlPt)
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
-
-DecapStream(jointFrms, 0, 100).show()
 
 ## for later
 combScn_trans = combScn.transparify(TRANS_FACTOR)
@@ -1930,6 +1993,7 @@ statFrms_tops, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_tops, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_tops = statFrms_tops.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_tops = put_desc(statFrms_tops, descStr, side)
 
 # -> only chip zones lit up
 zoneScn_chip = zoneDict_trans['tp'].combine(zoneDict['hi']).combine(zoneDict['lo']).consolidate()
@@ -1937,6 +2001,7 @@ statFrms_chip, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_chip, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_chip = statFrms_chip.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_chip = put_desc(statFrms_chip, descStr, side)
 
 # -> only flags lit up
 zoneScn_zone = zoneDict['tp'].combine(zoneDict['hi']).combine(zoneDict['lo']).consolidate()
@@ -1944,10 +2009,10 @@ statFrms_zone, _ = vs.animate_static(combScn_trans, static_cam = heatCam,
                                 background_scene = fullScn, previous_dummy_scene = zoneScn_zone, 
                                 annotated_points = annotPts, **prmDict_annot_heat, num_frames = TRANSITION_FRAMES)
 statFrms_zone = statFrms_zone.framed(FRAME_THICKNESS, FRAME_COLOR)
+statFrms_zone = put_desc(statFrms_zone, descStr, side)
 
-# -> framed with color
-statFrms_green = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
-statFrms_red = statFrms.framed(FRAME_THICKNESS, FRAME_COLOR_RED)
+statFrms_green = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR).dim(DIM_FACTOR_REDGREEN)
+statFrms_red = textFrms.framed(FRAME_THICKNESS, FRAME_COLOR_RED)
 
 prevRst_tops.add(statFrms_tops, i, j)
 prevRst_tops_wide.add(statFrms_tops, i, j)
@@ -1977,13 +2042,13 @@ zoneFrms = overlay(zoneFrms, leg3Frm, top_left_point = tlPt)
 greenFrms = overlay(greenFrms, leg3Frm, top_left_point = tlPt)
 redFrms = overlay(redFrms, leg3Frm, top_left_point = tlPt)
 
-topsFrms[-1].show()
-topsFrms_wide[-1].show()
-topsFrms_middle[-1].show()
-chipFrms[-1].show()
-zoneFrms[-1].show()
-greenFrms[-1].show()
-redFrms[-1].show()
+# topsFrms[-1].show()
+# topsFrms_wide[-1].show()
+# topsFrms_middle[-1].show()
+# chipFrms[-1].show()
+# zoneFrms[-1].show()
+# greenFrms[-1].show()
+# redFrms[-1].show()
 
 script_line =   """
                     As for placement, the topspin return should be played...
@@ -2065,12 +2130,7 @@ script_line =   """
 
 script_line =   """
 	                The exception is the serve out wide from the server's backhand side. 
-                                    
-                    (The high chip zone is larger than the low chip zone, which is probably due to the fact that the returner plays himself out of position 
-                    going down the line, and therefore needs as much time to recover as possible: the high chip, with its long travel time, affords that. 
-                    Nevertheless, )
-
-                    The topspin has both the highest peak and the largest zone, making it clearly the best option.
+                    Here, the topspin has both the highest peak and the largest zone, making it clearly the best option.
                 """
 ## -> flags lit, zones lit
 ## red border around exception.
@@ -2637,9 +2697,6 @@ bulletFrms1c = BGRFrames.from_frame(bulletFrm1c, 50).framed(FRAME_THICKNESS, FRA
 
 script_line =   """
                     Nevertheless, three factors lead our model to consider it a viable alternative to the topspin return.
-
-                    A chip return, especially when played with a higher launch angle, 
-                    travels for longer than a typical topspin return. 
                 """
 
 exRst = FramesRaster(3, 3)
@@ -2760,8 +2817,8 @@ exFrms = exRst.render()
 rast_frames.append(exFrms)
 
 script_line =   """
-                    This allows chip returns to the backhand to be run around,
-                    allowing the server to go for a forehand inside-out or inside-in. 
+                    Firstly, the longer travel time of a chip allows returns to the backhand to be run around,
+                    enabling the server to go for a forehand inside-out or inside-in. 
                 """
 
 exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nthe run-around serve+1")
@@ -2935,7 +2992,7 @@ candPnts = [*[dc_dtlPnts1[idx] for idx in dc_cands_b1], *[ad_dtlPnts1[idx] for i
             *[dc_dtlPnts2[idx] for idx in dc_cands_b2], *[ad_dtlPnts2[idx] for idx in ad_cands_b2]]
 
 script_line =   """
-                    On the plus side, longer travel time means more time for the returner to reposition,
+                    Second, longer travel time means more time for the returner to reposition,
                     making the chip return down the line more viable especially on serves out wide.
                     By contrast, the topspin return has to go cross-court on serves out wide, according to our model.
                 """
@@ -3059,12 +3116,6 @@ candPnts = [*[ftPnts1[idx] for idx in ft_cands_b1], *[ntPnts1[idx] for idx in nt
             *[ftPnts2[idx] for idx in ft_cands_b2], *[ntPnts2[idx] for idx in nt_cands_b2],
             *[ftPnts3[idx] for idx in ft_cands_b3], *[ntPnts3[idx] for idx in nt_cands_b3],]
 
-
-script_line =   """
-                    Finally, there is evidence for the server typically being somewhat too impatient on
-                    chip return serves + 1. 
-                """
-
 rast_frames = []
 row, col = 0, 0
 
@@ -3074,6 +3125,9 @@ exFrms = exRst.render()
 rast_frames.append(exFrms)
 
 script_line =   """
+                    Finally, there is evidence for the server typically being somewhat too impatient on
+                    chip return serves + 1. 
+
                     The model believes that a chip return to the forehand can goad the
                     server into premature aggression, and entice an error by the server.
                 """
