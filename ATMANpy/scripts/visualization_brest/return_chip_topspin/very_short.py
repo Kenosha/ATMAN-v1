@@ -26,7 +26,7 @@ from ATMANpy.types.Overlays import FrameRaster, FramesRaster, Table, overlay, ov
 
 from ATMANpy.funcs.util_funcs import interpolate_tuples
 
-SAVE = False
+SAVE = True
 
 def show(all_frames, ms_between_frames = 25):
     DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
@@ -295,13 +295,18 @@ regressor_names = ['Player\nPositions', 'Return\nPlacement',  '...', 'Return\nSp
 model_name = 'Logistic Regression'
 out_name = 'Returner Win Probability'
 
-text_color = const.BGR['bright_grey']
-shape_color = const.BGR['marine_blue']
-arrow_color = const.BGR['bright_blue']
+text_color = (0, 0, 0)
+# text_color = const.BGR['bright_grey']
+shape_color = const.BGR['smokey_grey']
+# shape_color = const.BGR['marine_blue']
+arrow_color = const.BGR['smokey_grey']
+# arrow_color = const.BGR['bright_blue']
+pct_color = const.BGR['smokey_grey']
 
 diag_kwargs = {'dimensions': DIMENSIONS_HALF, 'arrow_hat_length': 0.5, 'shape_offset': 0.05, 
-                'resolution': 1000, 'text_size': 2,
-                'text_color': text_color, 'arrow_color': arrow_color, 'shape_color': shape_color}
+                'resolution': 2000, 'text_size': 2,
+                'text_color': text_color, 'arrow_color': arrow_color, 'shape_color': shape_color, 
+                'shorten_arrows': 0.1}
 
 modDiag_0 = Diagram([[], [], [], [model_name], [], [], []], **diag_kwargs)
 modDiag_1 = Diagram([[], regressor_names, [], [model_name], [], [], []], **diag_kwargs)
@@ -336,14 +341,17 @@ annPnts_shifted_2 = [annPnts_2[0].right(0.2),
                    annPnts_2[5].right(7.4).back(0.2),
                    annPnts_2[6].right(6.55).back(0.2)]
 
+annPnts_shifted_2[2] = annPnts_shifted_2[2].recolor(const.BGR['bright_grey'])
+annPnts_shifted_2[-1] = annPnts_shifted_2[-1].recolor(const.BGR['bright_grey'])
+
 horiLn = myScn_2[6]['Bottom']
 
 from ATMANpy.types.ShapesTennis3D import Arrow
 
-pctArrow = Arrow.make(horiLn.leftPt, horiLn.rightPt, rot_angle = np.pi / 2, color = const.BGR['bright_grey'])
+pctArrow = Arrow.make(horiLn.leftPt, horiLn.rightPt, rot_angle = np.pi / 2, color = pct_color)
 
-zeroPt = horiLn.leftPt.back(1.5).annotate('0%').resize(2)
-onePt = horiLn.rightPt.back(1.5).left(2).annotate('100%').resize(2) 
+zeroPt = horiLn.leftPt.back(1.5).annotate('0%').resize(2).recolor(pct_color)
+onePt = horiLn.rightPt.back(1.5).left(2).annotate('100%').resize(2).recolor(pct_color)
 
 annPnts_shifted_2 = [*annPnts_shifted_2, zeroPt, onePt]
 
@@ -372,7 +380,7 @@ diagFrm_2 = diagFrm_2.put('THE MODEL', color = const.BGR['bright_grey'], size = 
 # diagFrm_2.show()
 
 diagFrm_2_framed = diagFrm_2.framed(FRAME_THICKNESS, FRAME_COLOR)
-# diagFrm_2_framed.show()
+diagFrm_2_framed.show()
 
 ### RESULT TEXT ###
 resFrm = BGRFrame.make_black(*DIMENSIONS_HALF)
@@ -632,7 +640,7 @@ def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_res
             }
 
 
-RESOLUTION_MODIFIER_NORMAL = 1 #35
+RESOLUTION_MODIFIER_NORMAL = 35
 RESOLUTION_MODIFIER_HEATMAP = 0.5
 prmDict = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1.25, 
                         adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
@@ -1361,7 +1369,7 @@ hiPt, hi_max = pvalDict['hi']
 
 ### Line Points -> up!
 up_pts = 20
-tpPt_up, loPt_up, hiPt_up = tpPt.up(up_pts + 10), loPt.up(up_pts + 10), hiPt.up(up_pts - 5)
+tpPt_up, loPt_up, hiPt_up = tpPt.up(up_pts + 10), loPt.up(up_pts + 25), hiPt.up(up_pts - 5)
 
 ### Little Flag
 tpReg = make_flag(tpPt_up, color = TOPS_COLOR, height_of_flag = 9, width_of_flag = 20)
@@ -2659,9 +2667,7 @@ text_color = const.BGR['bright_grey']
 bright_color = const.BGR['leafy_green']
 dark_color = interpolate_tuples(bright_color, (0, 0, 0), itpl_lambda = 0.4)
 
-itpRst = FramesRaster(3, 3)
-
-bulletFrm = BGRFrame.make_black(*DIMENSIONS_THIRD)
+bulletFrm = BGRFrame.make_black(*DIMENSIONS_HALF)
 
 bulletFrm = bulletFrm.put('', color = const.BGR['bright_grey'], size = 2, thickness = 2)
 
@@ -2685,10 +2691,10 @@ bulletFrm1c = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, col
 bulletFrm1c = bulletFrm1c.put(text1b, where = (50, round(y+6.5*i)), size = 2, color = dark_color)
 bulletFrm1c = bulletFrm1c.put(text1c, where = (50, round(y+8.5*i)), size = 2, color = bright_color)
 
-# bulletFrm1.show()
-# bulletFrm1a.show()
-# bulletFrm1b.show()
-# bulletFrm1c.show()
+bulletFrm1.show()
+bulletFrm1a.show()
+bulletFrm1b.show()
+bulletFrm1c.show()
 
 bulletFrms1 = BGRFrames.from_frame(bulletFrm1, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
 bulletFrms1a = BGRFrames.from_frame(bulletFrm1a, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
@@ -2699,7 +2705,7 @@ script_line =   """
                     Nevertheless, three factors lead our model to consider it a viable alternative to the topspin return.
                 """
 
-exRst = FramesRaster(3, 3)
+exRst = FramesRaster(2, 2)
 exRst.add(bulletFrms1, 0, 0)
 exFrms = exRst.render()
 
@@ -2806,13 +2812,14 @@ candPnts = [checkPnts[idx] for idx in cands_a]
 
 cands_a = [4, 9, 13, 16, 18, 20, 32, 39]
 cands_a = [4, 9, 13, 18, 20, 32, 39]
+cands_a = [9, 13, 39]
 candPnts = [checkPnts[idx] for idx in cands_a]
 
 rast_frames = []
-row, col = 0, 0
+row, col = 1, 0
 
-exRst = FramesRaster(3, 3)
-exRst.add(bulletFrms1a, col, row)
+exRst = FramesRaster(2, 2)
+exRst.add(bulletFrms1a, row, col)
 exFrms = exRst.render()
 rast_frames.append(exFrms)
 
@@ -2877,10 +2884,10 @@ def get_return_motion(myPnt, color = const.BGR['intense_red'], cumulative_transp
 
     return pt_scenes
 
-i = 1
+i = 0
 for myPnt in candPnts:
-    if i == 6:
-        i = 7 ### skip lower left
+    if i == 2:
+        i = 3 ### skip lower left
 
     ### splines
     splnScns = get_example_spline_scenes(myPnt)
@@ -2889,8 +2896,8 @@ for myPnt in candPnts:
     ### combine
     jointScns = [splnScn.combine(othrScn) for splnScn, othrScn in zip(splnScns, othrScns)]
     ### render    
-    realFrms = myPnt[:3].stream(confs = confs).decap().frames
-    myCam = Camera.calibrated_brest_behind()
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames.rescale(1.5)
+    myCam = Camera.calibrated_brest_behind().resize(1.5)
     exFrms, _ = vs.animate_sequence(jointScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
                                     animate_over = realFrms, 
                                     background_resolution = 1, argument_resolution = 1, 
@@ -2902,13 +2909,13 @@ for myPnt in candPnts:
     exRst = exRst.to_frame_raster().to_frames_raster(num_frames = 1)
     
     ### add new element
-    row, col = i // 3, i % 3 
+    row, col = i // 2, i % 2 
 
-    ### speed up
-    if row == 1:
-        exFrms = exFrms[::2]
-    if row == 2:
-        exFrms = exFrms[::3]
+    # ### speed up
+    # if row == 1:
+    #     exFrms = exFrms[::2]
+    # if row == 2:
+    #     exFrms = exFrms[::3]
 
     exRst.add(exFrms, row, col)
 
@@ -2940,7 +2947,7 @@ from ATMANpy.types.Overlays import reverse_cascade
 acc, frms = 1.25, 10
 
 script_line = ""
-revRst, revFrms = reverse_cascade(exRst, keep_which = [(0, 0), (2, 0)], acceleration = acc, frames_per_element = frms)
+revRst, revFrms = reverse_cascade(exRst, keep_which = [(1, 0)], acceleration = acc, frames_per_element = frms)
 
 all_frames.append(revFrms)
 script_lines.append(script_line)
@@ -2991,6 +2998,8 @@ ad_cands_b2 = [5, 13]
 candPnts = [*[dc_dtlPnts1[idx] for idx in dc_cands_b1], *[ad_dtlPnts1[idx] for idx in ad_cands_b1], 
             *[dc_dtlPnts2[idx] for idx in dc_cands_b2], *[ad_dtlPnts2[idx] for idx in ad_cands_b2]]
 
+candPnts = [candPnts[4], candPnts[0], candPnts[3]]
+
 script_line =   """
                     Second, longer travel time means more time for the returner to reposition,
                     making the chip return down the line more viable especially on serves out wide.
@@ -2998,20 +3007,20 @@ script_line =   """
                 """
 
 rast_frames = []
-row, col = 0, 0
+row, col = 1, 0
 
-exRst = FramesRaster(3, 3)
-exRst.add(bulletFrms1b, col, row)
+exRst = FramesRaster(2, 2)
+exRst.add(bulletFrms1b, row, col)
 exFrms = exRst.render()
 rast_frames.append(exFrms)
 
 exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
 rast_frames.append(exFrms)
 
-i = 1
+i = 0
 for myPnt in candPnts:
-    if i == 6:
-        i = 7 ### skip lower left
+    if i == 2:
+        i = 3 ### skip lower left
 
     ### splines
     splnScns = get_example_spline_scenes(myPnt)
@@ -3020,8 +3029,8 @@ for myPnt in candPnts:
     ### combine
     jointScns = [splnScn.combine(othrScn) for splnScn, othrScn in zip(splnScns, othrScns)]
     ### render    
-    realFrms = myPnt[:3].stream(confs = confs).decap().frames
-    myCam = Camera.calibrated_brest_behind()
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames.rescale(1.5)
+    myCam = Camera.calibrated_brest_behind().resize(1.5)
     exFrms, _ = vs.animate_sequence(jointScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
                                     animate_over = realFrms, 
                                     background_resolution = 1, argument_resolution = 2, 
@@ -3033,13 +3042,13 @@ for myPnt in candPnts:
     exRst = exRst.to_frame_raster().to_frames_raster(num_frames = 1)
     
     ### add new element
-    row, col = i // 3, i % 3
+    row, col = i // 2, i % 2
     
-    ### speed up    
-    if row == 1:
-        exFrms = exFrms[::2]
-    if row == 2:
-        exFrms = exFrms[::3]
+    # ### speed up    
+    # if row == 1:
+    #     exFrms = exFrms[::2]
+    # if row == 2:
+    #     exFrms = exFrms[::3]
 
     exRst.add(exFrms, row, col)
 
@@ -3068,7 +3077,7 @@ script_lines.append(script_line)
 # del exFrms, rstFrms, bulletFrms1b
 
 script_line = ""
-revRst, revFrms = reverse_cascade(exRst, keep_which = [(0, 0), (2, 0)], acceleration = acc, frames_per_element = frms)
+revRst, revFrms = reverse_cascade(exRst, keep_which = [(1, 0)], acceleration = acc, frames_per_element = frms)
 
 all_frames.append(revFrms)
 script_lines.append(script_line)
@@ -3116,11 +3125,13 @@ candPnts = [*[ftPnts1[idx] for idx in ft_cands_b1], *[ntPnts1[idx] for idx in nt
             *[ftPnts2[idx] for idx in ft_cands_b2], *[ntPnts2[idx] for idx in nt_cands_b2],
             *[ftPnts3[idx] for idx in ft_cands_b3], *[ntPnts3[idx] for idx in nt_cands_b3],]
 
-rast_frames = []
-row, col = 0, 0
+candPnts = [candPnts[2], candPnts[1], candPnts[5]]
 
-exRst = FramesRaster(3, 3)
-exRst.add(bulletFrms1c, col, row)
+rast_frames = []
+row, col = 1, 0
+
+exRst = FramesRaster(2, 2)
+exRst.add(bulletFrms1c, row, col)
 exFrms = exRst.render()
 rast_frames.append(exFrms)
 
@@ -3135,16 +3146,16 @@ script_line =   """
 exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on premature aggression\nagainst chip returns.")
 rast_frames.append(exFrms)
 
-i = 1
+i = 0
 for myPnt in candPnts:
-    if i == 6:
-        i = 7
+    if i == 2:
+        i = 3
 
     ### splines
     splnScns = get_example_spline_scenes(myPnt, third_color = const.BGR['intense_red'])
     ### render    
-    realFrms = myPnt[:3].stream(confs = confs).decap().frames
-    myCam = Camera.calibrated_brest_behind()
+    realFrms = myPnt[:3].stream(confs = confs).decap().frames.rescale(1.5)
+    myCam = Camera.calibrated_brest_behind().resize(1.5)
     exFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
                                     animate_over = realFrms, 
                                     background_resolution = 1, argument_resolution = 2, 
@@ -3156,20 +3167,18 @@ for myPnt in candPnts:
     exRst = exRst.to_frame_raster().to_frames_raster(num_frames = 1)
     
     ### add new element
-    row, col = i // 3, i % 3
+    row, col = i // 2, i % 2
 
-    ### speed up
-    if row == 1:
-        exFrms = exFrms[::2]
-    if row == 2:
-        exFrms = exFrms[::3]
+    # ### speed up
+    # if row == 1:
+    #     exFrms = exFrms[::2]
+    # if row == 2:
+    #     exFrms = exFrms[::3]
 
     exRst.add(exFrms, row, col)
 
     exFrms = exRst.render()
     
-    if i < 6:
-        exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on premature aggression\nagainst chip returns.")
     exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on premature aggression\nagainst chip returns.")
 
     rast_frames.append(exFrms)
@@ -3195,10 +3204,15 @@ script_line =   """
                     Naturally, against any specific player, the optimal return strategy may be very different, 
                     however, this analysis provides evidence that chipping the ball into play low, to the forehand, 
                     may be an underutilized strategy on aggregate. 
-                """
-revRst, revFrms = reverse_cascade(exRst, keep_which = [(2, 0)], acceleration = acc, frames_per_element = frms * 5)
+                """ # 20 sec
+revRst, revFrms = reverse_cascade(exRst, keep_which = [(1, 0)], acceleration = acc, frames_per_element = frms * 5)
 
-all_frames.append(revFrms)
+fadeFrms = BGRFrames.from_frame(revFrms[-1], 300).dim_progressively()
+
+lastFrms = BGRFrames.from_frames([revFrms, fadeFrms])
+DecapStream(lastFrms, 0, 100).show()
+
+all_frames.append(lastFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
