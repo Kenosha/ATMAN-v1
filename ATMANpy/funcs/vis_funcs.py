@@ -35,7 +35,9 @@ def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
     return BGRFrames.from_frames([combFrms] * repeats)[:duration_in_frames]
 
 def interpolate_camera_naive(startCam, endCam, num_frames):
-    ### TODO: this is not super reliable! -> quaternions + slerp?
+    if startCam == endCam:
+        return [startCam for _ in range(num_frames)]
+    
     assert startCam.sensor_dims == endCam.sensor_dims
     frames = range(0, num_frames)
     num_frames = len(frames)
@@ -49,8 +51,10 @@ def interpolate_camera_naive(startCam, endCam, num_frames):
     return itplCams
 
 def interpolate_camera_slerp(startCam, endCam, num_frames):
-    from ATMANpy.types.Visual3D import Quaternion
+    if startCam == endCam:
+        return [startCam for _ in range(num_frames)]
     
+    from ATMANpy.types.Visual3D import Quaternion
     def SLERP(q1, q2, u):
         ### TODO: enforce angle to be the short one?!
         if q1.vector() @ q2.vector() < 0:
@@ -209,10 +213,7 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
     argument_annotated_points_dimmed = [p.dim(1 / argument_luminosity) for p in annotated_points] ### this passes into the next_animation_dictionary
     annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
 
-    if start_cam == stop_cam:
-        cams = [start_cam for _ in range(num_frames)]
-    else:
-        cams = interpolate_func(start_cam, stop_cam, num_frames) 
+    cams = interpolate_func(start_cam, stop_cam, num_frames) 
 
     frameList = []
     for idx in range(num_frames):
