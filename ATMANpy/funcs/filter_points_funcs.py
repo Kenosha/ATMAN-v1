@@ -19,6 +19,11 @@ def is_server(myPnt, name):
 def is_returner(myPnt, name):
     return myPnt.get_rec_player_name() == name
 
+def is_not_server(myPnt, name):
+    return not is_server(myPnt, name)
+def is_not_returner(myPnt, name):
+    return not is_returner(myPnt, name)
+
 def is_serve_out_wide(myPnt):
     return filt_shot.is_out_wide(myPnt.get_serve())
 def is_serve_down_middle(myPnt):
