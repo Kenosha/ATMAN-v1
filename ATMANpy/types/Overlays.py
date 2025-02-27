@@ -685,6 +685,7 @@ class Diagram:
                  text_skip_after_how_many_symbols = None,
                  arrow_hat_angle = np.pi / 4, arrow_rot_angle = 0, arrow_hat_length = 1, 
                  arrow_color = const.BGR['strong_blue'], arrow_alpha = 1, arrow_thickness = 0,
+                 shorten_arrows = 0,
                  render_height = 100, dimensions = (600, 400), resolution = 10):
         ### diagram text array is an irregular array (an arbitrary list of lists) 
         # that contains the text that is to be printed in the diagram shapes.
@@ -756,6 +757,9 @@ class Diagram:
                     if origin_point == target_point:
                         row_arrows.append(None)
                     else:
+                        arrLn = Line3D(origin_point, target_point).shorten_by(shorten_arrows, N = 1000, which = 'both')
+                        origin_point, target_point = arrLn.leftPt, arrLn.rightPt
+
                         myArrow = Arrow.make(origin_point, target_point, 
                                              hat_angle = arrow_hat_angle, rot_angle = arrow_rot_angle, hat_length = arrow_hat_length,
                                              color = arrow_color, alpha = arrow_alpha, thickness = arrow_thickness)
