@@ -34,7 +34,7 @@ def blinking(onFrm, offFrm, blinks_per_second = 1, duration_in_frames = 100):
 
     return BGRFrames.from_frames([combFrms] * repeats)[:duration_in_frames]
 
-def interpolate_camera_naive(startCam, endCam, num_frames):
+def interpolate_camera_naive(startCam, endCam, num_frames, start_later = 0, stop_earlier = 0):
     if startCam == endCam:
         return [startCam for _ in range(num_frames)]
     
@@ -42,7 +42,11 @@ def interpolate_camera_naive(startCam, endCam, num_frames):
     frames = range(0, num_frames)
     num_frames = len(frames)
 
-    itpl_factors = np.linspace(0, 1, num_frames, endpoint = True)
+    trans_frames = num_frames - start_later - stop_earlier
+    itpl_factors = np.concatenate([np.zeros(start_later), 
+                                   np.linspace(0, 1, trans_frames, endpoint = True), 
+                                   np.ones(stop_earlier)])
+
     itpl_factors_brdcst = itpl_factors[:, np.newaxis, np.newaxis]
     M_ints = startCam.M_int[np.newaxis] * (1 - itpl_factors_brdcst) + endCam.M_int[np.newaxis] * itpl_factors_brdcst
     M_exts = startCam.M_ext[np.newaxis] * (1 - itpl_factors_brdcst) + endCam.M_ext[np.newaxis] * itpl_factors_brdcst
@@ -50,7 +54,7 @@ def interpolate_camera_naive(startCam, endCam, num_frames):
     itplCams = [Camera(M_int, M_ext, startCam.sensor_dims) for (M_int, M_ext) in zip(M_ints, M_exts)]
     return itplCams
 
-def interpolate_camera_slerp(startCam, endCam, num_frames):
+def interpolate_camera_slerp(startCam, endCam, num_frames, start_later = 0, stop_earlier = 0):
     if startCam == endCam:
         return [startCam for _ in range(num_frames)]
     
@@ -66,14 +70,17 @@ def interpolate_camera_slerp(startCam, endCam, num_frames):
         factor2 = np.sin(u * theta) / np.sin(theta)
 
         return q1 * factor1 + q2 * factor2
-
-    u_space = np.linspace(0, 1, num_frames, endpoint = True)
     
+    trans_frames = num_frames - start_later - stop_earlier
+    itpl_factors = np.concatenate([np.zeros(start_later), 
+                                   np.linspace(0, 1, trans_frames, endpoint = True), 
+                                   np.ones(stop_earlier)])
+
     q1 = Quaternion.from_rotation_matrix(startCam.get_R())
     q2 = Quaternion.from_rotation_matrix(endCam.get_R())
 
     itplCams = []
-    for u in u_space:
+    for u in itpl_factors:
         M_int = startCam.M_int * (1 - u) + endCam.M_int * u
         M_ext = startCam.M_ext * (1 - u) + endCam.M_ext * u
 
@@ -166,7 +173,8 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
                     argument_luminosity = 1, adaptive_resolution_exponent = 0, 
                     cumulate_argument = False, cumulative_foreground_transparence = None, 
                     argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
-                    start_cam = None, stop_cam = None, animate_over = None):
+                    start_cam = None, stop_cam = None, animate_over = None,
+                    start_later = 0, stop_earlier = 0):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
     num_frames = len(animation_sequence_objects)
@@ -213,7 +221,7 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
     argument_annotated_points_dimmed = [p.dim(1 / argument_luminosity) for p in annotated_points] ### this passes into the next_animation_dictionary
     annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
 
-    cams = interpolate_func(start_cam, stop_cam, num_frames) 
+    cams = interpolate_func(start_cam, stop_cam, num_frames, start_later = start_later, stop_earlier = stop_earlier) 
 
     frameList = []
     for idx in range(num_frames):
@@ -280,7 +288,8 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
                         argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                         argument_luminosity = 1, cumulative_foreground_transparence = None, adaptive_resolution_exponent = 0,
                         argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
-                        start_cam = None, stop_cam = None):
+                        start_cam = None, stop_cam = None,
+                        start_later = 0, stop_earlier = 0):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -336,7 +345,7 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
     annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
 
     ### make cams
-    cams = interpolate_func(start_cam, stop_cam, num_frames) 
+    cams = interpolate_func(start_cam, stop_cam, num_frames, start_later = start_later, stop_earlier = stop_earlier) 
 
     frameList = []
     for idx in range(num_frames):
