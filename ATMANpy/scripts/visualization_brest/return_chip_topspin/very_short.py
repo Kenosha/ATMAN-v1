@@ -328,6 +328,8 @@ annPnts_shifted_1 = [annPnts_1[0].right(0.2),
                     annPnts_1[4].right(0.5),
                     annPnts_1[5].right(7.4).back(0.2)]
 
+annPnts_shifted_1[2] = annPnts_shifted_1[2].recolor(const.BGR['bright_grey'])
+
 modDiag_2.shapes[0][2].shape_color = (0, 0, 0)
 modDiag_2.arrows[0].pop(2)
 
@@ -380,7 +382,7 @@ diagFrm_2 = diagFrm_2.put('THE MODEL', color = const.BGR['bright_grey'], size = 
 # diagFrm_2.show()
 
 diagFrm_2_framed = diagFrm_2.framed(FRAME_THICKNESS, FRAME_COLOR)
-diagFrm_2_framed.show()
+# diagFrm_2_framed.show()
 
 ### RESULT TEXT ###
 resFrm = BGRFrame.make_black(*DIMENSIONS_HALF)
@@ -464,7 +466,7 @@ current_idx = 0
 STILL_FRAMES = 10
 
 script_line =   """
-                    The primary goal of this analysis is to understand the effectiveness of the chip return as compared to the topspin return. 
+                    The primary GOAL of this analysis is to understand the EFFECTIVENESS of the CHIP return as compared to the TOPSPIN return. 
                 """  ### 22 sec until 'placed'
 
 blackFrm = BGRFrame.make_black(*DIMENSIONS)
@@ -477,7 +479,7 @@ script_lines.append(script_line)
 # del black_with_titleFrms
 
 script_line =   """
-                    The engine of our analysis is a statistical model...
+                    The ENGINE of our analysis is a statistical model...
                 """ # 3 sec
 
 
@@ -679,7 +681,7 @@ TOPS_COLOR = const.BGR['light_brown']
 from ATMANpy.auxil.court import back_view_asymmetric_cam
 myCam = back_view_asymmetric_cam(which = 'Deuce', side = 'Bot')
 myCam = Camera.calibrated_brest_behind().resize(3)
-courtScn = Scene.make_court()
+courtScn = Scene.make_court(net_mesh_density = 0.6)
 
 from ATMANpy.auxil.court import cnt_2D, top_cnt_2D
 from ATMANpy.types.Shapes3D import Point3D
@@ -708,9 +710,11 @@ prmDict_annot_heat['argument_luminosity'] = 1.5
 
 backView_half = View.make(halfCam, courtScn, resolution = 1, annotatedPoints = [fhPt_annot, bhPt_annot])
 backView_heat = View.make(heatCam, courtScn, resolution = 1, annotatedPoints = [fhPt_annot_heat, bhPt_annot_heat])
-
 # backView_half.snap().show()
 # backView_heat.snap().show()
+
+backFrm = View.make(halfCam, courtScn, resolution = RESOLUTION_MODIFIER_NORMAL).snap()
+# backFrm.show()
 
 ### Points over which to render
 aPnt = retPnts_in.get(26, 40)
@@ -1153,7 +1157,6 @@ annot_color = const.BGR['bright_grey']
 bandwidth_field = 50
 
 postRst = FramesRaster(2, 2, borders = 2)
-backFrm = View.make(halfCam, courtScn).snap()
 
 comparison_prob_dict = {'tp': 0.55, ### this way, target areas will have roughly the same size:
                         'lo': 0.55,      ### we then annotate their quality with annotation point
@@ -1270,7 +1273,6 @@ script_line =   """
                     In this situation, our model believes it is best to hit the topspin return cross-court.
                 """ 
 
-script_line = "" ### a little pause before the next segment
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
 
 all_frames.append(rastFrms_static)
@@ -1403,6 +1405,8 @@ rastFrms = overlay(rastFrms, leg3Frm, top_left_point = tlPt)
 all_frames.append(rastFrms)
 script_lines.append(script_line)
 # del lineFrms, statFrms, postFrms, rastFrms
+
+script_line = ""
 
 def put_desc(someFrms, descStr, side, color = const.BGR['leafy_green'], thickness = 2):
     assert side in ['left', 'right']
@@ -2059,7 +2063,7 @@ redFrms = overlay(redFrms, leg3Frm, top_left_point = tlPt)
 # redFrms[-1].show()
 
 script_line =   """
-                    As for placement, the topspin return should be played...
+                    Our model likes the topspin return ...
                 """
 ## -> topspin zones lit
 
@@ -2131,13 +2135,13 @@ joinFrms = BGRFrames.from_frames([itplFrms, greenFrms])
 all_frames.append(joinFrms)
 script_lines.append(script_line)
 
-script_line =   """
-                    The high chip return, having the smallest target area and the lowest peak probability, is cautioned against by our model.            
-                """
-## maybe cut
+# script_line =   """
+#                     The high chip return, having the smallest target area and the lowest peak probability, is cautioned against by our model.            
+#                 """
+# ## maybe cut
 
 script_line =   """
-	                The exception is the serve out wide from the server's backhand side. 
+                    The exception is the serve out wide from the server's backhand side. 
                     Here, the topspin has both the highest peak and the largest zone, making it clearly the best option.
                 """
 ## -> flags lit, zones lit
@@ -2150,10 +2154,14 @@ joinFrms = BGRFrames.from_frames([itplFrms, redFrms])
 all_frames.append(joinFrms)
 script_lines.append(script_line)
 
+script_line = ""
+all_frames.append(redFrms[:25])
+script_lines.append(script_line)
+
 script_line =    """
                     That the chip return is a viable alternative to the topspin return 
                     if played to the server's forehand is both an unintuitive and uncommon strategy.
-                    Unintuitive, because, in the aggregate, it appears that the chip return is a bad choice.
+                    For one, at first glance it appears that the chip return is generally an inferior choice.
                 """ # 15 sec
 
 statFrms = BGRFrames.from_frame(redFrms[-1], 300)
@@ -2432,7 +2440,7 @@ chip_retShots_rectified = retShots_rectified.filter('is_slice_visual')
 tops_retShots_rectified = retShots_rectified.filter('is_slice_visual', negate = True)
 
 script_line =   """
-                    Beyond being unintuitive, targeting the forehand on a chip return is also slightly uncommon.
+                    It also appears that targeting the forehand on a chip return is slightly uncommon.
                 """
 
 fadeFrms = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 100).dim_progressively()
@@ -2528,10 +2536,9 @@ itplFrms, _ = vs.animate_sequence(itplScns, start_cam = heatCam.resize(2), stop_
                                 **prmDict_nolum, **animDict)
 itplFrms = itplFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
 
-
 statFrms, _ = vs.animate_static(Scene([l0, l1, l2, l3, l4, l5]), static_cam = heatCam.resize(2),
                               annotated_points = annotPts_mid, background_scene = courtScn,
-                              **prmDict_nolum, **animDict, num_frames = 50)
+                              **prmDict_nolum, **animDict, num_frames = 125)
 statFrms = statFrms.put('CHIP RETURN LOCATION', color = CHIP_COLOR, size = 2, thickness = 2)
 
 jointFrms = BGRFrames.from_frames([itplFrms, statFrms])
@@ -2691,10 +2698,10 @@ bulletFrm1c = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, col
 bulletFrm1c = bulletFrm1c.put(text1b, where = (50, round(y+6.5*i)), size = 2, color = dark_color)
 bulletFrm1c = bulletFrm1c.put(text1c, where = (50, round(y+8.5*i)), size = 2, color = bright_color)
 
-bulletFrm1.show()
-bulletFrm1a.show()
-bulletFrm1b.show()
-bulletFrm1c.show()
+# bulletFrm1.show()
+# bulletFrm1a.show()
+# bulletFrm1b.show()
+# bulletFrm1c.show()
 
 bulletFrms1 = BGRFrames.from_frame(bulletFrm1, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
 bulletFrms1a = BGRFrames.from_frame(bulletFrm1a, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
@@ -2706,7 +2713,7 @@ script_line =   """
                 """
 
 exRst = FramesRaster(2, 2)
-exRst.add(bulletFrms1, 0, 0)
+exRst.add(bulletFrms1, 1, 0)
 exFrms = exRst.render()
 
 all_frames.append(exFrms)
@@ -3139,7 +3146,7 @@ script_line =   """
                     Finally, there is evidence for the server typically being somewhat too impatient on
                     chip return serves + 1. 
 
-                    The model believes that a chip return to the forehand can goad the
+                    The model believes that a chip return to the forehand can coax the
                     server into premature aggression, and entice an error by the server.
                 """
 
@@ -3205,14 +3212,10 @@ script_line =   """
                     however, this analysis provides evidence that chipping the ball into play low, to the forehand, 
                     may be an underutilized strategy on aggregate. 
                 """ # 20 sec
-revRst, revFrms = reverse_cascade(exRst, keep_which = [(1, 0)], acceleration = acc, frames_per_element = frms * 5)
+fadeFrms = BGRFrames.from_frame(rstFrms[-1], 350).dim_progressively()
+# DecapStream(lastFrms, 0, 100).show()
 
-fadeFrms = BGRFrames.from_frame(revFrms[-1], 300).dim_progressively()
-
-lastFrms = BGRFrames.from_frames([revFrms, fadeFrms])
-DecapStream(lastFrms, 0, 100).show()
-
-all_frames.append(lastFrms)
+all_frames.append(fadeFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
