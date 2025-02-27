@@ -976,6 +976,62 @@ class Shot:
                     self.hitPlayer.flip(courtLines = courtLines, across_net = across_net, across_middle = across_middle),
                     self.recPlayer.flip(courtLines = courtLines, across_net = across_net, across_middle = across_middle))
     
+    #### STRING DESCRIPTORS
+    def get_shot_description(self):
+        desc = self.get_hit_event_descriptor()
+        
+        side_map = {'fh': 'Forehand',
+                    'bh': 'Backhand'}
+        spin_map = {'ts': 'Topspin',
+                    'sf': 'Slice'}
+
+        if desc == 'srv':
+            return 'Serve'
+        elif desc == 'ovh':
+            return 'Overhead'
+        else:
+            side, spin = desc.split('_')
+            sideStr = side_map[side]
+            spinStr = spin_map[spin]
+            return f'{sideStr} {spinStr}'
+
+    def get_shot_string(self):
+        if self.is_serve():
+            dirStr = 'Ad' if self.is_serve_ad() else 'Deuce'
+            kindStr = 'Serve (Let)' if self.is_let() else 'Serve'
+            whichStr = 'First' if self.is_first_serve() else 'Second'
+            return f'{whichStr} {kindStr} ({dirStr})'
+        else:
+            descStr = self.get_shot_description()
+            return descStr
+
+    def get_data_string(self, get_speed = True, get_spin = True, get_launch_angle = True, with_descriptors = True,
+                        skipStr = '\n'):
+        data_strings = []
+
+        if get_speed:
+            velo = self.get_initial_speed()
+            veloStr = f'{int(round(velo, 0))} km/h'
+            if with_descriptors:
+                veloStr = 'Speed: ' + veloStr
+            data_strings.append(veloStr)
+
+        if get_spin:
+            spin = self.get_initial_spin()
+            spinStr = f'{int(round(spin, 0))} RPM'
+            if with_descriptors:
+                spinStr = 'Spin: ' + spinStr
+            data_strings.append(spinStr)
+
+        if get_launch_angle:
+            angl = self.get_launch_angle()
+            anglStr = f'{round(angl, 1)} deg.'
+            if with_descriptors:
+                anglStr = 'Launch Angle: ' + anglStr
+            data_strings.append(anglStr)
+
+        return skipStr.join(data_strings)
+
     ### FILTERS ###
     def is_serve(self):
         return self.get_hit_event()[0] == 'S'
