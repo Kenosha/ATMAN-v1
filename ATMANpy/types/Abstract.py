@@ -180,7 +180,13 @@ class Trajectory:
     
     def get_hit_series(self):
         return self.trajFrm.iloc[0]
-        
+
+    def get_hit_frame(self):
+        return self['frame_num'].iloc[0]
+
+    def get_next_hit_frame(self):
+        return self['frame_num'].iloc[-1]
+
     def get_hit_event(self):
         return self['event'].iloc[0]
         
@@ -734,12 +740,21 @@ class Shot:
     def get_num_frames_until_bounce(self):
         return self.shotTraj.get_num_frames_until_bounce()
 
+    def get_time_until_hit(self):
+        ### time (in num_frames) until hit 
+        # -> needed because the trajectory detection is cut-off (after currently 63 frames)
+        #    but high lobs can fly for longer.
+        return self.get_next_hit_frame() - self.get_hit_frame()
+
     def get_events(self):
         return self.shotTraj.get_events()
     
     def get_hit_frame(self):
         return self.shotTraj.get_hit_frame()
     
+    def get_next_hit_frame(self):
+        return self.shotTraj.get_next_hit_frame()
+
     def get_hit_event(self):
         return self.shotTraj.get_hit_event()
     
