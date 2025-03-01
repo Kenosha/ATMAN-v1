@@ -1,10 +1,14 @@
 import pandas as pd
 import numpy as np
 
+import ATMANpy.auxil.constants as const
+
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Overlays import Table
 from ATMANpy.types.Points import Point2D
+from ATMANpy.types.Shapes3D import Point3D
+from ATMANpy.types.Visual3D import Scene
 
 def show(all_frames, ms_between_frames = 25):
     DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
@@ -199,3 +203,55 @@ def render_many_over_frames(myTabs, myFrms, tlPt = Point2D((0, 0))):
     renFrms = BGRFrames.from_single_frames(rendered_frames)
     outFrms = overlay(myFrms, renFrms, top_left_point = tlPt)
     return outFrms
+
+def get_shot_scenes(myPnt, ball_color = const.BGR['ball_yellow'], 
+                    mark_size = 2, mark_color = const.BGR['bright_blue']):
+    from ATMANpy.types.ShapesTennis3D import Mark
+
+    bounce_scenes = []
+    spline_scenes = []
+    for myShot in myPnt:
+        # splines
+        shot_splines = myShot.feat_spline(which_endpoint = 'penultimate').values()
+        # n = len(shot_splines)
+        n = myShot.get_time_until_hit()
+
+        if n != len(shot_splines):
+            print(f'Probably a lob, but should be able to handle!')
+            print(f'Frames until next hit: {n}')
+            print(f'Shot splines created: {len(shot_splines)}')
+
+        shotScns = [Scene([spln.recolor(ball_color).resize(1.5)]) for spln in shot_splines if spln is not None]
+        ### pad the initial None
+        shotScns = [Scene.make_empty(), *shotScns] 
+        ### pad the final frames, if splines are nan
+        n_spln = len(shotScns)
+        shotScns = [*shotScns, *[Scene.make_empty() for _ in range(n - n_spln)]]
+        ### join to previous
+        spline_scenes = [*spline_scenes, *shotScns]
+
+        # bounce points
+        all_frms = myShot.get_frames()
+        bnc_frms = myShot.get_bounce_frames()
+        bnc_x, bnc_y = myShot.get_first_bounce_position()
+        
+        try:
+            prevScn = bounce_scenes[-1]
+        except IndexError:
+            prevScn = Scene.make_empty()
+
+        if len(bnc_frms) > 0:
+            bncPt = Point3D((bnc_x, bnc_y, 0))
+            bncMark = Mark.make(bncPt, size = mark_size, color = mark_color)
+            bnc_idx = all_frms.index(bnc_frms[0])
+        else:
+            bnc_idx = len(all_frms) ### this way, we'll never actually need the bncMark
+
+        for i in range(n):
+            if i >= bnc_idx:
+                bounce_scenes.append(prevScn.put(bncMark))
+            else:
+                bounce_scenes.append(prevScn)
+        
+    return spline_scenes, bounce_scenes
+    
