@@ -13,6 +13,8 @@ from typing import List
 
 import ATMANpy.auxil.constants as const
 
+from ATMANpy.funcs.util_funcs import get_updated_attribute_dictionary, interpolate_tuples
+
 
 @dataclass(frozen = True)
 class Line:
@@ -25,7 +27,6 @@ class Line:
     name: str = 'Line'
     
     def __post_init__(self):
-        
         ### make it so that lines always go from left to right. 
         # If there is a tie, they go from up to down.
         _reinst = False
@@ -41,7 +42,6 @@ class Line:
             object.__setattr__(self, 'leftPt', r)
             object.__setattr__(self, 'rightPt', l)
             
-    
     ### CONSTRUCTORS ###
     @staticmethod
     def from_coords(four_coords, name = 'Line'):
@@ -63,6 +63,34 @@ class Line:
         InstClass = self.__class__
         new_leftPt, new_rightPt = self.leftPt * y, self.rightPt * y
         return InstClass(new_leftPt, new_rightPt, name = self.name)
+
+    def __add__(self, other):
+        if isinstance(other, Line):
+            new_leftPt = self.leftPt + other.leftPt
+            new_rightPt = self.rightPt + other.rightPt
+        elif isinstance(other, Point2D):
+            new_leftPt = self.leftPt + other
+            new_rightPt = self.rightPt + other
+        else:
+            new_leftPt = self.leftPt + other
+            new_rightPt = self.rightPt + other
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
+    def __sub__(self, other):
+        if isinstance(other, Line):
+            new_leftPt = self.leftPt - other.leftPt
+            new_rightPt = self.rightPt - other.rightPt
+        elif isinstance(other, Point2D):
+            new_leftPt = self.leftPt - other
+            new_rightPt = self.rightPt - other
+        else:
+            new_leftPt = self.leftPt - other
+            new_rightPt = self.rightPt - other
+        updDict = {'leftPt': new_leftPt, 'rightPt': new_rightPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
 
     ### METHODS ### 
     def append(self, other):
@@ -293,6 +321,17 @@ class Lines:
         new_lineList = [aLn * y for aLn in self.lineList]
         return InstClass(new_lineList, name = self.name)
 
+    def __add__(self, other):
+        InstClass = self.__class__
+        new_lineList = [aLn + other for aLn in self.lineList]
+        return InstClass(new_lineList, name = self.name)
+
+    def __sub__(self, other):
+        InstClass = self.__class__
+        new_lineList = [aLn - other for aLn in self.lineList]
+        return InstClass(new_lineList, name = self.name)
+    
+    ### OTHER DUNDER ###
     def __iter__(self):
         return iter(self.lineList)
     
