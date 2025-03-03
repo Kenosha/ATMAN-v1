@@ -241,7 +241,14 @@ class Line:
             return self.leftPt.x
         else:
             return (y - itc) / slp
-        
+      
+    def rotate(self, angle, origPt = None):
+        lPt, rPt = self.leftPt, self.rightPt
+        rot_lPt, rot_rPt = lPt.rotate(angle, origPt = origPt), rPt.rotate(angle, origPt = origPt)
+        updDict = {'leftPt': rot_lPt, 'rightPt': rot_rPt}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+  
     def flip_vertically(self, aLn, name = 'Line'):
         if name is None:
             name = f'Flipped {self.name}'
@@ -443,7 +450,12 @@ class Lines:
             return Lines([getattr(l, lineFunc)(*args, name = l.name, **kwargs) for l in self.lineList])
         else:
             return Lines([lineFunc(l, *args, **kwargs) for l in self.lineList])
-            
+                
+    def rotate(self, angle, origPt = None):
+        InstClass = self.__class__
+        new_lineList = [aLn.rotate(angle, origPt = origPt) for aLn in self.lineList]
+        return InstClass(new_lineList, name = self.name)
+
     def filt(self, filtFunc):
         # print(f"{self.name}: {len(self)} before filter...")
         filtList = list(filter(filtFunc, self.lineList))
@@ -598,6 +610,9 @@ class CourtLines(Lines):
         return CourtLines.get_dimensions(scale = self.scale, 
                                          force_dimensions = self.force_dimensions)
     
+    def rotate(self, angle):
+        return Lines.rotate(self, angle, origPt = self.get_center_point())
+
     def add_singles_netline(self):
         netLine = self['Top Baseline'].down(self.side_length)
         netLine = Line(netLine.leftPt.right(self.doubles_alley_width).left(self.net_beyond_line),

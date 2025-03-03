@@ -92,7 +92,23 @@ class Point2D:
         new_y = self.y
         if not new_x is None:
             return Point2D((new_x, new_y))
+            
+    def rotate(self, angle, origPt = None):
+        if origPt is None:
+            origPt = Point2D((0, 0))
+
+        s, c = np.sin(angle), np.cos(angle)
+        R = np.array([[c, -s],
+                    [s,  c]])
         
+        normPt = self - origPt
+        p = np.array(normPt.coords)
+        p_r = p @ R
+
+        normPt_rot = Point2D(tuple(p_r))
+        rotPt = normPt_rot + origPt 
+        return rotPt
+
     def flip_vertically(self, aLn):
         """
         Flip vertically across a line by projecting onto it and mirroring distance on other side.
