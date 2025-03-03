@@ -181,6 +181,12 @@ class Frame:
     def __iter__(self):
         return FrameIterator(self)
     
+    def __getitem__(self, item):
+        InstClass = self.__class__
+        self_copy = self.array.copy()
+        cropArr = self_copy[item]
+        return InstClass(cropArr)
+    
     ### UTILITY METHODS ###
     def rename(self, new_name):
         return self.__class__(self.array, name = new_name)
