@@ -2418,10 +2418,9 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
   
     
 def viterbi_trajectories(prob_coordSF, 
-                         dst_factor = 1/7, dev_factor = 1/7, 
-                         bnc_factor = 1/7, net_factor = 1/7,
-                         fair_factor = 1/7, spin_factor = 1/7,
-                         angle_factor = 1/7):
+                         dst_factor = 1/6, dev_factor = 1/6, 
+                         bnc_factor = 1/6, net_factor = 1/6,
+                         fair_factor = 1/6, spin_factor = 1/6):
     
     ### figure out where we have gaps in the trajectory finder 
         # can only apply viterbi between these gaps, so that prev_lsArr and curr_fsArr are well defined
@@ -2465,7 +2464,6 @@ def viterbi_trajectories(prob_coordSF,
             netArr = featDict['net_probs']
             fairArr = featDict['fair_probs']
             spinArr = featDict['spin_probs']
-            angleArr = featDict['angle_probs']
             coordArr = featDict['traj_coordArr']
             
             if prev_lsArr is None: ### initialize trellis
@@ -2478,13 +2476,12 @@ def viterbi_trajectories(prob_coordSF,
                 log_netArr = np.log(netArr)
                 log_fairArr = np.log(fairArr)
                 log_spinArr = np.log(spinArr)
-                log_angleArr = np.log(angleArr)
                 
                 dist_prob_dict[frame] = None
 
                 dist_missing_correction = 1 / (1 - dst_factor)
 
-                trellis[0] = dist_missing_correction * (dev_factor * log_devArr + bnc_factor * log_bounceArr + net_factor * log_netArr + fair_factor * log_fairArr + spin_factor * log_spinArr + angle_factor * log_angleArr)
+                trellis[0] = dist_missing_correction * (dev_factor * log_devArr + bnc_factor * log_bounceArr + net_factor * log_netArr + fair_factor * log_fairArr + spin_factor * log_spinArr)
                 # pointers[0] = np.zeros((plane, traj, 2)) 
             else:
                 curr_fsArr = coordArr[:, :, 0, :]
@@ -2508,10 +2505,9 @@ def viterbi_trajectories(prob_coordSF,
                 log_netArr = np.log(netArr)
                 log_fairArr = np.log(fairArr)
                 log_spinArr = np.log(spinArr)
-                log_angleArr = np.log(angleArr)
                 
                 ### combine the distance probabilities with the current bounce audio and deviation probabilities
-                log_probArr = dst_factor * log_dist_probArr + dev_factor * log_devArr + bnc_factor * log_bounceArr + net_factor * log_netArr + fair_factor * log_fairArr + spin_factor * log_spinArr + angle_factor * log_angleArr
+                log_probArr = dst_factor * log_dist_probArr + dev_factor * log_devArr + bnc_factor * log_bounceArr + net_factor * log_netArr + fair_factor * log_fairArr + spin_factor * log_spinArr
                 
                 ### combine it with the trellis likelihood: -> what is the likelihood of being in the previous trajectory in the first place
                 trellis_brdcst = trellis[idx - 1, :, :, np.newaxis, np.newaxis]
@@ -2564,14 +2560,12 @@ def viterbi_trajectories(prob_coordSF,
             netArr = featDict['net_probs']
             fairArr = featDict['fair_probs']
             spinArr = featDict['spin_probs']
-            angleArr = featDict['angle_probs']
 
             outDict[frame]['bounce_prob'] = bounceArr[best_plane, best_traj]
             outDict[frame]['dev_prob'] = devArr[best_plane, best_traj]
             outDict[frame]['net_prob'] = netArr[best_plane, best_traj]
             outDict[frame]['fair_prob'] = fairArr[best_plane, best_traj]
             outDict[frame]['spin_prob'] = spinArr[best_plane, best_traj]
-            outDict[frame]['angle_prob'] = angleArr[best_plane, best_traj]
             
             if idx > 0:
                 dist_probArr = dist_prob_dict[frame]
@@ -2593,8 +2587,7 @@ def viterbi_trajectories(prob_coordSF,
                       'net_prob': None,
                       'fair_prob': None,
                       'spin_prob': None,
-                      'dist_prob': None,
-                      'angle_prob': None}
+                      'dist_prob': None}
     
     return StreamFeatures(allDict)    
     
