@@ -1014,7 +1014,7 @@ def fit_trajectory(planeArr, hitFlag,
         if trajectory_has_enough_observations.sum() == 0:
             trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
         else:
-            planeArr = planeArr[trajectory_has_enough_observations]
+            planeArr_filt = planeArr[trajectory_has_enough_observations]
 
             ### Figure out which height subspace to use, depending on the type of shot
             if 'srv' in hitFlag or 'ovh' in hitFlag:
@@ -1025,7 +1025,7 @@ def fit_trajectory(planeArr, hitFlag,
             groundArr_hfilt, vertArr_hfilt, rpmArr_hfilt = groundArr[:, :, :, h_filt], vertArr[:, :, :, h_filt], rpmArr[:, :, :, h_filt]
             
             ### fit trajectories
-            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = fit_trajectories_pointless(planeArr,
+            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = fit_trajectories_pointless(planeArr_filt,
                                                                                             groundArr_hfilt, vertArr_hfilt, rpmArr_hfilt, 
                                                                                             sum_of_squares = sum_of_squares,
                                                                                             number_of_local_minima = number_of_local_minima,
