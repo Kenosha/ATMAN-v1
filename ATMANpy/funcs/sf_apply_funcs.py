@@ -1116,8 +1116,8 @@ def trajectory_net_prob(traj_coordArr, netBool, stretch_factor = 0.25):
     if traj_coordArr is None:
         net_probs = None
     else:
-        from ATMANpy.types.ShapesTennis3D import Net
-        myNet = Net.make_singles()
+        from ATMANpy.types.ShapesTennis3D import NetRegions
+        myNet = NetRegions.make_singles()
         trajs, mins, t, d = traj_coordArr.shape
 
         lPt, cPt, rPt = myNet['Left Net']['Top'].leftPt, myNet['Left Net']['Top'].rightPt, myNet['Right Net']['Top'].rightPt
