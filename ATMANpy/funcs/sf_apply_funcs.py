@@ -911,7 +911,38 @@ def calculate_net_penalty(proj_net_vector, coord_net_vector):
     else:
         return (proj_net_vector != coord_net_vector).sum() / len(proj_net_vector) ### the closer the coord net vector to projected net vector, the better.
 
-def calculate_penalty(param_vector, proj_net_vector, coord_net_vector, time_idxs, frame_cutoff):
+def calculate_last_shot_angle_penalty(point_vector, remaining_shots, threshold_angle = np.pi / 4, epsilon = 0.1):
+    ### IDEA: punish final shots if their best trajectory has an angle that's too oblique
+    ### anything within threshold_angle is fine (default of np.pi / 4 = 45 deg), anything wider than that is weird.
+    ### minimum probability, so that we don't have zero probs
+    ### epsilon needed to avoid division by 0
+    if point_vector is None:
+        angle_penalty = 0
+    else:
+        if remaining_shots == 1:
+            fs, ls = point_vector
+            x0, y0, _ = fs
+            xT, yT, _ = ls
+            
+            dx, dy = np.abs(xT - x0), np.abs(yT - y0)
+
+            threshold_ratio = np.tan(threshold_angle)
+
+            D_ratio = dx / (dy + epsilon)
+            D_thresholded = np.clip(D_ratio - threshold_ratio, a_min = 0, a_max = None)
+
+            angle_y = np.arctan(D_thresholded) ### angle implied by dx/dy
+            normalized_y = angle_y / (np.pi / 2) # angle normalized to between 0 and 1
+            
+            angle_penalty = np.clip(normalized_y, a_min = 0, a_max = 1)
+        else:
+            angle_penalty = 0
+
+    return angle_penalty
+
+def calculate_penalty(param_vector, proj_net_vector, coord_net_vector, point_vector, 
+                      remaining_shots, time_idxs, 
+                      frame_cutoff = 5, threshold_angle = np.pi / 4, epsilon = 0.1):
     is_nan = np.isnan(param_vector).all(axis = 1)
     non_na_idxs = time_idxs[~is_nan]
     keep_filt = non_na_idxs >= frame_cutoff
@@ -922,10 +953,12 @@ def calculate_penalty(param_vector, proj_net_vector, coord_net_vector, time_idxs
     p2 = calculate_nonmonotonous_penalty(param_vector_non_nan)
     p3 = calculate_nondecelerating_penalty(param_vector_non_nan, non_na_idxs, keep_filt)
     p4 = calculate_net_penalty(proj_net_vector, coord_net_vector)
+    p5 = calculate_last_shot_angle_penalty(point_vector, remaining_shots, threshold_angle = threshold_angle, epsilon = epsilon)
 
-    return p1 + p2 + p3 + p4
+    return p1 + p2 + p3 + p4 + p5
 
-def calculate_plane_penalties_unvectorized(paramArr, proj_netArr, coord_netArr, frame_cutoff = 5):
+def calculate_plane_penalties_unvectorized(paramArr, proj_netArr, coord_netArr, pointArr, remaining_shots, 
+                                           frame_cutoff = 5, threshold_angle = np.pi / 4, epsilon = 0.1):
     ### IDEA like above, but here we allow for heterogenous non_nans (due to net balls being culled),
     ### which comes at the cost of vectorization.
 
@@ -941,11 +974,14 @@ def calculate_plane_penalties_unvectorized(paramArr, proj_netArr, coord_netArr, 
         for i in range(num_curr_points):
             for j in range(num_next_points):
                 param_vector = paramArr[i, j]
+                point_vector = pointArr[i, j]
                 if coord_netArr is None:
                     coord_net_vector = None
                 else:
                     coord_net_vector = coord_netArr[i, j, :, 0]
-                penalty = calculate_penalty(param_vector, proj_net_vector, coord_net_vector, time_idxs, frame_cutoff)
+                penalty = calculate_penalty(param_vector, proj_net_vector, coord_net_vector, point_vector, 
+                                            remaining_shots, time_idxs, 
+                                            frame_cutoff = frame_cutoff, threshold_angle = threshold_angle, epsilon = epsilon)
                 penalties[i, j] = penalty
 
     return penalties
