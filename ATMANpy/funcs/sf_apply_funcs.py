@@ -1265,6 +1265,34 @@ def trajectory_fair_prob(traj_coordArr, remaining_shots, hitFlag, srvFlag, court
 
     return fair_probs
 
+def trajectory_last_angle_prob(traj_coordArr, remaining_shots, threshold_angle = np.pi / 4, minimum_probability = 0.05, epsilon = 0.1):
+    ### IDEA: punish final shots if their best trajectory has an angle that's too oblique
+    ### anything within threshold_angle is fine (default of np.pi / 4 = 45 deg), anything wider than that is weird.
+    ### minimum probability, so that we don't have zero probs
+    ### epsilon needed to avoid division by 0
+    if traj_coordArr is None:
+        angle_probs = None
+    else:
+        trajs, mins, t, d = traj_coordArr.shape
+
+        if remaining_shots == 1:
+            xArr, yArr = traj_coordArr[:, :, :, 0], traj_coordArr[:, :, :, 1]
+            dxArr = np.abs(xArr[:, :, -1] - xArr[:, :, 0])
+            dyArr = np.abs(yArr[:, :, -1] - yArr[:, :, 0])
+
+            threshold_ratio = np.tan(threshold_angle)
+
+            D_ratio = dxArr / (dyArr + epsilon)
+            D_thresholded = np.clip(D_ratio - threshold_ratio, a_min = 0, a_max = None)
+
+            angle_y = np.arctan(D_thresholded) ### angle implied by dx/dy
+            normalized_y = angle_y / (np.pi / 2) # angle normalized to between 0 and 1
+            
+            angle_probs = np.clip(1 - normalized_y, a_min = minimum_probability, a_max = 1)
+        else:
+            angle_probs = np.full((trajs, mins), fill_value = 1)
+
+    return angle_probs
 
 def compare_trajectories_with_audio(traj_coordArr, bounceFrm, prior_override = None):
     traj_yArr = traj_coordArr[:, :, :, 2]
