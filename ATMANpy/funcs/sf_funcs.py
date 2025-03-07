@@ -2386,8 +2386,8 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
             else:
                 p0, p1, p2 = 0.1, 0.7, 0.2 ### this happens if the next hit frame is the inferred end of flight frame
                 
-            
-            ### prep bounce probabilities for one and two bounces
+            ### Conditional bounce probabilities for one and two bounces: given that it bounces once or twice...
+            ### ... what is the probability that it bounces in this exact frame?
             pArr1 = bncSer.reindex(frames).values
             pArr1[0] = 0 ### assumption being -> can not bounce in hit frame (after hit)
             pArr2 = pArr1[np.newaxis, :] * pArr1[:, np.newaxis]
