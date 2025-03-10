@@ -163,7 +163,7 @@ def main(conf,
          trajectory_params,
          plane_point_params, hit_point_params, 
          downsample_params, viterbi_net_params, penalty_params, 
-         viterbi_traj_params, 
+         viterbi_traj_params,
          name = None):
     
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
@@ -293,9 +293,9 @@ def main(conf,
     ### (this exploits us knowing that the ball starts out in flight).
     ### once the extrapolated ball crosses the net, we cull everything else.
 
-    
     ### PICK LOW PENALTY PLANES ###
-    mySFs = planeSFs_netted.merge(netSFs)
+    remSFs = planeSFs_netted.apply_whole(sf.count_remaining_shots)
+    mySFs = planeSFs_netted.merge(netSFs).merge(remSFs)
     penSFs = mySFs.apply(sa.calculate_plane_penalties_unvectorized, **penalty_params)
     
     planeSFs_raw = planeSFs_netted.merge(penSFs)
@@ -344,7 +344,7 @@ def main(conf,
     remSFs = traj_coordSFs.apply_whole(sf.count_remaining_shots)
     mySFs = traj_coordSFs.merge(remSFs).merge(hitSFs).merge(srvSFs)
     fair_probSFs = mySFs.apply(sa.trajectory_fair_prob)
-
+    
     ####### FIND BEST VITERBI PATH ###
     probSFs = audio_probSFs.merge(dev_probSFs).merge(net_probSFs).merge(spin_probSFs).merge(fair_probSFs)
     prob_coordSFs = probSFs.merge(traj_coordSFs)
@@ -405,7 +405,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[1])
+    conf = cnf_mod.get_conf(avail_vids[0])
 
     trajectory_params = prm_mod.ball_interpolation_plane.trajectory_params
     plane_point_params = prm_mod.ball_interpolation_plane.plane_point_params    

@@ -264,7 +264,8 @@ ball_interpolation_plane.hit_point_params = {'height_in_feet': 5, 'resolution': 
 ball_interpolation_plane.downsample_params = {'logit_coeff': 10, 'sampling_number': 25}
 ball_interpolation_plane.viterbi_net_params = {'p': 0.95, 'epsilon': 0.01, 'q': 0.1, 
                                                'stretch_factor': 0.25, 'net_bottom_adjustment_in_pixels': 5}
-ball_interpolation_plane.penalty_params = {'frame_cutoff': 5}
+ball_interpolation_plane.penalty_params = {'frame_cutoff': 5, 'threshold_angle': np.pi / 8, 'epsilon': 0.1,
+                                           'below_weight': 1, 'monot_weight': 1, 'decel_weight': 1, 'net_weight': 1, 'angle_weight': 0}
 ball_interpolation_plane.viterbi_traj_params = {'dst_factor': 0.15, 'dev_factor': 0.2, 
                                                 'bnc_factor': 0.2, 'net_factor': 0.15, 
                                                 'fair_factor': 0.15, 'spin_factor': 0.15}    
