@@ -942,7 +942,8 @@ def calculate_last_shot_angle_penalty(point_vector, remaining_shots, threshold_a
 
 def calculate_penalty(param_vector, proj_net_vector, coord_net_vector, point_vector, 
                       remaining_shots, time_idxs, 
-                      frame_cutoff = 5, threshold_angle = np.pi / 4, epsilon = 0.1):
+                      frame_cutoff = 5, threshold_angle = np.pi / 4, epsilon = 0.1,
+                      below_weight = 1, monot_weight = 1, decel_weight = 1, net_weight = 1, angle_weight = 1):
     is_nan = np.isnan(param_vector).all(axis = 1)
     non_na_idxs = time_idxs[~is_nan]
     keep_filt = non_na_idxs >= frame_cutoff
@@ -955,10 +956,17 @@ def calculate_penalty(param_vector, proj_net_vector, coord_net_vector, point_vec
     p4 = calculate_net_penalty(proj_net_vector, coord_net_vector)
     p5 = calculate_last_shot_angle_penalty(point_vector, remaining_shots, threshold_angle = threshold_angle, epsilon = epsilon)
 
-    return p1 + p2 + p3 + p4 + p5
+    p1w = p1 * below_weight
+    p2w = p2 * monot_weight
+    p3w = p3 * decel_weight
+    p4w = p4 * net_weight
+    p5w = p5 * angle_weight
+
+    return p1w + p2w + p3w + p4w + p5w
 
 def calculate_plane_penalties_unvectorized(paramArr, proj_netArr, coord_netArr, pointArr, remaining_shots, 
-                                           frame_cutoff = 5, threshold_angle = np.pi / 4, epsilon = 0.1):
+                                           frame_cutoff = 5, threshold_angle = np.pi / 4, epsilon = 0.1,
+                                           below_weight = 1, monot_weight = 1, decel_weight = 1, net_weight = 1, angle_weight = 1):
     ### IDEA like above, but here we allow for heterogenous non_nans (due to net balls being culled),
     ### which comes at the cost of vectorization.
 
@@ -981,7 +989,9 @@ def calculate_plane_penalties_unvectorized(paramArr, proj_netArr, coord_netArr, 
                     coord_net_vector = coord_netArr[i, j, :, 0]
                 penalty = calculate_penalty(param_vector, proj_net_vector, coord_net_vector, point_vector, 
                                             remaining_shots, time_idxs, 
-                                            frame_cutoff = frame_cutoff, threshold_angle = threshold_angle, epsilon = epsilon)
+                                            frame_cutoff = frame_cutoff, threshold_angle = threshold_angle, epsilon = epsilon,
+                                            below_weight = below_weight, monot_weight = monot_weight, 
+                                            decel_weight = decel_weight, net_weight = net_weight, angle_weight = angle_weight)
                 penalties[i, j] = penalty
 
     return penalties
