@@ -2194,6 +2194,17 @@ class NCStream:
     def size(self, unit = 'GB'):
         return Stream.size(self, unit = unit)
     
+    def maybe_to_stream(self):
+        from ATMANpy.funcs.util_funcs import split_into_contiguous
+        if len(split_into_contiguous(self.frmNums)) == 1:
+            fs, ls = self.frmNums[0], self.frmNums[-1]
+            return Stream(self.cap, fs, ls, truncation_anchor = self.truncation_anchor,
+                          cap_color_space = self.cap_color_space, target_color_space = self.target_color_space,
+                          name = self.name, features = self.features)
+        else:
+            print('Could not turn NCStream into Stream, returning NCStream')
+            return self
+
     def conform(self, new_frmNums):
         updDict = {'frmNums': new_frmNums}
         newDict = get_updated_attribute_dictionary(self, updDict)
