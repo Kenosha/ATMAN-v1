@@ -2294,7 +2294,290 @@ def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
         
     return StreamFeatures(outDict)
 
+def best_colinear_planes(mySF, matchCamera = None, num_angles = 1001, lim_pi = np.pi / 4, max_slope = 10 ** 6,
+                         w_obs = 0.8, w_cld = 0.2):
+    # The colinear projected line in this function is the 2D line created when projecting 
+    # a point in 3D space (ang_vecs are the set of these points for different angles)
+    # and a point straight above that point onto the screen.
+
+    # EDIT: this is not exactly what we want: we want to find the line a point makes when it flies
+    # along the camera line through the hit point, but changes only its height in 3D (since the camera line)
+    # goes below ground fast if the camera is well above the playing field, and the ball is assumed
+    # to travel in a straight plane in (x, y) coordinates, with changing heights (i.e: no sidespin)
+    # this is done in a different, better function.
+    
+    # now, the when adjusting the height of the point above the camera line arbitrarily,
+    # we usually get not just a line, but a plane 
+    # (except in the case where the camera rotation is perfectly aligned with the vertical flight plane)
+    # (i.e, for a perfectly straight camera looking down the middle, the ball straight ahead will always appear)
+    # to be on a line after projecting, not on a plane.
+    
+    # Hence, we need to restrict the height, otherwise the entire screen (?) can be projected on 
+    # for some z and some point along the camera line.
+
+    # in general, the second point has to be above ground. more strictly, we can say that such projections
+    # are close to the projected line of a ball flying dead straight, 
+    # with z adjusting so that the overall height is the same as the height of the original point.
+
+    ### check the equation for the colinear lines
+    # (Red Notebook, 09.03.2025)
+    d = 500 ### this parameter is pretty irrelevant, hence not a kwarg
+    M_proj = matchCamera.get_P()
+    
+    ### construct angle array
+    fs_pi, ls_pi = -lim_pi, lim_pi
+    angles = np.linspace(fs_pi, ls_pi, num = num_angles)
+    d_sin_angles, d_cos_angles = d * np.sin(angles), d* np.cos(angles)
+    ang_vecs = np.array([d_sin_angles, -d_cos_angles, np.zeros(num_angles), np.zeros(num_angles)]).T # shape: angles x 4
+
+    ### get the A, B, C --> these are dependent on theta, but not on the height
+    A0, B0, C0 = np.einsum('ij, nj -> in', M_proj, ang_vecs)
+    A1, B1, C1 = A0 + M_proj[0, 2], B0 + M_proj[1, 2], C0 + M_proj[2, 2]
+
+    ### dehomogenize
+    ux, uy = A0 / C0, B0 / C0
+    vx, vy = A1 / C1, B1 / C1
+    u, v = np.array([ux, uy]).T, np.array([vx, vy]).T
+
+    ### get the slope of the colinear projected line
+    # -> points flying colinearly with the camera will be projected close to one of these lines.
+    m = (vy - uy) / (vx - ux) ### these are needed for minimising distance of observed points
+                                # if vx - ux = 0, then there is an easier formula for minimal distance
+    # correct extreme slopes (vx - ux almost 0) to avoid numerical issues
+    m = np.where(np.abs(m) > max_slope, np.nan, m)
+
+    ### calculate normal vector coordinates
+    diff_vecs = v - u ### shape: angles x 2
+    dx, dy = diff_vecs[:, 0], diff_vecs[:, 1]
+    nx, ny = dy, -dx
+    len_n = (nx ** 2 + ny ** 2) ** 0.5
+    nx_unit, ny_unit = nx / len_n, ny / len_n
+
+    ### some broadcasting for later. shape: angles, obs
+    nx_unit_brdc = nx_unit[:, np.newaxis] 
+    ny_unit_brdc = ny_unit[:, np.newaxis]
+    m_brdc = m[:, np.newaxis]
+    ux_brdc = ux[:, np.newaxis]
+    uy_brdc = uy[:, np.newaxis]
+
+    def calculate_optimal_gamma(px_brdc, py_brdc):
+        # this calculates the gamma (the parameter of the unit normal vector (nx, ny) of our co-linear projected line)
+        # for which (px, py) + gamma * (nx, ny) intersects the co-linear projected line. 
+        # in effect, the gamma is the shortest signed distance to the co-linear projected line.
+        # the distance is then simply the absolute value of the gamma
+        # px_brdc and py_brdc are of shape: choice_dim, obs (choice_dim = angles, or hit points)
         
+        ### optimal gamma -> usual formula where ux != vx
+        opt_gamma_numer = m_brdc * (px_brdc - ux_brdc) - (py_brdc - uy_brdc)
+        opt_gamma_denom = ny_unit_brdc - m_brdc * nx_unit_brdc
+        opt_gamma_usual = opt_gamma_numer / opt_gamma_denom
+
+        ### optimal gamma -> fallback formula where ux = vx (and therefore m is dangerously large in absolute terms)
+        opt_gamma_fallback = (px_brdc - ux_brdc) / nx_unit_brdc
+
+        ### join the two formulae
+        opt_gamma = np.where(np.isnan(opt_gamma_usual), opt_gamma_fallback, opt_gamma_usual)
+        
+        return opt_gamma
+
+    anchorSF = mySF['cldPt3D']
+    shapeSF = mySF['ball_choicePt']
+
+    anchor_frames = anchorSF.dropna().get_frames()
+
+    outDict = {}
+    for idx in range(len(anchor_frames) - 1):
+        hit_idx_is_last = idx == len(anchor_frames) - 2
+    
+        frm_currhit, frm_nexthit = anchor_frames[idx], anchor_frames[idx + 1]
+        flight_frames = list(range(frm_currhit, frm_nexthit + 1))
+        
+        ### figure out observed projected point vectors
+        observed_and_none_points = list(shapeSF[flight_frames].values())
+        obsArr = np.array([obsPt.coords if obsPt is not None else (np.nan, np.nan) for obsPt in observed_and_none_points]) ### shape obs, 2
+        px, py = obsArr[:, 0], obsArr[:, 1]
+        px_brdc = px[np.newaxis, :] # shape: angles, obs
+        py_brdc = py[np.newaxis, :] # shape: angles, obs
+
+        ### figure out anchor point projections
+        anchorPts3D_curr, anchorPts3D_next = anchorSF[frm_currhit], anchorSF[frm_nexthit] 
+        anchorArr_curr, anchorArr_next = anchorPts3D_curr.project(M_proj), anchorPts3D_next.project(M_proj) ### shapes for either: cloud_points, 2
+
+        ax_curr = anchorArr_curr[:, 0]
+        ay_curr = anchorArr_curr[:, 1]
+        
+        ax_curr_brdc = ax_curr[np.newaxis, :]
+        ay_curr_brdc = ay_curr[np.newaxis, :]
+
+        if not hit_idx_is_last:
+            ax_next = anchorArr_next[:, 0]
+            ay_next = anchorArr_next[:, 1]
+            
+            ax_next_brdc = ax_next[np.newaxis, :]
+            ay_next_brdc = ay_next[np.newaxis, :]
+
+        ### calculate optimal distances for observed balls, candidate anchor points at moment of hit
+        opt_gamma_ball = calculate_optimal_gamma(px_brdc, py_brdc) ### shape: angles, obs
+        opt_gamma_curr = calculate_optimal_gamma(ax_curr_brdc, ay_curr_brdc) ### shape: angles, cloud_points
+
+        if not hit_idx_is_last:
+            opt_gamma_next = calculate_optimal_gamma(ax_next_brdc, ay_next_brdc) ### shape: angles, cloud_points
+        else:
+            opt_gamma_next = np.zeros_like(opt_gamma_curr) ### for the last hit, we have no indication of where it went
+
+        opt_dist_ball = np.abs(opt_gamma_ball)
+        opt_dist_curr = np.abs(opt_gamma_curr)
+        opt_dist_next = np.abs(opt_gamma_next)
+
+        ### the distance of every observation to every line is the absolute value of the gamma (the parameter along the normalized normal vector)
+        opt_dist_ball_avg = np.nanmean(opt_dist_ball, axis = 1)
+        opt_dist_curr_avg = np.nanmean(opt_dist_curr, axis = 1)
+        opt_dist_next_avg = np.nanmean(opt_dist_next, axis = 1)
+
+        if hit_idx_is_last:
+            opt_dist_anch_avg = opt_dist_curr_avg ### since opt_dist_next_brdc is useless, and all zeroes.  
+        else:
+            opt_dist_anch_avg = (opt_dist_curr_avg + opt_dist_next_avg) / 2
+
+        ### question: are the thetas of the co-linear projected for the observed points and the anchor cloud points consistent?
+        best_angle_ball_idx = np.argmin(opt_dist_ball_avg)
+        best_angle_anch_idx = np.argmin(opt_dist_anch_avg)
+        
+        # -> cross check the deviations of the projected balls evaluated at the best planes
+        best_angle_ball_avg = opt_dist_ball_avg[best_angle_ball_idx]
+        best_angle_anch_avg = opt_dist_anch_avg[best_angle_anch_idx]
+        anch_angle_ball_avg = opt_dist_ball_avg[best_angle_anch_idx]
+        ### -> report both of these for us to use as metrics when deciding if the co-linear plane should be taken
+        # a) best_angle_ball_avg is the mean deviation of projected points from the best co-linear plane
+            # -> indication if the projected points may be co-linear
+        # b) best_angle_anch_avg is the mean deviation of anchor points from the co-linear plane that fits the anchor points best
+            # -> indication if the anchor points may be co-linear
+        # c) anch_angle_ball_avg is the mean deviation of projected points from the co-linear plane that fits the anchor points best
+            # -> indication if the balls and the anchor points are consistently co-linear
+
+        ### best combined angle -> this is what we'll use at the end, if we accept that the flight of the ball is co-linear
+        opt_dist_avg = w_obs * opt_dist_ball_avg + (w_cld / 2) * opt_dist_curr_avg + (w_cld / 2) * opt_dist_next_avg
+        if hit_idx_is_last:
+           opt_dist_avg = opt_dist_avg / (w_obs + w_cld / 2) ### since opt_dist_next_brdc is useless, and all zeroes.  
+
+        best_angle_idx = np.argmin(opt_dist_avg)
+        best_angle_avg = opt_dist_avg[best_angle_idx]
+        ### d) report this too: an overall metric of co-linearity
+
+        ### we can now choose the best starting and ending point
+        best_curr_idx = np.argmin(opt_dist_curr[best_angle_idx])
+        
+        # a) in 2D
+        ax_curr_best = ax_curr[best_curr_idx]
+        ay_curr_best = ay_curr[best_curr_idx]
+
+        # b) in 3D
+        anchor3DArr_curr = np.array([anchorPts3D_curr.x, anchorPts3D_curr.y, anchorPts3D_curr.z]).T
+        curr_coords_3D = anchor3DArr_curr[best_curr_idx]
+        # -> this are forced to be projected onto the line
+        
+        if not hit_idx_is_last:
+            best_next_idx = np.argmin(opt_dist_next[best_angle_idx])
+            
+            # a) in 2D
+            ax_next_best = ax_curr[best_next_idx]
+            ay_next_best = ay_curr[best_next_idx]
+
+            # b) in 3D
+            anchor3DArr_next = np.array([anchorPts3D_next.x, anchorPts3D_next.y, anchorPts3D_next.z]).T
+            next_coords_3D = anchor3DArr_next[best_next_idx]
+            # -> this are forced to be projected onto the line
+
+        ### get the gammas at the optimal angle, and correct the the observed points to be on the co-linear projected line
+        best_unit_nx = nx_unit[best_angle_idx]
+        best_unit_ny = ny_unit[best_angle_idx]
+        
+        best_opt_gamma_ball = opt_gamma_ball[best_angle_idx]
+        px_shift = px + best_opt_gamma_ball * best_unit_nx
+        py_shift = py + best_opt_gamma_ball * best_unit_ny
+        shifted_ballArr = np.array([px_shift, py_shift]).T
+
+        best_opt_gamma_curr = opt_gamma_curr[best_angle_idx, best_curr_idx]
+        ax_curr_shift = ax_curr_best + best_opt_gamma_curr * best_unit_nx
+        ay_curr_shift = ay_curr_best + best_opt_gamma_curr * best_unit_ny
+        
+        if not hit_idx_is_last:
+            best_opt_gamma_next = opt_gamma_next[best_angle_idx, best_next_idx]
+            ax_next_shift = ax_next_best + best_opt_gamma_next * best_unit_nx
+            ay_next_shift = ay_next_best + best_opt_gamma_next * best_unit_ny
+        else:
+            ax_next_shift = np.nan
+            ay_next_shift = np.nan
+        
+        original_anchArr = np.array([[ax_curr_best, ay_curr_best], 
+                                     [ax_next_best, ax_next_best]])
+        shifted_anchArr = np.array([[ax_curr_shift, ay_curr_shift],
+                                    [ax_next_shift, ay_next_shift]])
+        
+        ### get the lambdas at the optimal angle.        
+        best_ux, best_uy = u[best_angle_idx]
+        best_vx, best_vy = v[best_angle_idx]
+        best_dy = best_vy - best_uy
+
+        best_opt_lambda_ball = (py - best_uy + best_opt_gamma_ball * best_unit_ny) / best_dy
+        
+        ### from the lambdas, calculate the height in 3D where the camera line cuts the original 3D line
+        # -> this is not the height of the ball, but a point on the vertical 3D line such that
+        #      the ball is projected onto the same point as that point on the vertical 3D line.
+        
+        best_opt_height_ball_numer = best_opt_lambda_ball * best_dy * C0[best_angle_idx]
+        best_opt_height_ball_denom = M_proj[1, 2] - M_proj[2, 2] * (best_uy + best_opt_lambda_ball * best_dy)
+        best_opt_height_ball = best_opt_height_ball_numer / best_opt_height_ball_denom
+        # -> this height is relative to the camera!
+
+        best_opt_height_ball_3D = np.array([np.zeros_like(best_opt_height_ball),
+                                            np.zeros_like(best_opt_height_ball),
+                                            best_opt_height_ball]).T
+
+        best_ang_vec = ang_vecs[best_angle_idx][:3] ### drop homogenous coordinate (= 0 in this case)
+        best_world_basis_point = best_ang_vec + matchCamera.get_cw()
+        # best_world_basis_point = best_world_basis_point[np.newaxis, :]
+        
+        best_point_on_vertical = best_world_basis_point + best_opt_height_ball_3D        
+
+
+        ### move the current point in 3D onto our projection plane
+        sin_theta, neg_cos_theta, _ = best_ang_vec / d
+        cos_theta = - neg_cos_theta
+        sx, sy, _ = curr_coords_3D
+        cx, cy, _ = matchCamera.get_cw()
+
+        gamma_curr = sin_theta * (cy - sy) + cos_theta * (cx - sx)
+
+        sx_on, sy_on = np.array([sx, sy]) + gamma_curr * np.array([cos_theta, sin_theta])        
+
+        outDict[frm_currhit] = {'shifted_ballArr': shifted_ballArr, 'shifted_anchArr': shifted_anchArr,
+                                'original_ballArr': obsArr, 'original_anchArr': original_anchArr,
+                                'vertical_3D_points': best_point_on_vertical,
+                                'u': (best_ux, best_uy), 'v': (best_vx, best_vy), 
+                                's': (sx, sy), 's_on': (sx_on, sy_on),
+                                'pure_ball_mean_dev': best_angle_ball_avg, 'pure_anchor_mean_dev': best_angle_anch_avg,
+                                'cross_val_mean_dev': anch_angle_ball_avg, 'final_mean_dev': best_angle_avg}
+
+        ### from the best angle we immediately get a flight plane!
+        # this is the flight plane given that the ball flies co-linear with the camera
+        # in this flight plane, we can not locate the ball by intersecting plane and camera line through observation (-> they're identical)
+        # instead, we use the height of the ball on the line (which can easily be calculated with the other optimization parameter, lambda)
+        # and then find a trajectory consistent with these projected heights.
+        # also consistent with bounce info, etc., of course.
+
+    outDict[frm_nexthit] = {'shifted_ballArr': None, 'shifted_anchArr': None,
+                            'original_ballArr': None, 'original_anchArr': None,
+                            'vertical_3D_points': None,
+                            'u': None, 'v': None,
+                            's': None, 's_on': None,
+                            'pure_ball_mean_dev': None, 'pure_anchor_mean_dev': None,
+                            'cross_val_mean_dev': None, 'final_mean_dev': None}
+        
+    return StreamFeatures(outDict)
+
+
+
 def filter_trajectories(trajDict, penalty_quantile = 0.05):
     
     outDict = {}
