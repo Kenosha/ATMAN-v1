@@ -103,7 +103,7 @@ class Point2D:
         
         normPt = self - origPt
         p = np.array(normPt.coords)
-        p_r = p @ R
+        p_r = R @ p
 
         normPt_rot = Point2D(tuple(p_r))
         rotPt = normPt_rot + origPt 
