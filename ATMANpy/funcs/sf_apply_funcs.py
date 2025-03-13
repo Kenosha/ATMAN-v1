@@ -462,11 +462,12 @@ def get_3D_hit_point_cloud(P, topPlayerCnt, botPlayerCnt, hitFlag, ball_choicePt
 def get_3D_hit_plane_point(P, topPlayerCnt, botPlayerCnt, hitFlag,
                            top_hand_Flag, bot_hand_Flag,
                            max_sideways_reach_in_feet = 5,
-                           height_in_feet = 5, resolution = 1):
+                           height_in_feet = 5, serve_height_modifier = 2, resolution = 1):
     ### As opposed to the above function, we calculate a line of points parallel to the baseline.
     ### if there are two such lines (for the hitter and the receiver), 
     ### all connections between any two points on the two lines will PARSIMONIOUSLY describe all relevant flight planes.
-    ### Note that for the purposes of trajectory finding, height_in_feet is irrelevant
+    ### Note that for the purposes of trajectory finding, height_in_feet and serve height modifier is irrelevant
+    ### for ball_interpolation_colinear, it is not 
     try:
         side, hit = hitFlag.split('_') ### if we have a serve or overhead
         is_serve = True
@@ -477,15 +478,15 @@ def get_3D_hit_plane_point(P, topPlayerCnt, botPlayerCnt, hitFlag,
     topPt3D, botPt3D = find_player_positions_3D(P, topPlayerCnt, botPlayerCnt)
     
     basePt3D = topPt3D if side == 'top' else botPt3D
-    height_in_axis_units = height_in_feet * const.SCALE
-    hingePt3D = basePt3D.up(height_in_axis_units)
-    
+
+    height_in_axis_units = height_in_feet * const.SCALE    
     max_reach_in_axis_units = max_sideways_reach_in_feet * const.SCALE
     
     relevant_hand = top_hand_Flag if side == 'top' else bot_hand_Flag
 
     if is_serve:
         ### these go up, but generally close to the player sideways
+        hingePt3D = basePt3D.up(serve_height_modifier * height_in_axis_units)
         leftPt3D, rightPt3D = hingePt3D.left(max_reach_in_axis_units / 2), hingePt3D.right(max_reach_in_axis_units / 2)
     else:
         ### Idea -> determine number of horizontal flips. 
@@ -493,6 +494,8 @@ def get_3D_hit_plane_point(P, topPlayerCnt, botPlayerCnt, hitFlag,
             # 1 Flip: one of these three factors flips -> ball is hit on the left
             # 2 Flips: two of these three factors flip -> ball is hit on the right
             # 3 Flips: all factors flip --> top, backhand, left handed -> ball is hit on the left.
+        hingePt3D = basePt3D.up(height_in_axis_units)
+
         side_flip = side == 'top'
         stroke_flip = stroke == 'bh'
         hand_flip = relevant_hand == 'left'
