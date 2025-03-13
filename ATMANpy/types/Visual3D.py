@@ -147,10 +147,10 @@ class Scene:
 
         if make_net:
             if singles_net:
-                net3D = Net.make_singles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
+                net3D = Net.make_singles(courtLines = courtLines, color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
                 myScn = myScn.put(net3D)
             else:
-                net3D = Net.make_doubles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
+                net3D = Net.make_doubles(courtLines = courtLines, color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
                 myScn = myScn.put(net3D)
 
         return myScn
@@ -316,6 +316,27 @@ class DummyScene:
     def transparify(self, transparence_factor):
         trans_alphaArrs = [np.clip(alphaArr * transparence_factor, 0, 1) for alphaArr in self.alphaArrs]
         return DummyScene(self.rastArrs, self.colArrs, trans_alphaArrs)
+
+    def rotate_flat(self, angle, origPt = None):         
+        s_a, c_a = np.sin(angle), np.cos(angle)
+
+        R = np.array([  [c_a, -s_a, 0],
+                        [s_a,  c_a, 0],
+                        [0  ,    0, 1]])
+        
+        if origPt is None:
+            origPt = Point3D((0, 0, 0))
+        origArr = np.array(origPt.coords)
+
+        rastArrs_rot = []
+        for rastArr in self.rastArrs:
+            rastArr_norm = rastArr - origArr
+            rastArr_norm_rot = np.einsum('ij, nj -> ni', R, rastArr_norm)
+            rastArr_rot = rastArr_norm_rot + origArr
+            rastArrs_rot.append(rastArr_rot)
+
+        rotScn = DummyScene(rastArrs_rot, self.colArrs, self.alphaArrs)
+        return rotScn
 
     def prune_transparents(self, alpha_threshold = 0.05):
         new_rastArrs, new_colArrs, new_alphaArrs = [], [], []
