@@ -396,7 +396,7 @@ class Point3D:
         if not self.is_vectorized():
             return self
         else:
-            tuples = [tuple(c) for c in self.coords.T]
+            tuples = [(x, y, z) for x, y, z in zip(self.x, self.y, self.z)]
             attr_dicts = [get_updated_attribute_dictionary(self, {'coords': tup}) for tup in tuples]
             return Points3D([self.__class__(**attr_dict) for attr_dict in attr_dicts])
 
@@ -1099,21 +1099,21 @@ class Line3D:
         y_dist = abs(self.rightPt.y - self.leftPt.y)
         z_dist = abs(self.rightPt.z - self.leftPt.z) 
         
-        return x_dist > y_dist and x_dist > z_dist 
+        return x_dist >= y_dist and x_dist >= z_dist 
     
     def is_front_to_back(self):
         x_dist = abs(self.rightPt.x - self.leftPt.x)
         y_dist = abs(self.rightPt.y - self.leftPt.y)
         z_dist = abs(self.rightPt.z - self.leftPt.z) 
         
-        return y_dist > x_dist and y_dist > z_dist 
+        return y_dist >= x_dist and y_dist >= z_dist 
     
     def is_down_to_up(self):
         x_dist = abs(self.rightPt.x - self.leftPt.x)
         y_dist = abs(self.rightPt.y - self.leftPt.y)
         z_dist = abs(self.rightPt.z - self.leftPt.z) 
         
-        return z_dist > x_dist and z_dist > y_dist 
+        return z_dist >= x_dist and z_dist >= y_dist 
     
     def left_point(self):
         if self.leftPt.is_left(self.rightPt):
