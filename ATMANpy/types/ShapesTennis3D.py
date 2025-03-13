@@ -63,8 +63,9 @@ class NetRegions(Regions3D):
     _NET_ALPHA = 1
     
     @staticmethod
-    def make_singles(color = _NET_COLOR, alpha = _NET_ALPHA):
-        courtLines = CourtLines.make()
+    def make_singles(courtLines = None, color = _NET_COLOR, alpha = _NET_ALPHA):
+        if courtLines is None:
+            courtLines = CourtLines.make()
 
         netLn = Line3D.from_line2D(courtLines.add_singles_netline()['Net Line'], z = 0)
         lPt, cPt, rPt = netLn.subdivide(3)
@@ -78,8 +79,9 @@ class NetRegions(Regions3D):
         return Net([leftReg, rightReg], name = 'Net', color = color, alpha = alpha)
         
     @staticmethod
-    def make_doubles(color = _NET_COLOR, alpha = _NET_ALPHA):
-        courtLines = CourtLines.make()
+    def make_doubles(courtLines = None, color = _NET_COLOR, alpha = _NET_ALPHA):
+        if courtLines is None:
+            courtLines = CourtLines.make()
 
         netLn = Line3D.from_line2D(courtLines.add_doubles_netline()['Net Line'], z = 0)
         lPt, cPt, rPt = netLn.subdivide(3)
@@ -144,18 +146,34 @@ class Net(Lines3D):
         return Net(allLns, name = 'Net', color = color, alpha = alpha)
 
     @staticmethod
-    def make_singles(color = _NET_COLOR, alpha = _NET_ALPHA, net_mesh_density = 1):
-        courtLines = CourtLines.make()
-        netLn = Line3D.from_line2D(courtLines.add_singles_netline()['Net Line'], z = 0)
-        return Net._on_line(netLn, height_middle = courtLines.net_height_middle, height_post = courtLines.net_height_post,
+    def make_singles(courtLines = None, color = _NET_COLOR, alpha = _NET_ALPHA, net_mesh_density = 1):
+        if courtLines is None:
+            courtLines = CourtLines.make()
+        
+        netLn = courtLines['Net Line']
+
+        if netLn is None:
+            netLn = courtLines.add_singles_netline()['Net Line']
+        
+        netLn3D = Line3D.from_line2D(netLn, z = 0)
+
+        return Net._on_line(netLn3D, height_middle = courtLines.net_height_middle, height_post = courtLines.net_height_post,
                                 color = color, alpha = alpha, 
                                 net_mesh_density = net_mesh_density)
         
     @staticmethod
-    def make_doubles(color = _NET_COLOR, alpha = _NET_ALPHA, net_mesh_density = 1):
-        courtLines = CourtLines.make()
-        netLn = Line3D.from_line2D(courtLines.add_doubles_netline()['Net Line'], z = 0)
-        return Net._on_line(netLn, height_middle = courtLines.net_height_middle, height_post = courtLines.net_height_post,
+    def make_doubles(courtLines = None, color = _NET_COLOR, alpha = _NET_ALPHA, net_mesh_density = 1):
+        if courtLines is None:
+            courtLines = CourtLines.make()
+
+        netLn = courtLines['Net Line']
+
+        if netLn is None:
+            netLn = courtLines.add_doubles_netline()['Net Line']
+        
+        netLn3D = Line3D.from_line2D(netLn, z = 0)
+        
+        return Net._on_line(netLn3D, height_middle = courtLines.net_height_middle, height_post = courtLines.net_height_post,
                                 color = color, alpha = alpha, 
                                 net_mesh_density = net_mesh_density)
         
