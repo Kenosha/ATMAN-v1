@@ -1095,7 +1095,190 @@ def fit_trajectory(planeArr, hitFlag,
             ## Update -> lets not do this right here -> we might need the longer trajectories when deciding
     
     return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt, trajectory_has_enough_observations
-        
+
+def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitFlag, bounceArr, 
+                            matchCamera = None, 
+                            groundArr = None, vertArr = None, rpmArr = None, height_space = None,
+                            observation_threshold = 3, number_of_local_minima = 100):
+    ### update: since we have a colinear plane, the vertical 3D points are all we have, 
+    # and finding a good trajectory based on only the deviations is tough.
+    # on the other hand, we have only a single plane, which eases finding minima.
+    # therefore, we include here also the information about bounce timing to aid in detection here.
+
+    if s_on is None:
+        trajArr, groundArr_filt, vertArr_filt, rpmArr_filt, pointArr, trajectory_has_enough_observations = None, None, None, None, None, None
+    else:        
+        s_x, s_y = s_on ### this is our starting hit point x and y on the plane (z is found within trajectory raster search)
+                        ### so s_x, s_y is basically our origin, w/r/t the trajectory raster.
+                        ### it is also on the same camera line that our shifted points are.
+
+        ### pointArr (needed for calculation of trajectory coordinates)
+        c_x, c_y, _ = matchCamera.get_cw()
+        pointArr = np.array([[s_x, s_y, 0], [s_x + (s_x - c_x), s_y + (s_y - c_y), 0]])
+
+        ### shorten vertical points if ball is detected to be in the net
+        if not netBool:
+            vertical_3D_points_flight = vertical_3D_points
+        else:
+            vertical_3D_points_flight = np.where(proj_netArr[:, np.newaxis], np.nan, vertical_3D_points)
+
+        coords_are_not_nan = ~np.isnan(vertical_3D_points_flight).all(axis = 1)
+        non_nan_observations = coords_are_not_nan.sum()
+        trajectory_has_enough_observations = non_nan_observations >= observation_threshold
+
+        if not trajectory_has_enough_observations:
+            trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
+        else:
+
+            u_x, u_y, heights = vertical_3D_points_flight.T
+            u_x, u_y = u_x[0], u_y[0] ### these points differ only in z-axis
+            num_obs = len(vertical_3D_points_flight)
+            num_sim = groundArr.shape[-1]
+
+            ### establish cam line (in meters)
+            # a) origin relative to hit point
+            cam_origin_relative = matchCamera.get_cw() - np.array([s_x, s_y, 0]) # z coordinate is a degree of freedom!
+            cam_origin_relative_meter = cam_origin_relative / const.SCALE * const.FOOT_TO_METER
+
+            cam_origin_relative_heights_meter = np.tile(cam_origin_relative_meter, reps = (len(height_space), 1)) 
+            cam_origin_relative_heights_meter[:, 2] = cam_origin_relative_heights_meter[:, 2] - height_space # minus, because we subtract the hit point (see three rows above)
+            # -> shape: heights x 3
+
+            # b) normalized slope
+            cam_vector = vertical_3D_points_flight - matchCamera.get_cw()
+            cam_vector_meter = cam_vector / const.SCALE * const.FOOT_TO_METER
+            cam_vector_len_meter = (cam_vector_meter ** 2).sum(axis = 1) ** 0.5
+            cam_vector_meter_norm = cam_vector_meter / cam_vector_len_meter[:, np.newaxis]
+            # -> shape: obs x 3
+
+            ### convert 3D cam vector to planar 2D, with 1st 2D-dim going in x and y 3D-dims along the camera line, and 2nd 2D-dim going in z in 3D-dim
+            planar_origin_x = (cam_origin_relative_heights_meter[:, :2] ** 2).sum(axis = 1) ** 0.5
+            planar_origin_y = cam_origin_relative_heights_meter[:, 2]        
+            # shapes of x, y -> heights
+            # therefore, rebroadcast
+            planar_origin_x_brdc = planar_origin_x[np.newaxis, np.newaxis, np.newaxis, :, np.newaxis]
+            planar_origin_y_brdc = planar_origin_y[np.newaxis, np.newaxis, np.newaxis, :, np.newaxis]
+
+            planar_vector_x = (cam_vector_meter_norm[:, :2] ** 2).sum(axis = 1) ** 0.5
+            planar_vector_y = cam_vector_meter_norm[:, 2]
+            # shapes of x, y -> obs
+            # therefore, rebroadcast
+            planar_vector_x_brdc = planar_vector_x[np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
+            planar_vector_y_brdc = planar_vector_y[np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
+
+            ### shorten the ground and vert arrays, to match observations in sample
+            groundArr_short, vertArr_short, rpmArr_short = groundArr[:, :, :, :, :num_obs], vertArr[:, :, :, :, :num_obs], rpmArr[:, :, :, :, :num_obs] 
+            
+            if num_obs > num_sim:
+                ### the vert and groundArr are capped at a certain number of frames.
+                # if the trajectory is very very long, 
+                # the dimensions of planar_vector_x_brdc can exceed rel_vertArr_short, for example.
+                # --> shorten the planar_vectors!
+                planar_vector_x_brdc = planar_vector_x_brdc[:, :, :, :, :num_sim]
+                planar_vector_y_brdc = planar_vector_y_brdc[:, :, :, :, :num_sim]
+                bounceArr = bounceArr[:num_sim]
+
+            ### calculate deviations from the flight plane for the entire trajectory array
+            rel_groundArr_short = planar_origin_x_brdc - groundArr_short
+            rel_vertArr_short = planar_origin_y_brdc - vertArr_short
+
+            gammaArr = planar_vector_x_brdc * rel_vertArr_short - planar_vector_y_brdc * rel_groundArr_short
+            distArr = np.abs(gammaArr)        
+            distArr_over_traj = np.nanmean(distArr, axis = -1) ### mean deviation over all observations
+
+            ### bounce info
+            is_bounceArr = vertArr_short == 0
+            num_bounceArr = is_bounceArr.sum(axis = -1)
+            
+            if netBool:
+                prior0, prior1, prior2 = 0.9, 0.09, 0.01
+            else:
+                prior0, prior1, prior2 = bounceArr[0, 2:]
+
+            cond_prior1, cond_prior2 = bounceArr[:, 0], bounceArr[:, 1]
+
+            cond_prior1_brdc = cond_prior1[np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+            cond_prior2_brdc = cond_prior2[np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+
+            cond_prior1_mul = np.prod(np.where(is_bounceArr, cond_prior1_brdc, 1), axis = -1)
+            cond_prior2_mul = np.prod(np.where(is_bounceArr, cond_prior2_brdc, 1), axis = -1)
+
+            priorArr = np.where(num_bounceArr == 0, prior0, 
+                                np.where(num_bounceArr == 1, prior1, 
+                                         prior2))
+            cond_priorArr = np.where(num_bounceArr == 0, 1, 
+                                     np.where(num_bounceArr == 1, cond_prior1_mul,
+                                              cond_prior2_mul))
+
+            bounce_probArr = priorArr * cond_priorArr
+
+            ### visual shot info
+            from ATMANpy.funcs.sf_apply_funcs import trajectory_spin_prob
+            spin_probs = trajectory_spin_prob(rpmArr, hitFlag)
+
+            ### join deviations and bounce probabilities in a sensible metric
+            dist_probArr = 1 / (1 + distArr_over_traj)
+            joint_probArr = dist_probArr * bounce_probArr * spin_probs
+
+            ### detect locally maximal probabilities
+            from ATMANpy.funcs.util_funcs import detect_local_minima
+            x_idxs, z_idxs, rpm_idxs, height_idxs = detect_local_minima(-joint_probArr)
+            max_probs = joint_probArr[x_idxs, z_idxs, rpm_idxs, height_idxs]
+
+            ### select the minimal initial conditions
+            groundArr_filt = groundArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs]
+            vertArr_filt = vertArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs]
+            rpmArr_filt = rpmArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs]
+
+            ### resample 
+            # even don't we do the viterbi step, we can resample here to reduce the set of choices 
+            # in case for some reason we get way too many local minima
+            
+            # additional resampling step: if the resulting trajectories are the same (or similar), the probabilities are scaled downward
+            ground_cross_dists = np.abs(groundArr_filt[:, np.newaxis] - groundArr_filt[np.newaxis, :])
+            vert_cross_dists = np.abs(vertArr_filt[:, np.newaxis] - vertArr_filt[np.newaxis, :])
+
+            ground_cross_dist_sum = ground_cross_dists.sum(axis = -1)
+            vert_cross_dist_sum = vert_cross_dists.sum(axis = -1)
+
+            cross_dist_sum = (ground_cross_dist_sum == 0) & (vert_cross_dist_sum == 0)
+            cross_dist_count = cross_dist_sum.sum(axis = 1)
+            cross_dist_weight = 1 / cross_dist_count
+            
+            # pick according to joint probs
+            rng = np.random.default_rng()
+            sample_ps = cross_dist_weight * max_probs
+            sample_ps_norm = sample_ps / sample_ps.sum()
+            loc_min_idxs = np.arange(len(sample_ps_norm))
+            
+            if len(loc_min_idxs) < number_of_local_minima: ### in this case, get all of the minima and pad the array to fill the required local minima
+                chosen_loc_min_idxs = np.tile(loc_min_idxs, number_of_local_minima)[:number_of_local_minima]
+            else:
+                chosen_loc_min_idxs = rng.choice(loc_min_idxs, size = number_of_local_minima, replace = False, p = sample_ps_norm)
+
+            ### build trajectory array
+            traj_ground_idxs = x_idxs[chosen_loc_min_idxs]
+            traj_vert_idxs = z_idxs[chosen_loc_min_idxs]
+            traj_rpm_idxs = rpm_idxs[chosen_loc_min_idxs]
+            traj_prob_idxs = max_probs[chosen_loc_min_idxs]
+            trajArr = np.stack([traj_ground_idxs, traj_vert_idxs, traj_rpm_idxs, traj_prob_idxs], axis = 1)
+            trajArr = trajArr[np.newaxis] ### add the pseudo-plane axis of length 1
+
+            ### filter again
+            groundArr_filt = groundArr_filt[chosen_loc_min_idxs]
+            vertArr_filt = vertArr_filt[chosen_loc_min_idxs]
+            rpmArr_filt = rpmArr_filt[chosen_loc_min_idxs]
+
+            ### prep shapes for trajectory coordinate calculation
+            pointArr = pointArr[np.newaxis]
+            groundArr_filt = groundArr_filt[np.newaxis]
+            vertArr_filt = vertArr_filt[np.newaxis]
+            rpmArr_filt = rpmArr_filt[np.newaxis]
+            trajectory_has_enough_observations = np.array([trajectory_has_enough_observations])
+
+    return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt, pointArr, trajectory_has_enough_observations
+    
+
 def trajectory_audio_prob(bounceArr, traj_coordArr, netBool):
     ### bounceArr shape: T x 5 (pcond1, pcond2, prior0, prior1, prior2)
     ### vertArr_filt shape: plane x traj x T
@@ -1233,7 +1416,7 @@ def trajectory_spin_prob(rpmArr_filt, hitFlag):
     if rpmArr_filt is None:
         spin_probs = None
     else:
-        initial_rpm = rpmArr_filt[:, :, 0]
+        initial_rpm = rpmArr_filt.take(0, axis = -1)
 
         ### set likelihoods for different hit kinds
         ### these are created using a simple spline interpolation using eleven lkl values that have to be supplied by the user  
@@ -1342,6 +1525,35 @@ def trajectory_last_angle_prob(traj_coordArr, remaining_shots, threshold_angle =
             angle_probs = np.full((trajs, mins), fill_value = 1)
 
     return angle_probs
+
+def get_highest_prob(trajArr, net_probs, fair_probs):
+    if trajArr is None:
+        best_traj = None
+        best_plane = None
+    else:
+        best_plane = 0 ### in the colinear case (where we use this function), there is only one plane
+        fit_probs = trajArr[best_plane, :, -1]
+        joint_probs = fit_probs * net_probs * fair_probs
+        best_traj = np.argmax(joint_probs)
+    
+    ### other stuff we need to make the trajectory array
+    bounce_prob = None
+    dev_prob = None
+    net_prob = None
+    fair_prob = None
+    spin_prob = None
+    dist_prob = None
+
+    return best_plane, best_traj, bounce_prob, dev_prob, net_prob, fair_prob, spin_prob, dist_prob
+
+def make_empty_coord_and_plane_array(traj_coordArr):
+    if traj_coordArr is None:
+        coordArr, planeArr = None, None
+    else:
+        _, _, T, _ = traj_coordArr.shape
+        coordArr = np.full((1, T, 3), fill_value = np.nan)
+        planeArr = np.full((1, T, 2), fill_value = np.nan)
+    return coordArr, planeArr
 
 def compare_trajectories_with_audio(traj_coordArr, bounceFrm, prior_override = None):
     traj_yArr = traj_coordArr[:, :, :, 2]
