@@ -2171,11 +2171,55 @@ def add_in_hit_point(mySF, height_in_feet = 5, resolution = 5, radius_in_feet = 
     
     return StreamFeatures(streamDict)
     
-def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
+def intersect_ball_observations_and_net_plane(mySF, matchCamera = None):
     from ATMANpy.types.ShapesTennis3D import Net
     myNet = Net.make_singles()
     netReg = myNet.get_rectangular_net_region()
+
+    anchorSF = mySF['cldPt3D']
+    shapeSF = mySF['ball_choicePt']
+    camlnSF = shapeSF.apply(sa.make_camline, myCamera = matchCamera)
     
+    anchor_frames = anchorSF.dropna().get_frames()
+
+    outDict = {}
+    for idx in range(len(anchor_frames) - 1): ### dont do the last one -> the hypothetical flight cloud is not a hit cloud
+        hit_idx_is_last = idx == len(anchor_frames) - 2
+
+        frm_currhit, frm_nexthit = anchor_frames[idx], anchor_frames[idx + 1]
+        flight_frames = list(range(frm_currhit, frm_nexthit + 1))
+        num_flight_frames = len(flight_frames)
+
+        ###### DEAL WITH NET COORDINATES, IF APPLICABLE #######
+        if hit_idx_is_last:
+            net_coordArr = np.full((num_flight_frames, 3), fill_value = np.nan)
+            net_paramArr = np.full((num_flight_frames, 3), fill_value = np.nan)
+
+            for frame_idx, frame_num in enumerate(flight_frames):
+                camLn = camlnSF[frame_num]
+                if camLn is not None:
+                    net_ballPt3D, net_params = camLn.intersect(netReg, rectify_plane = True)
+                else:
+                    net_ballPt3D = None 
+
+                if net_ballPt3D is not None:
+                    x_net, y_net, z_net = net_ballPt3D.coords
+                    l_net, m_net, n_net = net_params
+                    net_coordArr[frame_idx] = x_net, y_net, z_net
+                    net_paramArr[frame_idx] = l_net, m_net, n_net
+        else:
+            net_coordArr = None
+            net_paramArr = None
+
+        outDict[frm_currhit] = {'net_coordArr': net_coordArr,
+                                'net_paramArr': net_paramArr}
+        
+    outDict[frm_nexthit] = {'net_coordArr': None,
+                            'net_paramArr': None}
+    
+    return StreamFeatures(outDict)
+
+def intersect_ball_observations_and_flight_planes(mySF, matchCamera = None):
     anchorSF = mySF['cldPt3D']
     shapeSF = mySF['ball_choicePt']
     camlnSF = shapeSF.apply(sa.make_camline, myCamera = matchCamera)
@@ -2218,27 +2262,6 @@ def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
         coordArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
         paramArr = np.full((num_curr_points, num_next_points, num_flight_frames, 3), fill_value = np.nan)
         planeArr = np.full((num_curr_points, num_next_points, num_flight_frames, 2), fill_value = np.nan)
-        
-        ###### DEAL WITH NET COORDINATES, IF APPLICABLE #######
-        if hit_idx_is_last:
-            net_coordArr = np.full((num_flight_frames, 3), fill_value = np.nan)
-            net_paramArr = np.full((num_flight_frames, 3), fill_value = np.nan)
-
-            for frame_idx, frame_num in enumerate(flight_frames):
-                camLn = camlnSF[frame_num]
-                if camLn is not None:
-                    net_ballPt3D, net_params = camLn.intersect(netReg, rectify_plane = True)
-                else:
-                    net_ballPt3D = None 
-
-                if net_ballPt3D is not None:
-                    x_net, y_net, z_net = net_ballPt3D.coords
-                    l_net, m_net, n_net = net_params
-                    net_coordArr[frame_idx] = x_net, y_net, z_net
-                    net_paramArr[frame_idx] = l_net, m_net, n_net
-        else:
-            net_coordArr = None
-            net_paramArr = None
             
         ###### DEAL WITH FLIGHT COORDINATES #######
         for curr_idx in range(num_curr_points):
@@ -2281,16 +2304,12 @@ def intersect_ball_observations_and_planes(mySF, matchCamera = None, P = None):
         outDict[frm_currhit] = {'coordArr': coordArr, 
                                 'paramArr': paramArr, 
                                 'planeArr': planeArr, 
-                                'pointArr': pointArr, 
-                                'net_coordArr': net_coordArr,
-                                'net_paramArr': net_paramArr}
+                                'pointArr': pointArr}
         
     outDict[frm_nexthit] = {'coordArr': None, 
                             'paramArr': None, 
                             'planeArr': None, 
-                            'pointArr': None, 
-                            'net_coordArr': None,
-                            'net_paramArr': None}
+                            'pointArr': None}
         
     return StreamFeatures(outDict)
 
@@ -2395,6 +2414,17 @@ def best_colinear_planes(mySF, matchCamera = None, num_angles = 1001, lim_pi = n
         ### figure out observed projected point vectors
         observed_and_none_points = list(shapeSF[flight_frames].values())
         obsArr = np.array([obsPt.coords if obsPt is not None else (np.nan, np.nan) for obsPt in observed_and_none_points]) ### shape obs, 2
+        
+        if np.isnan(obsArr).all():
+            outDict[frm_currhit] = {'shifted_ballArr': None, 'shifted_anchArr': None,
+                                    'original_ballArr': None, 'original_anchArr': None,
+                                    'vertical_3D_points': None,
+                                    'u': None, 'v': None,
+                                    's': None, 's_on': None,
+                                    'pure_ball_mean_dev': None, 'pure_anchor_mean_dev': None,
+                                    'cross_val_mean_dev': None, 'final_mean_dev': None}
+            continue
+
         px, py = obsArr[:, 0], obsArr[:, 1]
         px_brdc = px[np.newaxis, :] # shape: angles, obs
         py_brdc = py[np.newaxis, :] # shape: angles, obs
@@ -2486,7 +2516,9 @@ def best_colinear_planes(mySF, matchCamera = None, num_angles = 1001, lim_pi = n
             # b) in 3D
             anchor3DArr_next = np.array([anchorPts3D_next.x, anchorPts3D_next.y, anchorPts3D_next.z]).T
             next_coords_3D = anchor3DArr_next[best_next_idx]
-            # -> this are forced to be projected onto the line
+            # -> these are forced to be projected onto the line
+        else:
+            ax_next_best, ay_next_best = np.nan, np.nan
 
         ### get the gammas at the optimal angle, and correct the the observed points to be on the co-linear projected line
         best_unit_nx = nx_unit[best_angle_idx]
@@ -2510,7 +2542,7 @@ def best_colinear_planes(mySF, matchCamera = None, num_angles = 1001, lim_pi = n
             ay_next_shift = np.nan
         
         original_anchArr = np.array([[ax_curr_best, ay_curr_best], 
-                                     [ax_next_best, ax_next_best]])
+                                     [ax_next_best, ay_next_best]])
         shifted_anchArr = np.array([[ax_curr_shift, ay_curr_shift],
                                     [ax_next_shift, ay_next_shift]])
         
