@@ -262,13 +262,14 @@ def main(conf,
     
     ### INTERSECT OBSERVED BALLS AND PLANES ###
     mySFs = ballSF.merge(cld3DSF, how = 'outer').conform(plyBF).filter(plyBF).split()
-    
-    planeSFs = mySFs.apply_whole_mp(sf.intersect_ball_observations_and_planes, nwo, matchCamera = matchCamera, P = P)
+    ball_planeSFs = mySFs.apply_whole_mp(sf.intersect_ball_observations_and_flight_planes, nwo, matchCamera = matchCamera)
     
     ### CHECK FOR NET POINTS ###
-    netSFs = planeSFs['net_coordArr'].apply_mp(sa.viterbi_net, nwo, **viterbi_net_params)
+    net_planeSFs = mySFs.apply_whole_mp(sf.intersect_ball_observations_and_net_plane, nwo, matchCamera = matchCamera)
+    netSFs = net_planeSFs['net_coordArr'].apply_mp(sa.viterbi_net, nwo, **viterbi_net_params)
 
     ### FIGURE OUT EXACT NET IMPACT TIMING FOR EACH PLANE, AND NULL EVERYTHING POST NET ###
+    planeSFs = ball_planeSFs.merge(net_planeSFs)
     mySFs = planeSFs.merge(netSFs)
     planeSFs_netted = mySFs.apply(sa.null_post_net_values)
     planeSFs_netted = planeSFs_netted.merge(planeSFs['pointArr'])
