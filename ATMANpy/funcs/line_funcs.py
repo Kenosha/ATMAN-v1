@@ -488,10 +488,10 @@ def linear_regress(relPoints):
     return b_0, b_1
 
 ### OTHERS ###
-def spline_func(eleven_values):
-    ### eleven_values -> waypoint likelihood values for rpms -5000, -4000, -3000, ..., 3000, 4000, 5000
+def spline_func(interp_values, min_x = -5000, max_x = 5000):
+    ### interp_values -> waypoint likelihood values for rpms -5000, -4000, -3000, ..., 3000, 4000, 5000
+    ### EDIT: can customize the x values (not just rpm), and give arbitrary length interp values
     from functools import partial
-    
-    xp = np.linspace(-5000, 5000, num = 11, endpoint = True)
-    itpl_func = partial(np.interp, xp = xp, fp = eleven_values)
+    xp = np.linspace(min_x, max_x, num = len(interp_values), endpoint = True)
+    itpl_func = partial(np.interp, xp = xp, fp = interp_values)
     return itpl_func

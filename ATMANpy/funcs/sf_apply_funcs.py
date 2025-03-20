@@ -1431,7 +1431,7 @@ def trajectory_spin_prob(rpmArr_filt, hitFlag):
         elif '_ts' in hitFlag:
             eleven_values = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1, 1, 1, 0.75, 0.5]
         
-        lkl_func = spline_func(eleven_values)
+        lkl_func = spline_func(eleven_values, mix_x = -5000, max_x = 5000)
         spin_probs = lkl_func(initial_rpm)
 
     return spin_probs
