@@ -1412,26 +1412,30 @@ def trajectory_net_prob(traj_coordArr, netBool, stretch_factor = 0.25):
 
     return net_probs
 
-def trajectory_spin_prob(rpmArr_filt, hitFlag):
+def trajectory_spin_prob(rpmArr_filt, hitFlag, spin_rate_space = None):
     if rpmArr_filt is None:
         spin_probs = None
     else:
         initial_rpm = rpmArr_filt.take(0, axis = -1)
+
+        if spin_rate_space is None:
+            min_x, max_x = -5000, 5000      ### we cannot take initial_rpm min and max values here 
+                                            # because the rpmArr_filt could be filtered in the rpm dimension
 
         ### set likelihoods for different hit kinds
         ### these are created using a simple spline interpolation using eleven lkl values that have to be supplied by the user  
         from ATMANpy.funcs.line_funcs import spline_func
 
         if '_srv' in hitFlag: # 1) serve -> could be flat or kick -> no spin or topspin!
-            eleven_values = [0.05, 0.1, 0.15, 0.4, 0.75, 1, 1, 1, 1, 0.9, 0.75]
+            interp_values = [0.05, 0.1, 0.15, 0.4, 0.75, 1, 1, 1, 1, 0.9, 0.75]
         elif '_ovh' in hitFlag: # 2) usually just flat, but can not discount the possibility of some spin
-            eleven_values = [0.05, 0.1, 0.15, 0.6, 1, 1, 1, 0.9, 0.45, 0.2, 0.05]
+            interp_values = [0.05, 0.1, 0.15, 0.6, 1, 1, 1, 0.9, 0.45, 0.2, 0.05]
         elif '_sf' in hitFlag: # 3) slice or flat -> can not be topspin!
-            eleven_values = [0.5, 0.75, 1, 1, 1, 1, 0.75, 0.5, 0.25, 0.1, 0.05]
+            interp_values = [0.5, 0.75, 1, 1, 1, 1, 0.75, 0.5, 0.25, 0.1, 0.05]
         elif '_ts' in hitFlag:
-            eleven_values = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1, 1, 1, 0.75, 0.5]
+            interp_values = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1, 1, 1, 0.75, 0.5]
         
-        lkl_func = spline_func(eleven_values, mix_x = -5000, max_x = 5000)
+        lkl_func = spline_func(interp_values, mix_x = min_x, max_x = max_x)
         spin_probs = lkl_func(initial_rpm)
 
     return spin_probs
