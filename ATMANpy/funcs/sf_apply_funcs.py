@@ -1098,7 +1098,9 @@ def fit_trajectory(planeArr, hitFlag,
 
 def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitFlag, bounceArr, 
                             matchCamera = None, 
-                            groundArr = None, vertArr = None, rpmArr = None, height_space = None,
+                            groundArr = None, vertArr = None, rpmArr = None, 
+                            height_space = None, v_init_ground_space = None, v_init_vert_space = None, spin_rate_space = None,
+                            groundstrokes_are_below = 2.5, serves_and_overheads_are_above = 2,
                             observation_threshold = 3, number_of_local_minima = 100):
     ### update: since we have a colinear plane, the vertical 3D points are all we have, 
     # and finding a good trajectory based on only the deviations is tough.
@@ -1129,11 +1131,20 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
         if not trajectory_has_enough_observations:
             trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = None, None, None, None
         else:
-
             u_x, u_y, heights = vertical_3D_points_flight.T
             u_x, u_y = u_x[0], u_y[0] ### these points differ only in z-axis
             num_obs = len(vertical_3D_points_flight)
             num_sim = groundArr.shape[-1]
+
+            ### shorten the ground and vert arrays, to match observations in sample
+            ### also, filter out the heights that are impossible given the observed shot
+            ### Figure out which height subspace to use, depending on the type of shot
+            if 'srv' in hitFlag or 'ovh' in hitFlag:
+                h_filt = height_space > serves_and_overheads_are_above
+            else:
+                h_filt = height_space < groundstrokes_are_below
+
+            groundArr_short, vertArr_short, rpmArr_short = groundArr[:, :, :, h_filt, :num_obs], vertArr[:, :, :, h_filt, :num_obs], rpmArr[:, :, :, h_filt, :num_obs]
 
             ### establish cam line (in meters)
             # a) origin relative to hit point
@@ -1155,7 +1166,9 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
             planar_origin_x = (cam_origin_relative_heights_meter[:, :2] ** 2).sum(axis = 1) ** 0.5
             planar_origin_y = cam_origin_relative_heights_meter[:, 2]        
             # shapes of x, y -> heights
-            # therefore, rebroadcast
+            # therefore, filter with h_filt and then rebroadcast
+            planar_origin_x = planar_origin_x[h_filt]
+            planar_origin_y = planar_origin_y[h_filt]
             planar_origin_x_brdc = planar_origin_x[np.newaxis, np.newaxis, np.newaxis, :, np.newaxis]
             planar_origin_y_brdc = planar_origin_y[np.newaxis, np.newaxis, np.newaxis, :, np.newaxis]
 
@@ -1166,9 +1179,6 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
             planar_vector_x_brdc = planar_vector_x[np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
             planar_vector_y_brdc = planar_vector_y[np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
 
-            ### shorten the ground and vert arrays, to match observations in sample
-            groundArr_short, vertArr_short, rpmArr_short = groundArr[:, :, :, :, :num_obs], vertArr[:, :, :, :, :num_obs], rpmArr[:, :, :, :, :num_obs] 
-            
             if num_obs > num_sim:
                 ### the vert and groundArr are capped at a certain number of frames.
                 # if the trajectory is very very long, 
@@ -1213,12 +1223,16 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
             bounce_probArr = priorArr * cond_priorArr
 
             ### visual shot info
-            from ATMANpy.funcs.sf_apply_funcs import trajectory_spin_prob
-            spin_probs = trajectory_spin_prob(rpmArr, hitFlag)
+            spin_probs = trajectory_spin_prob(rpmArr_short, hitFlag, spin_rate_space = spin_rate_space)
 
+            ### since we have so little to go in in case of co-linearity, 
+            # we put priors over the distribution of speeds and heights, too.
+            hori_probs = trajectory_hori_prob(groundArr_short, hitFlag, v_init_ground_space = v_init_ground_space)
+            height_probs = trajectory_height_prob(vertArr_short, hitFlag, height_space = height_space)
+            
             ### join deviations and bounce probabilities in a sensible metric
             dist_probArr = 1 / (1 + distArr_over_traj)
-            joint_probArr = dist_probArr * bounce_probArr * spin_probs
+            joint_probArr = dist_probArr * bounce_probArr * spin_probs * hori_probs * height_probs
 
             ### detect locally maximal probabilities
             from ATMANpy.funcs.util_funcs import detect_local_minima
@@ -1441,6 +1455,64 @@ def trajectory_spin_prob(rpmArr_filt, hitFlag, spin_rate_space = None):
         spin_probs = lkl_func(initial_rpm)
 
     return spin_probs
+
+def trajectory_hori_prob(groundArr_filt, hitFlag, v_init_ground_space = None):
+    if groundArr_filt is None:
+        speed_probs = None
+    else:
+        initial_ground_speed = (groundArr_filt.take(1, axis = -1) - groundArr_filt.take(0, axis = -1)) * 25 # m/frame to m/s
+
+        if v_init_ground_space is None:
+            min_x, max_x = 0, 60
+        else:
+            min_x, max_x = v_init_ground_space.min(), v_init_ground_space.max()
+
+        ### set likelihoods for different hit kinds
+        ### these are created using a simple spline interpolation using eleven lkl values that have to be supplied by the user  
+        from ATMANpy.funcs.line_funcs import spline_func
+
+        if '_srv' in hitFlag: # 1) serve -> more ground speed than overhead
+            interp_values = [0, 0, 0, 0.2, 0.6, 1, 0.8]
+        elif '_ovh' in hitFlag: # 2) could go straight down
+            interp_values = [0, 0, 0.2, 0.5, 1, 1, 0.8]
+        elif '_sf' in hitFlag: # 3) slice or flat -> not quite as fast as topspin
+            interp_values = [0.1, 0.8, 1, 1, 0.9, 0.25, 0]
+        elif '_ts' in hitFlag:
+            interp_values = [0, 0.25, 0.9, 1, 1, 0.6, 0.05]
+        
+        lkl_func = spline_func(interp_values, min_x = min_x, max_x = max_x)
+        speed_probs = lkl_func(initial_ground_speed)
+
+    return speed_probs
+
+def trajectory_height_prob(vertArr_filt, hitFlag, height_space = None):
+    if vertArr_filt is None:
+        height_probs = None
+    else:
+        initial_height = vertArr_filt.take(0, axis = -1)
+
+        if vertArr_filt is None:
+            min_x, max_x = 0, 4.5
+        else:
+            min_x, max_x = height_space.min(), height_space.max()
+
+        ### set likelihoods for different hit kinds
+        ### these are created using a simple spline interpolation using eleven lkl values that have to be supplied by the user  
+        from ATMANpy.funcs.line_funcs import spline_func
+
+        if '_srv' in hitFlag: # 1) serve -> hit high
+            interp_values = [0, 0, 0, 0, 0.5, 1, 1, 0.9, 0.75, 0.25]
+        elif '_ovh' in hitFlag: # 2) overhead -> hit high
+            interp_values = [0, 0, 0, 0, 0.5, 1, 1, 0.9, 0.75, 0.25]
+        elif '_sf' in hitFlag: # 3) slice or flat -> hit low
+            interp_values = [1, 1, 1, 0.8, 0.5, 0.25, 0, 0, 0, 0]
+        elif '_ts' in hitFlag: # 4) topspin -> hit medium height
+            interp_values = [0.25, 1, 1, 1, 1, 0.5, 0.1, 0, 0, 0]
+        
+        lkl_func = spline_func(interp_values, min_x = min_x, max_x = max_x)
+        height_probs = lkl_func(initial_height)
+
+    return height_probs
 
 def trajectory_fair_prob(traj_coordArr, remaining_shots, hitFlag, srvFlag, courtLines = None, 
                          stretch_factor = 1, on_the_line_correction = 3):
