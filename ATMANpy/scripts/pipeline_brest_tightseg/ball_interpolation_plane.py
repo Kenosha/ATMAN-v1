@@ -163,7 +163,7 @@ def main(conf,
          trajectory_params,
          plane_point_params, hit_point_params, 
          downsample_params, viterbi_net_params, penalty_params, 
-         viterbi_traj_params,
+         viterbi_traj_params, bounce_params,
          name = None):
     
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
@@ -258,7 +258,7 @@ def main(conf,
 
     ### CALCULATE BOUNCE PROBS FROM POSITIONS AND BOUNCE AUDIO ###
     mySFs = hitSF_ext.merge(ply3DSF, how = 'outer').merge(audSF, how = 'outer').conform(plyBF).filter(plyBF).split()
-    bounceSFs = mySFs.apply_whole(sf.combine_bounce_priors_and_probs)
+    bounceSFs = mySFs.apply_whole(sf.combine_bounce_priors_and_probs, **bounce_params)
     
     ### INTERSECT OBSERVED BALLS AND PLANES ###
     mySFs = ballSF.merge(cld3DSF, how = 'outer').conform(plyBF).filter(plyBF).split()
@@ -411,6 +411,7 @@ if __name__ == '__main__':
     trajectory_params = prm_mod.ball_interpolation_plane.trajectory_params
     plane_point_params = prm_mod.ball_interpolation_plane.plane_point_params    
     hit_point_params = prm_mod.ball_interpolation_plane.hit_point_params
+    bounce_params = prm_mod.ball_interpolation_plane.bounce_params
     downsample_params = prm_mod.ball_interpolation_plane.downsample_params
     viterbi_net_params = prm_mod.ball_interpolation_plane.viterbi_net_params
     penalty_params = prm_mod.ball_interpolation_plane.penalty_params
@@ -419,7 +420,7 @@ if __name__ == '__main__':
     name = ppl._name
 
     main(conf, trajectory_params, 
-         plane_point_params, hit_point_params, 
+         plane_point_params, hit_point_params, bounce_params,
          downsample_params, viterbi_net_params, penalty_params, 
          viterbi_traj_params, name = name)
 

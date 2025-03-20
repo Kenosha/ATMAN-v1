@@ -2635,7 +2635,7 @@ def filter_trajectories(trajDict, penalty_quantile = 0.05):
     return outDict
     
 
-def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
+def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines, prior_rel_weight_dist = 1, prior_rel_weight_max = 1):
     ### TODO: priors strongly influence the selection of the final trajectory.
     ### 1) use also the deviation of the trajectory to exclude bogus trajectories
     ### 2) make priors more informed 
@@ -2644,6 +2644,11 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
         # -> number of hits after the current hit (point can not be over if there are a bunch more hits after the current one)
         # ...
     
+    # a) normalize the weights for distance relative to bounce probs --> see addendum below.
+    prior_sum_weight = prior_rel_weight_dist + prior_rel_weight_max 
+    prior_weight_norm_dist = prior_rel_weight_dist / prior_sum_weight
+    prior_weight_norm_max = prior_rel_weight_max / prior_sum_weight
+
     def prior_dist(lmb):
         ### given a lambda (the depth of the receiving player over the depth of the court),
         ### calculate the probability of zero, one, two bounces (more bounces are not calculated)
@@ -2700,7 +2705,23 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
                 p0, p1, p2 = prior_dist(lmb)
             else:
                 p0, p1, p2 = 0.1, 0.7, 0.2 ### this happens if the next hit frame is the inferred end of flight frame
-                
+            
+            ### addendum: since we normalize the bounce probabilities in the conditional step,
+            # we have no feeling for the magnitude of the actual probability of the bounce.
+            # e.g -> if bounce probs are low across the board, it's likely that there has been no bounce a priori.
+            # if bounce probs are high at some point, it's likely that there will have been a bounce.
+            # ---> use this to inform the prior.
+            
+            # idea for the prior probability of no bounce --> = (1 - bncSer).prod()
+            # we can threshold the bncSer below to remove noise... 0.025 or something
+            thresh_prob = 0.05
+            denoise_bncSer = (bncSer - thresh_prob).clip(lower = 0)
+            no_bounce_prob = (1 - denoise_bncSer).prod()    
+
+            p0_joint = no_bounce_prob ** prior_weight_norm_max * p0 ** (prior_weight_norm_dist) 
+            p1_joint = p1 / (p1 + p2) * (1 - p0_joint)
+            p2_joint = p2 / (p1 + p2) * (1 - p0_joint)
+
             ### Conditional bounce probabilities for one and two bounces: given that it bounces once or twice...
             ### ... what is the probability that it bounces in this exact frame?
             pArr1 = bncSer.reindex(frames).values
@@ -2719,9 +2740,9 @@ def combine_bounce_priors_and_probs(mySF, schemaLines = schemaLines):
             
             frmArr = np.array([pArr1_norm, pArr2_norm]).T
             pFrm = pd.DataFrame(frmArr, index = frames, columns = ['bounce_prob_cond1', 'bounce_prob_cond2'])
-            pFrm['prior0'] = p0
-            pFrm['prior1'] = p1
-            pFrm['prior2'] = p2
+            pFrm['prior0'] = p0_joint
+            pFrm['prior1'] = p1_joint
+            pFrm['prior2'] = p2_joint
         
             ### EDIT: Instead of a dense stream feature, we return a sparse stream feature
             ### with arrays pertaining to the current hit at the hit frame
