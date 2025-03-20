@@ -1421,6 +1421,8 @@ def trajectory_spin_prob(rpmArr_filt, hitFlag, spin_rate_space = None):
         if spin_rate_space is None:
             min_x, max_x = -5000, 5000      ### we cannot take initial_rpm min and max values here 
                                             # because the rpmArr_filt could be filtered in the rpm dimension
+        else:
+            min_x, max_x = spin_rate_space.min(), spin_rate_space.max()
 
         ### set likelihoods for different hit kinds
         ### these are created using a simple spline interpolation using eleven lkl values that have to be supplied by the user  
