@@ -60,12 +60,15 @@ def load(vid, sto):
     srvSF = StreamFeature.from_store(vid, sto, featname = 'srvFlag')
     scrSF = StreamFeatures.from_store(vid, sto, featnameList = ['sb_name_lower_Flag', 'sb_name_upper_Flag', 'sb_score_lower_Flag', 'sb_score_upper_Flag', 'sb_games_lower_cleaned_Flag', 'sb_games_upper_cleaned_Flag'])
     trajFrm = ff.read_feature_frame('trajTable', vid, sto, keep_only = 'last')
-    return HPCF, segBF, plySF, srvSF, scrSF, trajFrm
+    coliFrm = ff.read_feature_frame('colinearTable', vid, sto, keep_only = 'last')
+    return HPCF, segBF, plySF, srvSF, scrSF, trajFrm, coliFrm
 
-def save(trajDFs, placeholderSers, vid, sto):
+def save(trajDFs, coliDFs, placeholderSers, vid, sto):
     trajFrm = pd.concat(trajDFs)
+    coliFrm = pd.concat(coliDFs)
     placeFrm = pd.concat(placeholderSers, axis = 1).T
     ff.save_feature_frame(trajFrm, 'dataTable', vid, sto)
+    ff.save_feature_frame(coliFrm, 'dataTable_colinear', vid, sto)
     ff.save_feature_frame(placeFrm, 'placeTable', vid, sto)
 
 def main(conf, name = None):
@@ -75,10 +78,13 @@ def main(conf, name = None):
     
     courtLines = CourtLines.make().add_singles_netline()
 
-    HPCF, segBF, plySF, srvSF, scrSF, trajFrm = load(vid, sto)
+    HPCF, segBF, plySF, srvSF, scrSF, trajFrm, coliFrm = load(vid, sto)
     # trajFrm = fix_traj_frame(trajFrm)
     trajSF = StreamFeatures.from_dataframe(trajFrm)
     trajSF = trajSF.merge(srvSF.rename('event_info'))
+
+    coliSF = StreamFeatures.from_dataframe(coliFrm)
+    coliSF = coliSF.merge(srvSF.rename('event_info'))
 
     # get player names
     player_names = list(trajFrm.player_name.unique())
@@ -98,6 +104,7 @@ def main(conf, name = None):
     topSFs = topSF.conform(segBF).filter(segBF).split()
     botSFs = botSF.conform(segBF).filter(segBF).split()
     trajSFs = trajSF.conform(segBF).filter(segBF).split()
+    coliSFs = coliSF.conform(segBF).filter(segBF).split()
     scrSFs = scrSF.conform(segBF).filter(segBF).split()
 
     ### Prepare some utility functions for player name and handedness
@@ -189,106 +196,109 @@ def main(conf, name = None):
     scoreFrms = ut.split(scoreFrm)
     gamesFrms = ut.split(gamesFrm)
 
-    frmList = []
-    placeholderList = []
-    for idx in range(trajSFs.length()):
-        trjFrm = trajSFs[idx].to_dataframe()
-        trjFrm = trjFrm.dropna(how = 'all', axis = 0) ### narrow it down to where info about the shot actually exists (this way, we kill stuff that happens before ball leaves the racket on serve)
+    frameDict = {}
+    placeDict = {}
+    for desc, sfs in {'traj': trajSFs, 'coli': coliSFs}.items():
+        frameDict[desc] = []
+        placeDict[desc] = []
+        for idx in range(sfs.length()):
+            trjFrm = sfs[idx].to_dataframe()
+            trjFrm = trjFrm.dropna(how = 'all', axis = 0) ### narrow it down to where info about the shot actually exists (this way, we kill stuff that happens before ball leaves the racket on serve)
 
-        plyFrm = trjFrm[player_cols]
-        trjFrm = trjFrm[[c for c in trjFrm if c not in player_cols]]
+            plyFrm = trjFrm[player_cols]
+            trjFrm = trjFrm[[c for c in trjFrm if c not in player_cols]]
 
-        ### player movements top and bot
-        topFrm = topSFs[idx].to_dataframe().reindex(trjFrm.index)
-        botFrm = botSFs[idx].to_dataframe().reindex(trjFrm.index)
+            ### player movements top and bot
+            topFrm = topSFs[idx].to_dataframe().reindex(trjFrm.index)
+            botFrm = botSFs[idx].to_dataframe().reindex(trjFrm.index)
 
-        ### Create some series to be used or added
-        sideSer = trjFrm.groupby('shot_idx')['event'].transform(get_side)
-        srvSer = trjFrm.groupby('shot_idx')['event_info'].transform(get_fs)
+            ### Create some series to be used or added
+            sideSer = trjFrm.groupby('shot_idx')['event'].transform(get_side)
+            srvSer = trjFrm.groupby('shot_idx')['event_info'].transform(get_fs)
 
-        trjFrm['point_idx'] = idx
+            trjFrm['point_idx'] = idx
 
-        ### Extend the first_serve/second_serve flag to the whole serve traj
-        trjFrm['event_info'] = srvSer
+            ### Extend the first_serve/second_serve flag to the whole serve traj
+            trjFrm['event_info'] = srvSer
 
-        ### Make a player frame with hitting and receiving player data: x, y, name and hand
-        plyFrm.columns = plyFrm.columns.str.replace('player', 'hit')
+            ### Make a player frame with hitting and receiving player data: x, y, name and hand
+            plyFrm.columns = plyFrm.columns.str.replace('player', 'hit')
 
-        plyFrm['hit_side'] = sideSer
+            plyFrm['hit_side'] = sideSer
 
-        hit_x = np.where(sideSer == 'top', topFrm['x'], botFrm['x'])
-        hit_y = np.where(sideSer == 'top', topFrm['y'], botFrm['y'])
-        rec_x = np.where(sideSer == 'bot', topFrm['x'], botFrm['x'])
-        rec_y = np.where(sideSer == 'bot', topFrm['y'], botFrm['y'])
+            hit_x = np.where(sideSer == 'top', topFrm['x'], botFrm['x'])
+            hit_y = np.where(sideSer == 'top', topFrm['y'], botFrm['y'])
+            rec_x = np.where(sideSer == 'bot', topFrm['x'], botFrm['x'])
+            rec_y = np.where(sideSer == 'bot', topFrm['y'], botFrm['y'])
 
-        plyFrm['hit_x'], plyFrm['hit_y'] = hit_x, hit_y
+            plyFrm['hit_x'], plyFrm['hit_y'] = hit_x, hit_y
 
-        plyFrm['rec_name'] = plyFrm['hit_name'].map(swap_player)
-        plyFrm['rec_hand'] = plyFrm['rec_name'].map(name_hand_map)
+            plyFrm['rec_name'] = plyFrm['hit_name'].map(swap_player)
+            plyFrm['rec_hand'] = plyFrm['rec_name'].map(name_hand_map)
 
-        plyFrm['rec_side'] = sideSer.replace({'top': 'bot', 'bot': 'top'})
+            plyFrm['rec_side'] = sideSer.replace({'top': 'bot', 'bot': 'top'})
 
-        plyFrm['rec_x'], plyFrm['rec_y'] = rec_x, rec_y
+            plyFrm['rec_x'], plyFrm['rec_y'] = rec_x, rec_y
 
-        ### Gather Score Information 
-        scoreFrm = scoreFrms[idx]
-        p1, p2 = scoreFrm.columns
-        p1_vals, p2_vals = scoreFrm[p1].unique(), scoreFrm[p2].unique()
-        assert len(p1_vals) == 1 and len(p2_vals) == 1
-        p1_val, p2_val = p1_vals[0], p2_vals[0]
-        scoreDict = {p1: p1_val, p2: p2_val}
-        
-        gamesFrm = gamesFrms[idx]
-        p1, p2 = gamesFrm.columns
-        p1_vals, p2_vals = gamesFrm[p1].unique(), gamesFrm[p2].unique()
-        assert len(p1_vals) == 1 and len(p2_vals) == 1
-
-        p1_val, p2_val = p1_vals[0], p2_vals[0]
-        p1_vals, p2_vals = [int(x) for x in p1_val.split('-')], [int(x) for x in p2_val.split('-')]
-        assert len(p1_vals) == len(p2_vals)
-
-        p1_sets, p2_sets = 0, 0
-        for p1_set_score, p2_set_score in zip(p1_vals, p2_vals):
-            if p1_set_score == 7 or (p1_set_score == 6 and p2_set_score <= 4):
-                p1_sets += 1
-            elif p2_set_score == 7 or (p2_set_score == 6 and p1_set_score <= 4):
-                p2_sets += 1
-            else:
-                p1_games = p1_set_score
-                p2_games = p2_set_score
-
-        if len(p1_vals) == p1_sets + p2_sets: ### if the set just ended
-            p1_games, p2_games = 0, 0
-
-        gamesDict = {p1: p1_games, p2: p2_games}
-        setsDict = {p1: p1_sets, p2: p2_sets}
-        del p1_games, p2_games
-        
-        if len(trjFrm) > 0:
-            ### Merge in the score information
-            plyFrm['hit_score'] = plyFrm['hit_name'].map(scoreDict)
-            plyFrm['rec_score'] = plyFrm['rec_name'].map(scoreDict)
+            ### Gather Score Information 
+            scoreFrm = scoreFrms[idx]
+            p1, p2 = scoreFrm.columns
+            p1_vals, p2_vals = scoreFrm[p1].unique(), scoreFrm[p2].unique()
+            assert len(p1_vals) == 1 and len(p2_vals) == 1
+            p1_val, p2_val = p1_vals[0], p2_vals[0]
+            scoreDict = {p1: p1_val, p2: p2_val}
             
-            plyFrm['hit_games'] = plyFrm['hit_name'].map(gamesDict)
-            plyFrm['rec_games'] = plyFrm['rec_name'].map(gamesDict)
+            gamesFrm = gamesFrms[idx]
+            p1, p2 = gamesFrm.columns
+            p1_vals, p2_vals = gamesFrm[p1].unique(), gamesFrm[p2].unique()
+            assert len(p1_vals) == 1 and len(p2_vals) == 1
+
+            p1_val, p2_val = p1_vals[0], p2_vals[0]
+            p1_vals, p2_vals = [int(x) for x in p1_val.split('-')], [int(x) for x in p2_val.split('-')]
+            assert len(p1_vals) == len(p2_vals)
+
+            p1_sets, p2_sets = 0, 0
+            for p1_set_score, p2_set_score in zip(p1_vals, p2_vals):
+                if p1_set_score == 7 or (p1_set_score == 6 and p2_set_score <= 4):
+                    p1_sets += 1
+                elif p2_set_score == 7 or (p2_set_score == 6 and p1_set_score <= 4):
+                    p2_sets += 1
+                else:
+                    p1_games = p1_set_score
+                    p2_games = p2_set_score
+
+            if len(p1_vals) == p1_sets + p2_sets: ### if the set just ended
+                p1_games, p2_games = 0, 0
+
+            gamesDict = {p1: p1_games, p2: p2_games}
+            setsDict = {p1: p1_sets, p2: p2_sets}
+            del p1_games, p2_games
             
-            plyFrm['hit_sets'] = plyFrm['hit_name'].map(setsDict)
-            plyFrm['rec_sets'] = plyFrm['rec_name'].map(setsDict)
+            if len(trjFrm) > 0:
+                ### Merge in the score information
+                plyFrm['hit_score'] = plyFrm['hit_name'].map(scoreDict)
+                plyFrm['rec_score'] = plyFrm['rec_name'].map(scoreDict)
+                
+                plyFrm['hit_games'] = plyFrm['hit_name'].map(gamesDict)
+                plyFrm['rec_games'] = plyFrm['rec_name'].map(gamesDict)
+                
+                plyFrm['hit_sets'] = plyFrm['hit_name'].map(setsDict)
+                plyFrm['rec_sets'] = plyFrm['rec_name'].map(setsDict)
 
-            ### join, and write to list
-            allFrm = trjFrm.merge(plyFrm, left_index = True, right_index = True)
-            frmList.append(allFrm)
-        else: ### no trajectories found at all! have to make a placeholder point
-            lo_name, up_name = lower_upper_names_proper
-            resDict = {'point_idx': idx, 
-                       'lo_name': lo_name, 'up_name': up_name, 
-                       'lo_score': scoreDict[lo_name], 'up_score': scoreDict[up_name],
-                       'lo_games': gamesDict[lo_name], 'up_games': gamesDict[up_name],
-                       'lo_sets': setsDict[lo_name], 'up_sets': setsDict[up_name]}
-            outSer = pd.Series(resDict)
-            placeholderList.append(outSer)
+                ### join, and write to list
+                allFrm = trjFrm.merge(plyFrm, left_index = True, right_index = True)
+                frameDict[desc].append(allFrm)
+            else: ### no trajectories found at all! have to make a placeholder point
+                lo_name, up_name = lower_upper_names_proper
+                resDict = {'point_idx': idx, 
+                        'lo_name': lo_name, 'up_name': up_name, 
+                        'lo_score': scoreDict[lo_name], 'up_score': scoreDict[up_name],
+                        'lo_games': gamesDict[lo_name], 'up_games': gamesDict[up_name],
+                        'lo_sets': setsDict[lo_name], 'up_sets': setsDict[up_name]}
+                outSer = pd.Series(resDict)
+                placeDict[desc].append(outSer)
 
-    save(frmList, placeholderList, vid, sto)
+    save(frameDict['traj'], frameDict['coli'], placeDict['traj'], vid, sto)
 
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
@@ -298,7 +308,7 @@ if __name__ == '__main__':
     cnf_mod = ppl.config_files.default
        
     avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
-    conf = cnf_mod.get_conf(avail_vids[10])
+    conf = cnf_mod.get_conf(avail_vids[0])
 
     name = ppl._name
 
