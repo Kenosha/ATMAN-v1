@@ -1583,6 +1583,72 @@ def trajectory_fair_prob(traj_coordArr, remaining_shots, hitFlag, srvFlag, court
 
     return fair_probs
 
+def trajectory_fair_prob_dynamic(traj_coordArr, remaining_shots, hitFlag, srvFlag, 
+                                    courtLines = None, last_shot_in = True,
+                                    stretch_factor = 1, on_the_line_correction = 3):
+    ### TODO: in the future, the last few shots will not get a trivial fair_prob
+    # since we will calculate the winner of the point based on the score before calculating trajectories
+    # however, in the meantime, we make a function that can be told whether the last shot was in or out.
+    from ATMANpy.types.Points import Point2D
+
+    if traj_coordArr is None:
+        fair_probs = None
+    else:
+        if courtLines is None:
+            courtLines = CourtLines.make().add_singles_netline()
+
+        trajs, mins, t, d = traj_coordArr.shape
+
+        ###
+        side = hitFlag.split('_')[0]
+        if side == 'bot':
+            side_opposite = 'Top'
+        elif side == 'top':
+            side_opposite = 'Bottom'
+        
+        if srvFlag is None:
+            relevant_region = courtLines.get_half_region(side = side_opposite, width = 'Singles')
+        else:
+            _, _, which_letter = srvFlag
+            if which_letter == 'D':
+                service_box = 'Deuce'
+            elif which_letter == 'A':
+                service_box = 'Ad'
+            relevant_region = courtLines.get_service_box(side = side_opposite, which = service_box)
+
+        distance_to_regArr = np.full((trajs, mins), fill_value = np.nan)
+        for traj_idx in range(trajs):
+            for min_idx in range(mins):
+                traj_coords = traj_coordArr[traj_idx, min_idx]
+                is_bounce = traj_coords[:, 2] == 0
+
+                ### check if ball bounces at all
+                bounces_at_all = np.max(is_bounce)
+                if not bounces_at_all:
+                    distance_to_regArr[traj_idx, min_idx] = 0 ### at dist = 0, the resulting likelihood will be 0.5
+                    continue
+
+                ### get first bounce point
+                first_bounce_idx = np.argmax(is_bounce)
+                bx, by = traj_coords[first_bounce_idx, :2]
+                bouncePt = Point2D((bx, by))
+
+                ### determine distance to region boundary
+                distances = [boundaryLn.distance_to(bouncePt) for boundaryLn in relevant_region.lineList]
+                d = min(distances)
+                sign = 1 if bouncePt.within(relevant_region) else -1
+
+                distance_to_regArr[traj_idx, min_idx] = sign * d + on_the_line_correction ### correct for a ball on the line being good!
+
+        ### calculate the degree to which the ball is fair
+        fair_probs = 1 / (1 + np.exp(-stretch_factor * distance_to_regArr))
+
+        if remaining_shots == 1:
+            if not last_shot_in:
+                fair_probs = 1 - fair_probs
+
+    return fair_probs
+
 def trajectory_last_angle_prob(traj_coordArr, remaining_shots, threshold_angle = np.pi / 4, minimum_probability = 0.05, epsilon = 0.1):
     ### IDEA: punish final shots if their best trajectory has an angle that's too oblique
     ### anything within threshold_angle is fine (default of np.pi / 4 = 45 deg), anything wider than that is weird.
