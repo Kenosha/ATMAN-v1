@@ -46,9 +46,12 @@ def load(vid, sto):
     infoSF_tb = StreamFeatures.from_store(vid, sto, featnameList = ['top_name_tb_Flag', 'top_hand_tb_Flag', 'bot_name_tb_Flag', 'bot_hand_tb_Flag'])
     return HPCF, segBF, ballSF, hitSF, plySF, audFrm, infoSF, infoSF_tb
 
-def save(trajDFs, vid, sto):
-    trajFrm = pd.concat(trajDFs)
-    ff.save_feature_frame(trajFrm, 'colinearTable', vid, sto)
+def save(trajDFs_fair, trajSFs_fault, vid, sto):
+    trajFrm = pd.concat(trajDFs_fair)
+    ff.save_feature_frame(trajFrm, 'colinearTable_fair', vid, sto)
+
+    trajFrm = pd.concat(trajSFs_fault)
+    ff.save_feature_frame(trajFrm, 'colinearTable_fault', vid, sto)
 
 def main(conf, 
          trajectory_params,
@@ -151,31 +154,34 @@ def main(conf,
     hitSF_ext = hitSF.extend(cld3DSF_last['hitFlag']).sort()
 
     ### CALCULATE BOUNCE PROBS FROM POSITIONS AND BOUNCE AUDIO ###
+    bounce_params = {'prior_rel_weight_dist': 1, 'prior_rel_weight_max': 1}
     mySFs = hitSF_ext.merge(ply3DSF, how = 'outer').merge(audSF, how = 'outer').conform(plyBF).filter(plyBF).split()
-    bounceSFs = mySFs.apply_whole(sf.combine_bounce_priors_and_probs)
+    bounceSFs = mySFs.apply_whole(sf.combine_bounce_priors_and_probs, **bounce_params)
 
     ### CHECK FOR NET PLANES
     mySFs = ballSF.merge(cld3DSF, how = 'outer').conform(plyBF).filter(plyBF).split()
     net_planeSFs = mySFs.apply_whole_mp(sf.intersect_ball_observations_and_net_plane, nwo, matchCamera = matchCamera)
     netSFs = net_planeSFs['net_coordArr'].apply_mp(sa.viterbi_net, nwo, **viterbi_net_params)
 
-    ###### TESTING ######
-    from ATMANpy.types.Frames import BGRFrame
-    from ATMANpy.types.Points import Point2D
-    from ATMANpy.types.Lines import Line
-    
-    blackFrm = BGRFrame.make_black(640, 360)
-
+    ### FIND COLINEAR PLANES
     mySFs = ballSF.merge(cld3DSF, how = 'outer').conform(plyBF).filter(plyBF).split()    
     colinear_params = {'num_angles': 1001, 'lim_pi': np.pi / 4, 'max_slope': 10 ** 6, 'w_obs': 0.8, 'w_cld': 0.2}
     coplSFs = mySFs.apply_whole_mp(sf.best_colinear_planes, nwo, matchCamera = matchCamera, **colinear_params)
+
+    # ### TEST ###
+    # chkSF = coplSFs[110][82472]
+    # ballArr = chkSF['shifted_ballArr']
+    # mySF = StreamFeature({idx + 82472: Point2D(tuple(coordArr)) if not np.isnan(coordArr).all() else None for idx, coordArr in enumerate(ballArr)}, name = 'ball')
+    # Stream(cap, 82472, 82514).attach(mySF).show()
 
     mySFs = coplSFs.merge(netSFs).merge(hitSFs).merge(bounceSFs)
     traj_params = {'observation_threshold': 3, 'number_of_local_minima': 100}
         
     nwo_fit = 4
     trajSFs = mySFs.apply_mp(sa.fit_trajectory_colinear, nwo_fit, matchCamera = matchCamera, 
-                             groundArr = groundArr, vertArr = vertArr, rpmArr = rpmArr, height_space = height_space,
+                             groundArr = groundArr, vertArr = vertArr, rpmArr = rpmArr, 
+                             height_space = height_space, v_init_ground_space = v_init_ground_space, 
+                             v_init_vert_space = v_init_vert_space, spin_rate_space = spin_rate_space,
                              **traj_params)
 
     mySFs = trajSFs.merge(netSFs['netBool'])
@@ -199,30 +205,37 @@ def main(conf,
     # -> first, need an indication shot by shot how long the rally will still be going on after.
     remSFs = traj_coordSFs.apply_whole(sf.count_remaining_shots)
     mySFs = traj_coordSFs.merge(remSFs).merge(hitSFs).merge(srvSFs)
-    fair_probSFs = mySFs.apply(sa.trajectory_fair_prob)
+    fair_probSFs_false = mySFs.apply(sa.trajectory_fair_prob_dynamic, last_shot_in = False)
+    fair_probSFs_true = mySFs.apply(sa.trajectory_fair_prob_dynamic, last_shot_in = True)
     
     ### CHOOSE BEST TRAJECTORY ###
-    mySFs = trajSFs['trajArr'].merge(net_probSFs).merge(fair_probSFs)
-    maxSFs = mySFs.apply(sa.get_highest_prob)
+    dfList = []
+    for fair_probSFs in [fair_probSFs_true, fair_probSFs_false]:
+        mySFs = trajSFs['trajArr'].merge(net_probSFs).merge(fair_probSFs)
+        maxSFs = mySFs.apply(sa.get_highest_prob)
 
-    emSFs = traj_coordSFs.apply(sa.make_empty_coord_and_plane_array)
+        emSFs = traj_coordSFs.apply(sa.make_empty_coord_and_plane_array)
 
-    mySFs = maxSFs.merge(emSFs).merge(traj_coordSFs).merge(trajSFs)
-    
-    traj_arrSFs = mySFs.apply(sa.make_trajectory_arrays, 
-                                v_init_ground_space = v_init_ground_space, v_init_vert_space = v_init_vert_space, 
-                                spin_rate_space = spin_rate_space, height_space = height_space)
+        mySFs = maxSFs.merge(emSFs).merge(traj_coordSFs).merge(trajSFs)
+        
+        traj_arrSFs = mySFs.apply(sa.make_trajectory_arrays, 
+                                    v_init_ground_space = v_init_ground_space, v_init_vert_space = v_init_vert_space, 
+                                    spin_rate_space = spin_rate_space, height_space = height_space)
 
-    
-    # b) add in hit and serve info to construct events
-    evtSFs = srvSF.merge(hitSF, how = 'outer').merge(infoSF_fix, how = 'left').conform(plyBF).filter(plyBF).split()
-    
-    # c) collect frames 
-    traj_evtSFs = traj_arrSFs.merge(evtSFs)
-    trajDFs = traj_evtSFs.apply_whole(sf.make_trajectory_frame, courtLines = courtLines)
-    
+        
+        # b) add in hit and serve info to construct events
+        evtSFs = srvSF.merge(hitSF, how = 'outer').merge(infoSF_fix, how = 'left').conform(plyBF).filter(plyBF).split()
+        
+        # c) collect frames 
+        traj_evtSFs = traj_arrSFs.merge(evtSFs)
+        trajDFs = traj_evtSFs.apply_whole(sf.make_trajectory_frame, courtLines = courtLines)
+        
+        dfList.append(trajDFs)
+
+    trajDFs_fair, trajDFs_fault = dfList
+
     ### SAVE TRAJECTORY TABLES ###
-    save(trajDFs, vid, sto)
+    save(trajDFs_fair, trajDFs_fault, vid, sto)
     
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
