@@ -1116,7 +1116,15 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
 
         ### pointArr (needed for calculation of trajectory coordinates)
         c_x, c_y, _ = matchCamera.get_cw()
-        pointArr = np.array([[s_x, s_y, 0], [s_x + (s_x - c_x), s_y + (s_y - c_y), 0]])
+
+        dir_string = hitFlag.split('_')[0]
+        assert dir_string in ['top', 'bot']
+        if dir_string == 'top':
+            dir_sign = -1
+        else:
+            dir_sign = 1
+
+        pointArr = np.array([[s_x, s_y, 0], [s_x + dir_sign * (s_x - c_x), s_y + dir_sign * (s_y - c_y), 0]])
 
         ### shorten vertical points if ball is detected to be in the net
         if not netBool:
