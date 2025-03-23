@@ -259,8 +259,9 @@ ball_interpolation_plane = Parameters()
 ball_interpolation_plane.trajectory_params = {'traj_name': 'ShorterTrajectories_g60_v41_s41_h46', 
                                               'observation_threshold': 3, 'sum_of_squares': True, 'number_of_local_minima': 30,
                                               'groundstrokes_are_below': 2.5, 'serves_and_overheads_are_above': 2}
-ball_interpolation_plane.plane_point_params = {'max_sideways_reach_in_feet': 5, 'resolution': 1}
+ball_interpolation_plane.plane_point_params = {'max_sideways_reach_in_feet': 5, 'resolution': 1, 'serve_height_modifier': 1}
 ball_interpolation_plane.hit_point_params = {'height_in_feet': 5, 'resolution': 0.5, 'radius_in_feet': 15}
+ball_interpolation_plane.bounce_params = {'prior_rel_weight_dist': 1, 'prior_rel_weight_max': 0} ### TODO: check for higher prior_rel_weight_max!
 ball_interpolation_plane.downsample_params = {'logit_coeff': 10, 'sampling_number': 25}
 ball_interpolation_plane.viterbi_net_params = {'p': 0.95, 'epsilon': 0.01, 'q': 0.1, 
                                                'stretch_factor': 0.25, 'net_bottom_adjustment_in_pixels': 5}
