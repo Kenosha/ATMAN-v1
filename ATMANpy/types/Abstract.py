@@ -1992,22 +1992,30 @@ def read_in_placeholder_table(conf, conf_idx = 0):
     placeTable['match_idx'] = conf_idx
     return placeTable
 
-def read_in_data_tables(confs):
+def read_in_colinear_table(conf, conf_idx = 0):
+    vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
+    dataTable = ff.read_feature_frame('dataTable_colinear', vid, sto, keep_only = 'last')
+    dataTable.index = pd.MultiIndex.from_product([[conf_idx], dataTable.index])
+    dataTable.index.names = ['match_idx', 'frame_num']
+    return dataTable
+
+def _read_tables_and_concat(confs, readFunc):
     ### READ IN DATA
     tables = []
     for conf_idx, conf in enumerate(confs):
-        dataTable = read_in_data_table(conf, conf_idx = conf_idx)
+        dataTable = readFunc(conf, conf_idx = conf_idx)
         tables.append(dataTable)
     allTable = pd.concat(tables)    
     return allTable
 
+def read_in_data_tables(confs):
+    return _read_tables_and_concat(confs, read_in_data_table)
+
 def read_in_placeholder_tables(confs):
-    tables = []
-    for conf_idx, conf in enumerate(confs):
-        placeTable = read_in_placeholder_table(conf, conf_idx = conf_idx)
-        tables.append(placeTable)
-    allTable = pd.concat(tables)    
-    return allTable
+    return _read_tables_and_concat(confs, read_in_placeholder_table)
+
+def read_in_colinear_tables(confs):
+    return _read_tables_and_concat(confs, read_in_colinear_table)
 
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct
