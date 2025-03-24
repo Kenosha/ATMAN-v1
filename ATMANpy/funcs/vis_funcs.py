@@ -814,17 +814,20 @@ def kde_contourmap(myShots,
     else:
         heightArr = np.full((num_x, num_y, 1), fill_value = 0)
     showArr_with_height = np.concatenate([showArr, heightArr], axis = 2)
+    showArr_with_height_long = showArr_with_height.reshape((num_x * num_y, 3))
 
     show_condition = density_is_above & density_is_below if not fill else density_is_above
-    if preserve_showarr_shape:
-        showArr_long = np.where(show_condition[:, :, np.newaxis], showArr_with_height, np.nan).reshape((num_x * num_y, 3))
-    else:
-        showArr_long = showArr_with_height[show_condition]
+    show_condition_long = show_condition.reshape(num_x * num_y)
 
-    bgrArr_long = np.ones((num_x * num_y, 3)) * contour_color
-    alphaArr_long = np.ones((num_x * num_y, 1)) * contour_alpha
+    bgrArr_long = np.where(show_condition_long[:, np.newaxis], contour_color, (0, 0, 0))
+    alphaArr_long = np.where(show_condition_long[:, np.newaxis], contour_alpha, 0)
 
-    kdeScn = DummyScene([showArr_long], [bgrArr_long], [alphaArr_long])
+    if not preserve_showarr_shape:
+        showArr_with_height_long = showArr_with_height_long[show_condition_long]
+        bgrArr_long = bgrArr_long[show_condition_long]
+        alphaArr_long = alphaArr_long[show_condition_long]
+
+    kdeScn = DummyScene([showArr_with_height_long], [bgrArr_long], [alphaArr_long])
 
     return kdeScn, cluster_data
 
