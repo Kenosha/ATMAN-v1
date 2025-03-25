@@ -638,19 +638,23 @@ class Trajectory:
         ballSF = StreamFeatures.from_dataframe(ballFrm).apply(sa.coords_to_ball3D)
         return ballSF
     
-    def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth'):
+    def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth', 
+                    color = const.BGR['bright_grey'], thickness = 0, alpha = 1):
         ballSF = self.feat_ball(how = how, which_endpoint = which_endpoint).rename('ball_curr')
         ballSF_before = ballSF.shift(offset = 1).rename('ball_bef')
         def make_spline(ball_bef, ball_curr):
             if ball_bef is None or ball_curr is None:
                 spLn = None
             else:
-                spLn = Line3D(ball_bef.get_point(), ball_curr.get_point(), contains_endpoint = False)
+                spLn = Line3D(ball_bef.get_point(), ball_curr.get_point(), contains_endpoint = False, 
+                              color = color, thickness = thickness, alpha = alpha)
             return spLn
         return ballSF_before.merge(ballSF).apply(make_spline)
     
-    def feat_spline_cumul(self, how = 'trajectory', which_endpoint = 'smooth'):
-        splineSF = self.feat_spline(how = how, which_endpoint = which_endpoint)
+    def feat_spline_cumul(self, how = 'trajectory', which_endpoint = 'smooth',
+                          color = const.BGR['bright_grey'], thickness = 0, alpha = 1):
+        splineSF = self.feat_spline(how = how, which_endpoint = which_endpoint,
+                                    color = color, thickness = thickness, alpha = alpha)
 
         cumulSF = {}
         for frame in splineSF:
@@ -1219,11 +1223,15 @@ class Shot:
         else:
             return self.recPlayer.feat_player()
         
-    def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth'):
-        return self.shotTraj.feat_spline(how = how, which_endpoint = which_endpoint)
+    def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth',
+                    color = const.BGR['bright_grey'], thickness = 0, alpha = 1):
+        return self.shotTraj.feat_spline(how = how, which_endpoint = which_endpoint,
+                                         color = color, thickness = thickness, alpha = alpha)
         
-    def feat_spline_cumul(self, how = 'trajectory', which_endpoint = 'smooth'):
-        return self.shotTraj.feat_spline_cumul(how = how, which_endpoint = which_endpoint)
+    def feat_spline_cumul(self, how = 'trajectory', which_endpoint = 'smooth',
+                          color = const.BGR['bright_grey'], thickness = 0, alpha = 1):
+        return self.shotTraj.feat_spline_cumul(how = how, which_endpoint = which_endpoint,
+                                               color = color, thickness = thickness, alpha = alpha)
 
     def get_capture(self, confs):
         return self.shotTraj.get_capture(confs)
