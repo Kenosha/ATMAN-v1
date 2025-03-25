@@ -2,9 +2,11 @@ import pandas as pd
 import numpy as np
 
 import ATMANpy.auxil.constants as const
+import ATMANpy.funcs.vis_funcs as vs
 
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.MultiFrames import BGRFrames
+from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.Overlays import Table
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Shapes3D import Point3D
@@ -12,7 +14,6 @@ from ATMANpy.types.Visual3D import Scene
 
 def show(all_frames, ms_between_frames = 25):
     DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
-
 
 ###### USEFUL MAPPING FUNCTIONS #####
 def map_label_to_explicit(label):
@@ -255,3 +256,75 @@ def get_shot_scenes(myPnt, ball_color = const.BGR['ball_yellow'],
         
     return spline_scenes, bounce_scenes
     
+def animate_bounce_and_mark_scenes(myPnt, start_cam, stop_cam, confs,
+                                    background_scene = None, spline_cumulative_transparence = 0.5,
+                                    over = False, over_scale = 3, init_over_dim = 1, last_over_dim = 1,
+                                    sub_region = True, region_color = const.BGR['smokey_grey'],
+                                    **anim_kwargs):
+    from ATMANpy.types.Abstract import Point
+
+    spline_scenes, bounce_scenes = get_shot_scenes(myPnt)
+
+    if over:
+        myFrms = myPnt.stream(confs = confs).decap().frames
+        if isinstance(myPnt, Point):
+            myFrms = myFrms[:-1]
+        myFrms = myFrms.rescale(over_scale)
+        myFrms = myFrms.dim_progressively(fs_dim_factor = init_over_dim, ls_dim_factor = last_over_dim)
+    else:
+        myFrms = None
+
+    if background_scene is None:
+        courtScn = Scene.make_empty()
+    else:
+        courtScn = background_scene
+
+    if sub_region:            
+        from ATMANpy.types.Lines import CourtLines
+        from ATMANpy.types.Shapes3D import Region3D
+        subReg = CourtLines.make().get_court_region().scale(1.25)
+        subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(region_color)
+        courtScn = courtScn.put(subReg3D)
+
+    markFrms, _ = vs.animate_sequence(bounce_scenes, start_cam = start_cam, stop_cam = stop_cam,
+                                        background_scene = courtScn, 
+                                        animate_over = myFrms, 
+                                        **anim_kwargs)
+
+    animFrms, _ = vs.animate_sequence(spline_scenes, start_cam = start_cam, stop_cam = stop_cam, 
+                                        animate_over = markFrms,
+                                        cumulative_foreground_transparence = spline_cumulative_transparence, cumulate_argument = True,
+                                        **anim_kwargs)
+
+    return animFrms
+
+def make_point_descriptor_box(myPnt, dims = (200, 100), origin = (10, 20), step_px = 20,
+                              text_size = 1, border_thickness = None, border_color = const.BGR['bright_grey'],
+                              back_color = const.BGR['smokey_grey'], text_color = const.BGR['leafy_green']):
+    
+    cols, rows = dims
+    o_x, o_y = origin
+
+    textFrm = BGRFrame.make_black(cols, rows)
+    textFrm = textFrm + back_color
+
+    kwargs = {'size': text_size, 'color': text_color}
+
+    shot_frames = []
+    for myShot in myPnt:
+        n = myShot.get_num_frames() - 1
+
+        shotStr = myShot.get_shot_string()
+        dataStr = myShot.get_data_string(with_descriptors = False, get_launch_angle = True)
+
+        fullFrm = textFrm.put(shotStr, where = (o_x, o_y), **kwargs).put(dataStr, where = (o_x, o_y + step_px), **kwargs)
+
+        fullFrms = BGRFrames.from_frame(fullFrm, n)
+        shot_frames.append(fullFrms)
+
+    fullFrms = BGRFrames.from_frames(shot_frames)
+
+    if border_thickness is not None:
+        fullFrms = fullFrms.framed(border_thickness, border_color)
+
+    return fullFrms
