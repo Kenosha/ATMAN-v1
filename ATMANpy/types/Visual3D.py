@@ -118,6 +118,9 @@ class Quaternion:
 class Scene:
     shapes: List ### a collection of various 3D shapes
         
+    def __post_init__(self):
+        object.__setattr__(self, 'shapes', [s for s in self.shapes if s is not None]) ### prune nones
+
     def __repr__(self):
         fsStr = f'{self.__class__.__name__}(['
         sStrs = ['  ' + repr(shape) + ',' for shape in self.shapes]
