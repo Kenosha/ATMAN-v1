@@ -1434,7 +1434,7 @@ class Point(Shots):
         return [event for shot in self.shotList for event in shot.get_events()]
         
     def get_frames(self):
-        return list(set([frame for shot in self.shotList for frame in shot.get_frames()])) ## remove duplicates
+        return sorted((set([frame for shot in self.shotList for frame in shot.get_frames()]))) ## remove duplicates
     
     def get_num_frames(self):
         return len(self.get_frames())
