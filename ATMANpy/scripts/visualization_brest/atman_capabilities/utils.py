@@ -86,23 +86,24 @@ def get_data_string(myShot):
 
 #######
 
-def speed_up_frames_progressively(segFrms, ramp_up_frames = 50, min_frames_for_speedup = 100):
-    if segFrms.length() <= ramp_up_frames * 2:
+def speed_up_frames_progressively(segFrms, ramp_up_frames = 50, ramp_down_frames = 50, min_frames_for_speedup = 100):
+    if segFrms.length() <= ramp_up_frames + ramp_down_frames:
         return segFrms
     else:
+        assert ramp_down_frames >= 1, "ramp_down_frames can not be zero because of indexing with negative."
         segFrms_start = segFrms[:ramp_up_frames]
-        segFrms_middle = segFrms[ramp_up_frames:-ramp_up_frames]
-        segFrms_end = segFrms[-ramp_up_frames:]
+        segFrms_middle = segFrms[ramp_up_frames:-ramp_down_frames]
+        segFrms_end = segFrms[-ramp_down_frames:]
 
         if segFrms_middle.length() <= min_frames_for_speedup:
             return segFrms
-        elif min_frames_for_speedup < segFrms_middle.length() <= min_frames_for_speedup + 2 * ramp_up_frames:
+        elif min_frames_for_speedup < segFrms_middle.length() <= min_frames_for_speedup + ramp_up_frames + ramp_down_frames:
             segFrms_middle = segFrms_middle[::2]
             return segFrms_start.join(segFrms_middle).join(segFrms_end)
         else: ### in this case, two levels of speedup
             segFrms_middle_start = segFrms_middle[:ramp_up_frames:2]
-            segFrms_middle_middle = segFrms_middle[ramp_up_frames:-ramp_up_frames:3]
-            segFrms_middle_end = segFrms_middle[-ramp_up_frames::2]
+            segFrms_middle_middle = segFrms_middle[ramp_up_frames:-ramp_down_frames:3]
+            segFrms_middle_end = segFrms_middle[-ramp_down_frames::2]
             return segFrms_start.join(segFrms_middle_start).join(segFrms_middle_middle).join(segFrms_middle_end).join(segFrms_end)
 
 ### fold bot and top into correct handedness -> this is done automatically in the code.
@@ -236,11 +237,6 @@ def get_shot_scenes(myPnt, ball_color = const.BGR['ball_yellow'],
         bnc_frms = myShot.get_bounce_frames()
         bnc_x, bnc_y = myShot.get_first_bounce_position()
         
-        try:
-            prevScn = bounce_scenes[-1]
-        except IndexError:
-            prevScn = Scene.make_empty()
-
         if len(bnc_frms) > 0:
             bncPt = Point3D((bnc_x, bnc_y, 0))
             bncMark = Mark.make(bncPt, size = mark_size, color = mark_color)
@@ -248,22 +244,42 @@ def get_shot_scenes(myPnt, ball_color = const.BGR['ball_yellow'],
         else:
             bnc_idx = len(all_frms) ### this way, we'll never actually need the bncMark
 
+        # net points, potentially
+        if myShot.is_in_net():
+            net_x, net_y, net_z = myShot.get_net_crossing_position()
+            netPnt = Point3D((net_x, net_y, net_z))
+            netMark = Mark.make(netPnt, size = mark_size, color = const.BGR['intense_red'], 
+                                flat_along_dimension = 'y')
+            net_idx = (myShot.shotTraj.trajFrm['event'] == 'N').argmax()
+    
+        try:
+            prevScn = bounce_scenes[-1]
+        except IndexError:
+            prevScn = Scene.make_empty()
+
         for i in range(n):
             if i >= bnc_idx:
-                bounce_scenes.append(prevScn.put(bncMark))
+                appScn = prevScn.put(bncMark)
             else:
-                bounce_scenes.append(prevScn)
-        
+                appScn = prevScn
+
+            if myShot.is_in_net():
+                if i >= net_idx:
+                    appScn = appScn.put(netMark)
+
+            bounce_scenes.append(appScn)
+          
     return spline_scenes, bounce_scenes
     
 def animate_bounce_and_mark_scenes(myPnt, start_cam, stop_cam, confs,
                                     background_scene = None, spline_cumulative_transparence = 0.5,
                                     over = False, over_scale = 3, init_over_dim = 1, last_over_dim = 1,
                                     sub_region = True, region_color = const.BGR['smokey_grey'],
+                                    mark_size = 2, mark_color = const.BGR['bright_blue'],
                                     **anim_kwargs):
     from ATMANpy.types.Abstract import Point
 
-    spline_scenes, bounce_scenes = get_shot_scenes(myPnt)
+    spline_scenes, bounce_scenes = get_shot_scenes(myPnt, mark_size = mark_size, mark_color = mark_color)
 
     if over:
         myFrms = myPnt.stream(confs = confs).decap().frames
@@ -298,7 +314,9 @@ def animate_bounce_and_mark_scenes(myPnt, start_cam, stop_cam, confs,
 
     return animFrms
 
-def make_point_descriptor_box(myPnt, dims = (200, 100), origin = (10, 20), step_px = 20,
+def make_point_descriptor_box(myPnt, dims = (200, 100), origin = (10, 20), para_px = 25, skip_px = 18,
+                              highlight_color = const.BGR['intense_red'],
+                              highlight_which = None, ### 0 for desc, 1 for speed, 2 for spin, 3 for angle.
                               text_size = 1, border_thickness = None, border_color = const.BGR['bright_grey'],
                               back_color = const.BGR['smokey_grey'], text_color = const.BGR['leafy_green']):
     
@@ -308,16 +326,29 @@ def make_point_descriptor_box(myPnt, dims = (200, 100), origin = (10, 20), step_
     textFrm = BGRFrame.make_black(cols, rows)
     textFrm = textFrm + back_color
 
-    kwargs = {'size': text_size, 'color': text_color}
-
     shot_frames = []
     for myShot in myPnt:
         n = myShot.get_num_frames() - 1
 
         shotStr = myShot.get_shot_string()
-        dataStr = myShot.get_data_string(with_descriptors = False, get_launch_angle = True)
+        dataStr = myShot.get_data_string(with_descriptors = True, get_launch_angle = True)
 
-        fullFrm = textFrm.put(shotStr, where = (o_x, o_y), **kwargs).put(dataStr, where = (o_x, o_y + step_px), **kwargs)
+        if highlight_which == 0:
+            fullFrm = textFrm.put(shotStr, where = (o_x, o_y), 
+                                  size = text_size, color = highlight_color)
+        else:
+            fullFrm = textFrm.put(shotStr, where = (o_x, o_y), 
+                                  size = text_size, color = text_color)
+
+        i = 0
+        for textStr in dataStr.split('\n'):
+            if highlight_which == i + 1:
+                fullFrm = fullFrm.put(textStr, where = (o_x, o_y + para_px + i * skip_px), 
+                                      size = text_size, color = highlight_color)
+            else:
+                fullFrm = fullFrm.put(textStr, where = (o_x, o_y + para_px + i * skip_px), 
+                                      size = text_size, color = text_color)
+            i += 1
 
         fullFrms = BGRFrames.from_frame(fullFrm, n)
         shot_frames.append(fullFrms)
