@@ -26,7 +26,7 @@ import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 
-SAVE = True
+SAVE = False
 
 ########################################
 ########### SAVE FOLDER ################
@@ -38,7 +38,9 @@ savePath = get_folder_struct('results_video')[SAVE_FOLDER]
 
 from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
 saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
-fullPath = maybe_make_folder(savePath, saveFolder)
+
+if SAVE:
+    fullPath = maybe_make_folder(savePath, saveFolder)
 
 #############################
 #### READ IN CONFIGS ########
@@ -88,13 +90,14 @@ allPnts = dataPnts.join(nullPnts).sort()
 #############################
 
 ### PARAMS ###
-mark_color = const.BGR['light_brown']
+mark_size = 6
+mark_color = const.BGR['bright_blue']
 heat_color = const.BGR['leafy_green']
 bandwidth = 40
 intermediate_lambdas = [0.25, 0.5, 0.75]
 
-
 prmDict = {'background_resolution': 0.05, 'argument_resolution': 0.05, 'interpolate_func': vs.interpolate_camera_naive}
+# prmDict = {'background_resolution': 2, 'argument_resolution': 2, 'interpolate_func': vs.interpolate_camera_naive}
 prmDict_static = {k: v for k, v in prmDict.items() if k not in ['interpolate_func']}
 
 ### FILTER ###
@@ -138,8 +141,8 @@ camPt3D = Point3D((-300, 2000, 600))
 thirdCam = Camera.from_to(camPt3D, cntPt3D).zoom(1.1)
 
 ### COURT ###
-courtLines = CourtLines.make().add_singles_netline()
-courtScn = Scene.make_court(courtLines) ### todo: rotate this if needed!
+courtLines = CourtLines.make()
+courtScn = Scene.make_court(courtLines, net_mesh_density = 0.75) ### todo: rotate this if needed!
 region_color = (60, 60, 60)
 from ATMANpy.types.Lines import CourtLines
 from ATMANpy.types.Shapes3D import Region3D
@@ -183,7 +186,7 @@ def kde_func(someShots, bandwidth = 40, normalize_density = True, display_at_hei
                                      normalize_density = normalize_density, 
                                      display_at_height = display_at_height,
                                      resolution = resolution, 
-                                     fill = True,
+                                     fill = True, zero_color = background_bgr,
                                      threshold_proportion = prop, contour_color = col)[0] for prop, col in zip(props, fill_colors)]
     contScn = reduce(DummyScene.combine, cont_scenes, DummyScene.make_empty())
 
@@ -261,7 +264,7 @@ for idx, myPnt in enumerate(filtPnts_before_fair):
             rotLns = courtLines.rotate(pi)
             rotReg = subReg.rotate(pi, origPt = centerPt)
             rotReg3D = Region3D.from_region2D(rotReg, z = -1).recolor(region_color)
-            rotScn = Scene.make_court(rotLns).put(rotReg3D)
+            rotScn = Scene.make_court(rotLns, net_mesh_density = 0.75).put(rotReg3D)
             
             heatView = View.make(thirdCam, heatScn_rect_rot, resolution = prmDict['argument_resolution'])
             courtView = View.make(thirdCam, rotScn, resolution = prmDict['background_resolution'])
@@ -279,7 +282,8 @@ for idx, myPnt in enumerate(filtPnts_before_fair):
     myFrms = myStm.decap().frames
 
     ### spline, bounce scenes
-    spline_scenes, bounce_scenes = vis_ut.get_shot_scenes(serve_and_return, mark_color = mark_color)
+    spline_scenes, bounce_scenes = vis_ut.get_shot_scenes(serve_and_return, mark_color = mark_color,
+                                                          mark_size = mark_size)
     spline_and_bounce_scenes = [sScn.combine(bScn) for sScn, bScn in zip(spline_scenes, bounce_scenes)]
 
     bounce_scenes_return = [myScn.drop(0) if not myScn.is_empty() else myScn for myScn in bounce_scenes]
@@ -311,6 +315,7 @@ for idx, myPnt in enumerate(filtPnts_before_fair):
     rasterFrms = vis_ut.animate_bounce_and_mark_scenes( serve_and_return, confs = confs, 
                                                         start_cam = brestCam_third, stop_cam = brestCam_third,
                                                         over = True, over_scale = 1, sub_region = False,
+                                                        mark_size = mark_size, mark_color = mark_color,
                                                         **prmDict)
     
     ### pre and post frames
@@ -387,7 +392,7 @@ d21 = frms1[0] - frms2[-1]
 d10 = frms0[0] - frms1[-1]
 
 interFrms10 = lastPnt.stream(confs = confs).widen(d10).decap().frames[:d10].rescale(3)
-interFrms10_speed = vis_ut.speed_up_frames_progressively(interFrms10, ramp_up_frames = 25)
+interFrms10_speed = vis_ut.speed_up_frames_progressively(interFrms10, ramp_up_frames = 150, ramp_down_frames = 100)
 intermezzo_stop_early = 50 ### stop early so that we have the windup of the serve later.
 interFrms10_speed_pre, interFrms_10_speed_post = interFrms10_speed[:-intermezzo_stop_early], interFrms10_speed[-intermezzo_stop_early:]
 interFrms_10_speed_post_dim = interFrms_10_speed_post.dim(0.5)
@@ -417,6 +422,8 @@ _, revFrms = reverse_cascade(myRst, keep_which = [(0, 2)], frames_per_element = 
 #                                         **prmDict)
 # DecapStream(rotate_backFrms, 0, 100).show()
 
+prmDict['background_resolution'] = 12 ### first resolution at which the background is solid even in full cam.
+
 rotate_backFrms_void, _ = vs.animate_cam_motion(kde_whole, start_cam = thirdCam, stop_cam = brestCam_full,
                                                 background_scene = courtScn, num_frames = map_frames,
                                                 **prmDict)
@@ -437,14 +444,16 @@ myPnts = filtPnts_before_fair.enforce_direction('Bot')
 srvShots = myPnts.get_serves() 
 retShots = myPnts.get_returns() 
 
-exampleSplnSF = srvShots[2].feat_spline_cumul(color = const.BGR['ball_yellow'])
+exampleSplnSF = srvShots[2].feat_spline_cumul(color = const.BGR['ball_yellow'], thickness = 1.5)
 example_splns = list(exampleSplnSF.values())
 
 _, exampleSpLns = exampleSplnSF.last()
 exampleSpLns = [ln for ln in exampleSpLns if ln is not None]
 
 srv_x, srv_y = srvShots.get_player_hit_position().mean(axis = 0)
-ret_x, ret_y = retShots.get_player_hit_position().mean(axis = 0)
+ret_x, ret_y = retShots.get_player_hit_position().mean(axis = 0) 
+
+srv_y = srv_y + 15
 
 srvPt = Point3D((srv_x, srv_y, 0)).annotate('Server').resize(3)
 retPt = Point3D((ret_x, ret_y, 0)).annotate('Returner').resize(2)
@@ -545,6 +554,7 @@ animFrms_before_with_inter = BGRFrames.from_frames([interFrms_before, animFrms_b
 
 animFrms_after = vis_ut.animate_bounce_and_mark_scenes(lastPnt[2:], brestCam_full_traj, brestCam_full_traj, confs, over = True, 
                                                 sub_region = False, 
+                                                mark_size = mark_size, mark_color = mark_color,
                                                 spline_cumulative_transparence = 0.7, **prmDict)
 # DecapStream(animFrms_after, 0, 100).show()
 widen_by = 150
@@ -630,8 +640,6 @@ all_frames = []
 script_lines = []
 
 script_line =   """
-                    It might be advantageous for Joao Sousa to know if Brandon Nakashima has a pattern on these returns.
-
                     With ATMAN, one can filter for occurences in previous matches of this tournament
                     in which Brandon Nakashima faced a similar serve, and take a look at where his return
                     previously landed.
@@ -645,8 +653,8 @@ full_rstFrms_accel = vis_ut.speed_up_frames_progressively(full_rstFrms,
                                                           ramp_down_frames = ramp_down_frames)
 DecapStream(full_rstFrms_accel, 0, 100).show()
 
-
 all_frames.append(full_rstFrms_accel)
+script_lines.append(script_line)
 
 script_line =   """
                     In the course of his previous matches in this tournament, 
@@ -684,7 +692,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     This example is a short but indicative look into the capabilities of ATMAN, 
-                    the Automated Tennis Match Annotator. If you want to learn more about its workings,
+                    the Automated Tennis Match Annotator. If you would like to learn more about its workings,
                     consult the longer version of this video; if you would like to see it employed in actual case studies,
                     take a look at the analysis videos.
                 """ # 16 seconds
@@ -692,11 +700,12 @@ jointFrms = BGRFrames.from_frames([itplFrms, animFrms_after_with_final_dim])
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
+### TODO: maybe have a little raster with previews for the full capabilities/analysis videos at the very end here.
+
 # BGRFrames.from_frames(all_frames)
 
 
 vis_ut.show(all_frames)
-
 
 
 ### Saving the separate MultiFrame objects and the Joint Script
