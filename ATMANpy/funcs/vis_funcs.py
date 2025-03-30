@@ -102,6 +102,9 @@ def interpolate_scenes(start_scene, end_scene, num_frames):
     start_shapes, end_shapes = start_scene.shapes, end_scene.shapes
     assert len(start_shapes) == len(end_shapes)
 
+    if num_frames == 1:
+        return [end_scene]
+
     scenes = []
     for frame in range(num_frames):
         lmbd = frame / (num_frames - 1)
@@ -125,6 +128,9 @@ def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
     
     fs_len, ls_len = len(start_dummyScn.rastArrs), len(end_dummyScn.rastArrs)
     assert fs_len == ls_len
+
+    if num_frames == 1:
+        return [end_dummyScn]
 
     scenes = []
     for frame in range(num_frames):
@@ -158,6 +164,9 @@ def interpolate_dummy_scenes(start_dummyScn, end_dummyScn, num_frames,
 
 def interpolate_frames(startFrm, stopFrm, num_frames = 25):
     frmsList = []
+
+    if num_frames == 1:
+        return BGRFrames.from_frame(stopFrm, 1)
 
     lambdas = np.linspace(0, 1, endpoint = True, num = num_frames)
     for lmbd in lambdas:
@@ -749,6 +758,7 @@ def kde_contourmap(myShots,
                    normalize_density = True,
                    preserve_showarr_shape = True, 
                    contour_color = const.BGR['intense_red'],
+                   zero_color = const.BGR['bright_blue'], ### this is only important for interpolations, since it will be invisible.
                    contour_alpha = 1):
     
     ### Gather courtlines
