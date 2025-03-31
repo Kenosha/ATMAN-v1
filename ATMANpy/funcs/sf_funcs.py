@@ -2051,7 +2051,7 @@ def find_matching_tracks(candSF, splitDF, frame_offset = 5, num_points = 6, thre
     ### for each track, find a track that would complement it (if possible)
     ### i.e, another track that begins right after that track ends.
     tracks_to_add = []
-    for track_id, frame_ls in lsSer.iteritems():
+    for track_id, frame_ls in lsSer.items():
         frame_after_ls = frame_ls + frame_offset
         
         begin_after_ls_series = fsSer == frame_after_ls
