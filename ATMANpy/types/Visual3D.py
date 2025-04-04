@@ -1202,7 +1202,17 @@ class SinglePixelView(View):
     #     dists = ((self.ptArr[1:] - self.ptArr[:-1]) ** 2).sum(axis = 1) ** 0.5
     #     self.ptArr[:, :, np.newaxis, np.newaxis] - self.ptArr[np.newaxis, np.newaxis, :, :]
 
-    
+@dataclass
+class SolidView:
+    ### This View exploits the fact that in projective geometry, ...
+        # ... straight line remain straight lines
+        # ... an area that is filled in in 3D will remain filled in in 2 dimensions
+    ### -> for a shape that is passed in, we read out the limiting contour points in 3D 
+        # (i.e, the corner points of a rectangle, or the some contour points on the border of a dummy scene)
+    ### -> then, when snapping, we project the contour points into 2D, and fill in. 
+    # to figure out for DummyScene -> how to find its "outline"?
+    pass
+
 if __name__ == '__main__':
     CHECK_SPEED = True
     CHECK_QUATERNIONS = False
