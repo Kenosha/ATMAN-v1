@@ -211,7 +211,8 @@ class Scene:
 
     ### METHODS ###
     def rasterize(self, resolution, alpha_threshold = 0.05, 
-                  camera_point = None, resnorm_point = None, adaptive_resolution_exponent = 0): ### these factors are relevant if we want adaptive resolution
+                  camera_point = None, resnorm_point = None, adaptive_resolution_exponent = 0, ### these factors are relevant if we want adaptive resolution
+                  concatenate = True): 
         RES_BOUND_MULTIPLICATIVE = 10
         ### yields a point-cloud representation of the objects in the scene, 
         # with points stored in rastArr_all and their colors stored in colArr_all
@@ -224,7 +225,6 @@ class Scene:
             colArr_all = []
             alphaArr_all = []
             for shape3D in pruned_self.shapes:
-            
                 ### If needed: Adaptive Resolution!
                 ### Problem: if an object is further away, it will appear denser at constant resolution, and brighter therefore!
                 ### Solution: reduce resolution of objects further away, and increase it for closer objects
@@ -248,11 +248,12 @@ class Scene:
                 rastArr_all.append(rastArr)
                 colArr_all.append(colArr)
                 alphaArr_all.append(alphaArr)
-                
-            rastArr_all = np.concatenate(rastArr_all)
-            colArr_all = np.concatenate(colArr_all)
-            alphaArr_all = np.concatenate(alphaArr_all)
             
+            if concatenate:
+                rastArr_all = np.concatenate(rastArr_all)
+                colArr_all = np.concatenate(colArr_all)
+                alphaArr_all = np.concatenate(alphaArr_all)
+                
             return rastArr_all, colArr_all, alphaArr_all
     
 @dataclass(frozen = True)
@@ -396,13 +397,20 @@ class DummyScene:
         return DummyScene([rastArr], [premul_color], [premul_alpha])
 
     def rasterize(self, resolution, alpha_threshold = 0.05, 
-                  camera_point = None, resnorm_point = None, adaptive_resolution_exponent = 0): ### TODO: adaptive resolution -> necessary for dummy scenes?
+                  camera_point = None, resnorm_point = None, adaptive_resolution_exponent = 0, ### TODO: adaptive resolution -> necessary for dummy scenes?
+                  concatenate = True): 
         ### TODO: implement pruning with alpha thresholding (see above) 
         pruned_self = self.prune_transparents()
 
-        rastArr_all = np.concatenate(pruned_self.rastArrs)
-        colArr_all = np.concatenate(pruned_self.colArrs)
-        alphaArr_all = np.concatenate(pruned_self.alphaArrs)
+        rastArr_all = pruned_self.rastArrs
+        colArr_all = pruned_self.colArrs
+        alphaArr_all = pruned_self.alphaArrs
+
+        if concatenate:
+            rastArr_all = np.concatenate(rastArr_all)
+            colArr_all = np.concatenate(colArr_all)
+            alphaArr_all = np.concatenate(alphaArr_all)
+        
         return rastArr_all, colArr_all, alphaArr_all
     
 
@@ -768,6 +776,17 @@ class View:
     
     sensor_dims: tuple = (1920, 1080)
     
+    def __getitem__(self, item):
+        ptArr_filt = self.ptArr[item]
+        clArr_filt = self.clArr[item]
+        alArr_filt = self.alArr[item]
+        pxArr_filt = self.pxArr[item]
+        dsArr_filt = self.dsArr[item]
+        return View(ptArr_filt, clArr_filt, alArr_filt, pxArr_filt, dsArr_filt, self.text_param_dicts, self.sensor_dims)
+
+    def __len__(self):
+        return len(self.ptArr)
+
     @staticmethod
     def make_empty(sensor_dims = (1920, 1080), text_param_dicts = None):
         return View(np.zeros((0, 3)), 
@@ -779,8 +798,101 @@ class View:
                     sensor_dims = sensor_dims)
     
     @staticmethod
-    def make(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05,
-             adaptive_resolution_exponent = 0):
+    def from_many_views(sub_views):
+        ptArrs = []
+        clArrs = []
+        alArrs = []
+        pxArrs = []
+        dsArrs = []
+
+        for spView in sub_views:
+            ptArrs.append(spView.ptArr)
+            clArrs.append(spView.clArr)
+            alArrs.append(spView.alArr)
+            pxArrs.append(spView.pxArr)
+            dsArrs.append(spView.dsArr)
+
+        ptArr = np.concatenate(ptArrs, axis = 0)
+        clArr = np.concatenate(clArrs, axis = 0)
+        alArr = np.concatenate(alArrs, axis = 0)
+        pxArr = np.concatenate(pxArrs, axis = 0)
+        dsArr = np.concatenate(dsArrs, axis = 0)
+
+        return View(ptArr, clArr, alArr, pxArr, dsArr, 
+                    text_param_dicts = sub_views[0].text_param_dicts, sensor_dims = sub_views[0].sensor_dims)
+
+    @staticmethod
+    def make_without_single_pixel_pruning(myCamera, myScene, annotatedPoints = None, resolution = 10, 
+                                          alpha_threshold = 0.05, adaptive_resolution_exponent = 0):
+        ### Deal with annotated points
+        if annotatedPoints is not None:
+            deduplicated_annotatedPnts = list(set(annotatedPoints))
+            text_param_dicts = []
+            for anPnt in deduplicated_annotatedPnts:
+                ### get parameters like text body, font size, font color, etc.
+                pnt_params = anPnt.get_parameters()
+                
+                ### project the location of the point
+                pnt_coordArr = np.array([anPnt.coords])
+                pnt_pxArr = myCamera.project_points(pnt_coordArr).astype(int)
+                
+                ### make a point dictionary
+                pnt_tuple = tuple(pnt_pxArr.flatten())
+                pnt_params['where'] = pnt_tuple
+                text_param_dicts.append(pnt_params)
+        else:
+            text_param_dicts = None
+
+
+        if myScene.is_empty(): 
+            return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
+        else:
+            if adaptive_resolution_exponent != 0:
+                camPt = myCamera.get_center_point()
+                cntPt = Point3D.from_point2D(CourtLines.make().get_center_point(), z = 0)
+            else:
+                camPt = None
+                cntPt = None
+
+            ### 1) Collect real world points and their colors
+            ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold, 
+                                                    camera_point = camPt, 
+                                                    resnorm_point = cntPt,
+                                                    adaptive_resolution_exponent = adaptive_resolution_exponent,
+                                                    concatenate = True)
+            
+            if ptArr is None:
+                return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
+
+            ### 2A) check if points are in front of camera 
+            ptArr_cam = myCamera.world_points_to_camera_points(ptArr)
+            px_in_front = ptArr_cam[:, 2] < 0 ### z-coordinate goes straight INTO the camera!
+            ptArr = ptArr[px_in_front]
+            clArr = clArr[px_in_front]
+            alArr = alArr[px_in_front]
+        
+            ### 3) Project Point Cloud in 3D onto 2D Sensor
+            pxArr = myCamera.project_points(ptArr).astype(int)
+            px_on_sensor = ((0, 0) <= pxArr) & (pxArr <  myCamera.sensor_dims)
+            px_filter = px_on_sensor.all(axis = 1)
+            
+            ptArr = ptArr[px_filter]
+            clArr = clArr[px_filter]
+            alArr = alArr[px_filter]
+            pxArr = pxArr[px_filter]
+            
+            ### 4) For every point, get distance from Pinhole
+            dsArr = ((ptArr - myCamera.get_cw()) ** 2).sum(axis = 1) ** 0.5
+                
+            aView = View(ptArr, clArr, alArr, pxArr, dsArr,
+                            text_param_dicts = text_param_dicts, 
+                            sensor_dims = myCamera.sensor_dims)
+
+            return aView
+
+    @staticmethod
+    def make_with_single_pixel_pruning(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05,
+                                        adaptive_resolution_exponent = 0, opacity_pruning_threshold = 50):
 
         ### Deal with annotated points
         if annotatedPoints is not None:
@@ -811,45 +923,82 @@ class View:
             else:
                 camPt = None
                 cntPt = None
+
             ### 1) Collect real world points and their colors
-            ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold, 
+            ptArrs, clArrs, alArrs = myScene.rasterize(resolution, alpha_threshold = alpha_threshold, 
                                                     camera_point = camPt, 
                                                     resnorm_point = cntPt,
-                                                    adaptive_resolution_exponent = adaptive_resolution_exponent)
+                                                    adaptive_resolution_exponent = adaptive_resolution_exponent,
+                                                    concatenate = False)
             
-            if ptArr is None:
+            if ptArrs is None:
                 return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
 
-            # ### 2) Suppress negative coordinates TODO: why are negative world coordinates not allowed? seems stupid
-            # all_positive_indices = (ptArr >= 0).all(axis = 1)
-            # ptArr = ptArr[all_positive_indices]
-            # clArr = clArr[all_positive_indices]
-            # alArr = alArr[all_positive_indices]
+            sub_views = []
+            for ptArr, clArr, alArr in zip(ptArrs, clArrs, alArrs): ### for each shape in the scene, we have our own subView
+                ### 2A) check if points are in front of camera 
+                ptArr_cam = myCamera.world_points_to_camera_points(ptArr)
+                px_in_front = ptArr_cam[:, 2] < 0 ### z-coordinate goes straight INTO the camera!
+                ptArr = ptArr[px_in_front]
+                clArr = clArr[px_in_front]
+                alArr = alArr[px_in_front]
+            
+                ### 3) Project Point Cloud in 3D onto 2D Sensor
+                pxArr = myCamera.project_points(ptArr).astype(int)
+                px_on_sensor = ((0, 0) <= pxArr) & (pxArr <  myCamera.sensor_dims)
+                px_filter = px_on_sensor.all(axis = 1)
+                
+                ptArr = ptArr[px_filter]
+                clArr = clArr[px_filter]
+                alArr = alArr[px_filter]
+                pxArr = pxArr[px_filter]
+                
+                ### 4) For every point, get distance from Pinhole
+                dsArr = ((ptArr - myCamera.get_cw()) ** 2).sum(axis = 1) ** 0.5
+                    
+                aView = View(ptArr, clArr, alArr, pxArr, dsArr,
+                                text_param_dicts = text_param_dicts, 
+                                sensor_dims = myCamera.sensor_dims)
 
-            ### 2A) check if points are in front of camera 
-            ptArr_cam = myCamera.world_points_to_camera_points(ptArr)
-            px_in_front = ptArr_cam[:, 2] < 0 ### z-coordinate goes straight INTO the camera!
-            ptArr = ptArr[px_in_front]
-            clArr = clArr[px_in_front]
-            alArr = alArr[px_in_front]
+                ### 5) single pixel pruning (on each shape separately)
+                sp_views = aView.make_single_pixel_views()
+                sp_views_pruned = [spView.prune_to_singleton() for spView in sp_views]
+                subView = View.from_many_views(sp_views_pruned)
+
+                sub_views.append(subView)
+
+            jointView = View.from_many_views(sub_views)
+            
+            if len(sub_views) > opacity_pruning_threshold:
+                ### optional: opacity pruning
+                ## -> if there are many shapes in the scene, this might speed up the snap, 
+                # but the added overhead might not be worth it.
+                sp_views = jointView.make_single_pixel_views()
+                sp_views_pruned = [spView.prune_behind_opaque() for spView in sp_views]
+                outView = View.from_many_views(sp_views_pruned)
+            else:
+                outView = jointView
+
+            object.__setattr__(outView, 'text_param_dicts', text_param_dicts)
+            object.__setattr__(outView, 'sensor_dims', myCamera.sensor_dims)
+
+            return outView
+
+    @staticmethod
+    def make(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05,
+            adaptive_resolution_exponent = 0, opacity_pruning_threshold = 50):
         
-            ### 3) Project Point Cloud in 3D onto 2D Sensor
-            pxArr = myCamera.project_points(ptArr).astype(int)
-            px_on_sensor = ((0, 0) <= pxArr) & (pxArr <  myCamera.sensor_dims)
-            px_filter = px_on_sensor.all(axis = 1)
-            
-            ptArr = ptArr[px_filter]
-            clArr = clArr[px_filter]
-            alArr = alArr[px_filter]
-            pxArr = pxArr[px_filter]
-            
-            ### 4) For every point, get distance from Pinhole
-            dsArr = ((ptArr - myCamera.get_cw()) ** 2).sum(axis = 1) ** 0.5
-            aView = View(ptArr, clArr, alArr, pxArr, dsArr,
-                         text_param_dicts = text_param_dicts, 
-                         sensor_dims = myCamera.sensor_dims)
-            
-            return aView
+        if isinstance(myScene, DummyScene) and resolution > 6 or resolution > 12:
+            return View.make_with_single_pixel_pruning(myCamera, myScene, resolution = resolution, 
+                                                       alpha_threshold = alpha_threshold,
+                                                       annotatedPoints = annotatedPoints,
+                                                       adaptive_resolution_exponent = adaptive_resolution_exponent, 
+                                                       opacity_pruning_threshold = opacity_pruning_threshold)
+        else:
+            return View.make_without_single_pixel_pruning(myCamera, myScene, resolution = resolution, 
+                                                          annotatedPoints = annotatedPoints,
+                                                          alpha_threshold = alpha_threshold,
+                                                          adaptive_resolution_exponent = adaptive_resolution_exponent)
 
     def sort_by_pixel(self):
         sort_idxs = np.lexsort((self.pxArr[:, 1], self.pxArr[:, 0]))
@@ -888,7 +1037,28 @@ class View:
                     text_param_dicts = self.text_param_dicts,
                     sensor_dims = self.sensor_dims)
 
-    def snap(self, over_array = None):
+    def make_single_pixel_views(self):
+        ### figure out which points are mapped to the same pixel.
+        sortView_px = self.sort_by_pixel()
+        pxArr_diff = sortView_px.pxArr - np.roll(sortView_px.pxArr, 1, 0)
+        boolArr_diff = (pxArr_diff != 0).any(axis = 1)
+        switch_idxs = np.arange(len(boolArr_diff))[boolArr_diff]
+
+        out_sp_views = []
+        prev_idx = None
+        for idx in switch_idxs:
+            if prev_idx is not None:
+                currView = sortView_px[prev_idx:idx]
+                # unique_pxArr = np.unique(currView.pxArr, axis = 0)
+                # assert len(unique_pxArr) == 1
+                currSPView = SinglePixelView(currView.ptArr, currView.clArr, currView.alArr, currView.pxArr, currView.dsArr)
+                out_sp_views.append(currSPView)
+
+            prev_idx = idx
+
+        return out_sp_views
+
+    def snap_sequential(self, over_array = None):
         ### 1) Sort by distance for painters algorithm: far to near
         sortView = self.sort_by_distance(near_to_far = False)
     
@@ -925,6 +1095,58 @@ class View:
                 snapFrm = snapFrm.put(text, **{k: v for k, v in param_dict.items() if k != 'text'})
         
         return snapFrm
+    
+    def snap_grouped(self, over_array = None):
+        ### figure out which points are mapped to the same pixel.
+        ### group these, and perform a vectorized calculation of the color on that pixel.
+        sp_views = self.make_single_pixel_views()
+
+        rows, cols = self.sensor_dims[1], self.sensor_dims[0]
+
+        ### figure out base array
+        if over_array is None:
+            snapArr = np.zeros((rows, cols, 3), dtype = 'uint8')
+        else:
+            if len(over_array.shape) == 2:
+                snapArr = np.stack([over_array] * 3, axis = 2)
+            else:
+                snapArr = over_array
+
+        prev_idx = None
+        for currView in sp_views:
+            ### get current view, sorted from near to far
+            sort_currView = currView.sort_by_distance(near_to_far = True)
+            
+            try:
+                u, v = sort_currView.pxArr[0] ### pixel value is constant within sort_currView -> take first!
+            except IndexError:
+                continue
+            else:
+                curr_color = snapArr[v, u]
+
+            ### the cumulative 1 - alphas -> how much of the 
+            cum_comp_alphas = np.cumprod(1 - sort_currView.alArr)
+            fs, ls = cum_comp_alphas[:-1], cum_comp_alphas[-1]
+            fs_shift = np.array([1, *fs])
+
+            premul_colors = sort_currView.clArr * sort_currView.alArr
+
+            final_premul_color = np.sum(premul_colors * fs_shift[:, np.newaxis], axis = 0)
+            final_base_color = ls * curr_color
+            
+            snapArr[v, u] = final_premul_color + final_base_color
+
+        snapFrm = BGRFrame(snapArr)
+
+        if self.text_param_dicts is not None:
+            for param_dict in self.text_param_dicts:
+                text = param_dict['text']
+                snapFrm = snapFrm.put(text, **{k: v for k, v in param_dict.items() if k != 'text'})
+        
+        return snapFrm
+
+    def snap(self, over_array = None):
+        return self.snap_sequential(over_array = over_array) ### the testing code shows that best results are achieved with pruning in make.
         
     def combine(self, otherView):
         assert self.sensor_dims == otherView.sensor_dims
@@ -945,9 +1167,200 @@ class View:
         aView = aView.sort_by_distance(near_to_far = False)
         return aView
 
+@dataclass(frozen = True)
+class SinglePixelView(View):
+    ### these are because knowing that raster spots are mapped to the same pixel allows for more pruning
+
+    def get_pixel(self):
+        return self.pxArr[0]
+    
+    def prune_behind_opaque(self):
+        sortSPView = self.sort_by_distance(near_to_far = True)
+
+        is_opaque = sortSPView.alArr[:, 0] == 1
+
+        if is_opaque.sum() == 0:
+            return self
+        else:
+            nearest_opaque_idx = np.argmax(is_opaque)
+            return sortSPView[:nearest_opaque_idx + 1]
+
+    def prune_to_singleton(self):
+        ### this is fine if:
+            # 1) the view is of a single shape
+            # 2) the shape is flat in some dimension
+        # if 2) is not met, it's not too bad: a ball for example will lose projected point on the far side, 
+        # but its projected onto the camera by some other point on the camera-facing side of the ball anyway.
+        return self.sort_by_distance(near_to_far = True)[[0]]
+           
+    # def prune_close(self, distance_threshold = 1):
+    #     ### exploit that points next to each other are either rendered at resolution distance from each other, 
+    #     ### or they're far enough apart not to prune.
+    #     ### distance threshold -> the distance to the neighbor under which the 3D point is judged to be the same as its neigbor.
+    #         ### note: if we had only flat surfaces to render, we wouldn't need this; but a ball is 3D, 
+    #         ### so two points on the sphere will be projected onto the same pixel, but these are not the same.
+    #     dists = ((self.ptArr[1:] - self.ptArr[:-1]) ** 2).sum(axis = 1) ** 0.5
+    #     self.ptArr[:, :, np.newaxis, np.newaxis] - self.ptArr[np.newaxis, np.newaxis, :, :]
+
+    
 if __name__ == '__main__':
-    CHECK_QUATERNIONS = True
+    CHECK_SPEED = True
+    CHECK_QUATERNIONS = False
     CHECK_FONTS = False
+
+    if CHECK_SPEED:
+        import time
+
+        from ATMANpy.types.Shapes3D import Point3D, Ball3D, Lines3D, Region3D, Regions3D, AnnotatedPoint3D
+        from ATMANpy.types.ShapesTennis3D import Player
+        import ATMANpy.funcs.vis_funcs as vs
+
+        ####### SOME OBJECTS TO SHOW ########
+        courtLines = CourtLines.make().add_singles_netline()
+
+        c_w_2D = courtLines['Bottom Baseline'].center().down(150).left(100)
+        d_w_2D = courtLines.get_center_point()
+    
+        c_w = Point3D.from_point2D(c_w_2D, z = 100)
+        d_w = Point3D.from_point2D(d_w_2D, z = 0)
+        
+        cam1 = Camera.from_to(c_w, d_w)
+
+        ### court
+        courtScn = Scene.make_court(courtLines)
+
+        ### some region
+        botReg = courtLines.get_half_region(side = 'Bottom', width = 'Singles')
+        bot_adReg = courtLines.get_service_box(side = 'Bottom', which = 'Deuce')
+        botReg3D = Region3D.from_region2D(botReg, z = 0).recolor(const.BGR['grass_green'])
+        ad_botReg3D = Region3D.from_region2D(bot_adReg, z = 1).recolor(const.BGR['strong_pink'])
+
+        ### players        
+        p1_2D = courtLines['Bottom Baseline'].center().right(100)
+        p2_2D = courtLines['Top Baseline'].center().left(100).up(100)
+
+        ply1 = Player.make(p1_2D.coords)
+        ply2 = Player.make(p2_2D.coords)
+
+        ### KDE
+        from ATMANpy.types.Abstract import Points, read_in_data_tables
+        import ATMANpy.scripts.pipeline_brest_tightseg as ppl
+        from ATMANpy.funcs.util_funcs import get_folder_struct
+
+        prm_mod = ppl.parameter_files.default
+        cnf_mod = ppl.config_files.default
+            
+        avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
+        confs = [cnf_mod.get_conf(vid) for vid in avail_vids]
+        cap = confs[0]['cap']
+
+        dataTable = read_in_data_tables(confs)
+        dataPnts = Points.from_datatable(dataTable, split_by_match = False)
+
+        import ATMANpy.funcs.filter_points_funcs as filt_p
+        filtPnts1 = dataPnts.filter(filt_p.is_returner, name = 'Brandon Nakashima').filter(filt_p.is_longer_than, threshold = 1)
+
+        filtPnts2 = filtPnts1.filter('is_first_serve')
+        filtPnts3 = filtPnts2.filter('is_serve_deuce')
+        filtPnts4 = filtPnts3.filter(filt_p.is_serve_out_wide)
+
+        filtPnts_before = filtPnts4.filter(filt_p.is_not_server, name = 'Joao Sousa')
+        filtPnts_after = filtPnts4.filter(filt_p.is_server, name = 'Joao Sousa')
+
+        def return_is_fair(somePnt):
+            try:
+                thirdShot = somePnt[2]
+            except:
+                thirdShot = None
+            return somePnt.get_return().is_fair(thirdShot)
+
+        filtPnts_before_fair = filtPnts_before.filter(return_is_fair)
+        retShots_before_fair = filtPnts_before_fair.get_returns() ### unrectified!
+
+        def kde_func(someShots, bandwidth = 40, normalize_density = True, display_at_height = False, resolution = 2,
+                    heat_bgr = const.BGR['intense_red'], props = [0.2, 0.4, 0.6, 0.8]):
+            ### bulls eye look
+            
+            from ATMANpy.funcs.util_funcs import interpolate_tuples
+            background_bgr = tuple(BGRFrame.from_video(cap, 1100).array[200, 350]) ### the color of the court.
+            fill_colors = [interpolate_tuples(background_bgr, heat_bgr, itpl_lambda = p) for p in props]
+
+            from functools import reduce
+            cont_scenes = [vs.kde_contourmap(someShots, bandwidth = bandwidth,
+                                            normalize_density = normalize_density, 
+                                            display_at_height = display_at_height,
+                                            resolution = resolution, 
+                                            fill = True, zero_color = background_bgr,
+                                            threshold_proportion = prop, contour_color = col)[0] for prop, col in zip(props, fill_colors)]
+            contScn = reduce(DummyScene.combine, cont_scenes, DummyScene.make_empty())
+
+            contScn = contScn.consolidate()
+
+            return contScn
+                        
+        retShots_before_fair_rectified = retShots_before_fair.enforce_direction('Top')
+
+        ######################################
+
+        ######### TIMING FUNCTION ############
+        def view_and_snap_timed(myCam, myScene, resolution,
+                                view_func = 'make', snap_func = 'snap'):
+            curr_time = time.time()
+            myView = getattr(View, view_func)(myCam, myScene, resolution = resolution)
+            view_time = time.time()
+            myFrm = getattr(myView, snap_func)()
+            snap_time = time.time()
+
+            view_duration = view_time - curr_time
+            snap_duration = snap_time - view_time
+            total_duration = snap_time - curr_time
+
+            print(f'Timing with view_func: {view_func} and snap_func: {snap_func} at res {resolution}...')
+            print(f'    View: {view_duration:.2f} seconds')
+            print(f'    Snap: {snap_duration:.2f} seconds (on {len(myView)} points)')
+            print(f'   Total: {total_duration:.2f} seconds')
+
+            return myFrm
+        #####################################
+
+        SHOW = True
+        RESOLUTIONS = [0.1, 1, 10]
+        for res in RESOLUTIONS:
+            myCamera = cam1
+            myScene = courtScn.put(ply1).put(ply2)
+            myScene = courtScn.put(ply1).put(ply2).put(ad_botReg3D)
+
+            kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': res}
+            kde_whole = kde_func(retShots_before_fair_rectified, **kdeDict)
+            myScene = kde_whole
+
+            ### old school way
+            aFrm1 = view_and_snap_timed(myCamera, myScene, resolution = res, 
+                                        view_func = 'make_without_single_pixel_pruning', snap_func = 'snap_sequential')
+
+            ### old school with grouping
+            aFrm2 = view_and_snap_timed(myCamera, myScene, resolution = res, 
+                                        view_func = 'make_without_single_pixel_pruning', snap_func = 'snap_grouped')
+
+            ### single pixel pruning
+            aFrm3 = view_and_snap_timed(myCamera, myScene, resolution = res, 
+                                        view_func = 'make_with_single_pixel_pruning', snap_func = 'snap_sequential')
+
+            ### single pixel pruning and grouping
+            aFrm4 = view_and_snap_timed(myCamera, myScene, resolution = res, 
+                                        view_func = 'make_with_single_pixel_pruning', snap_func = 'snap_grouped')
+            
+            ### automatic decision about which make and snap to take
+            aFrm5 = view_and_snap_timed(myCamera, myScene, resolution = res, 
+                                        view_func = 'make', snap_func = 'snap')
+
+            if SHOW: 
+                aFrm1.show()
+                aFrm2.show()
+                aFrm3.show()
+                aFrm4.show()
+                aFrm5.show()
+
 
     if CHECK_QUATERNIONS:
         w, x, y, z = 1, 0.5, 1, 2
@@ -1081,22 +1494,22 @@ if __name__ == '__main__':
 
         # Player.make()
 
-        # emptyScn = Scene.empty() 
-        # courtRegions3D = Regions3D.make_court()
-        # myBall = Ball3D((30, 30, 30))
-        # myNet = Regions3D.make_singles_net()
+        emptyScn = Scene.make_empty() 
+        courtRegions3D = Court.make()
+        myBall = Ball3D((30, 30, 30))
+        myNet = Net.make_singles()
 
-        # backScn = emptyScn.put(courtRegions3D).put(myNet)
-        # ballScn = emptyScn.put(myBall)
+        backScn = emptyScn.put(courtRegions3D).put(myNet)
+        ballScn = emptyScn.put(myBall)
 
-        # myCam = Camera.calibrated_AO_behind()
+        myCam = Camera.calibrated_AO_behind()
 
-        # backView = View.make(myCam, backScn)
-        # frntView = View.make(myCam, ballScn)
+        backView = View.make(myCam, backScn)
+        frntView = View.make(myCam, ballScn)
 
-        # backView.snap().show()
-        # frntView.snap().show()
+        backView.snap().show()
+        frntView.snap().show()
 
-        # bothView = backView.combine(frntView)
-        # bothView.show()
+        bothView = backView.combine(frntView)
+        bothView.snap().show()
 
