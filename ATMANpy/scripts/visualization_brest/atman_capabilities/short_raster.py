@@ -96,8 +96,10 @@ heat_color = const.BGR['leafy_green']
 bandwidth = 40
 intermediate_lambdas = [0.25, 0.5, 0.75]
 
-prmDict = {'background_resolution': 0.05, 'argument_resolution': 0.05, 'interpolate_func': vs.interpolate_camera_naive}
-# prmDict = {'background_resolution': 2, 'argument_resolution': 2, 'interpolate_func': vs.interpolate_camera_naive}
+# prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
+#            'interpolate_func': vs.interpolate_camera_naive}
+prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+           'interpolate_func': vs.interpolate_camera_naive}
 prmDict_static = {k: v for k, v in prmDict.items() if k not in ['interpolate_func']}
 
 ### FILTER ###
@@ -208,7 +210,7 @@ fade_length = 10
 fade_thresh = 0.025
 dim_factor = 0.25
 
-kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 5}
+kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 10}
 
 raster_frames = []
 raster_rot_frames = []
@@ -423,6 +425,16 @@ _, revFrms = reverse_cascade(myRst, keep_which = [(0, 2)], frames_per_element = 
 # DecapStream(rotate_backFrms, 0, 100).show()
 
 prmDict['background_resolution'] = 12 ### first resolution at which the background is solid even in full cam.
+prmDict_static['background_resolution'] = 12 ### first resolution at which the background is solid even in full cam.
+
+####### SOME TESTING, DELETE #######
+
+myScene = kde_whole
+myCamera = brestCam_full
+
+aView.snap()
+
+####################################
 
 rotate_backFrms_void, _ = vs.animate_cam_motion(kde_whole, start_cam = thirdCam, stop_cam = brestCam_full,
                                                 background_scene = courtScn, num_frames = map_frames,
@@ -511,7 +523,6 @@ diagFrms_all = BGRFrames.from_frames([diagFrms0, diagFrms1, diagFrms2, diagFrms3
 newFrm = interFrms_10_speed_post[0]
 newFrm_dim = interFrms_10_speed_post_dim[0]
 
-kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 5}
 kde_whole = kde_func(retShots_before_fair_rectified, **kdeDict)
 
 # View.make(brestCam_full, kde_whole, resolution = 1).snap(over_array = newFrm.array.copy()).show()
@@ -536,7 +547,7 @@ kdeFrms_before, _ = vs.animate_sequence([kde_whole for _ in range(beforeFrms.len
 
 brestCam_full_traj = Camera.calibrated_brest_behind().resize(3)
 
-spline_scenes, bounce_scenes = vis_ut.get_shot_scenes(lastPnt[:2])
+spline_scenes, bounce_scenes = vis_ut.get_shot_scenes(lastPnt[:2], mark_color = mark_color, mark_size = mark_size)
 
 markFrms_before, _ = vs.animate_sequence(bounce_scenes, start_cam = brestCam_full_traj, stop_cam = brestCam_full_traj,
                                     animate_over = kdeFrms_before, 
@@ -557,12 +568,12 @@ animFrms_after = vis_ut.animate_bounce_and_mark_scenes(lastPnt[2:], brestCam_ful
                                                 mark_size = mark_size, mark_color = mark_color,
                                                 spline_cumulative_transparence = 0.7, **prmDict)
 # DecapStream(animFrms_after, 0, 100).show()
-widen_by = 150
+widen_by = 100
 finalFrms = lastPnt.stream(confs = confs).widen(widen_by).decap().frames[-widen_by:].rescale(3)
 # DecapStream(finalFrms, 0, 100).show()
 animFrms_after_with_final = BGRFrames.from_frames([animFrms_after, finalFrms])
 # DecapStream(animFrms_after_with_final, 0, 100).show()
-animFrms_after_with_final_dim = animFrms_after_with_final.dim_progressively(1, 0)
+animFrms_after_with_final_dim = animFrms_after_with_final.dim_progressively(1, 0, exp = 0.5)
 # DecapStream(animFrms_after_with_final_dim, 0, 100).show()
 
 fadeinFrms = vs.interpolate_frames(rotate_backFrms_void[-1], interFrms_before[0], 50)
@@ -611,18 +622,56 @@ combFrms = BGRFrames.from_single_frames(comb_frames)
 # DecapStream(combFrms, 0, 100).show()
 
 ### hold
-staticFrms = BGRFrames.from_frame(combFrms[-1], 50)
+staticFrms = BGRFrames.from_frame(combFrms[-1], 100)
 
 ### fade
 ls_frm = lastPnt[1].get_frames()[-2]
 lsFrm = Stream(cap, ls_frm, ls_frm).get(ls_frm).rescale(3)
-itplFrms = vs.interpolate_frames(combFrms[-1], lsFrm, num_frames = 25)
+itplFrms = vs.interpolate_frames(combFrms[-1], lsFrm, num_frames = 50)
 
 ### join
 jointFrms = BGRFrames.from_frames([combFrms, staticFrms, itplFrms])
 
 # DecapStream(jointFrms, 0, 100).show()
 
+#### END SCREEN ####
+
+from ATMANpy.types.Overlays import FrameRaster
+myRst = FrameRaster(2, 2)
+
+myFrm = BGRFrame.make_black(960, 540)
+
+textFrm0 = myFrm.put('More Videos', color = const.BGR['bright_grey'], size = 3, where = (325, 280))
+textFrm0 = textFrm0.framed(4, const.BGR['bright_grey'])
+# textFrm0.show()
+
+textFrm1 = myFrm.put('The Automated Tennis Match ANnotator', size = 2, where = (150, 280))
+textFrm1 = textFrm1.framed(4, const.BGR['bright_grey'])
+# textFrm1.show()
+
+textFrm2 = myFrm.put('On the Effectiveness of the Chipped Return', size = 2, where = (100, 280))
+textFrm2 = textFrm2.framed(4, const.BGR['bright_grey'])
+# textFrm2.show()
+
+textFrm3 = myFrm.put('On the Impact of Pressure on Serve Selection', size = 2, where = (80, 280))
+textFrm3 = textFrm3.framed(4, const.BGR['bright_grey'])
+# textFrm3.show()
+
+myRst.add(textFrm0, 0, 0)
+rstFrm0 = myRst.render()
+# rstFrm0.show()
+
+myRst.add(textFrm1, 1, 0)
+rstFrm1 = myRst.render()
+# rstFrm1.show()
+
+myRst.add(textFrm2, 0, 1)
+rstFrm2 = myRst.render()
+# rstFrm2.show()
+
+myRst.add(textFrm3, 1, 1)
+rstFrm3 = myRst.render()
+# rstFrm3.show()
 
 ############ ADD TO ALL FRAMES ##########
 # available frames in order: 
@@ -651,7 +700,7 @@ ramp_down_frames = 1
 full_rstFrms_accel = vis_ut.speed_up_frames_progressively(full_rstFrms, 
                                                           ramp_up_frames = ramp_up_frames,
                                                           ramp_down_frames = ramp_down_frames)
-DecapStream(full_rstFrms_accel, 0, 100).show()
+# DecapStream(full_rstFrms_accel, 0, 100).show()
 
 all_frames.append(full_rstFrms_accel)
 script_lines.append(script_line)
@@ -683,26 +732,55 @@ script_line =   """
 all_frames.append(fadeinFrms)
 script_lines.append(script_line)
 
+script_line =   ""
+all_frames.append(combFrms[:40])
+script_lines.append(script_line)
+
 script_line =   """
                     The ball lands close to where previous returns landed, going down the line to Joao Sousa's backhand.
                 """ # 6 seconds
-jointFrms = BGRFrames.from_frames([combFrms, staticFrms])
+jointFrms = BGRFrames.from_frames([combFrms[40:], staticFrms])
 all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   ""
+all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 script_line =   """
                     This example is a short but indicative look into the capabilities of ATMAN, 
-                    the Automated Tennis Match Annotator. If you would like to learn more about its workings,
-                    consult the longer version of this video; if you would like to see it employed in actual case studies,
-                    take a look at the analysis videos.
-                """ # 16 seconds
-jointFrms = BGRFrames.from_frames([itplFrms, animFrms_after_with_final_dim])
-all_frames.append(jointFrms)
+                    the Automated Tennis Match Annotator. 
+                """ # 8 seconds
+all_frames.append(animFrms_after_with_final_dim)
 script_lines.append(script_line)
 
-### TODO: maybe have a little raster with previews for the full capabilities/analysis videos at the very end here.
+script_line =   """
+                    If you would like to learn more about its workings...
+                """ # 4 seconds
 
-# BGRFrames.from_frames(all_frames)
+rstFrms0 = BGRFrames.from_frame(rstFrm0, 75)
+all_frames.append(rstFrms0)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... consult the longer version of this video.
+                """ # 4 seconds
+
+rstFrms1 = BGRFrames.from_frame(rstFrm1, 100)
+all_frames.append(rstFrms1)
+script_lines.append(script_line)
+
+script_line =   """
+                    If you would like to see it employed in actual case studies,
+                    take a look at the analysis videos.
+                """ # 8 seconds
+
+rstFrms2 = BGRFrames.from_frame(rstFrm2, 100)
+rstFrms3 = BGRFrames.from_frame(rstFrm3, 100)
+jointFrms = BGRFrames.from_frames([rstFrms2, rstFrms3])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
 
 
 vis_ut.show(all_frames)

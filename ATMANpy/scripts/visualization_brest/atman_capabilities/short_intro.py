@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
-SAVE = False
+SAVE = True
 
 ########################################
 ########### SAVE FOLDER ################
@@ -126,8 +126,10 @@ brestCam_full = brestCam_third.resize(3)
 ######### PARAMETERS #########
 ##############################
 
-prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'interpolate_func': vs.interpolate_camera_naive}
-# prmDict = {'background_resolution': 2, 'argument_resolution': 2, 'interpolate_func': vs.interpolate_camera_naive}
+prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
+           'interpolate_func': vs.interpolate_camera_naive}
+prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+           'interpolate_func': vs.interpolate_camera_naive}
 
 ######################################
 ### CHECK DISTRO OF BEFORE RETURNS ###
@@ -174,22 +176,22 @@ mark_color = const.BGR['bright_blue']
 mark_size = 6
 
 animFrms2 = vis_ut.animate_bounce_and_mark_scenes(prevPnt2, start_cam = brestCam_full, stop_cam = brestCam_full, confs = confs, over = True,
-                                                    sub_region = False, argument_resolution = 10,
-                                                    mark_size = mark_size, mark_color = mark_color)
+                                                    sub_region = False,  mark_size = mark_size, mark_color = mark_color,
+                                                    **prmDict)
 # DecapStream(animFrms2, 0, 100).show()
 
 animFrms1 = vis_ut.animate_bounce_and_mark_scenes(prevPnt1, start_cam = brestCam_full, stop_cam = brestCam_full, confs = confs, over = True,
-                                                    sub_region = False, argument_resolution = 10,
-                                                    mark_size = mark_size, mark_color = mark_color)
+                                                    sub_region = False, mark_size = mark_size, mark_color = mark_color,
+                                                    **prmDict)
 # DecapStream(animFrms1, 0, 100).show()
 
 animFrms0 = vis_ut.animate_bounce_and_mark_scenes(lastPnt, start_cam = brestCam_full, stop_cam = brestCam_full, confs = confs, over = True,
-                                                    sub_region = False, argument_resolution = 10,
-                                                    mark_size = mark_size, mark_color = mark_color)
+                                                    sub_region = False, mark_size = mark_size, mark_color = mark_color,
+                                                    **prmDict)
 # DecapStream(animFrms0, 0, 100).show()
 
 ### figure out intermezzi.
-initial_widen_by = 325
+initial_widen_by = 325 + 10 + 10 + 75 + 60
 preFrms = prevPnt2.stream(confs = confs).widen(initial_widen_by).decap().frames[:initial_widen_by].rescale(3)
 
 # frms3 = prevPnt3.get_frames()
@@ -207,7 +209,7 @@ interFrms10 = lastPnt.stream(confs = confs).widen(d10).decap().frames[:d10].resc
 
 # interFrms32_speed = vis_ut.speed_up_frames_progressively(interFrms32, ramp_up_frames = 25)
 interFrms21_speed = vis_ut.speed_up_frames_progressively(interFrms21, ramp_up_frames = 25)
-interFrms10_speed = vis_ut.speed_up_frames_progressively(interFrms10, ramp_up_frames = 150, ramp_down_frames = 100)
+interFrms10_speed = vis_ut.speed_up_frames_progressively(interFrms10, ramp_up_frames = 150, ramp_down_frames = 150)
 
 #TODO: vis_ut.show feels fast
 
@@ -304,10 +306,48 @@ preFrms_fade_in = preFrms[:fade_in_length].dim_progressively(0, 1)
 preFrms_fade = post_dimFrms_fade_out + preFrms_fade_in
 # DecapStream(preFrms_fade, 0, 100).show()
 
-preFrms_rest = preFrms[fade_in_length:]
+
+pre_lines_and_players_frames = 75
+post_lines_and_players_frames = 10
+lines_and_players_frames = pre_lines_and_players_frames + post_lines_and_players_frames
+
+preFrms_rest = preFrms[fade_in_length:-lines_and_players_frames]
+preFrms_last_pre = preFrms[-lines_and_players_frames:-post_lines_and_players_frames]
+preFrms_last_post = preFrms[-post_lines_and_players_frames:]
 
 introFrms = BGRFrames.from_frames([pre_staticFrm, pre_dimFrms_lettered, post_dimFrms_lettered, preFrms_fade, preFrms_rest])
 # DecapStream(introFrms, 0, 100).show()
+
+###############################
+### TEASE LINES AND PLAYERS ###
+###############################
+
+curr_frame = prevPnt2.get_frames()[0] - post_lines_and_players_frames
+
+H = ConstFeature.from_store(vid, sto, featname = 'H').feature
+courtLines = sa.find_courtlines(H).drop('Net Line').rescale(3)
+
+plSF = StreamFeatures.from_store(vid, sto, featnameList = ['botPlayerCnt', 'topPlayerCnt'])
+featDict = plSF[curr_frame]
+
+botCnt, topCnt = featDict['botPlayerCnt'], featDict['topPlayerCnt']
+botCnt, topCnt = botCnt.rescale(3), topCnt.rescale(3)
+
+offFrm = preFrms_last_post[0]
+onFrm_line = offFrm.put(courtLines, color = const.BGR['sign_orange'], thickness = 4)
+
+lineFrms_blink = vs.blinking(offFrm, onFrm_line, blinks_per_second = 4, duration_in_frames = 50)
+# DecapStream(lineFrms_blink, 0, 100).show()
+
+onFrm_players = offFrm.put([botCnt, topCnt], color = const.BGR['sign_orange'], thickness = 4)
+
+playerFrms_blink = vs.blinking(offFrm, onFrm_players, blinks_per_second = 4, duration_in_frames = 50)
+# DecapStream(playerFrms_blink, 0, 100).show()
+
+# preFrms_last = BGRFrames.from_frames([preFrms_last_pre, lineFrms_blink, playerFrms_blink])
+ 
+# ATMAN automatically recognizes the lines, [PAUSE] the players, [PAUSE] and the ball ## 7 seconds
+# DecapStream(preFrms_last, 0, 100).show()
 
 ###############################
 ##### FIRST RALLY TO SHOW #####
@@ -365,7 +405,11 @@ fullFrm3 = fullFrms_hi1[frm3]
 fullFrm2 = fullFrms_hi2[frm2]
 fullFrm1 = fullFrms_hi3[frm1]
 
-animFrms_pre = animFrms2[:frm4]
+### anim frames split to have little progressive dim
+animFrms_pre_normal = animFrms2[:frm4 - 25]
+animFrms_pre_fade = animFrms2[frm4 - 25:frm4].dim_progressively(1, dim_factor)
+animFrms_pre = BGRFrames.from_frames([animFrms_pre_normal, animFrms_pre_fade])
+
 stopFrms4 = animFrms2[frm4:frm3]
 stopFrms3 = animFrms2[frm3:frm2]
 stopFrms2 = animFrms2[frm2:frm1]
@@ -379,7 +423,7 @@ combFrms1 = overlay(stopFrms1.dim(dim_factor), fullFrm1, top_left_point = Point2
 combFrms4_freeze = BGRFrames.from_frame(combFrms4[0], 50)
 combFrms3_freeze = BGRFrames.from_frame(combFrms3[0], 25)
 combFrms2_freeze = BGRFrames.from_frame(combFrms2[0], 25)
-combFrms1_freeze = BGRFrames.from_frame(combFrms1[0], 50)
+combFrms1_freeze = BGRFrames.from_frame(combFrms1[0], 75)
 
 combFrms4_joint = BGRFrames.from_frames([combFrms4_freeze, combFrms4])
 combFrms3_joint = BGRFrames.from_frames([combFrms3_freeze, combFrms3])
@@ -389,7 +433,7 @@ combFrms1_joint = BGRFrames.from_frames([combFrms1_freeze, combFrms1])
 # vis_ut.show([combFrms4_joint, combFrms3_joint, combFrms2_joint, combFrms1_joint])
 
 ### disappear the box, and brighten the frames during the intermezzo
-fade_out_frames = 50
+fade_out_frames = 60
 cam_move_frames = 100
 interFrms21_speed = vis_ut.speed_up_frames_progressively(interFrms21, ramp_up_frames = fade_out_frames, ramp_down_frames = cam_move_frames)
 interFrms21_speed_begin, interFrms21_speed_rest = interFrms21_speed[:fade_out_frames], interFrms21_speed[fade_out_frames:]
@@ -430,11 +474,19 @@ downCam = Camera.from_to(Point3D((c_x, c_y, c_z)), Point3D((c_x, c_y, 0)))
 
 courtScn = Scene.make_court(net_mesh_density = 0.75)
 
-alpha_factors = np.linspace(0, 1, num = interFrms21_speed_last.length())
+alpha_factors = np.linspace(0.055, 1, num = interFrms21_speed_last.length())
+
+# blue_color = interFrms21_speed_last[0].put(Point2D((300, 700)), size = 3).show()
+blue_color = tuple(interFrms21_speed_last[0].array[700, 300])
+
+from ATMANpy.funcs.util_funcs import interpolate_tuples
 
 court_scenes_fadein = []
 for alpha in alpha_factors:
+    itpl_color = interpolate_tuples(blue_color, back_color, alpha)
+
     subReg = CourtLines.make().get_court_region().scale(1.25)
+    # subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(back_color).realpha(alpha)
     subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(back_color).realpha(alpha)
     curr_courtScn = courtScn.put(subReg3D)
     court_scenes_fadein.append(curr_courtScn)
@@ -475,7 +527,7 @@ interFrms10_speed_pre, interFrms_10_speed_post = interFrms10_speed[:-intermezzo_
 
 # DecapStream(interFrms10_speed_pre, 0, 100).show()
 
-animFrms_inter, _ = vs.animate_sequence([courtScn for _ in range(interFrms10_speed_pre.length())], start_cam = downCam, stop_cam = downCam,
+animFrms_inter, _ = vs.animate_sequence([curr_courtScn for _ in range(interFrms10_speed_pre.length())], start_cam = downCam, stop_cam = downCam,
                                         previous_foreground_scene = markScn, cumulative_foreground_transparence = 0.99,
                                         animate_over = interFrms10_speed_pre, 
                                         **prmDict)
@@ -491,13 +543,15 @@ trans_frames = 50
 
 interFrms10_speed_pre_last = BGRFrames.from_frame(interFrms10_speed_pre[-1], trans_frames).dim_progressively(1, 0)
 
-animFrms_trans, _ = vs.animate_sequence([courtScn for _ in range(trans_frames)], start_cam = downCam, stop_cam = thirdCam,
+animFrms_trans, _ = vs.animate_sequence([curr_courtScn for _ in range(trans_frames)], start_cam = downCam, stop_cam = thirdCam,
                                         animate_over = interFrms10_speed_pre_last, 
                                         **prmDict)
 # DecapStream(animFrms_trans, 0, 100).show()
 
 #### available frames in order
 # introFrms -> text contraction, fade in of play
+# preFrms_last_pre, lineFrms_blink, playerFrms_blink -> lines, players flashing
+# preFrms_last_post -> 10 frames right before serve impact
 # animFrms_pre -> initial bit of play
 # combFrms4_joint, combFrms3_joint, combFrms2_joint, combFrms1_joint --> shot type, speed, spin, launch angle.
 # interFrms21_speed_fade -> fading out shot type markers
@@ -526,13 +580,43 @@ all_frames.append(introFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    ATMAN recognizes the lines, players and the ball
-                    and employs a suite of articifial intelligence models
-                    to analyze player swing motion and the sound of the rally
-                    to generate ball trajectories even on low quality video. 
-                """ ### 12 sec
+                    ATMAN automatically recognizes ...
+                """
 
-all_frames.append(animFrms_pre)
+all_frames.append(preFrms_last_pre)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... the lines ...
+                """
+
+all_frames.append(lineFrms_blink)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... the players ...
+                """
+
+all_frames.append(playerFrms_blink)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... and the ball.
+                """
+
+staticFrms = BGRFrames.from_frame(playerFrms_blink[-1], 50)
+
+all_frames.append(staticFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    Articifial intelligence models analyze swing motion and the sound of the rally.
+                    This data is checked against flight simulations to generate ball trajectories even on low quality video. 
+                """ ### 11 sec
+
+jointFrms = BGRFrames.from_frames([preFrms_last_post, animFrms_pre])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line  =  """
@@ -563,14 +647,19 @@ script_line  =  """
 all_frames.append(combFrms1_joint)
 script_lines.append(script_line)
 
+script_line =   "" ### have a litte pause
+
+all_frames.append(interFrms21_speed_fade)
+script_lines.append(script_line)
+
 script_line =   """
                     ATMAN also includes a visual engine, which allows
                     any point to be displayed in arbitrary virtual space.
                 """ ## 6 secs
 
-interFrms21_speed_middle_accel = vis_ut.speed_up_frames_progressively(interFrms21_speed_middle, ramp_up_frames = 15, ramp_down_frames = 15)
+interFrms21_speed_middle_accel = vis_ut.speed_up_frames_progressively(interFrms21_speed_middle, ramp_up_frames = 40, ramp_down_frames = 40)
 
-jointFrms = BGRFrames.from_frames([interFrms21_speed_fade, interFrms21_speed_middle_accel, moveFrms])
+jointFrms = BGRFrames.from_frames([interFrms21_speed_middle_accel, moveFrms])
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
@@ -579,7 +668,7 @@ script_line =   """
                     The visual engine can then be seamlessly employed to display results.
                 """ # 8 seconds
 
-animFrms_inter_fs, animFrms_inter_ls = animFrms_inter[:125], animFrms_inter[125:] ### split, so we can fill this script line
+animFrms_inter_fs, animFrms_inter_ls = animFrms_inter[:160], animFrms_inter[160:] ### split, so we can fill this script line
 jointFrms = BGRFrames.from_frames([animFrms_down, animFrms_inter_fs])
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -608,6 +697,7 @@ if SAVE:
 
     # b) Save segments
     for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        print(idx)
         subFrms, script_line = frames_and_script
         subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
         
