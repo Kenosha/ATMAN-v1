@@ -455,6 +455,10 @@ class TableSkeleton:
 
         self.tabRegs = tabRegs ### these are lists of lists of regions! cannot be turned to Regions3D
 
+        ### Initialize None text colors and background colors
+        self.text_colors = [[None for cellReg in colRegs] for colRegs in tabRegs]
+        self.back_colors = [[None for cellReg in colRegs] for colRegs in tabRegs]
+
         ### Table Lines
         self.vertLns = []
         self.horiLns = []
@@ -479,6 +483,10 @@ class TableSkeleton:
     def __getitem__(self, item):
         row, col = item
         return self.tabRegs[row][col]
+
+    def __setitem__(self, item, value):
+        row, col = item
+        self.tabRegs[row][col] = value
 
     def get_lines(self):
         return self.vertLns.join(self.horiLns)
@@ -592,6 +600,12 @@ class Table:
     def __getitem__(self, item):
         return self.tabSket.__getitem__(item)
 
+    def set_back_color(self, color, row, col):
+        self.tabSket.back_colors[row][col] = color
+
+    def set_text_color(self, color, row, col):
+        self.tabSket.text_colors[row][col] = color
+
     def preview(self):
         allLns = self.get_lines()
         tabScn = Scene(allLns)
@@ -614,6 +628,17 @@ class Table:
                                   skip_after_how_many_symbols = self.skip_after_how_many_symbols,
                                   horizontal_offset = self.index_offset,
                                   automatic_vertical_offset_text_line_height = self.index_auto_vert_offset)
+            
+            # potentially recolor text
+            text_cell_color = self.tabSket.text_colors[i + 1][0]
+            if text_cell_color is not None:
+                textPt = textPt.recolor(text_cell_color)
+
+            # potentially recolor cell background
+            back_cell_color = self.tabSket.back_colors[i + 1][0]
+            if back_cell_color is not None:
+                tabScn = tabScn.put(myReg.recolor(back_cell_color))
+
             annPnts.append(textPt)
 
         ### render columns:
@@ -625,6 +650,17 @@ class Table:
                                   horizontal_offset = self.header_offset, 
                                   automatic_vertical_offset_text_line_height = self.header_auto_vert_offset
                                   )
+            
+            # potentially recolor text
+            text_cell_color = self.tabSket.text_colors[0][i + 1]
+            if text_cell_color is not None:
+                textPt = textPt.recolor(text_cell_color)
+
+            # potentially recolor cell background
+            back_cell_color = self.tabSket.back_colors[0][i + 1]
+            if back_cell_color is not None:
+                tabScn = tabScn.put(myReg.recolor(back_cell_color))
+
             annPnts.append(textPt)
 
         ### render data:
@@ -640,8 +676,19 @@ class Table:
                                       size = self.data_text_size, thickness = self.data_text_thickness, color = self.data_text_color,
                                       skip_after_how_many_symbols = self.skip_after_how_many_symbols,
                                       horizontal_offset = self.data_offset, 
-                                      automatic_vertical_offset_text_line_height = self.data_auto_vert_offset
+                                      automatic_vertical_offset_text_line_height = self.data_auto_vert_offset,
                                       )
+                
+                # potentially recolor text
+                text_cell_color = self.tabSket.text_colors[i + 1][j + 1]
+                if text_cell_color is not None:
+                    textPt = textPt.recolor(text_cell_color)
+
+                # potentially recolor cell background
+                back_cell_color = self.tabSket.back_colors[i + 1][j + 1]
+                if back_cell_color is not None:
+                    tabScn = tabScn.put(myReg.recolor(back_cell_color))
+                    
                 annPnts.append(textPt)
 
         return tabScn, annPnts
