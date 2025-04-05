@@ -502,6 +502,29 @@ class Lines:
         return self.__class__([ln.rescale(scale_factor) for ln in self.lineList], name = self.name)
 
 @dataclass(frozen = True)
+class Arrow(Lines):
+    
+    @staticmethod
+    def make(startPt, endPt, hat_angle = np.pi / 4, hat_length = 10):
+        x, y = (endPt - startPt).coords
+        arrow_angle = np.arctan2(y, x)
+
+        comb_angle_1 = np.pi + arrow_angle - hat_angle
+        comb_angle_2 = np.pi + arrow_angle + hat_angle
+
+        x1, y1 = np.cos(comb_angle_1), np.sin(comb_angle_1)
+        x2, y2 = np.cos(comb_angle_2), np.sin(comb_angle_2)
+
+        pt1 = Point2D((x1, y1)) * hat_length + endPt
+        pt2 = Point2D((x2, y2)) * hat_length + endPt
+
+        arrLn0 = Line(startPt, endPt)
+        arrLn1 = Line(endPt, pt1)
+        arrLn2 = Line(endPt, pt2)
+
+        return Lines([arrLn0, arrLn1, arrLn2])
+
+@dataclass(frozen = True)
 class NetLines(Lines):
     lineList: List[Line]
     name: str = 'NetLines'
@@ -1123,8 +1146,17 @@ if __name__ == '__main__':
     myRst[0, 2]
     
     
-    
-        
+    ### Test Arrow
+    from ATMANpy.types.Frames import BGRFrame
+    nullFrm = BGRFrame.make_black()
+
+    coords = [(100, 100, 200, 200), (100, 100, 200, 50), (100, 100, 50, 50), (100, 100, 50, 200)]
+
+    for x1, y1, x2, y2 in coords:
+        p1 = Point2D(coords=(x1, y1), value=None)
+        p2 = Point2D(coords=(x2, y2), value=None)
+        myArr = Arrow.make(p1, p2, hat_length = 50)
+        nullFrm.put(myArr).show()
     
     
     
