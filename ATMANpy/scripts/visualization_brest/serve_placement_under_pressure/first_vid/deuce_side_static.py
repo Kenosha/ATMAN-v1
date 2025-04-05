@@ -46,13 +46,19 @@ name = ppl._name
 graphPath = ut.get_folder_struct('graphs')['serve_under_pressure']
 sub_graphPath = os.path.join(graphPath, 'Deuce')
 
+
+### SAVE FOLDER 
+DESCRIPTOR = 'deuce_side_static'
+SAVE_FOLDER = 'serve_pressure'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
 ### PARAMETERS #####
-RESOLUTION_MODIFIER = 2 # 2
-RESOLUTION_BACKGROUND = 0.5 * RESOLUTION_MODIFIER
+RESOLUTION_MODIFIER = 3 # 2
+RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
 RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
 RESOLUTION_KDE = 2 * RESOLUTION_MODIFIER
 MIX_COLORS_KDE = True
-BANDWIDTH_KDE = 30
+BANDWIDTH_KDE = 35
 SCENE_FADE = 0.9
 CONTOUR_PROP = 0.5
 EPSILON = 0.002
@@ -131,10 +137,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -151,7 +160,7 @@ diagPt = Point3D((x_ax.leftPt.x, y_ax.rightPt.y, 0))
 jntStr = vis_ut.make_stat_string(lowShots, hiShots)
 statPt = diagPt.annotate(jntStr).back(110).left(40)
 
-jntStr_comb = vis_ut.make_stat_string(lowShots, midShots.join(hiShots), lo_desc = 'Low Pressure', hi_desc = 'Mid + High Pressure')
+jntStr_comb = vis_ut.make_stat_string(lowShots, midShots.join(hiShots), lo_desc = 'Low Pressure', hi_desc = 'Medium + High Pressure')
 statPt_comb = diagPt.annotate(jntStr_comb).back(110).left(40)
 
 ##### Player name and handedness ####
@@ -207,10 +216,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -274,10 +286,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -341,10 +356,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -407,11 +425,14 @@ lowShots = serveShots_sample.filter('get_total_match_score_pressure', is_below =
 midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.04, is_below = 0.08)
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
-low_kde_scene = vs.kde_hillmap(lowShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+low_kde_scene = vs.kde_hillmap(lowShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line,
+							   bandwidth = BANDWIDTH_KDE, 
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = deucelineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -459,7 +480,6 @@ static_frames[player_name] = [plainFrm, fullFrm]
 DO_SUPPLEMENTARY = False
 
 if DO_SUPPLEMENTARY:
-
 	lefties = ['Kenny De Schepper', 'Liam Broady', 'Hugo Gaston']
 
 	for player_name in lefties:
@@ -481,6 +501,35 @@ if DO_SUPPLEMENTARY:
 		print('median')
 		print(np.median(firstShots.get_initial_speed()))
 
+	player_name = 'Kenny De Schepper'
+	firstShots = allPnts.get_serves().filter(vis_ut.is_player, player_name = player_name)
+	myShot = firstShots[0]
+
+	vis_ut.is_out_wide(myShot)
+	vis_ut.is_down_middle(myShot)
+	
+	idx = myShot.get_match_index()
+	cap = confs[int(idx)]['cap']
+	myShot.stream(cap).show()
+
+	wide_speeds = deucePnts.get_serves().filter(vis_ut.is_player, player_name = player_name).filter(vis_ut.is_out_wide).get_initial_speed()
+	middle_speed = deucePnts.get_serves().filter(vis_ut.is_player, player_name = player_name).filter(vis_ut.is_down_middle).get_initial_speed()
+
+	np.median(wide_speeds)
+	np.median(middle_speed)
+
+	wide_speeds = deucePnts.get_serves().filter(vis_ut.is_player, player_name = 'Hugo Gaston').filter(vis_ut.is_out_wide).get_initial_speed()
+	middle_speed = deucePnts.get_serves().filter(vis_ut.is_player, player_name = 'Hugo Gaston').filter(vis_ut.is_down_middle).get_initial_speed()
+
+	np.median(wide_speeds)
+	np.median(middle_speed)
+	
+	wide_speeds = deucePnts.get_serves().filter(vis_ut.is_player, player_name = 'Liam Broady').filter(vis_ut.is_out_wide).get_initial_speed()
+	middle_speed = deucePnts.get_serves().filter(vis_ut.is_player, player_name = 'Liam Broady').filter(vis_ut.is_down_middle).get_initial_speed()
+
+	np.median(wide_speeds)
+	np.median(middle_speed)
+
 	hiShots = deucePnts.get_serves().filter(vis_ut.is_player, player_name = 'Federico Gaio').filter('get_total_match_score_pressure', is_above = 0.08)
 	for shot in hiShots[:-1]:
 		idx = shot.get_match_index()
@@ -490,15 +539,136 @@ if DO_SUPPLEMENTARY:
 		myStm = shot.stream(cap)
 		myStm.show(ms_between_frames = 100)
 
+	### CHECK RETURN POSITION FOR LIAM BROADY VS HUGO GASTON
+	player_name = 'Liam Broady'
+	firstShots = deucePnts.get_serves().filter(vis_ut.is_player, player_name = player_name)
+	hi_and_midShots = firstShots.filter('get_total_match_score_pressure', is_above = 0.04)
+	bx, by = np.median(hi_and_midShots.get_player_rec_position(), axis = 0)
+	
+	player_name = 'Hugo Gaston'
+	firstShots = deucePnts.get_serves().filter(vis_ut.is_player, player_name = player_name)
+	hi_and_midShots = firstShots.filter('get_total_match_score_pressure', is_above = 0.04)
+	gx, gy = np.median(hi_and_midShots.get_player_rec_position(), axis = 0)
+
+	brady = Player.make((bx, by), color = const.BGR['light_brown'])
+	gaston = Player.make((gx, gy), color = const.BGR['bluey_green'])
+
+	plScn = Scene.make_court().put(brady).put(gaston)
+
+	from ATMANpy.auxil.court import back_view_asymmetric_cam
+	courtCam = back_view_asymmetric_cam(which = 'Deuce', side = 'Top')
+	View.make(courtCam, plScn).snap().show()
+
 #############################################
 ######## FROM STATIC FRAME TO FRAMES ########
 #############################################
 
+static_frames.keys()
+
 all_frames = []
 script_lines = []
+
+## HOLGER RUNE ##
+frm1, frm2, frm3 = static_frames['Holger Rune']
+
+script_line = 'Consider Holger Rune. In conditions of low pressure, he appears to serve predominantly down the middle; at higher pressures, he prefers to serve out wide.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'Unfortunately, our statistical tests can not establish a significant difference between high pressure and low pressure situations. This is predominantly due to the low sample size: in the two matches analysed by ATMAN for Holger Rune, we only observe 6 high pressure situations.'
+myFrms = BGRFrames.from_frame(frm2, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'However, considering medium and high pressure situations jointly against low pressure situations, the tests do reveal a statistically significant difference.'
+myFrms = BGRFrames.from_frame(frm3, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+## Hugo Gaston ##
+frm1, frm2 = static_frames['Hugo Gaston']
+frm2.show()
+
+script_line = 'Consider now Hugo Gaston. As serve pressure increases, he employs a serve down the middle with increasing preference.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'On the deuce side, a left-handed player like Hugo Gaston can deliver a nasty slice serve down the middle that curves away from the receiving right-handed player, deep into his backhand.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+## Liam Broady ##
+frm1, frm2 = static_frames['Liam Broady']
+frm2.show()
+
+script_line = 'Similarly, Liam Broady, another left-handed player, relies on the effective slice serve down the middle with increasing regularity as points become more crucial.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'It might be conjectured that both of these lefties rely on the more effective serve to the backhand in high pressure situations. while mixing in serves out wide in low pressure situations, to keep the receiver guessing on EVERY serve.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'Essentially, by mixing in the serve out wide in low pressure situations, both players forego some efficacy when it is cheap to do so. In order to protect the stronger serve down the middle in high pressure situations.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'Note the usual caveats on sample size, however. For both Hugo Gaston and Liam Broady, only one match video each has been fed to ATMAN, so available first serves on the deuce side are scarce.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+## Kenny De Schepper ##
+frm1, frm2 = static_frames['Kenny De Schepper']
+frm2.show()
+
+script_line = 'Note that not all left-handed serves predominantly employ the serve down the middle. Kenny De Schepper mixes in a flat serve out wide frequently, regardless of pressure.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'Indeed, Kenny De Scheppers serves out wide on the deuce side typically measure 192 km/h, whereas they come in slower down the middle, at 181 km/h. indicating a fast flat serve out wide and a slower, sliced serve down the middle.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+## Federico Gaio ##
+frm1, frm2 = static_frames['Federico Gaio']
+frm2.show()
+
+script_line = 'Do note also that targeting a right-handed receivers backhand on a deuce serve is not limited to left-handed players.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'For example, right-handed Federico Gaio employs a flat serve down the middle the vast majority of times.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'Having looked at a few interesting cases on the deuce side, let us move on to ad side first serves.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
 
 jntFrms = BGRFrames.from_frames(all_frames)
 DecapStream(jntFrms, 0, 100).show(ms_between_frames = 25)
 
-    
-    
+### Saving the separate MultiFrame objects and the Joint Script
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+with open(os.path.join(fullPath, 'script.txt'), mode = 'w') as f:
+    f.writelines([l + '\n' for l in script_lines])

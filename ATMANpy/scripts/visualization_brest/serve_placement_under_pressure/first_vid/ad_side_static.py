@@ -46,13 +46,18 @@ name = ppl._name
 graphPath = ut.get_folder_struct('graphs')['serve_under_pressure']
 sub_graphPath = os.path.join(graphPath, 'Deuce')
 
+### SAVE FOLDER 
+DESCRIPTOR = 'ad_side_static'
+SAVE_FOLDER = 'serve_pressure'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
 ### PARAMETERS #####
-RESOLUTION_MODIFIER = 2 # 2
-RESOLUTION_BACKGROUND = 0.5 * RESOLUTION_MODIFIER
+RESOLUTION_MODIFIER = 3 # 2
+RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
 RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
 RESOLUTION_KDE = 2 * RESOLUTION_MODIFIER
 MIX_COLORS_KDE = True
-BANDWIDTH_KDE = 30
+BANDWIDTH_KDE = 35
 SCENE_FADE = 0.9
 CONTOUR_PROP = 0.5
 EPSILON = 0.002
@@ -131,10 +136,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -201,10 +209,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -271,10 +282,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -341,10 +355,13 @@ midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above =
 hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = 0.08)
 
 low_kde_scene = vs.kde_hillmap(lowShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['grass_green'])
 mid_kde_scene = vs.kde_hillmap(midShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+							   bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['soft_yellow'])
 high_kde_scene = vs.kde_hillmap(hiShots, showReg = adlineReg, position_func = vis_ut.find_intersection_with_service_line, 
+								bandwidth = BANDWIDTH_KDE,
                                 resolution = RESOLUTION_KDE, normalize_density = True, one_color = const.BGR['intense_red'])
 
 mid_kde_scene.rastArrs[0] += [0, 60, 0]
@@ -393,11 +410,82 @@ static_frames[player_name] = [plainFrm, fullFrm]
 ######## FROM STATIC FRAME TO FRAMES ########
 #############################################
 
+static_frames.keys()
+
 all_frames = []
 script_lines = []
 
+## HUGO GASTON ##
+frm1, frm2 = static_frames['Hugo Gaston']
+frm1.show()
+
+script_line = 'Given the previous caveats on sample size, it seems that left-handed Hugo Gaston indeed employs the serve out wide almost exclusively in points that matter. In low pressure situations, he mixes in a serve down the middle, possibly to establish a measure of unpredictability.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+## LIAM BROADY ##
+frm1, frm2 = static_frames['Liam Broady']
+frm1.show()
+
+script_line = 'For Liam Broady, we observe a similar picture, though the dependance on pressure is less pronounced.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+## JOAO SOUSA ##
+frm1, frm2 = static_frames['Joao Sousa']
+frm1.show()
+
+script_line = 'Do note that this behaviour is not limited to left-handed servers, however. A right-handed server can still deliver a flat serve out wide, though without the benefit of slice pulling the ball away from the receiver.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'For example, Joao Sousa relies on the flat serve out wide on the ad side, especially in situations of great importance. If the point matters less, he delivers a serve down the middle about as often as out wide.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'Again, this might be to keep the receiver guessing, especially on later ad-side returns, which might bear more importance.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'Since for Joao Sousa we have four matches visually recognized by ATMAN (though they are all played against right-handers). it is easier to establish a statistically significant difference between serve placement in High Pressure and Low Pressure situations.'
+myFrms = BGRFrames.from_frame(frm2, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+### CARLOS TABERNER ###
+frm1, frm2 = static_frames['Carlos Taberner']
+frm2.show()
+
+script_line = 'On the other hand, Carlos Taberner exclusively serves down the middle in medium or high pressure situations. whereas he mixes his serves in low pressure situations.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
+script_line = 'However, Carlos Taberners only match in our sample came against left-handed Kenny De Schepper. so it might be that he is simply targetting the backhand on serve. and results might not generalize to right-handed receivers.'
+myFrms = BGRFrames.from_frame(frm1, 100)
+all_frames.append(myFrms)
+script_lines.append(script_line)
+
 jntFrms = BGRFrames.from_frames(all_frames)
 DecapStream(jntFrms, 0, 100).show(ms_between_frames = 25)
+
+### Saving the separate MultiFrame objects and the Joint Script
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
+# b) Save segments
+for idx, subFrms in enumerate(all_frames):
+    subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+
+# c) Save script
+with open(os.path.join(fullPath, 'script.txt'), mode = 'w') as f:
+    f.writelines([l + '\n' for l in script_lines])
 
     
     

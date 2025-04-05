@@ -18,8 +18,8 @@ from matplotlib import pyplot as plt
 
 SAMPLE_RATE = 44100
 PROJECT_NAME = 'serve_pressure'
-VIDEOS = ['intro_20240729_002957', 'deuce_side_static_20240728_213428', 
-          'transition_deuce_to_ad_20240728_224945', 'ad_side_static_20240728_214055']
+VIDEOS = ['intro_20240729_025502', 'deuce_side_static_20240730_004031', 
+          'transition_deuce_to_ad_20240730_012459', 'ad_side_static_20240730_023305']
 
 def countdown():
     ### add in a countdown, so we open the opencv window
@@ -77,8 +77,7 @@ def time_needed(script_line, words_per_minute = 100, pause_after_period = 1):
     speak_time = len(words) / words_per_minute * 60
     return speak_time + pause_time
 
-
-IDX = 0
+IDX = 3
 VIDEO = VIDEOS[IDX]
 
 ### Paths
@@ -166,78 +165,4 @@ for idx, waveform in recordings.items():
     plt.close()
 
     sf.write(os.path.join(take_path, f'seg_{idx}.mp3'), mono_waveform, samplerate = SAMPLE_RATE)
-
-
-crops = [(0.5, 5),
-         (0.5, 3.5),
-         None,
-         (0.1, 5),
-         (0, 18),
-         None,
-         (0, 9),
-         (0, 6),
-         (0, 6),
-         None,
-         (0.5, 7.5),
-         (0.5, 4),
-         (0, 12)]
-
-len(crops)
-len(recordings)
-
-cropped_frames = []
-cropped_waveforms = []
-for crop, waveform, dStm in zip(crops, recordings, ordered_dStms):
-    myFrms = dStm.frames
-    if crop is None:
-        cropped_frames.append(myFrms)
-        cropped_waveforms.append(waveform)
-    else:
-        fs_sec, ls_sec = crop
-        fs_frm, ls_frm = int(fs_sec * 25), int(ls_sec * 25) + 1
-        fs_smp, ls_smp = int(fs_sec * SAMPLE_RATE), int(ls_sec * SAMPLE_RATE) + 1
-        cropped_frames.append(myFrms[fs_frm:ls_frm])
-        cropped_waveforms.append(waveform[fs_smp:ls_smp])
-
-joint_cropped_frames = BGRFrames.from_frames(cropped_frames)
-joint_cropped_waveforms = np.concatenate(cropped_waveforms, axis = 0)
-
-cropped_video_path = os.path.join(result_path, 'cropped_vid.avi')
-cropped_audio_path = os.path.join(result_path, 'cropped_recording.mp3')
-cropped_joint_path = os.path.join(result_path, 'cropped_joint.mp4')
-joint_cropped_frames.save(result_path, 'cropped_vid')
-sf.write(os.path.join(result_path, 'cropped_recording.mp3'), joint_cropped_waveforms, samplerate = SAMPLE_RATE)
-subprocess.run(f'ffmpeg -y -i "{cropped_video_path}" -i "{cropped_audio_path}" -c copy "{cropped_joint_path}"')
-
-#### PROBLEM WITH RECORDING WITH STREAMS
-# -> hard to synchronise using the show method of any stream, since there is overhead in putting text and showing each frame
-# -> idea: record, then show a still frame of what is happening, with text. 
-        # then, we can fit the duration of the animation to the length of the narration
-        # by looking at the envelope of the waveform and establishing where speech is. This allows us to cut out dead space.
-partial = False
-if partial:
-    countdown()
-    recordings = []
-    for subStm, script_line in zip(ordered_dStms, script_lines_split):
-        txtCF = ConstFeature('textFlag', script_line)
-        
-        seconds = subStm.length() / 25
-        sub_recording = sd.rec(int(seconds * SAMPLE_RATE), samplerate = SAMPLE_RATE, channels = 2)
-
-        subStm.attach(txtCF).show(text_region = script_region, ms_between_frames = 40)
-
-        recordings.append(sub_recording)
-
-    joint_recording = np.concatenate(recordings, axis = 0)
-else:
-    countdown()
-    seconds = fullDtm.length() / 25
-    joint_recording = sd.rec(int(seconds * SAMPLE_RATE), samplerate = SAMPLE_RATE, channels = 2)
-    fullDtm.attach(textSF).show(text_region = script_region, ms_between_frames = 40)
-
-### write audio file
-sf.write(audio_path, joint_recording, samplerate = SAMPLE_RATE)
-
-### write combined video and audio file
-subprocess.run(f'ffmpeg -y -i "{video_path}" -i "{audio_path}" -c copy "{joint_path}"')
 
