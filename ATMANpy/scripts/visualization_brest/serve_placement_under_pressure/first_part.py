@@ -145,7 +145,7 @@ textFrm_hi_1 = textFrm_hi_0.put(myArr0, color = const.BGR['intense_red'], thickn
 textFrm_hi_2 = textFrm_hi_1.put('Server is well advised to employ\na serve that maximizes\nwin probability.', color = const.BGR['bright_grey'], 
                             size = 2, thickness = 1,
                             where = (300, 350))
-textFrm_hi_2.show()
+# textFrm_hi_2.show()
 
 ### lo leverage text frame
 arrPt10 = Point2D((650, 235))
@@ -160,7 +160,7 @@ textFrm_lo_1 = textFrm_lo_0.put(myArr1, color = const.BGR['leafy_green'], thickn
 textFrm_lo_2 = textFrm_lo_1.put('Server might mix in a serve that is not optimal\nto retain unpredictability.', color = const.BGR['bright_grey'], 
                             size = 2, thickness = 1,
                             where = (100, 350))
-textFrm_lo_2.show()
+# textFrm_lo_2.show()
 
 ##########
 myRst = FramesRaster(2, 2, borders = None)
@@ -193,5 +193,218 @@ rstFrms5 = myRst.render()
 
 rst_frames = [rstFrms0, rstFrms1, rstFrms2, rstFrms3, rstFrms4, rstFrms5]
 
-vis_ut.show(rst_frames)
+# vis_ut.show(rst_frames)
+
+### crop the score and fade out screen
+from ATMANpy.types.Lines import Region, Line
+x1, x2 = 20, 300
+y1, y2 = 460, 525
+p1, p2 = Point2D((x1, y1)), Point2D((x2, y2))
+cropReg = Region.from_points(p1, p2)
+
+lsFrm = rstFrms5[-1]
+# lsFrm.put(cropReg).show()
+cropFrm = lsFrm.crop(cropReg)
+
+from ATMANpy.types.Overlays import scoreboard, overlay, Table
+lsFrms_fade = BGRFrames.from_frame(lsFrm, 50).dim_progressively()
+lsFrms_fade = overlay(lsFrms_fade, cropFrm, top_left_point = p1)
+# DecapStream(lsFrms_fade, 0, 100).show()
+
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 5
+point_score2 = 6
+game_string1 = '376'
+game_string2 = '666'
+
+scoreFrm = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 2,
+                      frame_thickness = 2, frame_color = const.BGR['bright_grey'])
+# scoreFrm.show()
+
+fade_frms = 50
+fadeFrms = vs.interpolate_frames(cropFrm, scoreFrm, fade_frms)
+
+start_point = p1
+end_point = Point2D((200, 400))
+
+lmbds = np.linspace(0, 1, fade_frms)
+
+blackFrm = BGRFrame.make_black()
+moving_frames = []
+for idx in range(fade_frms):
+    fadeFrm = fadeFrms[idx]
+    lmbd = lmbds[idx]
+
+    itplPt = start_point * (1 - lmbd) + end_point * lmbd
+    itplPt = itplPt.round_point()
+
+    move_fadeFrm = overlay(blackFrm, fadeFrm, top_left_point = itplPt)
+    moving_frames.append(move_fadeFrm)
+
+moveFrms = BGRFrames.from_single_frames(moving_frames)
+# DecapStream(moveFrms, 0, 100).show()
+
+###### MARKOV DIAGRAM ######
+curr_scoreFrm = moveFrms[-1]
+
+### 1st Order ###
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 5
+point_score2 = 7
+game_string1 = '376'
+game_string2 = '667'
+
+scoreFrm_win = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 2,
+                          frame_thickness = 2, frame_color = const.BGR['leafy_green'])
+# scoreFrm_win.show()
+
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 6
+point_score2 = 6
+game_string1 = '376'
+game_string2 = '666'
+
+scoreFrm_lose = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 2,
+                           frame_thickness = 2, frame_color = const.BGR['bright_grey'])
+# scoreFrm_lose.show()
+
+dist_x = 400
+dist_y = 100
+
+tlPt_init = end_point
+tlPt_win = tlPt_init.right(dist_x).up(dist_y)
+tlPt_lose = tlPt_init.right(dist_x).down(dist_y)
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win, top_left_point = tlPt_win)
+# curr_scoreFrm.show()
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_lose, top_left_point = tlPt_lose)
+# curr_scoreFrm.show()
+
+### 2nd Order ###
+tlPt_losewin = tlPt_lose.right(dist_x).up(dist_y)
+tlPt_loselose = tlPt_lose.right(dist_x).down(dist_y)
+
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 6
+point_score2 = 7
+game_string1 = '376'
+game_string2 = '666'
+
+scoreFrm_losewin = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 1,
+                          frame_thickness = 2, frame_color = const.BGR['bright_grey'])
+# scoreFrm_losewin.show()
+
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 7
+point_score2 = 6
+game_string1 = '376'
+game_string2 = '666'
+
+scoreFrm_loselose = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 1,
+                           frame_thickness = 2, frame_color = const.BGR['bright_grey'])
+# scoreFrm_loselose.show()
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_losewin, top_left_point = tlPt_losewin)
+# curr_scoreFrm.show()
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_loselose, top_left_point = tlPt_loselose)
+# curr_scoreFrm.show()
+
+### 3rd Order ###
+tlPt_losewinwin = tlPt_losewin.right(dist_x).up(dist_y)
+tlPt_losewinlose = tlPt_losewin.right(dist_x).down(dist_y)
+tlPt_loseloselose = tlPt_loselose.right(dist_x).down(dist_y)
+
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 6
+point_score2 = 8
+game_string1 = '376'
+game_string2 = '667'
+
+scoreFrm_losewinwin = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 1,
+                          frame_thickness = 2, frame_color = const.BGR['leafy_green'])
+# scoreFrm_losewin.show()
+
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 7
+point_score2 = 7
+game_string1 = '376'
+game_string2 = '666'
+
+scoreFrm_losewinlose = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 1,
+                           frame_thickness = 2, frame_color = const.BGR['bright_grey'])
+# scoreFrm_loselose.show()
+
+name1 = 'F.GAIO'
+name2 = 'J.SOUSA'
+point_score1 = 8
+point_score2 = 6
+game_string1 = '377'
+game_string2 = '666'
+
+scoreFrm_loseloselose = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 1,
+                           frame_thickness = 2, frame_color = const.BGR['intense_red'])
+# scoreFrm_loselose.show()
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_losewinwin, top_left_point = tlPt_losewinwin)
+# curr_scoreFrm.show()
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_losewinlose, top_left_point = tlPt_losewinlose)
+# curr_scoreFrm.show()
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_loseloselose, top_left_point = tlPt_loseloselose)
+# curr_scoreFrm.show()
+
+tlPt_start = tlPt_init
+tlPt_end = tlPt_win
+
+def make_arrow_from_to(tlPt_start, tlPt_end, dims = (280, 65)):
+    dx, dy = dims
+    right_startPt = tlPt_start.right(dx).down(dy/2)
+    left_endPt = tlPt_end.down(dy/2)
+    return Arrow.make(right_startPt, left_endPt, shorten_by = 0.2)
+
+arr_win = make_arrow_from_to(tlPt_init, tlPt_win)
+arr_lose = make_arrow_from_to(tlPt_init, tlPt_lose)
+
+arr_losewin = make_arrow_from_to(tlPt_lose, tlPt_losewin)
+arr_loselose = make_arrow_from_to(tlPt_lose, tlPt_loselose)
+
+arr_losewinwin = make_arrow_from_to(tlPt_losewin, tlPt_losewinwin)
+arr_losewinlose = make_arrow_from_to(tlPt_losewin, tlPt_losewinlose)
+arr_loselosewin = make_arrow_from_to(tlPt_loselose, tlPt_losewinlose)
+arr_loseloselose = make_arrow_from_to(tlPt_loselose, tlPt_loseloselose)
+
+arr_color_win = const.BGR['grass_green']
+arr_color_lose = const.BGR['sign_orange']
+
+curr_scoreFrm = curr_scoreFrm.put(arr_win, color = arr_color_win)
+curr_scoreFrm = curr_scoreFrm.put(arr_lose, color = arr_color_lose)
+
+curr_scoreFrm = curr_scoreFrm.put(arr_losewin, color = arr_color_win)
+curr_scoreFrm = curr_scoreFrm.put(arr_loselose, color = arr_color_lose)
+
+curr_scoreFrm = curr_scoreFrm.put(arr_losewinwin, color = arr_color_win)
+curr_scoreFrm = curr_scoreFrm.put(arr_losewinlose, color = arr_color_lose)
+curr_scoreFrm = curr_scoreFrm.put(arr_loselosewin, color = arr_color_win)
+curr_scoreFrm = curr_scoreFrm.put(arr_loseloselose, color = arr_color_lose)
+
+curr_scoreFrm.show()
+
+######## LEGEND #######
+
+from ATMANpy.types.Overlays import Legend, LegendRow
+
+LegendRow('Sousa wins the Match')
+
+Legend()
+
 
