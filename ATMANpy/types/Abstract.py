@@ -1834,15 +1834,18 @@ class Points:
     def __len__(self):
         return len(self.pointList)
     
-    def get(self, match_index, point_index):
-        getPnts = [myPnt for myPnt in self if myPnt.get_match_index() == match_index and myPnt.get_point_index() == point_index]
-        if len(getPnts) == 0:
-            print(f'Could not find Point {point_index} in Match {match_index}')
-            return None
-        elif len(getPnts) == 1:
-            return getPnts[0]
+    def get(self, match_index, point_index = None):
+        if point_index is None:
+            return Points([myPnt for myPnt in self if myPnt.get_match_index() == match_index])
         else:
-            raise Exception(f'More than one Point {point_index} in Match {match_index} found! --> {getPnts}')
+            getPnts = [myPnt for myPnt in self if myPnt.get_match_index() == match_index and myPnt.get_point_index() == point_index]
+            if len(getPnts) == 0:
+                print(f'Could not find Point {point_index} in Match {match_index}')
+                return None
+            elif len(getPnts) == 1:
+                return getPnts[0]
+            else:
+                raise Exception(f'More than one Point {point_index} in Match {match_index} found! --> {getPnts}')
         
     def filter(self, bool_func_or_array, **filter_kwargs):
         ### TODO: harmonize Shots.filter and Points.filter
