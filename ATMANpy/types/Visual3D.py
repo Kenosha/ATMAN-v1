@@ -1040,21 +1040,29 @@ class View:
     def make_single_pixel_views(self):
         ### figure out which points are mapped to the same pixel.
         sortView_px = self.sort_by_pixel()
-        pxArr_diff = sortView_px.pxArr - np.roll(sortView_px.pxArr, 1, 0)
-        boolArr_diff = (pxArr_diff != 0).any(axis = 1)
-        switch_idxs = np.arange(len(boolArr_diff))[boolArr_diff]
+        if len(sortView_px) == 1: ### if there's only one element, the rolling will not work
+            out_sp_views = [SinglePixelView(sortView_px.ptArr, sortView_px.clArr, sortView_px.alArr, sortView_px.pxArr, sortView_px.dsArr)]
 
-        out_sp_views = []
-        prev_idx = None
-        for idx in switch_idxs:
-            if prev_idx is not None:
-                currView = sortView_px[prev_idx:idx]
-                # unique_pxArr = np.unique(currView.pxArr, axis = 0)
-                # assert len(unique_pxArr) == 1
-                currSPView = SinglePixelView(currView.ptArr, currView.clArr, currView.alArr, currView.pxArr, currView.dsArr)
-                out_sp_views.append(currSPView)
+        else:
+            pxArr_diff = sortView_px.pxArr - np.roll(sortView_px.pxArr, 1, 0)
+            boolArr_diff = (pxArr_diff != 0).any(axis = 1)
+            switch_idxs = np.arange(len(boolArr_diff))[boolArr_diff]
 
-            prev_idx = idx
+            out_sp_views = []
+            prev_idx = None
+            for idx in switch_idxs:
+                if prev_idx is not None:
+                    currView = sortView_px[prev_idx:idx]
+                    # unique_pxArr = np.unique(currView.pxArr, axis = 0)
+                    # assert len(unique_pxArr) == 1
+                    currSPView = SinglePixelView(currView.ptArr, currView.clArr, currView.alArr, currView.pxArr, currView.dsArr)
+                    out_sp_views.append(currSPView)
+
+                prev_idx = idx
+
+            currView = sortView_px[idx:]
+            currSPView = SinglePixelView(currView.ptArr, currView.clArr, currView.alArr, currView.pxArr, currView.dsArr)
+            out_sp_views.append(currSPView)
 
         return out_sp_views
 
