@@ -279,6 +279,21 @@ class Line:
         x_y_space = zip(x_space, y_space)
         return [Point2D(x_y) for x_y in x_y_space]
     
+    def shorten_by(self, factor, N = 100, which = 'left'):
+        assert which in ['both', 'left', 'right']
+        assert 0 < factor < 1
+
+        subPnts = self.subdivide(N)
+
+        factor_idx = max(1, round(factor * N)) - 1
+        factor_idx_left = factor_idx if which in ['both', 'left'] else 0
+        factor_idx_right = -factor_idx if which in ['both', 'right'] else 0
+
+        cutPt_left = subPnts[factor_idx_left]
+        cutPt_right = subPnts[factor_idx_right]
+
+        return Line(cutPt_left, cutPt_right, name = self.name)
+    
     def join(self, bLn):
         if self.rightPt == bLn.leftPt:
             return Line(self.leftPt, bLn.rightPt)
@@ -505,7 +520,15 @@ class Lines:
 class Arrow(Lines):
     
     @staticmethod
-    def make(startPt, endPt, hat_angle = np.pi / 4, hat_length = 10):
+    def make(startPt, endPt, hat_angle = np.pi / 4, hat_length = 10, shorten_by = 0):
+        
+        ### shorten if necessary
+        assert 0 <= shorten_by < 1
+
+        if shorten_by > 0:
+            shortLn = Line(startPt, endPt).shorten_by(shorten_by, which = 'both')
+            startPt, endPt = shortLn.leftPt, shortLn.rightPt
+
         x, y = (endPt - startPt).coords
         arrow_angle = np.arctan2(y, x)
 
