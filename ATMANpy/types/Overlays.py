@@ -2,7 +2,7 @@
 import numpy as np
 
 from ATMANpy.types.Points import Point2D
-from ATMANpy.types.Lines import Region
+from ATMANpy.types.Lines import Region, Line
 
 from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D, Line3D, Lines3D, Point3D
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
@@ -1362,6 +1362,49 @@ def reverse_cascade(finalRst, keep_which = None,
 
     jntFrms = BGRFrames.from_frames(list_of_renderedFrms)
     return myRst, jntFrms
+
+def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = '', game_string2 = '',
+               serving = 1, 
+               frame_thickness = None, frame_color = const.BGR['bright_grey']):
+    ### this scoreboard is our approximation of the one in 2021 Brest Challenger
+
+    assert serving in [1, 2] ### 1 is the top player, 2 is the bottom player
+
+    p1Dict = {' ' * i: val for i, val in enumerate([point_score1, *game_string1])}
+    p2Dict = {' ' * i: val for i, val in enumerate([point_score2, *game_string2])}
+
+    table_data = {name1: p1Dict, name2: p2Dict}
+
+    myTab = Table(table_data, number_format = '.0f', dimensions = (280, 65), header_row_height = 0,
+              index_col_width = 5, skeleton_horizontal_offset = 0.2, index_offset = 0.1, automatic_vertical_offset_text_line_height = 0.275,
+              skeleton_shrinkage = 0.025, resolution = 10000, horizontal_lines = True, vertical_lines = True,
+              data_offset = 0.25, data_text_color = const.BGR['bright_grey'], index_text_color = const.BGR['bright_grey'],
+              data_text_thickness = 1, index_text_thickness = 1)
+
+    ### background color and text for point score 
+    myTab.set_back_color(const.BGR['bright_grey'], 1, 1)
+    myTab.set_back_color(const.BGR['bright_grey'], 2, 1)
+
+    myTab.set_text_color(const.BGR['darker_grey'], 1, 1)
+    myTab.set_text_color(const.BGR['darker_grey'], 2, 1)
+
+    tabFrm = myTab.render()
+
+    ### yellow line for serve indication
+    if serving == 1:
+        lnPt1, lnPt2 = Point2D((8, 8)), Point2D((8, 28))
+    else:
+        lnPt1, lnPt2 = Point2D((8, 35)), Point2D((8, 57))
+    
+    yellowLn = Line(lnPt1, lnPt2)
+    tabFrm = tabFrm.put(yellowLn, color = const.BGR['ball_yellow'], thickness = 3)
+
+    ### frame it
+    if frame_thickness is not None:
+        tabFrm = tabFrm.framed(frame_thickness, frame_color)
+
+    return tabFrm
+
 
 
 if __name__ == '__main__':
