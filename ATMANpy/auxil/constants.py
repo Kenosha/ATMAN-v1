@@ -72,7 +72,8 @@ RGB = {'ball_yellow': (223, 255, 79),
        'intense_red': (238, 37, 36),
 
        'bright_grey': (238, 238, 238),
-       'smokey_grey': (150, 150, 150)
+       'smokey_grey': (150, 150, 150),
+       'darker_grey': (30, 30, 30)
        }
 
 BGR = {name: (val[2], val[1], val[0]) for name, val in RGB.items()}
