@@ -246,8 +246,6 @@ moveFrms = BGRFrames.from_single_frames(moving_frames)
 # DecapStream(moveFrms, 0, 100).show()
 
 ###### MARKOV DIAGRAM ######
-curr_scoreFrm = moveFrms[-1]
-
 ### 1st Order ###
 name1 = 'F.GAIO'
 name2 = 'J.SOUSA'
@@ -278,12 +276,6 @@ tlPt_init = end_point
 tlPt_win = tlPt_init.right(dist_x).up(dist_y)
 tlPt_lose = tlPt_init.right(dist_x).down(dist_y)
 
-curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win, top_left_point = tlPt_win)
-# curr_scoreFrm.show()
-
-curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_lose, top_left_point = tlPt_lose)
-# curr_scoreFrm.show()
-
 ### 2nd Order ###
 tlPt_losewin = tlPt_lose.right(dist_x).up(dist_y)
 tlPt_loselose = tlPt_lose.right(dist_x).down(dist_y)
@@ -309,12 +301,6 @@ game_string2 = '666'
 scoreFrm_loselose = scoreboard(name1, name2, point_score1, point_score2, game_string1, game_string2, serving = 1,
                            frame_thickness = 2, frame_color = const.BGR['bright_grey'])
 # scoreFrm_loselose.show()
-
-curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_losewin, top_left_point = tlPt_losewin)
-# curr_scoreFrm.show()
-
-curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_loselose, top_left_point = tlPt_loselose)
-# curr_scoreFrm.show()
 
 ### 3rd Order ###
 tlPt_losewinwin = tlPt_losewin.right(dist_x).up(dist_y)
@@ -354,23 +340,18 @@ scoreFrm_loseloselose = scoreboard(name1, name2, point_score1, point_score2, gam
                            frame_thickness = 2, frame_color = const.BGR['intense_red'])
 # scoreFrm_loselose.show()
 
-curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_losewinwin, top_left_point = tlPt_losewinwin)
-# curr_scoreFrm.show()
 
-curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_losewinlose, top_left_point = tlPt_losewinlose)
-# curr_scoreFrm.show()
-
-curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_loseloselose, top_left_point = tlPt_loseloselose)
-# curr_scoreFrm.show()
-
-tlPt_start = tlPt_init
-tlPt_end = tlPt_win
-
-def make_arrow_from_to(tlPt_start, tlPt_end, dims = (280, 65)):
+def make_arrow_from_to(tlPt_start, tlPt_end, dims = (280, 65), num_dashes = None):
     dx, dy = dims
     right_startPt = tlPt_start.right(dx).down(dy/2)
     left_endPt = tlPt_end.down(dy/2)
-    return Arrow.make(right_startPt, left_endPt, shorten_by = 0.2)
+    return Arrow.make(right_startPt, left_endPt, shorten_by = 0.2, num_dashes = num_dashes)
+
+def make_arrow_from_to_backwards(tlPt_start, tlPt_end, dims = (280, 65), num_dashes = None):
+    dx, dy = dims
+    left_startPt = tlPt_start.down(dy/2)
+    right_endPt = tlPt_end.right(dx).down(dy/2)
+    return Arrow.make(left_startPt, right_endPt, shorten_by = 0.1, num_dashes = num_dashes)
 
 arr_win = make_arrow_from_to(tlPt_init, tlPt_win)
 arr_lose = make_arrow_from_to(tlPt_init, tlPt_lose)
@@ -386,25 +367,359 @@ arr_loseloselose = make_arrow_from_to(tlPt_loselose, tlPt_loseloselose)
 arr_color_win = const.BGR['grass_green']
 arr_color_lose = const.BGR['sign_orange']
 
+from ATMANpy.funcs.util_funcs import interpolate_tuples
+dim_factor = 0.25
+arr_color_win_dim = interpolate_tuples((0, 0, 0), arr_color_win, itpl_lambda = dim_factor)
+arr_color_lose_dim = interpolate_tuples((0, 0, 0), arr_color_lose, itpl_lambda = dim_factor)
+
+### win percentage boxes
+def make_win_perc_box(win_percent = 0.5, back_color = const.BGR['bright_grey']):
+    blackFrm = BGRFrame.make_black(280, 20)
+    colorFrm = blackFrm + back_color
+    if isinstance(win_percent, float):
+        textStr = f'Win Probability: {win_percent:.0%}'
+    else:
+        textStr = f'Win Probability: {win_percent}'
+    return colorFrm.put(textStr, color = const.BGR['darker_grey'], where = (100, 15))
+
+percFrm_win = make_win_perc_box(1.0, back_color = const.BGR['leafy_green'])
+percFrm_lose_known = make_win_perc_box(0.5)
+percFrm_lose_unknown = make_win_perc_box('?')
+
+scoreFrm_win_with_box = BGRFrame(np.concatenate([scoreFrm_win.array, percFrm_win.array], axis = 0))
+# scoreFrm_lose_known_with_box = BGRFrame(np.concatenate([scoreFrm_lose.array, percFrm_lose_known.array], axis = 0))
+# scoreFrm_lose_unknown_with_box = BGRFrame(np.concatenate([scoreFrm_lose.array, percFrm_lose_unknown.array], axis = 0))
+scoreFrm_lose_known_with_box = BGRFrame(np.concatenate([percFrm_lose_known.array, scoreFrm_lose.array], axis = 0))
+scoreFrm_lose_unknown_with_box = BGRFrame(np.concatenate([percFrm_lose_unknown.array, scoreFrm_lose.array], axis = 0))
+
+######### WRITE SCRIPT DRAFT ########
+curr_scoreFrm = moveFrms[-1]
+
+all_frames = []
+script_lines = []
+
+script_line = "The leverage of a point should quantify to what extent the outcome of the point influences the outcome of the match."
+currFrms = BGRFrames.from_frame(curr_scoreFrm, 50)
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "The outcome of a point is among two possibilities: Joao Sousa can win the point, or he can lose it."
+
+curr_scoreFrm0 = overlay(curr_scoreFrm, scoreFrm_win, top_left_point = tlPt_win)
+curr_scoreFrm0 = curr_scoreFrm0.put(arr_win, color = arr_color_win)
+currFrms0 = BGRFrames.from_frame(curr_scoreFrm0, 50)
+
+curr_scoreFrm1 = overlay(curr_scoreFrm0, scoreFrm_lose, top_left_point = tlPt_lose)
+curr_scoreFrm1 = curr_scoreFrm1.put(arr_lose, color = arr_color_lose)
+currFrms1 = BGRFrames.from_frame(curr_scoreFrm1, 50)
+
+currFrms = BGRFrames.from_frames([currFrms0, currFrms1])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "If he wins this point, the outcome of the match is decided in favor of Joao Sousa."
+### brighten win side, dim lose side
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win, top_left_point = tlPt_win)
 curr_scoreFrm = curr_scoreFrm.put(arr_win, color = arr_color_win)
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_lose.dim(dim_factor), top_left_point = tlPt_lose)
+curr_scoreFrm = curr_scoreFrm.put(arr_lose, color = arr_color_lose_dim)
+# curr_scoreFrm.show()
+
+fadeFrms = vs.interpolate_frames(currFrms[-1], curr_scoreFrm, 50)
+statFrms = BGRFrames.from_frame(curr_scoreFrm, 50)
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win_with_box, top_left_point = tlPt_win)
+
+fadeFrms2 = vs.interpolate_frames(statFrms[-1], curr_scoreFrm)
+statFrms2 = BGRFrames.from_frame(curr_scoreFrm, 50)
+
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms, fadeFrms2, statFrms2])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "If he loses this point, the outcome of the match is uncertain: it's now 6-all in the deciding tiebreak."
+### brighten lose side, dim win side
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win_with_box.dim(dim_factor), top_left_point = tlPt_win)
+curr_scoreFrm = curr_scoreFrm.put(arr_win, color = arr_color_win_dim)
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_lose, top_left_point = tlPt_lose)
 curr_scoreFrm = curr_scoreFrm.put(arr_lose, color = arr_color_lose)
+# curr_scoreFrm.show()
 
-curr_scoreFrm = curr_scoreFrm.put(arr_losewin, color = arr_color_win)
-curr_scoreFrm = curr_scoreFrm.put(arr_loselose, color = arr_color_lose)
+fadeFrms = vs.interpolate_frames(currFrms[-1], curr_scoreFrm, 50)
+statFrms = BGRFrames.from_frame(curr_scoreFrm, 50)
 
-curr_scoreFrm = curr_scoreFrm.put(arr_losewinwin, color = arr_color_win)
-curr_scoreFrm = curr_scoreFrm.put(arr_losewinlose, color = arr_color_lose)
-curr_scoreFrm = curr_scoreFrm.put(arr_loselosewin, color = arr_color_win)
-curr_scoreFrm = curr_scoreFrm.put(arr_loseloselose, color = arr_color_lose)
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_lose_unknown_with_box, top_left_point = tlPt_lose.up(20))
 
-curr_scoreFrm.show()
+fadeFrms2 = vs.interpolate_frames(statFrms[-1], curr_scoreFrm)
+statFrms2 = BGRFrames.from_frame(curr_scoreFrm, 50)
 
-######## LEGEND #######
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms, fadeFrms2, statFrms2])
 
-from ATMANpy.types.Overlays import Legend, LegendRow
+all_frames.append(currFrms)
+script_lines.append(script_line)
 
-LegendRow('Sousa wins the Match')
+script_line = "What we do in this case is try to figure out the probability of Joao Sousa winning the match."
+### ...
 
-Legend()
+script_line = "To this end, we follow the path of possible point outcomes a bit further."
+### build out possible outcomes
+
+curr_scoreFrm0 = overlay(curr_scoreFrm, scoreFrm_losewin, top_left_point = tlPt_losewin)
+curr_scoreFrm0 = curr_scoreFrm0.put(arr_losewin, color = arr_color_win)
+
+curr_scoreFrm1 = overlay(curr_scoreFrm0, scoreFrm_loselose, top_left_point = tlPt_loselose)
+curr_scoreFrm1 = curr_scoreFrm1.put(arr_loselose, color = arr_color_lose)
+
+curr_scoreFrm2 = overlay(curr_scoreFrm1, scoreFrm_losewinwin, top_left_point = tlPt_losewinwin)
+curr_scoreFrm2 = curr_scoreFrm2.put(arr_losewinwin, color = arr_color_win)
+
+curr_scoreFrm3 = overlay(curr_scoreFrm2, scoreFrm_losewinlose, top_left_point = tlPt_losewinlose)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_losewinlose, color = arr_color_lose)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_loselosewin, color = arr_color_win)
+# curr_scoreFrm.show()
+
+curr_scoreFrm4 = overlay(curr_scoreFrm3, scoreFrm_loseloselose, top_left_point = tlPt_loseloselose)
+curr_scoreFrm4 = curr_scoreFrm4.put(arr_loseloselose, color = arr_color_lose)
+
+currFrms = BGRFrames.from_frames([BGRFrames.from_frame(curr_scoreFrm0, 25),
+                                  BGRFrames.from_frame(curr_scoreFrm1, 25),
+                                  BGRFrames.from_frame(curr_scoreFrm2, 25),
+                                  BGRFrames.from_frame(curr_scoreFrm3, 25),
+                                  BGRFrames.from_frame(curr_scoreFrm4, 25)])
+prevFrm = curr_scoreFrm4
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+
+script_line = "If Joao Sousa wins two points consecutively, he wins the match 8-6."
+### brighten top path
+
+curr_scoreFrm0 = overlay(curr_scoreFrm, scoreFrm_losewin, top_left_point = tlPt_losewin)
+curr_scoreFrm0 = curr_scoreFrm0.put(arr_losewin, color = arr_color_win)
+
+curr_scoreFrm1 = overlay(curr_scoreFrm0, scoreFrm_loselose.dim(dim_factor), top_left_point = tlPt_loselose)
+curr_scoreFrm1 = curr_scoreFrm1.put(arr_loselose, color = arr_color_lose_dim)
+
+curr_scoreFrm2 = overlay(curr_scoreFrm1, scoreFrm_losewinwin, top_left_point = tlPt_losewinwin)
+curr_scoreFrm2 = curr_scoreFrm2.put(arr_losewinwin, color = arr_color_win)
+
+curr_scoreFrm3 = overlay(curr_scoreFrm2, scoreFrm_losewinlose.dim(dim_factor), top_left_point = tlPt_losewinlose)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_losewinlose, color = arr_color_lose_dim)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_loselosewin, color = arr_color_win_dim)
+# curr_scoreFrm.show()
+
+curr_scoreFrm4 = overlay(curr_scoreFrm3, scoreFrm_loseloselose.dim(dim_factor), top_left_point = tlPt_loseloselose)
+curr_scoreFrm4 = curr_scoreFrm4.put(arr_loseloselose, color = arr_color_lose_dim)
+
+fadeFrms = vs.interpolate_frames(prevFrm, curr_scoreFrm4, 50)
+statFrms = BGRFrames.from_frame(curr_scoreFrm4, 50)
+prevFrm = curr_scoreFrm4
+
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "If Federico Gaio wins two points consecutively, Joao Sousa loses the match 6-8."
+### brighten bottom path
+
+curr_scoreFrm0 = overlay(curr_scoreFrm, scoreFrm_losewin.dim(dim_factor), top_left_point = tlPt_losewin)
+curr_scoreFrm0 = curr_scoreFrm0.put(arr_losewin, color = arr_color_win_dim)
+
+curr_scoreFrm1 = overlay(curr_scoreFrm0, scoreFrm_loselose, top_left_point = tlPt_loselose)
+curr_scoreFrm1 = curr_scoreFrm1.put(arr_loselose, color = arr_color_lose)
+
+curr_scoreFrm2 = overlay(curr_scoreFrm1, scoreFrm_losewinwin.dim(dim_factor), top_left_point = tlPt_losewinwin)
+curr_scoreFrm2 = curr_scoreFrm2.put(arr_losewinwin, color = arr_color_win_dim)
+
+curr_scoreFrm3 = overlay(curr_scoreFrm2, scoreFrm_losewinlose.dim(dim_factor), top_left_point = tlPt_losewinlose)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_losewinlose, color = arr_color_lose_dim)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_loselosewin, color = arr_color_win_dim)
+# curr_scoreFrm.show()
+
+curr_scoreFrm4 = overlay(curr_scoreFrm3, scoreFrm_loseloselose, top_left_point = tlPt_loseloselose)
+curr_scoreFrm4 = curr_scoreFrm4.put(arr_loseloselose, color = arr_color_lose)
+
+fadeFrms = vs.interpolate_frames(prevFrm, curr_scoreFrm4, 50)
+statFrms = BGRFrames.from_frame(curr_scoreFrm4, 50)
+prevFrm = curr_scoreFrm4
+
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "If the next two points are shared between the two players, the tiebreak continues at 7-7."
+### brighten middle paths
+
+curr_scoreFrm0 = overlay(curr_scoreFrm, scoreFrm_losewin, top_left_point = tlPt_losewin)
+curr_scoreFrm0 = curr_scoreFrm0.put(arr_losewin, color = arr_color_win)
+
+curr_scoreFrm1 = overlay(curr_scoreFrm0, scoreFrm_loselose, top_left_point = tlPt_loselose)
+curr_scoreFrm1 = curr_scoreFrm1.put(arr_loselose, color = arr_color_lose)
+
+curr_scoreFrm2 = overlay(curr_scoreFrm1, scoreFrm_losewinwin.dim(dim_factor), top_left_point = tlPt_losewinwin)
+curr_scoreFrm2 = curr_scoreFrm2.put(arr_losewinwin, color = arr_color_win_dim)
+
+curr_scoreFrm3 = overlay(curr_scoreFrm2, scoreFrm_losewinlose, top_left_point = tlPt_losewinlose)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_losewinlose, color = arr_color_lose)
+curr_scoreFrm3 = curr_scoreFrm3.put(arr_loselosewin, color = arr_color_win)
+# curr_scoreFrm.show()
+
+curr_scoreFrm4 = overlay(curr_scoreFrm3, scoreFrm_loseloselose.dim(dim_factor), top_left_point = tlPt_loseloselose)
+curr_scoreFrm4 = curr_scoreFrm4.put(arr_loseloselose, color = arr_color_lose_dim)
+
+fadeFrms = vs.interpolate_frames(prevFrm, curr_scoreFrm4, 50)
+statFrms = BGRFrames.from_frame(curr_scoreFrm4, 50)
+prevFrm = curr_scoreFrm4
+
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "This is practically the same situation as at 6-6, except that Federico Gaio is now on serve."
+### dashed arrow back
+
+backArr = make_arrow_from_to_backwards(tlPt_losewinlose, tlPt_lose, num_dashes = 10)
+arrFrm = prevFrm.put(backArr, color = const.BGR['bright_grey'])
+
+currFrms = BGRFrames.from_frame(arrFrm, 50)
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "At 6-6, 7-7, 8-8, and so on, play continues until either player wins the match by winning two consecutive points, one on serve, one on return."
+### ...
+
+script_line = "By virtue of this symmetry, we therefore take the probability for Joao Sousa to win the match at 6-6 to be 50%."
+### ... fade out after 6-6, and fade in box with win prob 50%.
+
+curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win_with_box.dim(dim_factor), top_left_point = tlPt_win)
+curr_scoreFrm = curr_scoreFrm.put(arr_win, color = arr_color_win_dim)
+
+curr_scoreFrm_unknown = overlay(curr_scoreFrm, scoreFrm_lose_unknown_with_box, top_left_point = tlPt_lose.up(20))
+curr_scoreFrm_unknown = curr_scoreFrm_unknown.put(arr_lose, color = arr_color_lose)
+
+curr_scoreFrm_known = overlay(curr_scoreFrm, scoreFrm_lose_known_with_box, top_left_point = tlPt_lose.up(20))
+curr_scoreFrm_known = curr_scoreFrm_known.put(arr_lose, color = arr_color_lose)
+
+statFrms = BGRFrames.from_frame(curr_scoreFrm_unknown, 25)
+fadeFrms = vs.interpolate_frames(curr_scoreFrm_unknown, curr_scoreFrm_known, 25)
+statFrms2 = BGRFrames.from_frame(curr_scoreFrm_known, 25)
+
+currFrms = BGRFrames.from_frames([BGRFrames.from_frame(curr_scoreFrm4, 10),
+                                  BGRFrames.from_frame(curr_scoreFrm3, 10),
+                                  BGRFrames.from_frame(curr_scoreFrm2, 10),
+                                  BGRFrames.from_frame(curr_scoreFrm1, 10),
+                                  BGRFrames.from_frame(curr_scoreFrm0, 10),
+                                  statFrms, fadeFrms, statFrms2])
+
+DecapStream(currFrms, 0, 100).show()
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "The difference between winning and losing the point is the difference between a match that is won and a match that is dead-even."
+### highlight the difference, somehow?
+
+resFrm = BGRFrame.make_black()
+resFrm = overlay(resFrm, scoreFrm, tlPt_init)
+resFrm = overlay(resFrm, percFrm_win, tlPt_win.down(65))
+resFrm = overlay(resFrm, percFrm_lose_known, tlPt_lose.up(20))
+resFrm = overlay(resFrm, scoreFrm_win.dim(dim_factor), tlPt_win)
+resFrm = overlay(resFrm, scoreFrm_lose.dim(dim_factor), tlPt_lose)
+resFrm = resFrm.put(arr_win, color = arr_color_win)
+resFrm = resFrm.put(arr_lose, color = arr_color_lose)
+
+fadeFrms = vs.interpolate_frames(currFrms[-1], resFrm, 50)
+statFrms = BGRFrames.from_frame(resFrm, 50)
+
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "Our measure of leverage is therefore at 50%."
+### difference = 50%
+
+winArr = make_arrow_from_to(tlPt_win.down(40), tlPt_losewin)
+loseArr = make_arrow_from_to(tlPt_lose.up(40), tlPt_losewin)
+
+meanPt = (winArr[0].rightPt + loseArr[0].rightPt) / 2
+meanPt = meanPt.down(8).right(10)
+
+resFrm2 = resFrm.put(winArr, color = const.BGR['bright_grey'])
+resFrm2 = resFrm2.put(loseArr, color = const.BGR['bright_grey'])
+
+lvrStr = 'Leverage = 100% - 50% = 50%'
+resFrm2 = resFrm2.put(lvrStr, where = meanPt.round_coords(), size = 2, color = const.BGR['bright_grey'])
+
+currFrms = BGRFrames.from_frame(resFrm2, 50)
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "In fact, this is the highest possible leverage in a standard tennis match; with no-ad scoring, a leverage of 100% is possible."
+### ...
+
+lastFrm = BGRFrame.make_black()
+lastFrm = overlay(lastFrm, scoreFrm, tlPt_init)
+lastFrm = lastFrm.put(lvrStr, where = meanPt.round_coords(), size = 2, color = const.BGR['bright_grey'])
+
+lastArr = make_arrow_from_to(tlPt_init, tlPt_init.right(800))
+lastFrm = lastFrm.put(lastArr, color = const.BGR['bright_grey'])
+# lastFrm.show()
+
+fadeFrms = vs.interpolate_frames(resFrm2, lastFrm, 50)
+statFrms = BGRFrames.from_frame(lastFrm, 50)
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+
+script_line = "With just a few more fairly unrestrictive assumptions, we can quantify leverage for the entire match."
+
+from ATMANpy.types.Overlays import Graph, LineChart, ScatterChart
+
+ys = mtcPnts.apply(maybe_get_pressure)
+xs = np.arange(len(ys))
+pressChart = LineChart(xs, ys)
+
+new_set = (mtcPnts.apply('get_game_score') == 0).all(axis = 1)
+new_set_start = new_set & ~np.roll(new_set, 1)
+
+new_set_start_idxs = np.arange(len(new_set_start))[new_set_start]
+set0, set1, set2 = new_set_start_idxs
+
+num_dots = 50
+xs1 = np.ones(num_dots) * set1
+xs2 = np.ones(num_dots) * set2
+ys12 = np.linspace(0, 0.5, num = num_dots)
+
+vChart1 = ScatterChart(xs1, ys12, color = const.BGR['bright_blue'])
+vChart2 = ScatterChart(xs2, ys12, color = const.BGR['bright_blue'])
+
+myGraph = Graph([pressChart, vChart1, vChart2], make_default_x_labels = False, y_label_format = '>5.0%', y_label_dist = 1.5, 
+                header_text = 'Score Leverage: Gaio v. Sousa', header_horizontal_offset = 5, max_y_override = 0.5, 
+                x_label_dist = 0, tick_label_size = 1, x_tick_label_left_shift = 0, header_size = 1, 
+                color = const.BGR['bright_grey'],
+                resolution = 100)
+
+graphFrm = myGraph.render()
+graphFrm.show()
+
+
+
+
 
 
