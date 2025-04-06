@@ -156,22 +156,22 @@ class Line:
     def up(self, points, name = None):
         if name is None:
             name = self.name
-        return Line(self.leftPt.up(points), self.rightPt.up(points), name = name)
+        return Line(self.leftPt.up(points), self.rightPt.up(points), name = name, force_l2r = self.force_l2r)
 
     def down(self, points, name = None):
         if name is None:
             name = self.name
-        return Line(self.leftPt.down(points), self.rightPt.down(points), name = name)
+        return Line(self.leftPt.down(points), self.rightPt.down(points), name = name, force_l2r = self.force_l2r)
 
     def left(self, points, name = None):
         if name is None:
             name = self.name
-        return Line(self.leftPt.left(points), self.rightPt.left(points), name = name)
+        return Line(self.leftPt.left(points), self.rightPt.left(points), name = name, force_l2r = self.force_l2r)
 
     def right(self, points, name = None):
         if name is None:
             name = self.name
-        return Line(self.leftPt.right(points), self.rightPt.right(points), name = name)
+        return Line(self.leftPt.right(points), self.rightPt.right(points), name = name, force_l2r = self.force_l2r)
 
     def length(self):
         return self.leftPt.distance_to(self.rightPt)
@@ -255,23 +255,25 @@ class Line:
         if name is None:
             name = f'Flipped {self.name}'
         return Line(self.leftPt.flip_vertically(aLn), self.rightPt.flip_vertically(aLn),
-                    name = name)
+                    name = name, force_l2r = self.force_l2r)
         
     def flip_horizontally(self, aLn, name = None):
         if name is None:
             name = f'Flipped {self.name}'
         return Line(self.leftPt.flip_horizontally(aLn), self.rightPt.flip_horizontally(aLn), 
-                    name = name)
+                    name = name, force_l2r = self.force_l2r)
     
     def apply_homography(self, H, name = None):
         if name is None:
             name = self.name
-        return Line(self.leftPt.apply_homography(H), self.rightPt.apply_homography(H), name = name)
+        return Line(self.leftPt.apply_homography(H), self.rightPt.apply_homography(H), 
+                    name = name, force_l2r = self.force_l2r)
     
     def round_points(self, name = None):
         if name is None:
             name = self.name
-        return Line(self.leftPt.round_point(), self.rightPt.round_point(), name = name)
+        return Line(self.leftPt.round_point(), self.rightPt.round_point(), 
+                    name = name, force_l2r = self.force_l2r)
 
     def subdivide(self, elements = 100):
         x_space = np.linspace(self.left_point().x, self.right_point().x, num = elements, dtype = 'int32')
@@ -294,7 +296,8 @@ class Line:
         cutPt_left = subPnts[factor_idx_left]
         cutPt_right = subPnts[factor_idx_right]
 
-        return Line(cutPt_left, cutPt_right, name = self.name)
+        return Line(cutPt_left, cutPt_right, 
+                    name = self.name, force_l2r = self.force_l2r)
     
     def dash(self, num_dashes = 10):
         subPnts = self.subdivide(num_dashes * 2)
@@ -303,9 +306,11 @@ class Line:
 
     def join(self, bLn):
         if self.rightPt == bLn.leftPt:
-            return Line(self.leftPt, bLn.rightPt)
+            return Line(self.leftPt, bLn.rightPt, 
+                        name = self.name, force_l2r = self.force_l2r)
         elif self.leftPt == bLn.rightPt:
-            return Line(bLn.leftPt, self.rightPt)
+            return Line(bLn.leftPt, self.rightPt,
+                        name = self.name, force_l2r = self.force_l2r)
         
     def center(self):
         return (self.leftPt + self.rightPt) // 2
@@ -318,7 +323,8 @@ class Line:
         return aPt.distance_to(nearestPt)
     
     def rescale(self, scale_factor):
-        return Line(self.leftPt.rescale(scale_factor), self.rightPt.rescale(scale_factor), name = self.name)
+        return Line(self.leftPt.rescale(scale_factor), self.rightPt.rescale(scale_factor), 
+                    name = self.name, force_l2r = self.force_l2r)
     
 @dataclass(frozen = True)
 class Lines:
