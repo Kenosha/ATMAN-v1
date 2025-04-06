@@ -296,6 +296,11 @@ class Line:
 
         return Line(cutPt_left, cutPt_right, name = self.name)
     
+    def dash(self, num_dashes = 10):
+        subPnts = self.subdivide(num_dashes * 2)
+        subLns = Lines([Line(subPnts[idx], subPnts[idx + 1]) for idx in range(len(subPnts) - 1)])
+        return subLns[::2]
+
     def join(self, bLn):
         if self.rightPt == bLn.leftPt:
             return Line(self.leftPt, bLn.rightPt)
@@ -522,7 +527,7 @@ class Lines:
 class Arrow(Lines):
     
     @staticmethod
-    def make(startPt, endPt, hat_angle = np.pi / 4, hat_length = 10, shorten_by = 0):
+    def make(startPt, endPt, hat_angle = np.pi / 4, hat_length = 10, shorten_by = 0, num_dashes = None):
         
         ### shorten if necessary
         assert 0 <= shorten_by < 1
@@ -547,7 +552,13 @@ class Arrow(Lines):
         arrLn1 = Line(endPt, pt1)
         arrLn2 = Line(endPt, pt2)
 
-        return Lines([arrLn0, arrLn1, arrLn2])
+        if num_dashes is not None:
+            arrLns0 = arrLn0.dash(num_dashes)
+            outLns = Lines([*arrLns0, arrLn1, arrLn2])
+        else:
+            outLns = Lines([arrLn0, arrLn1, arrLn2])
+
+        return outLns
 
 @dataclass(frozen = True)
 class NetLines(Lines):
