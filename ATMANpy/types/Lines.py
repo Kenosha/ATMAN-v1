@@ -25,22 +25,24 @@ class Line:
     rightPt: Point2D
     
     name: str = 'Line'
+    force_l2r: bool = True ### force the line to be left to right
     
     def __post_init__(self):
-        ### make it so that lines always go from left to right. 
-        # If there is a tie, they go from up to down.
-        _reinst = False
-        l, r = self.leftPt, self.rightPt
-        if not l.is_left(r):
-            if not l.is_right(r):
-                ### same x coord!
-                if l.is_below(r):
+        if self.force_l2r:
+            ### make it so that lines always go from left to right. 
+            # If there is a tie, they go from up to down.
+            _reinst = False
+            l, r = self.leftPt, self.rightPt
+            if not l.is_left(r):
+                if not l.is_right(r):
+                    ### same x coord!
+                    if l.is_below(r):
+                        _reinst = True
+                else:
                     _reinst = True
-            else:
-                _reinst = True
-        if _reinst:
-            object.__setattr__(self, 'leftPt', r)
-            object.__setattr__(self, 'rightPt', l)
+            if _reinst:
+                object.__setattr__(self, 'leftPt', r)
+                object.__setattr__(self, 'rightPt', l)
             
     ### CONSTRUCTORS ###
     @staticmethod
@@ -526,7 +528,7 @@ class Arrow(Lines):
         assert 0 <= shorten_by < 1
 
         if shorten_by > 0:
-            shortLn = Line(startPt, endPt).shorten_by(shorten_by, which = 'both')
+            shortLn = Line(startPt, endPt, force_l2r = False).shorten_by(shorten_by, which = 'both')
             startPt, endPt = shortLn.leftPt, shortLn.rightPt
 
         x, y = (endPt - startPt).coords
