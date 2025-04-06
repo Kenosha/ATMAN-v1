@@ -166,7 +166,8 @@ class Graph:
                  label_size = 1, tick_label_size = 1,
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
                  header_size = 1, header_height = 1, graph_height = 9, z_epsilon = 0.01,
-                 cam = None, render_height = 100, dimensions = (600, 400), resolution = 10):
+                 cam = None, render_height = 100, dimensions = (600, 400), resolution = 10, 
+                 max_y_override = None):
         ### TODO: add axis labels (y-axis vertical! how?)
         self.charts = charts
         self.color = color
@@ -194,6 +195,7 @@ class Graph:
         self.tick_label_size = tick_label_size
 
         self.z_epsilon = z_epsilon
+        self.max_y_override = max_y_override
  
         if cam is None: ### Rendering Camera
             cam = Camera.birds_eye(render_height, sensor_dims = dimensions)
@@ -253,7 +255,7 @@ class Graph:
             if self.as_density:
                 max_y = 1.05 * max_y ### scale up a bit
             else:
-                max_y = int(np.ceil(max_y))
+                max_y = int(np.ceil(max_y)) if self.max_y_override is None else self.max_y_override
 
         self.min_x = min_x
         self.max_x = max_x
