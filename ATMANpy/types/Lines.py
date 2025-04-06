@@ -539,8 +539,12 @@ class Arrow(Lines):
         assert 0 <= shorten_by < 1
 
         if shorten_by > 0:
-            shortLn = Line(startPt, endPt, force_l2r = False).shorten_by(shorten_by, which = 'both')
-            startPt, endPt = shortLn.leftPt, shortLn.rightPt
+            tempLn = Line(startPt, endPt)
+            shortLn = tempLn.shorten_by(shorten_by, which = 'both')
+            if startPt == tempLn.leftPt:
+                startPt, endPt = shortLn.leftPt, shortLn.rightPt
+            else:
+                startPt, endPt = shortLn.rightPt, shortLn.leftPt
 
         x, y = (endPt - startPt).coords
         arrow_angle = np.arctan2(y, x)
