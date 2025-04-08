@@ -42,7 +42,7 @@ class Point3D:
     """
     A point in 3D: tuple of integers, signifying x, y and z coordinates
     """
-    coords: tuple ### a tuple of numbers (this is a single point) or vectors (a set of points)
+    coords: tuple ### a tuple of numbers (this is a single point) or vectors (a set of points) ### NEW: a np.array of vectors
     
     _DEFAULT_COLOR = const.BGR['bright_grey']
     _DEFAULT_ALPHA = 1
@@ -90,32 +90,32 @@ class Point3D:
     def __add__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.x + op_x, self.y + op_y, self.z + op_z
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __sub__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.x - op_x, self.y - op_y, self.z - op_z
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __mul__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.x * op_x, self.y * op_y, self.z * op_z
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __truediv__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.x / op_x, self.y / op_y, self.z / op_z
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __floordiv__(self, other):
         op_x, op_y, op_z = Point3D.get_operant(other)
         outCoords = self.x // op_x, self.y // op_y, self.z // op_z
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __abs__(self):
         outCoords = abs(self.x), abs(self.y), abs(self.z)
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __round__(self, ndigits = None):
         outCoords = round(self.x, ndigits = ndigits), round(self.y, ndigits = ndigits), round(self.z, ndigits = ndigits)
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __neg__(self):
         outCoords = -self.x, -self.y, -self.z
-        return Point3D(outCoords)
+        return Point3D(outCoords).to_array_formatted_vectors()
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
@@ -127,6 +127,20 @@ class Point3D:
             return False
 
     ### REINSTANTIATION ###
+    
+    def to_array_formatted_vectors(self):
+        ### old vectorized point format: tuple of vectors
+        ### new vectorized point format: np.array of vectors
+        x, y, z = self.coords
+        if not self.is_vectorized():
+            new_coords = (x, y, z)
+        else:
+            new_coords = np.vstack([x, y, z])
+
+        updDict = {'coords': new_coords}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return self.__class__(**newDict)
+
     def reposition(self, new_coords):
         updDict = {'coords': new_coords}
         newDict = get_updated_attribute_dictionary(self, updDict)
