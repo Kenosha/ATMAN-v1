@@ -225,6 +225,11 @@ class Mark(Lines3D):
         
         return Mark([aLn, bLn], color = color, alpha = alpha, name = name)
      
+    def get_center_point(self):
+        ### we do this by averaging the four corner points
+        l1, l2 = self
+        return (l1.leftPt + l1.rightPt + l2.leftPt + l2.rightPt) / 4
+
 @dataclass(frozen = True, repr = False, eq = False)    
 class Arrow(Lines3D):
     _ARROW_COLOR = const.BGR['strong_blue']
