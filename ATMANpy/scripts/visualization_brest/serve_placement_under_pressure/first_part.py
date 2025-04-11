@@ -12,7 +12,7 @@ from ATMANpy.types.Features import StreamFeature, StreamFeatures, BoolFeature, B
 from ATMANpy.types.Frames import BGRFrame, MaskFrame
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Visual3D import Camera, View, Scene, DummyScene
-from ATMANpy.types.Overlays import FramesRaster
+from ATMANpy.types.Overlays import FramesRaster, overlay_center, overlay
 from ATMANpy.types.Lines import CourtLines
 from ATMANpy.types.Shapes3D import Region3D, Point3D
 
@@ -68,6 +68,57 @@ nullPnts = Points.from_placeholder_table(nullTable)
 
 allPnts = dataPnts.join(nullPnts).sort()
 
+### TITLE CARD ###
+from ATMANpy.types.Frames import BGRFrame
+from ATMANpy.types.Lines import Region
+
+title_dims = (850, 100)
+eps = 2
+title_x, title_y = title_dims
+
+titleStr = 'On the Impact of Leverage on Serve Selection'
+
+titleFrm = BGRFrame.make_black(*title_dims).put(titleStr, size = 2, where = (30, round(0.575 * title_y)))
+# titleFrm.show()
+
+blackFrm = BGRFrame.make_black()
+black_with_titleFrm = overlay_center(blackFrm, titleFrm)
+# black_with_titleFrm.show()
+
+### TODO: maybe a little quote 
+### TODO: maybe emphasize contrast between Playing every point like your life depends on it v. only point that matters is the last one.
+
+all_frames = []
+script_lines = []
+
+script_line =   """
+                    In tennis, not all points are of equal importance. 
+                    Facetiously speaking, the only point that really matters is the last one. 
+                    Though this might be a convenient oversimplification, 
+                    there is more at stake in a close final set tiebreak than 2 breaks ahead in the first.
+
+                    We quantify what is at stake by a notion of leverage: to what extent can a point swing the outcome of a match.
+
+                    In this analysis, we want to find out whether leverage affects a player's serve selection.
+                """
+
+fadeFrms = vs.interpolate_frames(blackFrm, black_with_titleFrm, 100)
+statFrms = BGRFrames.from_frame(black_with_titleFrm, 100)
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+# script_line =   """
+#                     The hypothesis is that at high leverage, a player will want to employ the serve that maximizes his or her chances of winning;
+#                     at low leverage, a player might be more willing to go for sub-optimal serves in order to remain unpredictable, 
+#                     and hopefully keep the receiver guessing even in high-leverage situations.
+#                 """
+
+# script_line =   """
+#                     Before testing the hypothesis, let's take a quick look at the construction of the leverage metric.
+#                 """
+
 ##############################
 ########## Raster ############
 ##############################
@@ -119,15 +170,24 @@ loPnt = filtPnts[min_idx]
 # loPnt.stream(confs = confs).show()
 
 ### initial frame raster ###
-widen_by = 100
+widen_by = 250
+fade_by = 100
+keep_for_end = 50
 hiStm = hiPnt.stream(confs = confs).widen(widen_by)
 loStm = loPnt.stream(confs = confs).widen(widen_by)
 
-pre_hiFrms = hiStm.decap().frames[:widen_by].rescale(3/2)
-pre_loFrms = loStm.decap().frames[:widen_by].rescale(3/2)
+pre_hiFrms_all = hiStm.decap().frames[:widen_by].rescale(3/2)
+pre_loFrms_all = loStm.decap().frames[:widen_by].rescale(3/2)
 
-pre_hiFrms = pre_hiFrms.framed(thickness = 3, color = const.BGR['bright_grey'])
-pre_loFrms = pre_loFrms.framed(thickness = 3, color = const.BGR['bright_grey'])
+pre_hiFrms_all = pre_hiFrms_all.framed(thickness = 3, color = const.BGR['bright_grey'])
+pre_loFrms_all = pre_loFrms_all.framed(thickness = 3, color = const.BGR['bright_grey'])
+
+pre_hiFrms_fade = pre_hiFrms_all[:fade_by]
+pre_loFrms_fade = pre_loFrms_all[:fade_by]
+pre_hiFrms = pre_hiFrms_all[fade_by:widen_by-keep_for_end]
+pre_loFrms = pre_loFrms_all[fade_by:widen_by-keep_for_end]
+pre_hiFrms_post = pre_hiFrms_all[-keep_for_end:]
+pre_hiFrms_post = pre_hiFrms_all[-keep_for_end:]
 
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Arrow
@@ -165,6 +225,11 @@ textFrm_lo_2 = textFrm_lo_1.put('Server might mix in a serve that is not optimal
 ##########
 myRst = FramesRaster(2, 2, borders = None)
 
+myRst.add(pre_hiFrms_fade, 0, 0)
+rstFrms_fade = myRst.render()
+rstFrms_fade = rstFrms_fade.dim_progressively(0, 1) + BGRFrames.from_frame(black_with_titleFrm, fade_by).dim_progressively(1, 0)
+myRst = myRst.to_frame_raster().to_frames_raster()
+
 myRst.add(pre_hiFrms, 0, 0)
 rstFrms0 = myRst.render()
 # DecapStream(rstFrms0, 0, 100).show()
@@ -191,7 +256,38 @@ myRst.add(BGRFrames.from_frame(textFrm_lo_2, 50), 1, 0)
 rstFrms5 = myRst.render()
 # DecapStream(rstFrms5, 0, 100).show()
 
-rst_frames = [rstFrms0, rstFrms1, rstFrms2, rstFrms3, rstFrms4, rstFrms5]
+rst_frames = [rstFrms_fade, rstFrms0, rstFrms1, rstFrms2, rstFrms3, rstFrms4, rstFrms5]
+vis_ut.show(rst_frames)
+
+###### ANIMATE #####
+
+script_line =   """
+                    Consider this match point on Joao Sousa's serve.
+                """
+currFrms = BGRFrames.from_frames([rstFrms_fade, rstFrms0])
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    The hypothesis is that at such high leverage, 
+                    a player will want to employ the serve that maximizes his or her chances of winning.
+                """
+currFrms = BGRFrames.from_frames([rstFrms1, rstFrms2])
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    In a lower leverage situation, a player might be more willing to go for sub-optimal serves in order to remain unpredictable, 
+                    and hopefully keep the receiver guessing even in high-leverage situations.
+                """
+currFrms = BGRFrames.from_frames([rstFrms3, rstFrms4, rstFrms5])
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    Before testing the hypothesis, let's take a quick look at the construction of the leverage metric, 
+                    using as an example the high-leverage situation.
+                """
 
 # vis_ut.show(rst_frames)
 
@@ -202,8 +298,15 @@ y1, y2 = 460, 525
 p1, p2 = Point2D((x1, y1)), Point2D((x2, y2))
 cropReg = Region.from_points(p1, p2)
 
+# other crop score region (for later)
+x1, x2 = x1 + 1920 // 2, x2 + 1920 // 2 - 30
+y1, y2 = y1 + 1080 // 2, y2 + 1080 // 2
+p1_2, p2_2 = Point2D((x1, y1)), Point2D((x2, y2))
+cropReg_2 = Region.from_points(p1_2, p2_2)
+
 lsFrm = rstFrms5[-1]
-# lsFrm.put(cropReg).show()
+lsFrm.put(cropReg).show()
+lsFrm.put(cropReg_2).show()
 cropFrm = lsFrm.crop(cropReg)
 
 from ATMANpy.types.Overlays import scoreboard, overlay, Table
@@ -244,6 +347,10 @@ for idx in range(fade_frms):
 
 moveFrms = BGRFrames.from_single_frames(moving_frames)
 # DecapStream(moveFrms, 0, 100).show()
+
+fade_and_moveFrms = BGRFrames.from_frames([lsFrms_fade, moveFrms])
+all_frames.append(fade_and_moveFrms)
+script_lines.append(script_line)
 
 ###### MARKOV DIAGRAM ######
 ### 1st Order ###
@@ -394,9 +501,6 @@ scoreFrm_lose_unknown_with_box = BGRFrame(np.concatenate([percFrm_lose_unknown.a
 
 ######### WRITE SCRIPT DRAFT ########
 curr_scoreFrm = moveFrms[-1]
-
-all_frames = []
-script_lines = []
 
 script_line = "The leverage of a point should quantify to what extent the outcome of the point influences the outcome of the match."
 currFrms = BGRFrames.from_frame(curr_scoreFrm, 50)
@@ -686,7 +790,7 @@ currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-
+############# PRESSURE CHART #############
 script_line = "With just a few more fairly unrestrictive assumptions, we can quantify leverage for the entire match."
 
 from ATMANpy.types.Overlays import Graph, LineChart, ScatterChart
@@ -716,10 +820,101 @@ myGraph = Graph([pressChart, vChart1, vChart2], make_default_x_labels = False, y
                 resolution = 100)
 
 graphFrm = myGraph.render()
+
+graphFrm = graphFrm.framed(2, const.BGR['bright_grey'])
 graphFrm.show()
 
+last_diagFrm = currFrms[-1]
+last_rastFrm = rstFrms5[-1]
+
+from ATMANpy.types.Overlays import overlay_center
+
+fade_backFrm0 = last_rastFrm.dim(dim_factor)
+fade_backFrm1 = overlay(fade_backFrm0, last_rastFrm.crop(cropReg), p1)
+fade_backFrm2 = overlay(fade_backFrm1, last_rastFrm.crop(cropReg_2), p1_2)
+# fade_backFrm.show()
+
+statFrm_black = overlay_center(BGRFrame.make_black(), graphFrm)
+statFrm = overlay_center(fade_backFrm2, graphFrm)
+
+fadeFrms = vs.interpolate_frames(last_diagFrm, statFrm_black, 50)
+statFrms = BGRFrames.from_frame(statFrm_black, 50)
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+# DecapStream(currFrms, 0, 100).show()
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "... with our initial situations corresponding to very high and very low leverage, indeed."
+
+# hi_idx = hiPnt.get_point_index()
+# lo_idx = loPnt.get_point_index()
+# hi_idx_norm = hi_idx / hi_idx ### since hi_idx is the last point
+# lo_idx_norm = lo_idx / hi_idx
+
+scoreArr_hi = Arrow.make(p2.up(30), p2.up(100).right(890), shorten_by = 0.99, hat_length = 20)
+scoreArr_lo = Arrow.make(p1_2.right(100), p1_2.up(300).left(32), shorten_by = 0.97, hat_length = 20)
+
+arrFrm1 = statFrm.put(scoreArr_hi, thickness = 2)
+arrFrm2 = arrFrm1.put(scoreArr_lo, thickness = 2)
+
+fadeFrms = vs.interpolate_frames(statFrm_black, statFrm, 50)
+arrFrms1 = BGRFrames.from_frame(arrFrm1, 50)
+arrFrms2 = BGRFrames.from_frame(arrFrm2, 50)
+
+currFrms = BGRFrames.from_frames([fadeFrms, 
+                                  arrFrms1,
+                                  arrFrms2])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = "So then let's take a look at serve placement."
+### remove all elements except the top left situation.
+
+from ATMANpy.types.Overlays import reverse_cascade
+
+arrFrms1_back = BGRFrames.from_frame(arrFrm1, 15)
+statFrms_back = BGRFrames.from_frame(statFrm, 10)
+fade_backFrms2 = BGRFrames.from_frame(fade_backFrm2, 5)
+fade_backFrms1 = BGRFrames.from_frame(fade_backFrm1, 5)
+fade_backFrms0 = BGRFrames.from_frame(fade_backFrm0, 5)
+revRst, revFrms = reverse_cascade(myRst, keep_which = [(0, 0)], frames_per_element = 5)
+revFrms = revFrms.dim(dim_factor)
+
+currFrms = BGRFrames.from_frames([arrFrms1_back, statFrms_back, 
+                                  fade_backFrms2, fade_backFrms1, fade_backFrms0, 
+                                  revFrms])
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+DecapStream(currFrms, 0, 100).show()
+
+script_line = "In all of his tournament matches, when serving from the ad side..."
+### grow frame
+
+factors = np.linspace(1, 2, num = 50)
+
+out_frames = []
+blackFrm = BGRFrame.make_black()
+for idx, f in enumerate(factors):
+    ### curr_frame
+    currFrm = pre_hiFrms_post[idx]
+    ### calculate dim factor
+    lmbd = f - 1
+    curr_dim_factor = 0.25 * (1 - lmbd) + 1 * lmbd
+    ### dim and rescale
+    currFrm = currFrm.dim(curr_dim_factor).rescale(f)
+    ### overlay on black frame so we have consistent size
+    outFrm = overlay(blackFrm, currFrm, top_left_point = Point2D((0, 0)))
+    out_frames.append(outFrm)
+
+outFrms = BGRFrames.from_single_frames(out_frames)
+
+all_frames.append(outFrms)
+script_lines.append(script_line)
 
 
-
-
+vis_ut.show(all_frames)
 

@@ -3,8 +3,14 @@ import scipy
 from ATMANpy.auxil.court import courtLines
 from ATMANpy.types.Points import Point2D
 
-from ATMANpy.types.Overlays import Legend
+from ATMANpy.types.Overlays import Legend, LegendRow
 import ATMANpy.auxil.constants as const
+
+from ATMANpy.types.Streams import DecapStream
+from ATMANpy.types.MultiFrames import BGRFrames
+
+def show(all_frames, ms_between_frames = 25):
+    DecapStream(BGRFrames.from_frames(all_frames), 0, 100).show(ms_between_frames = ms_between_frames)
 
 def get_service_line_and_indicator(side, which):
     srvReg = courtLines.get_service_box(side = side, which = which)
@@ -140,6 +146,8 @@ deuceReg_enlarged = deuceReg.scale(1.25)
 adReg = courtLines.make().add_singles_netline().get_service_box(which = 'Ad', side = 'Top')
 adReg_enlarged = adReg.scale(1.25)
 
+
+
 def is_player(myShot, player_name = 'Joao Sousa'):
     return myShot.hitPlayer.get_name() == player_name
 
@@ -151,10 +159,14 @@ def is_bounce_in_region(myShot, myReg):
         bouncePt = Point2D(coords)
         return bouncePt.within(myReg)
     
-def is_bounce_in_ad(myShot):
+def is_bounce_in_ad(myShot, side = 'Top'):
+    adReg = courtLines.make().add_singles_netline().get_service_box(which = 'Ad', side = side)
+    adReg_enlarged = adReg.scale(1.25)
     return is_bounce_in_region(myShot, adReg_enlarged)
 
-def is_bounce_in_deuce(myShot):
+def is_bounce_in_deuce(myShot, side = 'Top'):
+    deuceReg = courtLines.make().add_singles_netline().get_service_box(which = 'Deuce', side = side)
+    deuceReg_enlarged = deuceReg.scale(1.25)
     return is_bounce_in_region(myShot, deuceReg_enlarged)
 
 def make_legend_frame(player_name, handedness):
@@ -192,3 +204,87 @@ def collect_video_frames(shots, confs, widen_by = 5):
         frms_list.append(shotFrms)
 
     return frms_list
+
+
+def split_kde(serveShots_sample, side, p_thresh_lo = 0.04, p_thresh_hi = 0.08, **kde_kwargs):
+    from ATMANpy.types.ShapesTennis3D import Court
+    from ATMANpy.types.Shapes3D import Region3D, Line3D, Point3D
+    from ATMANpy.types.Visual3D import Scene
+    from ATMANpy.types.Lines import CourtLines
+    import ATMANpy.funcs.vis_funcs as vs
+
+    srvLn, indDict = CourtLines.make().add_singles_netline().get_service_line_and_indicator('Bottom', side)
+
+    lineReg = Court.make()['Bottom Service Line'] ### in case of changing away from top or deuce, these might have to be changed!
+    adlineReg, deucelineReg  = lineReg.split(how = 'vertical') ### in case of changing away from top or deuce, these might have to be changed!
+
+    if side == 'Deuce':
+        showReg = deucelineReg
+    else:
+        showReg = adlineReg
+
+    ### MAKE KDES WITH SPLIT CATEGORIES
+    lowShots = serveShots_sample.filter('get_total_match_score_pressure', is_below = p_thresh_lo)
+    midShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = p_thresh_lo, is_below = p_thresh_hi)
+    hiShots = serveShots_sample.filter('get_total_match_score_pressure', is_above = p_thresh_hi)
+
+    low_kde_scene = vs.kde_hillmap(lowShots, one_color = const.BGR['grass_green'], showReg = showReg, **kde_kwargs)
+    mid_kde_scene = vs.kde_hillmap(midShots, one_color = const.BGR['soft_yellow'], showReg = showReg, **kde_kwargs)
+    high_kde_scene = vs.kde_hillmap(hiShots, one_color = const.BGR['intense_red'], showReg = showReg, **kde_kwargs)
+
+    mid_kde_scene.rastArrs[0] -= [0, 60, 0]
+    high_kde_scene.rastArrs[0] -= [0, 120, 0]
+
+    splitScn = low_kde_scene.combine(mid_kde_scene).combine(high_kde_scene)
+
+    ### JOINT KDEs    
+    joint_kde_null_scene = vs.kde_hillmap(serveShots_sample, max_height = -0.5, one_color = const.BGR['strong_blue'], **kde_kwargs)
+    joint_kde_scene = vs.kde_hillmap(serveShots_sample, one_color = const.BGR['strong_blue'], **kde_kwargs)
+
+    ### SERVICE BOX GRAPH
+    width = courtLines.see_dimensions()['otherline_width']
+    x_ax, y_ax = srvLn, courtLines['Bottom Center Line']
+    x_ax_3D = Region3D.from_line3D(Line3D.from_line2D(x_ax, z = 0), width = width, dim = 'y')
+    y_ax_3D = Region3D.from_line3D(Line3D.from_line2D(y_ax, z = 0), width = width, dim = 'x')
+    xyScn = Scene([x_ax_3D, y_ax_3D])
+
+    origPt = x_ax.weak_intersect(y_ax)
+    origPt_3D = Point3D.from_point2D(origPt, z = 0)
+
+    loPt = origPt_3D.right(15).annotate(f'Low Pressure \n (Point Impact <4%) \n n = {len(lowShots)}').recolor(const.BGR['grass_green'])
+    midPt = origPt_3D.front(70).right(20).annotate(f'Medium Pressure \n (Point Impact 4-8%) \n n = {len(midShots)}').recolor(const.BGR['soft_yellow'])
+    hiPt = origPt_3D.front(150).right(25).annotate(f'High Pressure \n (Point Impact >8%) \n n = {len(hiShots)}').recolor(const.BGR['intense_red'])
+
+    tPt = origPt_3D.left(15).back(10).annotate('Down the Middle')    
+    wPt = origPt_3D.left(110).back(10).annotate('Out Wide')
+
+    diagPt = Point3D((x_ax.rightPt.x, y_ax.leftPt.y, 0))
+    jntStr = make_stat_string(lowShots, hiShots)
+    statPt = diagPt.annotate(jntStr).front(110).right(40)
+
+    annPnts = [loPt, midPt, hiPt, tPt, wPt, statPt]
+
+    return splitScn, xyScn, annPnts
+
+def joint_kde(serveShots_sample, side, **kde_kwargs):
+    from ATMANpy.types.ShapesTennis3D import Court
+    from ATMANpy.types.Shapes3D import Region3D, Line3D, Point3D
+    from ATMANpy.types.Visual3D import Scene
+    from ATMANpy.types.Lines import CourtLines
+    import ATMANpy.funcs.vis_funcs as vs
+
+    lineReg = Court.make()['Bottom Service Line'] ### in case of changing away from top or deuce, these might have to be changed!
+    adlineReg, deucelineReg  = lineReg.split(how = 'vertical') ### in case of changing away from top or deuce, these might have to be changed!
+
+    if side == 'Deuce':
+        showReg = deucelineReg
+    else:
+        showReg = adlineReg
+
+    ### JOINT KDEs    
+    joint_kde_null_scene = vs.kde_hillmap(serveShots_sample, max_height = -0.5, one_color = const.BGR['strong_blue'], showReg = showReg,
+                                          **kde_kwargs)
+    joint_kde_scene = vs.kde_hillmap(serveShots_sample, one_color = const.BGR['strong_blue'], showReg = showReg,
+                                     **kde_kwargs)
+
+    return joint_kde_null_scene, joint_kde_scene
