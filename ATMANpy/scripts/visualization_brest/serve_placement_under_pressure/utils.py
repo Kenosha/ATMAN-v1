@@ -126,13 +126,13 @@ def make_stat_string(loShots, hiShots, alpha = 0.05, lo_desc = 'Low Pressure', h
     ks_p, ad_p = ks_res.pvalue, ad_res.pvalue
 
     if ks_p >= alpha and ad_p >= alpha:
-        textStr = f'{hi_desc} and {lo_desc} distributions \n can not be shown to be statistically different at a = {alpha}.'
+        textStr = f'{hi_desc} and {lo_desc} distributions\ncan not be shown to be statistically different at a = {alpha}.'
     elif ks_p < alpha and ad_p < alpha:
-        textStr = f'{hi_desc} and {lo_desc} distributions \n are statistically different at a = {alpha}.'
+        textStr = f'{hi_desc} and {lo_desc} distributions\nare statistically different at a = {alpha}.'
     elif ks_p < alpha and ad_p >= alpha:
-        textStr = f'{hi_desc} and {lo_desc} distributions \n are statistically different at a = {alpha} \n only according to the Kolmogorov-Smirnov test.'
+        textStr = f'{hi_desc} and {lo_desc} distributions\nare statistically different at a = {alpha}\nonly according to the Kolmogorov-Smirnov test.'
     elif ks_p >= alpha and ad_p < alpha:
-        textStr = f'{hi_desc} and {lo_desc} distributions \n are statistically different at a = {alpha} \n only according to the Anderson-Darling test.'
+        textStr = f'{hi_desc} and {lo_desc} distributions\nare statistically different at a = {alpha}\nonly according to the Anderson-Darling test.'
 
     ksStr = f'Kolmogorov-Smirnov 2-Sample p-value: {round(ks_p, 3)}'
     adStr = f'Anderson-Darling 2-Sample p-value: {round(ad_p, 3)}'
@@ -169,25 +169,33 @@ def is_bounce_in_deuce(myShot, side = 'Top'):
     deuceReg_enlarged = deuceReg.scale(1.25)
     return is_bounce_in_region(myShot, deuceReg_enlarged)
 
-def make_legend_frame(player_name, handedness):
-    ## legend parameters
-    text_size = 1
-    thickness = 1
-    offset = 0.5
-    color = const.BGR['bright_grey']
+def make_legend_frame(player_name, handedness, side, player_spaces = 15, 
+                      index_color = const.BGR['bright_grey'], data_color = const.BGR['grass_green']):
+    from ATMANpy.types.Overlays import Table
 
-    myLeg = Legend.make_empty(resolution = 100, header_offset = 3.25, legend_dimensions = (350, 200), header_thickness = 2)
+    if handedness == 'Right':
+        hand_spaces = 16
+    elif handedness == 'Left':
+        hand_spaces = 16
 
-    l1 = {'text_string_shape': 'Player:', 'text_color_shape': color, 'text_size_shape': text_size, 'text_thickness_shape': thickness, 'text_offset_shape': offset,
-        'text_string': player_name,  'text_color': color, 'text_size': text_size, 'text_thickness': thickness, 'text_offset': 3 * offset}        
-    l2 = {'text_string_shape': 'Handedness:', 'text_color_shape': color, 'text_size_shape': text_size, 'text_thickness_shape': thickness, 'text_offset_shape': offset,
-            'text_string': handedness,  'text_color': color, 'text_size': text_size, 'text_thickness': thickness, 'text_offset': 3 * offset}
+    if side == 'Deuce':
+        side_spaces = 15
+    elif side == 'Ad':
+        side_spaces = 16
+
+    table_data = {'Player': {'': f'{player_name:>{player_spaces}}'}, 
+                  'Handedness': {'': f'{handedness:>{hand_spaces}}'},
+                  'Serving': {'': f'{side:>{side_spaces}}'}}
+
+    myTab = Table(  table_data, dimensions = (350, 200), 
+                #   title = 'Legend', title_horizontal_offset = 3.25, title_vertical_offset = 0.25, title_color = color,
+                    header_row_height = 0.5, 
+                    data_text_color = data_color, index_text_color = index_color,
+                    skeleton_shrinkage = 0.2, index_offset = 0.25, automatic_vertical_offset_text_line_height = 0.25)
     
-    myLeg = myLeg.add(l1).add(l2)
-
-    legFrm = myLeg.render()
-
-    return legFrm
+    tabFrm = myTab.render()
+    tabFrm = tabFrm.framed(2, index_color)
+    return tabFrm
 
 def collect_video_frames(shots, confs, widen_by = 5):
     frms_list = []
@@ -237,10 +245,6 @@ def split_kde(serveShots_sample, side, p_thresh_lo = 0.04, p_thresh_hi = 0.08, *
 
     splitScn = low_kde_scene.combine(mid_kde_scene).combine(high_kde_scene)
 
-    ### JOINT KDEs    
-    joint_kde_null_scene = vs.kde_hillmap(serveShots_sample, max_height = -0.5, one_color = const.BGR['strong_blue'], **kde_kwargs)
-    joint_kde_scene = vs.kde_hillmap(serveShots_sample, one_color = const.BGR['strong_blue'], **kde_kwargs)
-
     ### SERVICE BOX GRAPH
     width = courtLines.see_dimensions()['otherline_width']
     x_ax, y_ax = srvLn, courtLines['Bottom Center Line']
@@ -251,12 +255,21 @@ def split_kde(serveShots_sample, side, p_thresh_lo = 0.04, p_thresh_hi = 0.08, *
     origPt = x_ax.weak_intersect(y_ax)
     origPt_3D = Point3D.from_point2D(origPt, z = 0)
 
-    loPt = origPt_3D.right(15).annotate(f'Low Pressure \n (Point Impact <4%) \n n = {len(lowShots)}').recolor(const.BGR['grass_green'])
-    midPt = origPt_3D.front(70).right(20).annotate(f'Medium Pressure \n (Point Impact 4-8%) \n n = {len(midShots)}').recolor(const.BGR['soft_yellow'])
-    hiPt = origPt_3D.front(150).right(25).annotate(f'High Pressure \n (Point Impact >8%) \n n = {len(hiShots)}').recolor(const.BGR['intense_red'])
+    if side == 'Deuce':
+        loPt = origPt_3D.left(25).annotate(f'Low Pressure \n (Point Impact <4%) \n n = {len(lowShots)}').recolor(const.BGR['grass_green'])
+        midPt = origPt_3D.front(70).left(35).annotate(f'Medium Pressure \n (Point Impact 4-8%) \n n = {len(midShots)}').recolor(const.BGR['soft_yellow'])
+        hiPt = origPt_3D.front(150).left(37).annotate(f'High Pressure \n (Point Impact >8%) \n n = {len(hiShots)}').recolor(const.BGR['intense_red'])
 
-    tPt = origPt_3D.left(15).back(10).annotate('Down the Middle')    
-    wPt = origPt_3D.left(110).back(10).annotate('Out Wide')
+        tPt = origPt_3D.right(0).back(10).annotate('Down the Middle')    
+        wPt = origPt_3D.right(100).back(10).annotate('Out Wide')
+
+    elif side == 'Ad':
+        loPt = origPt_3D.right(15).annotate(f'Low Pressure \n (Point Impact <4%) \n n = {len(lowShots)}').recolor(const.BGR['grass_green'])
+        midPt = origPt_3D.front(70).right(20).annotate(f'Medium Pressure \n (Point Impact 4-8%) \n n = {len(midShots)}').recolor(const.BGR['soft_yellow'])
+        hiPt = origPt_3D.front(150).right(25).annotate(f'High Pressure \n (Point Impact >8%) \n n = {len(hiShots)}').recolor(const.BGR['intense_red'])
+
+        tPt = origPt_3D.left(15).back(10).annotate('Down the Middle')    
+        wPt = origPt_3D.left(110).back(10).annotate('Out Wide')
 
     diagPt = Point3D((x_ax.rightPt.x, y_ax.leftPt.y, 0))
     jntStr = make_stat_string(lowShots, hiShots)
@@ -288,3 +301,30 @@ def joint_kde(serveShots_sample, side, **kde_kwargs):
                                      **kde_kwargs)
 
     return joint_kde_null_scene, joint_kde_scene
+
+def morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
+                     splitScn1, xyScn1, annPnts1, legFrm1,
+                     myCam, 
+                     num_frames = 50, tlPt_leg = Point2D((0, 0)),
+                     **prmDict):
+    from ATMANpy.types.Visual3D import View
+    from ATMANpy.types.Overlays import overlay
+    import ATMANpy.funcs.vis_funcs as vs
+
+    ### interpolate the annotated points and legends
+    emFrm0 = View.make(myCam, xyScn0, annotatedPoints = annPnts0, resolution = prmDict['background_resolution']).snap()
+    emFrm1 = View.make(myCam, xyScn1, annotatedPoints = annPnts1[:-1], resolution = prmDict['background_resolution']).snap()
+
+    emFrm0 = overlay(emFrm0, legFrm0, tlPt_leg)
+    emFrm1 = overlay(emFrm1, legFrm1, tlPt_leg)
+
+    emFrms_itpl = vs.interpolate_frames(emFrm0, emFrm1, num_frames)
+    # DecapStream(emFrms_itpl, 0, 100).show()
+
+    ### animate over these the interpolated split scenes
+    itplScns = vs.interpolate_dummy_scenes(splitScn0, splitScn1, 50)
+
+    itplFrms, _ = vs.animate_sequence(itplScns, start_cam = myCam, stop_cam = myCam, 
+                                      animate_over = emFrms_itpl, **prmDict)
+    
+    return itplFrms
