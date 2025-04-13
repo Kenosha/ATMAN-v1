@@ -183,7 +183,8 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
                     cumulate_argument = False, cumulative_foreground_transparence = None, 
                     argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
                     start_cam = None, stop_cam = None, animate_over = None,
-                    start_later = 0, stop_earlier = 0):
+                    start_later = 0, stop_earlier = 0,
+                    text_at = 'current'):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
     num_frames = len(animation_sequence_objects)
@@ -252,14 +253,21 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
 
         current_scene_brightened = current_scene.dim(argument_luminosity)
         current_scene_dimmed = current_scene.dim(1 / argument_luminosity)
-        current_view = View.make(current_cam, current_scene_brightened, annotatedPoints = annotated_points_to_show, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
+        current_view = View.make(current_cam, current_scene_brightened, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     
+        if text_at == 'current':
+            text_view = View.make(current_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
+        elif text_at == 'start':
+            text_view = View.make(start_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
+        elif text_at == 'stop':
+             text_view = View.make(stop_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
+
         ### create previous and base views
         front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
         dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution) ### TODO: adaptive resolution not done for dummy scenes
         base_view = View.make(current_cam, background_scene, resolution = background_resolution) ### TODO: adaptive resolution redundant for the background?
 
-        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
+        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
         
         if animate_over is None:
             over_array = None
@@ -1033,8 +1041,8 @@ def kill_nans_in_vectorized_line(aLn):
 
     return Line3D(Point3D(l_coords), Point3D(r_coords), color = aLn.color, alpha = aLn.alpha, thickness = aLn.thickness)
 
-def ball_flight(myShots, line_interpolation_factor = None):
-    splineSF = myShots.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = 'actual')
+def ball_flight(myShots, line_interpolation_factor = None, which_endpoint = 'actual'):
+    splineSF = myShots.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = which_endpoint)
     shapes = list(splineSF.values())
     shapes_vectorized = [f.vectorize() for f in shapes if f is not None]
     shapes_vectorized_nanfilt = [kill_nans_in_vectorized_line(aLn) for aLn in shapes_vectorized]
@@ -1043,7 +1051,8 @@ def ball_flight(myShots, line_interpolation_factor = None):
         shapes_vectorized_nanfilt_expanded = shapes_vectorized_nanfilt
     else:
         shapes_vectorized_nanfilt_expanded = [subLn for aLn in shapes_vectorized_nanfilt for subLn in divide_line(aLn, num_divisions = line_interpolation_factor)]
-    
+        # shapes_vectorized_nanfilt_expanded = [subLn for aLn in shapes_vectorized_nanfilt for subLn in aLn.subdivide(line_interpolation_factor)]
+
     return shapes_vectorized_nanfilt_expanded
 
 
