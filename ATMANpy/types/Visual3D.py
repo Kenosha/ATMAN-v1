@@ -298,7 +298,11 @@ class DummyScene:
     @staticmethod
     def make_empty():
         return DummyScene([], [], [])
-    
+
+    def copy(self):       
+        import copy
+        return copy.deepcopy(self)
+
     def is_empty(self):
         return len(self.rastArrs) == 0
     
