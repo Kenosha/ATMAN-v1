@@ -966,10 +966,11 @@ class View:
 
                 ### 5) single pixel pruning (on each shape separately)
                 sp_views = aView.make_single_pixel_views()
-                sp_views_pruned = [spView.prune_to_singleton() for spView in sp_views]
-                subView = View.from_many_views(sp_views_pruned)
+                if len(sp_views) > 0:
+                    sp_views_pruned = [spView.prune_to_singleton() for spView in sp_views]
+                    subView = View.from_many_views(sp_views_pruned)
 
-                sub_views.append(subView)
+                    sub_views.append(subView)
 
             jointView = View.from_many_views(sub_views)
             
@@ -1044,9 +1045,10 @@ class View:
     def make_single_pixel_views(self):
         ### figure out which points are mapped to the same pixel.
         sortView_px = self.sort_by_pixel()
-        if len(sortView_px) == 1: ### if there's only one element, the rolling will not work
+        if len(sortView_px) == 0:
+            out_sp_views = []
+        elif len(sortView_px) == 1: ### if there's only one element, the rolling will not work
             out_sp_views = [SinglePixelView(sortView_px.ptArr, sortView_px.clArr, sortView_px.alArr, sortView_px.pxArr, sortView_px.dsArr)]
-
         else:
             pxArr_diff = sortView_px.pxArr - np.roll(sortView_px.pxArr, 1, 0)
             boolArr_diff = (pxArr_diff != 0).any(axis = 1)
