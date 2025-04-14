@@ -27,6 +27,24 @@ import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 
 import ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils as vis_ut
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+SAVE = True
+
+DESCRIPTOR = 'ad_side_cases'
+SAVE_FOLDER = 'serve_pressure_new'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+
+if SAVE:
+    fullPath = maybe_make_folder(savePath, saveFolder)
+
+
 #############################
 #### READ IN CONFIGS ########
 #############################
@@ -276,69 +294,125 @@ sceneDict[player_name] = splitScn, xyScn, annPnts, legFrm
 #### ANIMATION ###
 
 all_frames = []
+script_lines = []
+
+script_line =   """
+                    The Ad-side serve out wide to the backhand is a sensible weapon of choice.
+                    For Joao Sousa, a righty, the serve will be hard and flat. 
+                    For lefties, however, the staple ad-side serve is the slice out wide, 
+                    pulling the returner out of the court on the backhand side.
+                """
 
 splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Joao Sousa']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Liam Broady']
 
+stillFrms_pre, _ = vs.animate_static(splitScn0, background_scene = xyScn0, static_cam = boxCam,
+                                    annotated_points = annPnts0, num_frames = 50,
+                                    **prmDict)
+stillFrms_pre = overlay(stillFrms_pre, legFrm0, tlPt_leg)
+
+all_frames.append(stillFrms_pre)
+script_lines.append(script_line)
+
+script_line =   """
+                    Indeed, for Liam Broady, we see a heavy dependence on this serve out wide.
+                """
+
 itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
                                     splitScn1, xyScn1, annPnts1, legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
-all_frames.append(itplFrms)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1[:-1], num_frames = 50,
                                 **prmDict)
 stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
-all_frames.append(stillFrms)
+
+jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
 
 statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1, num_frames = 50,
                                 **prmDict)
 statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-all_frames.append(statFrms)
+statFrms[-1].show()
 
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    The same holds for Hugo Gaston, another lefty. 
+                    Even though it looks like they both mix in serves down the middle at low leverage,
+                    and rely on the slice out wide almost exclusively at higher leverages, 
+                    our tests can not establish a statistically significant difference in serve locations
+                    due to very limited sample size: for both Liam Broady, and Hugo Gaston, we only have one match in our sample.
+                """
 
 splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Liam Broady']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Hugo Gaston']
 
-itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
+itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
                                     splitScn1, xyScn1, annPnts1, legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
-all_frames.append(itplFrms)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1[:-1], num_frames = 50,
                                 **prmDict)
 stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
-all_frames.append(stillFrms)
 
 statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1, num_frames = 50,
                                 **prmDict)
 statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-all_frames.append(statFrms)
+statFrms[-1].show()
 
+jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    On the other hand, Carlos Taberner exclusively serves down the middle in medium or high pressure situations, 
+                    whereas he mixes his serves in low pressure situations.
+
+                    However, Carlos Taberners only match in our sample came against left-handed Kenny De Schepper, 
+                    so it might be that he is simply targetting the backhand on serve, 
+                    and results might not generalize to right-handed receivers.
+                """
 
 splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Hugo Gaston']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Carlos Taberner']
 
-itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
+itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
                                     splitScn1, xyScn1, annPnts1, legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
-all_frames.append(itplFrms)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1[:-1], num_frames = 50,
                                 **prmDict)
 stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
-all_frames.append(stillFrms)
 
-statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
-                                annotated_points = annPnts1, num_frames = 50,
-                                **prmDict)
-statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-all_frames.append(statFrms)
+jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+# statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
+#                                 annotated_points = annPnts1, num_frames = 50,
+#                                 **prmDict)
+# statFrms = overlay(statFrms, legFrm1, tlPt_leg)
+# all_frames.append(statFrms)
 
 vis_ut.show(all_frames)
 
+### Saving the separate MultiFrame objects and the Joint Script
+if SAVE:
+    assert len(script_lines) == len(all_frames)
+
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        print(idx)
+        subFrms, script_line = frames_and_script
+        subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+            f.write(script_line)
 

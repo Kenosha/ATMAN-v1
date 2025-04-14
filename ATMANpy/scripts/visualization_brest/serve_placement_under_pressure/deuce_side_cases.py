@@ -27,6 +27,25 @@ import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 
 import ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils as vis_ut
+
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+SAVE = True
+
+DESCRIPTOR = 'deuce_side_cases'
+SAVE_FOLDER = 'serve_pressure_new'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+
+if SAVE:
+    fullPath = maybe_make_folder(savePath, saveFolder)
+
+
 #############################
 #### READ IN CONFIGS ########
 #############################
@@ -143,8 +162,9 @@ legFrm = vis_ut.make_legend_frame(player_name, handedness, serve_from)
 tlPt_leg = Point2D((50, 50))
 
 splitScn, xyScn, annPnts = vis_ut.split_kde(serveShots_sample, serve_from, **kde_kwargs)
+_, _, annPnts_join = vis_ut.split_kde(serveShots_sample, 'Deuce', join_mid_and_high = True, **kde_kwargs)
 
-sceneDict[player_name] = splitScn, xyScn, annPnts, legFrm
+sceneDict[player_name] = splitScn, xyScn, annPnts_join, legFrm
 
 ##################################
 ########### HUGO GASTON ##########
@@ -195,7 +215,7 @@ sceneDict[player_name] = splitScn, xyScn, annPnts, legFrm
 ##################################
 ##### KENNY DE SCHEPPER ##########
 ##################################
-player_name = 'Kenny de Schepper'
+player_name = 'Kenny De Schepper'
 ### COLLECT SHOTS FOR PLAYER
 serveShots = deucePnts.filter(server_is, player_name = player_name).get_serves()
 print(f'{len(serveShots)} ad serves for {player_name}')
@@ -241,6 +261,9 @@ sceneDict[player_name] = splitScn, xyScn, annPnts, legFrm
 #### ANIMATION ###
 
 all_frames = []
+script_lines = []
+
+script_line = "Let's check back in on our lefties. "
 
 splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Holger Rune']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Liam Broady']
@@ -248,82 +271,125 @@ splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Liam Broady']
 itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
                                     splitScn1, xyScn1, annPnts1, legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
+
 all_frames.append(itplFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    Liam Broady seems to rely primarily on a serve down the middle; 
+                    This is typically a slice serve again, curving away from the returner to the backhand;
+                    however, this time, the returner is drawn into the court, and not out of it.
+                """
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1[:-1], num_frames = 50,
                                 **prmDict)
 stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
+
 all_frames.append(stillFrms)
+script_lines.append(script_line)
 
-statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
-                                annotated_points = annPnts1, num_frames = 50,
-                                **prmDict)
-statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-all_frames.append(statFrms)
+# script_line =   """
+#                     At low leverages, there are some out wide serves mixed in, but evidence is ambivalent
+#                 """
+# statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
+#                                 annotated_points = annPnts1, num_frames = 50,
+#                                 **prmDict)
+# statFrms = overlay(statFrms, legFrm1, tlPt_leg)
+# all_frames.append(statFrms)
 
+script_line =   """
+                    For Hugo Guston, the same pattern holds, with him seeming to mix in serves out wide in low leverage situations a bit more regularly, 
+                    to protect the slice serve down the middle in high leverage situations.
+                """
 
 splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Liam Broady']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Hugo Gaston']
 
-itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
+itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
                                     splitScn1, xyScn1, annPnts1, legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
-all_frames.append(itplFrms)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1[:-1], num_frames = 50,
                                 **prmDict)
 stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
-all_frames.append(stillFrms)
 
-statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
-                                annotated_points = annPnts1, num_frames = 50,
-                                **prmDict)
-statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-all_frames.append(statFrms)
+jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
 
+all_frames.append(jointFrms)
+script_lines.append(script_line)
 
+# script_line =   """
+#                     (Usual caveats about low sample size).
+#                 """
+# statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
+#                                 annotated_points = annPnts1, num_frames = 50,
+#                                 **prmDict)
+# statFrms = overlay(statFrms, legFrm1, tlPt_leg)
+# all_frames.append(statFrms)
+
+script_line =   """
+                    Note that not all lefty servers redominantly employ the serve down the middle. 
+                    Kenny De Schepper mixes in a flat serve out wide frequently, regardless of pressure.
+                """
 splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Hugo Gaston']
-splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Kenny de Schepper']
+splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Kenny De Schepper']
 
-itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
+itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
                                     splitScn1, xyScn1, annPnts1, legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
-all_frames.append(itplFrms)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1[:-1], num_frames = 50,
                                 **prmDict)
 stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
-all_frames.append(stillFrms)
 
-statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
-                                annotated_points = annPnts1, num_frames = 50,
-                                **prmDict)
-statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-all_frames.append(statFrms)
+jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
 
-splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Kenny de Schepper']
-splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Federico Gaio']
+all_frames.append(jointFrms)
+script_lines.append(script_line)
 
-itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
-                                    splitScn1, xyScn1, annPnts1, legFrm1, 
-                                    boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
-all_frames.append(itplFrms)
+# statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
+#                                 annotated_points = annPnts1, num_frames = 50,
+#                                 **prmDict)
+# statFrms = overlay(statFrms, legFrm1, tlPt_leg)
+# all_frames.append(statFrms)
 
-stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
-                                annotated_points = annPnts1[:-1], num_frames = 50,
-                                **prmDict)
-stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
-all_frames.append(stillFrms)
+# script_line = ""
 
-statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
-                                annotated_points = annPnts1, num_frames = 50,
-                                **prmDict)
-statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-all_frames.append(statFrms)
+# splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Kenny de Schepper']
+# splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Federico Gaio']
+
+# itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
+#                                     splitScn1, xyScn1, annPnts1, legFrm1, 
+#                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
+# all_frames.append(itplFrms)
+
+# stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
+#                                 annotated_points = annPnts1[:-1], num_frames = 50,
+#                                 **prmDict)
+# stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
+# all_frames.append(stillFrms)
+
+# statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
+#                                 annotated_points = annPnts1, num_frames = 50,
+#                                 **prmDict)
+# statFrms = overlay(statFrms, legFrm1, tlPt_leg)
+# all_frames.append(statFrms)
 
 vis_ut.show(all_frames)
 
+### Saving the separate MultiFrame objects and the Joint Script
+if SAVE:
+    assert len(script_lines) == len(all_frames)
+
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        print(idx)
+        subFrms, script_line = frames_and_script
+        subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+            f.write(script_line)
 

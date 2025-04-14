@@ -214,7 +214,8 @@ def collect_video_frames(shots, confs, widen_by = 5):
     return frms_list
 
 
-def split_kde(serveShots_sample, side, p_thresh_lo = 0.04, p_thresh_hi = 0.08, **kde_kwargs):
+def split_kde(serveShots_sample, side, p_thresh_lo = 0.04, p_thresh_hi = 0.08, 
+              join_mid_and_high = False, **kde_kwargs):
     from ATMANpy.types.ShapesTennis3D import Court
     from ATMANpy.types.Shapes3D import Region3D, Line3D, Point3D
     from ATMANpy.types.Visual3D import Scene
@@ -272,7 +273,10 @@ def split_kde(serveShots_sample, side, p_thresh_lo = 0.04, p_thresh_hi = 0.08, *
         wPt = origPt_3D.left(110).back(10).annotate('Out Wide')
 
     diagPt = Point3D((x_ax.rightPt.x, y_ax.leftPt.y, 0))
-    jntStr = make_stat_string(lowShots, hiShots)
+    if join_mid_and_high:
+        jntStr = make_stat_string(lowShots, midShots.join(hiShots), lo_desc = 'Low Pressure', hi_desc = 'Medium + High Pressure')
+    else:
+        jntStr = make_stat_string(lowShots, hiShots)
     statPt = diagPt.annotate(jntStr).front(110).right(40)
 
     annPnts = [loPt, midPt, hiPt, tPt, wPt, statPt]

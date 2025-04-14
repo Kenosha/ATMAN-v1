@@ -27,6 +27,23 @@ import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 
 import ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils as vis_ut
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+SAVE = True
+
+DESCRIPTOR = 'ad_side_example'
+SAVE_FOLDER = 'serve_pressure_new'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+
+if SAVE:
+    fullPath = maybe_make_folder(savePath, saveFolder)
+
 #############################
 #### READ IN CONFIGS ########
 #############################
@@ -147,7 +164,7 @@ ball_bounces_when = 12 * line_slomo
 ball_flight_over_when = 17 * line_slomo
 
 all_frames = []
-script_line = []
+script_lines = []
 
 ### PREVIOUS FRAME 
 hiPnt = dataPnts[1131]
@@ -160,13 +177,14 @@ shapes = vs.ball_flight(serveShots_sample, line_interpolation_factor = 5, which_
 # splineSF = serveShots_sample.feat_spline_simul(color = const.BGR['ball_yellow'], which_endpoint = 'penultimate')
 # shapes = [someLns for someLns in splineSF.values() if someLns is not None]
 
+script_line = "... it seems that Joao Sousa goes for serves out wide somewhat more often than for serves down the middle."
+
 myFrms_pre, animDict = vs.animate_sequence(shapes[:ball_bounces_when], 
                                         start_cam = brestCam, stop_cam = brestCam,
                                         cumulate_argument = True, cumulative_foreground_transparence = 0.9, 
                                         **prmDict,
                                         animate_over = lastFrm_framed 
                                         )
-all_frames.append(myFrms_pre)
 # DecapStream(myFrms, 0, 100).show(ms_between_frames = 50)
 
 ### SCATTERS
@@ -203,7 +221,6 @@ myFrms_post, animDict = vs.animate_sequence(shapes[ball_bounces_when:ball_flight
                                         **animDict,
                                         animate_over = lastFrm_framed 
                                         )
-all_frames.append(myFrms_post)
 
 ### FADE OUT COURT
 courtScn = Scene.make_court(singles_net = False)
@@ -212,13 +229,17 @@ nextFrm = View.make(brestCam, courtScn.combine(markScn_mono)).snap()
 nextFrm = overlay(nextFrm, legFrm, tlPt_leg)
 itplFrms = vs.interpolate_frames(lastFrm, nextFrm, 50)
 
-all_frames.append(itplFrms)
+jointFrms = BGRFrames.from_frames([myFrms_pre, myFrms_post, itplFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
 
 ### ZOOM ONTO BOX
+script_line = "To understand if serve placement correlates with leverage, we color in each bounce: the redder a mark, the higher the leverage."
+
 myFrms, animDict = vs.animate_cam_motion(markScn_mono, background_scene = courtScn, start_cam = brestCam, stop_cam = boxCam, num_frames = 25,
                                             **prmDict)
 myFrms = overlay(myFrms, legFrm, tlPt_leg)
-all_frames.append(myFrms)
 
 ### MONO TO POLY
 backView = View.make(boxCam, courtScn, resolution = prmDict['background_resolution'])
@@ -234,8 +255,12 @@ animDict['previous_foreground_scene'] = markScn_poly
 polyFrms = BGRFrames.from_frame(polyFrm, 50)
 polyFrms = overlay(polyFrms, legFrm, tlPt_leg)
 
-all_frames.append(itplFrms)
-all_frames.append(polyFrms)
+jointFrms = BGRFrames.from_frames([myFrms, itplFrms, polyFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = "To be able to quantify serve location more precisely, we record where any given serve would have crossed the service line."
 
 ### FLIGHT LINE
 from ATMANpy.types.Points import Point2D
@@ -276,17 +301,14 @@ lineFrms, animDict = vs.animate_sequence(flight_line_and_mark_scenes, background
 
 lineFrms = overlay(lineFrms, legFrm, tlPt_leg)
 
-all_frames.append(lineFrms)
 # DecapStream(lineFrms, 0, 100).show()
 
-statFrms, animDict = vs.animate_static(flight_line_and_mark_scene, background_scene = courtScn, static_cam = boxCam,
+statFrms_pre, animDict = vs.animate_static(flight_line_and_mark_scene, background_scene = courtScn, static_cam = boxCam,
                                         **prmDict, 
                                         **animDict)
 # statFrms[-1].show()
 
-statFrms = overlay(statFrms, legFrm, tlPt_leg)
-
-all_frames.append(statFrms)
+statFrms_pre = overlay(statFrms_pre, legFrm, tlPt_leg)
 
 ### PROJECT MARK ONTO SERVICE LINE
 bncMark_on_line = Mark.make(interPt, color = color)
@@ -303,13 +325,15 @@ moveFrms, animDict = vs.animate_sequence(mark_moving_scenes, background_scene = 
 
 moveFrms = overlay(moveFrms, legFrm, tlPt_leg)
 
-all_frames.append(moveFrms)
+statFrms_post = BGRFrames.from_frame(moveFrms[-1], 50)
+statFrms_post = overlay(statFrms_post, legFrm, tlPt_leg)
 
-statFrms = BGRFrames.from_frame(moveFrms[-1], 50)
-statFrms = overlay(statFrms, legFrm, tlPt_leg)
+jointFrms = BGRFrames.from_frames([lineFrms, statFrms_pre, moveFrms, statFrms_post])
 
-all_frames.append(statFrms)
+all_frames.append(jointFrms)
+script_lines.append(script_line)
 
+script_line = "By projecting onto the service line along the flight path..."
 
 ### FADE OTHER MARKS BACK IN
 markScn_poly_bar_one = Scene([*[mk for mk in markScn_poly if mk != bncMark], bncMark_on_line])
@@ -321,8 +345,6 @@ polyFrm = backView.combine(polyView).snap()
 itplFrms = vs.interpolate_frames(moveFrms[-1], polyFrm, 50)
 
 itplFrms = overlay(itplFrms, legFrm, tlPt_leg)
-
-all_frames.append(itplFrms)
 
 ### MOVE OTHER MARKS
 hitArr_bnc = serveShots_clean_bounce.get_ball_hit_position()[:, :2]
@@ -350,12 +372,17 @@ moveFrms, animDict = vs.animate_sequence(all_marks_moving_scenes, background_sce
                                     start_cam = boxCam, stop_cam = boxCam,
                                     **prmDict)
 moveFrms = overlay(moveFrms, legFrm, tlPt_leg)
-all_frames.append(moveFrms)
 
 statFrms, animDict = vs.animate_static(markScn_poly_moved, background_scene = courtScn, static_cam = boxCam, num_frames = 25,
                                         **prmDict)
 statFrms = overlay(statFrms, legFrm, tlPt_leg)
-all_frames.append(statFrms)
+
+jointFrms = BGRFrames.from_frames([itplFrms, moveFrms, statFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = "... we can easily construct a distribution of serve placement. Indeed, the serve out wide is favored against the serve down the middle."
 
 ### MAKE KDE WITH ALL ON BASELINE
 kde_kwargs = {'position_func': vis_ut.find_intersection_with_service_line, 'normalize_density': True, 
@@ -376,13 +403,15 @@ statFrms, animDict = vs.animate_static(jointScn, background_scene = courtScn, st
                                         **prmDict)
 statFrms = overlay(statFrms, legFrm, tlPt_leg)
 
-all_frames.append(kdeFrms)
-all_frames.append(statFrms)
+jointFrms = BGRFrames.from_frames([kdeFrms, statFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = "We can now split this distribution by point leverage."
 
 jointScn = jointScn.combine(jointScn).combine(jointScn)
 itplScns = vs.interpolate_dummy_scenes(jointScn, splitScn, num_frames = 25)
-
-######## DISTRO TESTS #########
 
 ### FADE OUT COURT ###
 court_fadeout_scenes = vs.interpolate_scenes(courtScn, courtScn.transparify(0), num_frames = 25)
@@ -396,25 +425,195 @@ fadeFrms, animDict = vs.animate_sequence(court_fadeout_scenes, background_scene 
                                         **animDict)
 fadeFrms = overlay(fadeFrms, legFrm, tlPt_leg)
 
-all_frames.append(fadeFrms)
-
 splitFrms, animDict = vs.animate_sequence(itplScns, background_scene = xyScn, cumulate_argument = False, 
                                         start_cam = boxCam, stop_cam = boxCam,
                                         annotated_points = annPnts[:-1],
                                         **prmDict)
 splitFrms = overlay(splitFrms, legFrm, tlPt_leg)
 
-all_frames.append(splitFrms)
+jointFrms = BGRFrames.from_frames([fadeFrms, splitFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    In red, we chart the distribution of serves in high leverage situations; 
+                    in yellow, medium leverage situations; 
+                    in green, low leverage situations.
+
+                    Over the entire sample, the average low leverage point swings match outcome probabilities by around 2,2%, 
+                    whereas the average high leverage swings match outcomes by 12,9%. 
+                    This makes points in the high leverage category on average six times more relevant to the match outcome than points in the low leverage category.
+                
+                    In Joao Sousa's case, this segmented view is very revealing. 
+                    At low pressures, he serves down the middle as often as he serves out wide; 
+                    however, as pressure increases, he reduces his serves down the middle.
+                    At high pressures, he serves out wide almost exclusively. 
+                """
 
 statFrms, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 25,
-                                        annotated_points = annPnts,
+                                        annotated_points = annPnts[:-1],
                                         **prmDict)
 
 statFrms = overlay(statFrms, legFrm, tlPt_leg)
 
-### TODO: maybe for KS, AD: high and low are superimposed, while camera moves to direct front view; then we make arrows between the distros.
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    In fact, two statistical tests show that there is a highly significant difference between high and low leverage serve placement.
+                """
+
+statFrms, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 25,
+                                        annotated_points = annPnts,
+                                        **prmDict)
+statFrms = overlay(statFrms, legFrm, tlPt_leg)
 
 all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    The Kolmogorov-Smirnov and the Anderson-Darling test both quantify how likely it is that
+                    two sets of samples (in our case, low and high leverage serve locations) are generated by the same underlying distribution.
+                """
+annPnts_curr = [pt for pt in annPnts]
+
+annPnts_curr.pop(2)
+statFrms1, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+                                        annotated_points = annPnts_curr,
+                                        **prmDict)
+statFrms1 = overlay(statFrms1, legFrm, tlPt_leg)
+
+annPnts_curr.pop(1)
+statFrms2, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+                                        annotated_points = annPnts_curr,
+                                        **prmDict)
+statFrms2 = overlay(statFrms2, legFrm, tlPt_leg)
+
+annPnts_curr.pop(0)
+statFrms3, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+                                        annotated_points = annPnts_curr,
+                                        **prmDict)
+statFrms3 = overlay(statFrms3, legFrm, tlPt_leg)
+
+### maybe for KS, AD: high and low are superimposed, while camera moves to direct front view; then we make arrows between the distros.
+old_splitScn = splitScn.copy()
+new_splitScn = splitScn.copy()
+
+new_splitScn.rastArrs[2] += [0, 120, 0]
+new_splitScn.alphaArrs[1] = new_splitScn.alphaArrs[1] * 0
+
+straightCam = boxCam.tilt(-0.15).down(10)
+
+itplScns = vs.interpolate_dummy_scenes(old_splitScn, new_splitScn, 50)
+
+moveFrms, _ = vs.animate_sequence(itplScns, start_cam = boxCam, stop_cam = straightCam, background_scene = xyScn, **prmDict,
+                                annotated_points = annPnts_curr, text_at = 'start')
+moveFrms = overlay(moveFrms, legFrm, tlPt_leg)
+
+jointFrms = BGRFrames.from_frames([statFrms1, statFrms2, statFrms3, moveFrms])
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+### arrows to show distance
+script_line =   """
+                    In this case, the tests argue that it is very unlikely that low and high leverage serve locations are generated by the same distribution.
+                    Essentially, Joao Sousa's decision process about where to serve in low leverage situations is different than in high leverage situations.
+                """
+from ATMANpy.types.Lines import Arrow
+
+aPt1, bPt1 = Point2D((400, 480)), Point2D((400, 560))
+aPt2, bPt2 = Point2D((900, 545)), Point2D((900, 630))
+aPt3, bPt3 = Point2D((1200, 540)), Point2D((1200, 665))
+aPt4, bPt4 = Point2D((1440, 445)), Point2D((1440, 670))
+
+arr_color = const.BGR['bright_grey']
+
+arr1a = Arrow.make(aPt1, bPt1, num_dashes = 10)
+arr2a = Arrow.make(aPt2, bPt2, num_dashes = 10)
+arr3a = Arrow.make(aPt3, bPt3, num_dashes = 15)
+arr4a = Arrow.make(aPt4, bPt4, num_dashes = 25)
+
+arr1b = Arrow.make(bPt1, aPt1, num_dashes = 10)
+arr2b = Arrow.make(bPt2, aPt2, num_dashes = 10)
+arr3b = Arrow.make(bPt3, aPt3, num_dashes = 15)
+arr4b = Arrow.make(bPt4, aPt4, num_dashes = 25)
+
+arrs = [arr1a, arr1b, arr2a, arr2b, arr3a, arr3b, arr4a, arr4b]
+
+arrFrm0 = moveFrms[-1]
+arrFrm1 = moveFrms[-1].put(arrs[:2], color = arr_color)
+arrFrm2 = moveFrms[-1].put(arrs[:4], color = arr_color)
+arrFrm3 = moveFrms[-1].put(arrs[:6], color = arr_color)
+arrFrm4 = moveFrms[-1].put(arrs[:8], color = arr_color)
+# arrFrm4.show()
+
+arrFrms0 = BGRFrames.from_frame(arrFrm0, 50)
+arrFrms1 = BGRFrames.from_frame(arrFrm1, 50)
+arrFrms2 = BGRFrames.from_frame(arrFrm2, 50)
+arrFrms3 = BGRFrames.from_frame(arrFrm3, 50)
+arrFrms4 = BGRFrames.from_frame(arrFrm4, 50)
+
+arrFrms = BGRFrames.from_frames([arrFrms0, arrFrms1, arrFrms2, arrFrms3, arrFrms4])
+
+all_frames.append(arrFrms)
+script_lines.append(script_line)
+
+### now move back to previous view
+script_line =   """
+                    Joao Sousa might well be maximising win probability on high leverage serves 
+                    by going for serves out wide to the receiver's backhand almost exclusively;
+                    In low leverage situations, he mixes it up pretty much 50/50, serving down the middle to retain a measure of unpredictability.
+                """
+
+arrFrms_back = BGRFrames.from_frames([arrFrms4, arrFrms3, arrFrms2, arrFrms1, arrFrms0])
+
+itplScns = vs.interpolate_dummy_scenes(new_splitScn, old_splitScn, 50)
+
+moveFrms_back, _ = vs.animate_sequence(itplScns, start_cam = straightCam, stop_cam = boxCam, background_scene = xyScn, **prmDict,
+                                    annotated_points = annPnts_curr, text_at = 'stop')
+moveFrms_back = overlay(moveFrms_back, legFrm, tlPt_leg)
+
+annPnts_curr = [annPnts[0], *annPnts_curr]
+statFrms3, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+                                        annotated_points = annPnts_curr,
+                                        **prmDict)
+statFrms3 = overlay(statFrms3, legFrm, tlPt_leg)
+
+annPnts_curr = [annPnts[1], *annPnts_curr]
+statFrms2, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+                                        annotated_points = annPnts_curr,
+                                        **prmDict)
+statFrms2 = overlay(statFrms2, legFrm, tlPt_leg)
+
+annPnts_curr = [annPnts[2], *annPnts_curr]
+statFrms1, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+                                        annotated_points = annPnts_curr,
+                                        **prmDict)
+statFrms1 = overlay(statFrms1, legFrm, tlPt_leg)
+
+
+jointFrms = BGRFrames.from_frames([arrFrms_back, moveFrms_back, statFrms3, statFrms2, statFrms1])
+DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
 
 vis_ut.show(all_frames)
 
+
+### Saving the separate MultiFrame objects and the Joint Script
+if SAVE:
+    assert len(script_lines) == len(all_frames)
+
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        print(idx)
+        subFrms, script_line = frames_and_script
+        subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+            f.write(script_line)

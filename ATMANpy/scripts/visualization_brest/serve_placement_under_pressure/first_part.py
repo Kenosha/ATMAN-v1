@@ -26,6 +26,22 @@ import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 
+########################################
+########### SAVE FOLDER ################
+########################################
+
+SAVE = True
+
+DESCRIPTOR = 'first_part'
+SAVE_FOLDER = 'serve_pressure_new'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+
+if SAVE:
+    fullPath = maybe_make_folder(savePath, saveFolder)
+    
 #############################
 #### READ IN CONFIGS ########
 #############################
@@ -305,8 +321,8 @@ p1_2, p2_2 = Point2D((x1, y1)), Point2D((x2, y2))
 cropReg_2 = Region.from_points(p1_2, p2_2)
 
 lsFrm = rstFrms5[-1]
-lsFrm.put(cropReg).show()
-lsFrm.put(cropReg_2).show()
+# lsFrm.put(cropReg).show()
+# lsFrm.put(cropReg_2).show()
 cropFrm = lsFrm.crop(cropReg)
 
 from ATMANpy.types.Overlays import scoreboard, overlay, Table
@@ -546,7 +562,11 @@ currFrms = BGRFrames.from_frames([fadeFrms, statFrms, fadeFrms2, statFrms2])
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-script_line = "If he loses this point, the outcome of the match is uncertain: it's now 6-all in the deciding tiebreak."
+script_line =   """
+                    If he loses this point, the outcome of the match is uncertain: it's now 6-all in the deciding tiebreak.
+
+                    What we do in this case is try to figure out the probability of Joao Sousa winning the match.
+                """
 ### brighten lose side, dim win side
 
 curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win_with_box.dim(dim_factor), top_left_point = tlPt_win)
@@ -568,9 +588,6 @@ currFrms = BGRFrames.from_frames([fadeFrms, statFrms, fadeFrms2, statFrms2])
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
-
-script_line = "What we do in this case is try to figure out the probability of Joao Sousa winning the match."
-### ...
 
 script_line = "To this end, we follow the path of possible point outcomes a bit further."
 ### build out possible outcomes
@@ -727,7 +744,7 @@ currFrms = BGRFrames.from_frames([BGRFrames.from_frame(curr_scoreFrm4, 10),
                                   BGRFrames.from_frame(curr_scoreFrm0, 10),
                                   statFrms, fadeFrms, statFrms2])
 
-DecapStream(currFrms, 0, 100).show()
+# DecapStream(currFrms, 0, 100).show()
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -822,7 +839,7 @@ myGraph = Graph([pressChart, vChart1, vChart2], make_default_x_labels = False, y
 graphFrm = myGraph.render()
 
 graphFrm = graphFrm.framed(2, const.BGR['bright_grey'])
-graphFrm.show()
+# graphFrm.show()
 
 last_diagFrm = currFrms[-1]
 last_rastFrm = rstFrms5[-1]
@@ -889,7 +906,7 @@ currFrms = BGRFrames.from_frames([arrFrms1_back, statFrms_back,
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-DecapStream(currFrms, 0, 100).show()
+# DecapStream(currFrms, 0, 100).show()
 
 script_line = "In all of his tournament matches, when serving from the ad side..."
 ### grow frame
@@ -918,3 +935,16 @@ script_lines.append(script_line)
 
 vis_ut.show(all_frames)
 
+
+### Saving the separate MultiFrame objects and the Joint Script
+if SAVE:
+    assert len(script_lines) == len(all_frames)
+
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        print(idx)
+        subFrms, script_line = frames_and_script
+        subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+            f.write(script_line)
