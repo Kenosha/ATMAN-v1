@@ -803,6 +803,9 @@ class View:
     
     @staticmethod
     def from_many_views(sub_views):
+        if len(sub_views) == 0:
+            return View.make_empty()
+        
         ptArrs = []
         clArrs = []
         alArrs = []
