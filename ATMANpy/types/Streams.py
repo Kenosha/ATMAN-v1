@@ -1327,12 +1327,16 @@ class StreamList:
         return StreamList([myStm.attach(mySF) for myStm, mySF in zip(self, sfList)])
     
     def join(self):
-        ### create an NCStream from the StreamList
-        frameList = sorted(set([frmNum for myStm in self for frmNum in myStm.get_framelist()]))
-        concSF = SFList([myStm.features for myStm in self]).concatenate()
-        cap = self[0].cap ### needs generalisation...
-        return NCStream(cap, frameList, features = concSF)
-    
+        caps = [myStm.cap for myStm in self]
+        fs_cap = caps[0]
+        if not all([cap == fs_cap for cap in caps]):
+            raise Exception('Could not join StreamList; different source VideoCaptures in StreamList')
+        else:
+            ### create an NCStream from the StreamList
+            frameList = sorted(set([frmNum for myStm in self for frmNum in myStm.get_framelist()]))
+            concSF = SFList([myStm.features for myStm in self]).concatenate()
+            return NCStream(fs_cap, frameList, features = concSF)
+        
     def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
         for myStm in self:
             myStm.show(ms_between_frames = ms_between_frames, frame_counter = frame_counter, text_region = text_region)
