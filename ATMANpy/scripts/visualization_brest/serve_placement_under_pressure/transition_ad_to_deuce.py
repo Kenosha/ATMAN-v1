@@ -243,8 +243,8 @@ script_lines.append(script_line)
 
 ### transition to hi/mid/lo
 script_line =   """
-                    However, the breakdown shows that the deuce serve out wide is almost exclusively a high-leverage serve;
-                    at low leverage, Holger Rune switches it up with predominantly serves down the middle.
+                    However, the breakdown shows that the deuce serve out wide is predominantly a high-leverage serve;
+                    at low leverage, Holger Rune switches it up, serving mostly down the middle.
                 """
 
 jointScn_triple = jointScn.combine(jointScn).combine(jointScn)
@@ -279,7 +279,11 @@ statFrms_join, _ = vs.animate_static(splitScn, static_cam = boxCam_deuce, backgr
                                 num_frames = 50, **prmDict)
 statFrms_join = overlay(statFrms_join, legFrm, tlPt_leg)
 
-all_frames.append(statFrms_join)
+fadeFrms = vs.interpolate_frames(statFrms[-1], statFrms_join[0], 25)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, statFrms_join])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)

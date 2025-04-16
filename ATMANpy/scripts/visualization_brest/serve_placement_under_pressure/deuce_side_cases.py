@@ -228,7 +228,7 @@ serveShots_sample = serveShots_clean_bounce.join(serveShots_net)
 
 ### PREP LEGEND
 handedness = serveShots_clean_bounce[0].hitPlayer.get_hand().capitalize()
-legFrm = vis_ut.make_legend_frame(player_name, handedness, serve_from)
+legFrm = vis_ut.make_legend_frame(player_name, handedness, serve_from, player_spaces = 15)
 tlPt_leg = Point2D((50, 50))
 
 splitScn, xyScn, annPnts = vis_ut.split_kde(serveShots_sample, serve_from, **kde_kwargs)
@@ -269,7 +269,7 @@ splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Holger Rune']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Liam Broady']
 
 itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
-                                    splitScn1, xyScn1, annPnts1, legFrm1, 
+                                    splitScn1, xyScn1, annPnts1[:-1], legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
 
 all_frames.append(itplFrms)
@@ -299,7 +299,7 @@ script_lines.append(script_line)
 # all_frames.append(statFrms)
 
 script_line =   """
-                    For Hugo Guston, the same pattern holds, with him seeming to mix in serves out wide in low leverage situations a bit more regularly, 
+                    For Hugo Gaston, the same pattern holds, with him seeming to mix in serves out wide in low leverage situations a bit more regularly, 
                     to protect the slice serve down the middle in high leverage situations.
                 """
 
@@ -307,7 +307,7 @@ splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Liam Broady']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Hugo Gaston']
 
 itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
-                                    splitScn1, xyScn1, annPnts1, legFrm1, 
+                                    splitScn1, xyScn1, annPnts1[:-1], legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
@@ -329,26 +329,26 @@ script_lines.append(script_line)
 # statFrms = overlay(statFrms, legFrm1, tlPt_leg)
 # all_frames.append(statFrms)
 
-script_line =   """
-                    Note that not all lefty servers redominantly employ the serve down the middle. 
-                    Kenny De Schepper mixes in a flat serve out wide frequently, regardless of pressure.
-                """
-splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Hugo Gaston']
-splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Kenny De Schepper']
+# script_line =   """
+#                     Note that not all lefty servers redominantly employ the serve down the middle. 
+#                     Kenny De Schepper mixes in a flat serve out wide frequently, regardless of leverage.
+#                 """
+# splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Hugo Gaston']
+# splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Kenny De Schepper']
 
-itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
-                                    splitScn1, xyScn1, annPnts1, legFrm1, 
-                                    boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
+# itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
+#                                     splitScn1, xyScn1, annPnts1[:-1], legFrm1, 
+#                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
 
-stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
-                                annotated_points = annPnts1[:-1], num_frames = 50,
-                                **prmDict)
-stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
+# stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
+#                                 annotated_points = annPnts1[:-1], num_frames = 50,
+#                                 **prmDict)
+# stillFrms = overlay(stillFrms, legFrm1, tlPt_leg)
 
-jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
+# jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
 
-all_frames.append(jointFrms)
-script_lines.append(script_line)
+# all_frames.append(jointFrms)
+# script_lines.append(script_line)
 
 # statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
 #                                 annotated_points = annPnts1, num_frames = 50,
@@ -377,6 +377,25 @@ script_lines.append(script_line)
 #                                 **prmDict)
 # statFrms = overlay(statFrms, legFrm1, tlPt_leg)
 # all_frames.append(statFrms)
+
+script_line =   """
+                    In this video, we have shown how some players adjust their serve patterns 
+                    based on leverage, a measure of the importance of the point being played. 
+                    Since high leverage points matter disproportionately more than low leverage points, 
+                    it is essential to disaggregate the opponents serve placement by leverage;
+                    otherwise, one might be fooled on important points by expecting serves 
+                    which the server only plays on points he or she can afford to lose.
+
+                    Figuring this out in the match can be costly, or even outright impossible:
+                    High leverage points are few and far between, and having to guess sets the receiver up for failure when it matters most. 
+
+                    On the other hand, knowing the serve mix at different leverages ahead of time, there is no need to guess.
+                """
+
+fadeoutFrms = BGRFrames.from_frame(stillFrms[-1], 500).dim_progressively(1, 0)
+
+all_frames.append(fadeoutFrms)
+script_lines.append(script_line)
 
 vis_ut.show(all_frames)
 

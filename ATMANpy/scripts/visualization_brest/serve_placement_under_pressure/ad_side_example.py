@@ -170,7 +170,6 @@ script_lines = []
 hiPnt = dataPnts[1131]
 
 lastFrm = hiPnt.stream(confs = confs).decap().frames[0].rescale(3)
-lastFrm_framed = lastFrm.framed(4, color = const.BGR['bright_grey'])
 
 shapes = vs.ball_flight(serveShots_sample, line_interpolation_factor = 5, which_endpoint = 'penultimate')
 
@@ -183,7 +182,7 @@ myFrms_pre, animDict = vs.animate_sequence(shapes[:ball_bounces_when],
                                         start_cam = brestCam, stop_cam = brestCam,
                                         cumulate_argument = True, cumulative_foreground_transparence = 0.9, 
                                         **prmDict,
-                                        animate_over = lastFrm_framed 
+                                        animate_over = lastFrm 
                                         )
 # DecapStream(myFrms, 0, 100).show(ms_between_frames = 50)
 
@@ -219,7 +218,7 @@ myFrms_post, animDict = vs.animate_sequence(shapes[ball_bounces_when:ball_flight
                                         cumulate_argument = True, cumulative_foreground_transparence = 0.9, 
                                         **prmDict,
                                         **animDict,
-                                        animate_over = lastFrm_framed 
+                                        animate_over = lastFrm 
                                         )
 
 ### FADE OUT COURT
@@ -440,15 +439,6 @@ script_line =   """
                     In red, we chart the distribution of serves in high leverage situations; 
                     in yellow, medium leverage situations; 
                     in green, low leverage situations.
-
-                    Over the entire sample, the average low leverage point swings match outcome probabilities by around 2,2%, 
-                    whereas the average high leverage swings match outcomes by 12,9%. 
-                    This makes points in the high leverage category on average six times more relevant to the match outcome than points in the low leverage category.
-                
-                    In Joao Sousa's case, this segmented view is very revealing. 
-                    At low pressures, he serves down the middle as often as he serves out wide; 
-                    however, as pressure increases, he reduces his serves down the middle.
-                    At high pressures, he serves out wide almost exclusively. 
                 """
 
 statFrms, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 25,
@@ -460,6 +450,134 @@ statFrms = overlay(statFrms, legFrm, tlPt_leg)
 all_frames.append(statFrms)
 script_lines.append(script_line)
 
+
+script_line =   """ 
+                    Over the entire sample, the average low leverage point swings match outcome probabilities by around 2,2%, ...
+                """
+
+statFrms_fading = statFrms.dim_progressively(1, 0.5)
+
+loPt, hiPt = annPnts[0], annPnts[2]
+loPt_avg = loPt.retext('Mean: 2.2%').right(20).back(1).rethicken(2)
+hiPt_avg = hiPt.retext('Mean: 12.9%').right(30).back(3).rethicken(2)
+
+statFrms1, animDict = vs.animate_static(Scene.make_empty(), static_cam = boxCam, num_frames = 50,
+                                        annotated_points = [loPt_avg],
+                                        animate_over = statFrms_fading[-1],
+                                        **prmDict)
+
+jointFrms = BGRFrames.from_frames([statFrms_fading, statFrms1])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... Whereas the average high leverage swings match outcomes by 12,9%. 
+                """
+
+statFrms2, animDict = vs.animate_static(Scene.make_empty(), static_cam = boxCam, num_frames = 50,
+                                        annotated_points = [loPt_avg, hiPt_avg],
+                                        animate_over = statFrms_fading[-1],
+                                        **prmDict)
+
+all_frames.append(statFrms2)
+script_lines.append(script_line)
+
+script_line =   """
+                    This makes a typical high leverage point six times more relevant to the match outcome than a typical low leverage point.
+                """
+
+from ATMANpy.types.ShapesTennis3D import Arrow
+myArr = Arrow.make(loPt_avg.right(7).front(10), hiPt_avg.right(4).back(20), rot_angle = np.pi / 1.75, hat_length = 5)
+
+dashLns = [*myArr[0].dash(25), myArr[1], myArr[2]]
+
+arrFrms, _ = vs.animate_sequence(dashLns, start_cam = boxCam, stop_cam = boxCam,
+                                 cumulate_argument = True,
+                                 annotated_points = [loPt_avg, hiPt_avg], 
+                                 animate_over = statFrms_fading[-1],
+                                 **prmDict)
+
+midPt_avg = (loPt_avg + hiPt_avg) / 2
+midPt_avg = midPt_avg.annotate('x6').resize(2).back(8).right(7)
+
+statFrms3, animDict = vs.animate_static(dashLns, static_cam = boxCam, num_frames = 50,
+                                        annotated_points = [loPt_avg, hiPt_avg, midPt_avg],
+                                        animate_over = statFrms_fading[-1],
+                                        **prmDict)
+
+jointFrms = BGRFrames.from_frames([arrFrms, statFrms3])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    In Joao Sousa's case, this segmented view is very revealing. 
+                """
+
+statFrms_fadeback = vs.interpolate_frames(statFrms3[-1], statFrms[0], 50)
+jointFrms = BGRFrames.from_frames([statFrms_fadeback, statFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+alpha = 0.25
+loScn = splitScn[0].combine(splitScn[1].realpha(alpha)).combine(splitScn[2].realpha(alpha))
+midScn = splitScn[0].realpha(alpha).combine(splitScn[1]).combine(splitScn[2].realpha(alpha))
+hiScn = splitScn[0].realpha(alpha).combine(splitScn[1].realpha(alpha)).combine(splitScn[2])
+
+script_line =   """
+                    At low leverage, he serves down the middle as often as he serves out wide; 
+                """
+
+annPnts_dim = [annPnts[0], annPnts[1].dim(alpha), annPnts[2].dim(alpha), *annPnts[3:-1]]
+
+fadedFrms, _ = vs.animate_static(loScn, static_cam = boxCam, background_scene = xyScn, num_frames = 50,
+                                 annotated_points = annPnts_dim, **prmDict)
+fadedFrms = overlay(fadedFrms, legFrm, tlPt_leg)
+
+fadeFrms = vs.interpolate_frames(statFrms[-1], fadedFrms[0], 25)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, fadedFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    However, as leverage increases, he reduces his serves down the middle.
+                """
+
+annPnts_dim = [annPnts[0].dim(alpha), annPnts[1], annPnts[2].dim(alpha), *annPnts[3:-1]]
+
+fadedFrms, _ = vs.animate_static(midScn, static_cam = boxCam, background_scene = xyScn, num_frames = 50,
+                                 annotated_points = annPnts_dim, **prmDict)
+fadedFrms = overlay(fadedFrms, legFrm, tlPt_leg)
+
+fadeFrms = vs.interpolate_frames(fadeFrms[-1], fadedFrms[0], 25)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, fadedFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """ 
+                    At high leverage, he serves out wide almost exclusively. 
+                """
+
+annPnts_dim = [annPnts[0].dim(alpha), annPnts[1].dim(alpha), annPnts[2], *annPnts[3:-1]]
+
+fadedFrms, _ = vs.animate_static(hiScn, static_cam = boxCam, background_scene = xyScn, num_frames = 50,
+                                 annotated_points = annPnts_dim, **prmDict)
+fadedFrms = overlay(fadedFrms, legFrm, tlPt_leg)
+
+fadeFrms = vs.interpolate_frames(fadeFrms[-1], fadedFrms[0], 25)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, fadedFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+vis_ut.show(all_frames)
 
 script_line =   """
                     In fact, two statistical tests show that there is a highly significant difference between high and low leverage serve placement.
@@ -509,7 +627,7 @@ straightCam = boxCam.tilt(-0.15).down(10)
 itplScns = vs.interpolate_dummy_scenes(old_splitScn, new_splitScn, 50)
 
 moveFrms, _ = vs.animate_sequence(itplScns, start_cam = boxCam, stop_cam = straightCam, background_scene = xyScn, **prmDict,
-                                annotated_points = annPnts_curr, text_at = 'start')
+                                annotated_points = annPnts_curr, text_cam = boxCam)
 moveFrms = overlay(moveFrms, legFrm, tlPt_leg)
 
 jointFrms = BGRFrames.from_frames([statFrms1, statFrms2, statFrms3, moveFrms])
@@ -551,11 +669,11 @@ arrFrm3 = moveFrms[-1].put(arrs[:6], color = arr_color)
 arrFrm4 = moveFrms[-1].put(arrs[:8], color = arr_color)
 # arrFrm4.show()
 
-arrFrms0 = BGRFrames.from_frame(arrFrm0, 50)
-arrFrms1 = BGRFrames.from_frame(arrFrm1, 50)
-arrFrms2 = BGRFrames.from_frame(arrFrm2, 50)
-arrFrms3 = BGRFrames.from_frame(arrFrm3, 50)
-arrFrms4 = BGRFrames.from_frame(arrFrm4, 50)
+arrFrms0 = BGRFrames.from_frame(arrFrm0, 15)
+arrFrms1 = BGRFrames.from_frame(arrFrm1, 15)
+arrFrms2 = BGRFrames.from_frame(arrFrm2, 15)
+arrFrms3 = BGRFrames.from_frame(arrFrm3, 15)
+arrFrms4 = BGRFrames.from_frame(arrFrm4, 15)
 
 arrFrms = BGRFrames.from_frames([arrFrms0, arrFrms1, arrFrms2, arrFrms3, arrFrms4])
 
@@ -566,44 +684,75 @@ script_lines.append(script_line)
 script_line =   """
                     Joao Sousa might well be maximising win probability on high leverage serves 
                     by going for serves out wide to the receiver's backhand almost exclusively;
-                    In low leverage situations, he mixes it up pretty much 50/50, serving down the middle to retain a measure of unpredictability.
                 """
 
 arrFrms_back = BGRFrames.from_frames([arrFrms4, arrFrms3, arrFrms2, arrFrms1, arrFrms0])
 
-itplScns = vs.interpolate_dummy_scenes(new_splitScn, old_splitScn, 50)
+redScn = new_splitScn[0].realpha(0.25).combine(new_splitScn[1]).combine(new_splitScn[2])
+grnScn = new_splitScn[0].combine(new_splitScn[1]).combine(new_splitScn[2].realpha(0.25))
+
+itplScns = vs.interpolate_dummy_scenes(new_splitScn, redScn, 50)
+
+itplFrms, _ = vs.animate_sequence(itplScns, start_cam = straightCam, stop_cam = straightCam, background_scene = xyScn, 
+                                    annotated_points = annPnts_curr, text_cam = boxCam)
+itplFrms = overlay(itplFrms, legFrm, tlPt_leg)
+
+statFrms, _ = vs.animate_static(redScn, static_cam = straightCam, text_cam = boxCam, background_scene = xyScn, annotated_points = annPnts_curr,
+                                num_frames = 100)
+statFrms = overlay(statFrms, legFrm, tlPt_leg)
+
+jointFrms = BGRFrames.from_frames([arrFrms_back, itplFrms, statFrms])
+DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    In low leverage situations, he mixes it up pretty much 50/50, serving down the middle to retain a measure of unpredictability.
+                """
+
+itplScns = vs.interpolate_dummy_scenes(redScn, grnScn, 50)
+
+itplFrms, _ = vs.animate_sequence(itplScns, start_cam = straightCam, stop_cam = straightCam, background_scene = xyScn, 
+                                annotated_points = annPnts_curr, text_cam = boxCam)
+itplFrms = overlay(itplFrms, legFrm, tlPt_leg)
+
+statFrms, _ = vs.animate_static(grnScn, static_cam = straightCam, text_cam = boxCam, background_scene = xyScn, annotated_points = annPnts_curr,
+                                num_frames = 100)
+statFrms = overlay(statFrms, legFrm, tlPt_leg)
+
+itplScns = vs.interpolate_dummy_scenes(grnScn, old_splitScn, 25)
 
 moveFrms_back, _ = vs.animate_sequence(itplScns, start_cam = straightCam, stop_cam = boxCam, background_scene = xyScn, **prmDict,
-                                    annotated_points = annPnts_curr, text_at = 'stop')
+                                    annotated_points = annPnts_curr, text_cam = boxCam)
 moveFrms_back = overlay(moveFrms_back, legFrm, tlPt_leg)
 
 annPnts_curr = [annPnts[0], *annPnts_curr]
-statFrms3, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+statFrms3, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 10,
                                         annotated_points = annPnts_curr,
                                         **prmDict)
 statFrms3 = overlay(statFrms3, legFrm, tlPt_leg)
 
 annPnts_curr = [annPnts[1], *annPnts_curr]
-statFrms2, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+statFrms2, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 10,
                                         annotated_points = annPnts_curr,
                                         **prmDict)
 statFrms2 = overlay(statFrms2, legFrm, tlPt_leg)
 
 annPnts_curr = [annPnts[2], *annPnts_curr]
-statFrms1, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 15,
+statFrms1, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 10,
                                         annotated_points = annPnts_curr,
                                         **prmDict)
 statFrms1 = overlay(statFrms1, legFrm, tlPt_leg)
 
 
-jointFrms = BGRFrames.from_frames([arrFrms_back, moveFrms_back, statFrms3, statFrms2, statFrms1])
+jointFrms = BGRFrames.from_frames([itplFrms, statFrms, moveFrms_back, statFrms3, statFrms2, statFrms1])
 DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
-
 
 ### Saving the separate MultiFrame objects and the Joint Script
 if SAVE:

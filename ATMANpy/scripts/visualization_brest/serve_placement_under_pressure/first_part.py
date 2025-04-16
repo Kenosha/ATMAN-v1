@@ -186,24 +186,27 @@ loPnt = filtPnts[min_idx]
 # loPnt.stream(confs = confs).show()
 
 ### initial frame raster ###
-widen_by = 250
+widen_by = 350
 fade_by = 100
-keep_for_end = 50
+keep_for_end = 150
 hiStm = hiPnt.stream(confs = confs).widen(widen_by)
 loStm = loPnt.stream(confs = confs).widen(widen_by)
 
-pre_hiFrms_all = hiStm.decap().frames[:widen_by].rescale(3/2)
-pre_loFrms_all = loStm.decap().frames[:widen_by].rescale(3/2)
+pre_hiFrms_all_unframed = hiStm.decap().frames[:widen_by].rescale(3/2)
+pre_loFrms_all_unframed = loStm.decap().frames[:widen_by].rescale(3/2)
 
-pre_hiFrms_all = pre_hiFrms_all.framed(thickness = 3, color = const.BGR['bright_grey'])
-pre_loFrms_all = pre_loFrms_all.framed(thickness = 3, color = const.BGR['bright_grey'])
+pre_hiFrms_all = pre_hiFrms_all_unframed.framed(thickness = 3, color = const.BGR['bright_grey'])
+pre_loFrms_all = pre_loFrms_all_unframed.framed(thickness = 3, color = const.BGR['bright_grey'])
 
 pre_hiFrms_fade = pre_hiFrms_all[:fade_by]
 pre_loFrms_fade = pre_loFrms_all[:fade_by]
 pre_hiFrms = pre_hiFrms_all[fade_by:widen_by-keep_for_end]
 pre_loFrms = pre_loFrms_all[fade_by:widen_by-keep_for_end]
 pre_hiFrms_post = pre_hiFrms_all[-keep_for_end:]
-pre_hiFrms_post = pre_hiFrms_all[-keep_for_end:]
+pre_loFrms_post = pre_loFrms_all[-keep_for_end:]
+
+last_frame_unframed = pre_hiFrms_all_unframed[-keep_for_end]
+
 
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Arrow
@@ -293,7 +296,7 @@ all_frames.append(currFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    In a lower leverage situation, a player might be more willing to go for sub-optimal serves in order to remain unpredictable, 
+                    In a lower leverage situation, such as here, at 40-Love, a player might be more willing to go for sub-optimal serves in order to remain unpredictable, 
                     and hopefully keep the receiver guessing even in high-leverage situations.
                 """
 currFrms = BGRFrames.from_frames([rstFrms3, rstFrms4, rstFrms5])
@@ -524,15 +527,16 @@ currFrms = BGRFrames.from_frame(curr_scoreFrm, 50)
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-script_line = "The outcome of a point is among two possibilities: Joao Sousa can win the point, or he can lose it."
+# script_line = "The outcome of a point is among two possibilities: Joao Sousa can win the point, or he can lose it."
+script_line = "Let's go through the possibilities."
 
 curr_scoreFrm0 = overlay(curr_scoreFrm, scoreFrm_win, top_left_point = tlPt_win)
 curr_scoreFrm0 = curr_scoreFrm0.put(arr_win, color = arr_color_win)
-currFrms0 = BGRFrames.from_frame(curr_scoreFrm0, 50)
+currFrms0 = BGRFrames.from_frame(curr_scoreFrm0, 40)
 
 curr_scoreFrm1 = overlay(curr_scoreFrm0, scoreFrm_lose, top_left_point = tlPt_lose)
 curr_scoreFrm1 = curr_scoreFrm1.put(arr_lose, color = arr_color_lose)
-currFrms1 = BGRFrames.from_frame(curr_scoreFrm1, 50)
+currFrms1 = BGRFrames.from_frame(curr_scoreFrm1, 40)
 
 currFrms = BGRFrames.from_frames([currFrms0, currFrms1])
 
@@ -549,13 +553,13 @@ curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_lose.dim(dim_factor), top_left_p
 curr_scoreFrm = curr_scoreFrm.put(arr_lose, color = arr_color_lose_dim)
 # curr_scoreFrm.show()
 
-fadeFrms = vs.interpolate_frames(currFrms[-1], curr_scoreFrm, 50)
-statFrms = BGRFrames.from_frame(curr_scoreFrm, 50)
+fadeFrms = vs.interpolate_frames(currFrms[-1], curr_scoreFrm, 25)
+statFrms = BGRFrames.from_frame(curr_scoreFrm, 40)
 
 curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win_with_box, top_left_point = tlPt_win)
 
-fadeFrms2 = vs.interpolate_frames(statFrms[-1], curr_scoreFrm)
-statFrms2 = BGRFrames.from_frame(curr_scoreFrm, 50)
+fadeFrms2 = vs.interpolate_frames(statFrms[-1], curr_scoreFrm, 25)
+statFrms2 = BGRFrames.from_frame(curr_scoreFrm, 40)
 
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms, fadeFrms2, statFrms2])
 
@@ -877,7 +881,7 @@ arrFrm2 = arrFrm1.put(scoreArr_lo, thickness = 2)
 
 fadeFrms = vs.interpolate_frames(statFrm_black, statFrm, 50)
 arrFrms1 = BGRFrames.from_frame(arrFrm1, 50)
-arrFrms2 = BGRFrames.from_frame(arrFrm2, 50)
+arrFrms2 = BGRFrames.from_frame(arrFrm2, 150)
 
 currFrms = BGRFrames.from_frames([fadeFrms, 
                                   arrFrms1,
@@ -899,9 +903,14 @@ fade_backFrms0 = BGRFrames.from_frame(fade_backFrm0, 5)
 revRst, revFrms = reverse_cascade(myRst, keep_which = [(0, 0)], frames_per_element = 5)
 revFrms = revFrms.dim(dim_factor)
 
+revRst.add(last_frame_unframed.dim(dim_factor), 0, 0)
+unFrm = revRst.render()
+
+fadeFrms = vs.interpolate_frames(revFrms[-1], unFrm, 10)
+
 currFrms = BGRFrames.from_frames([arrFrms1_back, statFrms_back, 
                                   fade_backFrms2, fade_backFrms1, fade_backFrms0, 
-                                  revFrms])
+                                  revFrms, fadeFrms])
 
 all_frames.append(currFrms)
 script_lines.append(script_line)

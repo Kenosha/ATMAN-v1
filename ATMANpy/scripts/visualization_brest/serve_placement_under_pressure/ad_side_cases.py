@@ -253,6 +253,45 @@ sceneDict[player_name] = splitScn, xyScn, annPnts, legFrm
 # statFrm = statFrms[0]
 # statFrm.show()
 
+# ##################################
+# ####### KENNY DE SCHEPPER ########
+# ##################################
+# player_name = 'Kenny De Schepper'
+# ### COLLECT SHOTS FOR PLAYER
+# serveShots = adPnts.filter(server_is, player_name = player_name).get_serves()
+# print(f'{len(serveShots)} ad serves for {player_name}')
+# serveShots = serveShots.filter('get_initial_speed', is_above = 130)
+# print(f'{len(serveShots)} after speed filtering')
+
+# serveShots_clean_bounce = serveShots.filter(vis_ut.is_bounce_in_ad, side = 'Bottom')
+# serveShots_net = serveShots.filter('is_in_net')
+# serveShots_sample = serveShots_clean_bounce.join(serveShots_net)
+
+# ### PREP LEGEND
+# handedness = serveShots_clean_bounce[0].hitPlayer.get_hand().capitalize()
+# legFrm = vis_ut.make_legend_frame(player_name, handedness, serve_from)
+# tlPt_leg = Point2D((50, 50))
+
+# splitScn, xyScn, annPnts = vis_ut.split_kde(serveShots_sample, serve_from, **kde_kwargs)
+
+# sceneDict[player_name] = splitScn, xyScn, annPnts, legFrm
+
+# splitFrms, _ = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 25,
+#                                         annotated_points = annPnts[:-1],
+#                                         **prmDict)
+# splitFrms = overlay(splitFrms, legFrm, tlPt_leg)
+# splitFrm = splitFrms[0]
+# splitFrm.show()
+
+# statFrms, _ = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam, num_frames = 25,
+#                                         annotated_points = annPnts,
+#                                         **prmDict)
+# statFrms = overlay(statFrms, legFrm, tlPt_leg)
+# statFrm = statFrms[0]
+# statFrm.show()
+
+
+
 
 ##################################
 ######## CARLOS TABERNER #########
@@ -315,11 +354,11 @@ all_frames.append(stillFrms_pre)
 script_lines.append(script_line)
 
 script_line =   """
-                    Indeed, for Liam Broady, we see a heavy dependence on this serve out wide.
+                    Indeed, for left-handed Liam Broady, we see a heavy dependence on this serve out wide.
                 """
 
 itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
-                                    splitScn1, xyScn1, annPnts1, legFrm1, 
+                                    splitScn1, xyScn1, annPnts1[:-1], legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
@@ -350,7 +389,7 @@ splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Liam Broady']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Hugo Gaston']
 
 itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
-                                    splitScn1, xyScn1, annPnts1, legFrm1, 
+                                    splitScn1, xyScn1, annPnts1[:-1], legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
@@ -370,8 +409,8 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    On the other hand, Carlos Taberner exclusively serves down the middle in medium or high pressure situations, 
-                    whereas he mixes his serves in low pressure situations.
+                    On the other hand, Carlos Taberner exclusively serves down the middle in medium or high leverage situations, 
+                    whereas he mixes his serves in low leverage situations.
 
                     However, Carlos Taberners only match in our sample came against left-handed Kenny De Schepper, 
                     so it might be that he is simply targetting the backhand on serve, 
@@ -382,7 +421,7 @@ splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Hugo Gaston']
 splitScn1, xyScn1, annPnts1, legFrm1 = sceneDict['Carlos Taberner']
 
 itplFrms = vis_ut.morph_split_kdes(splitScn0, xyScn0, annPnts0[:-1], legFrm0,
-                                    splitScn1, xyScn1, annPnts1, legFrm1, 
+                                    splitScn1, xyScn1, annPnts1[:-1], legFrm1, 
                                     boxCam, num_frames = 50, tlPt_leg = tlPt_leg, **prmDict)
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
