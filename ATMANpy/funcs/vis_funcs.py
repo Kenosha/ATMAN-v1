@@ -184,7 +184,7 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
                     argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
                     start_cam = None, stop_cam = None, animate_over = None,
                     start_later = 0, stop_earlier = 0,
-                    text_at = 'current'):
+                    text_cam = None):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
     num_frames = len(animation_sequence_objects)
@@ -255,12 +255,10 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         current_scene_dimmed = current_scene.dim(1 / argument_luminosity)
         current_view = View.make(current_cam, current_scene_brightened, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     
-        if text_at == 'current':
+        if text_cam is None:
             text_view = View.make(current_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
-        elif text_at == 'start':
-            text_view = View.make(start_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
-        elif text_at == 'stop':
-             text_view = View.make(stop_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
+        else:
+            text_view = View.make(text_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
 
         ### create previous and base views
         front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
@@ -306,7 +304,8 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
                         argument_luminosity = 1, cumulative_foreground_transparence = None, adaptive_resolution_exponent = 0,
                         argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
                         start_cam = None, stop_cam = None,
-                        start_later = 0, stop_earlier = 0):
+                        start_later = 0, stop_earlier = 0,
+                        text_cam = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -373,14 +372,19 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
             previous_foreground_scene = previous_foreground_scene.transparify(cumulative_foreground_transparence)
             previous_dummy_scene = previous_dummy_scene.transparify(cumulative_foreground_transparence)
         
-        current_view = View.make(current_cam, static_scene_brightened, annotatedPoints = annotated_points_to_show, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
-    
+        current_view = View.make(current_cam, static_scene_brightened, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
+        
+        if text_cam is None:
+            text_view = View.make(current_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
+        else:
+            text_view = View.make(text_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
+
         ### create previous and base views
         front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
         dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution)
         base_view = View.make(current_cam, background_scene, resolution = background_resolution)
 
-        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
+        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
         
         myFrm = joint_view.snap()
 
@@ -405,7 +409,8 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
                     background_scene = None, previous_foreground_scene = None, previous_dummy_scene = None, previous_annotated_points = None,
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     argument_luminosity = 1, adaptive_resolution_exponent = 0,
-                    argument_blinks_per_second = None, animate_over = None):
+                    argument_blinks_per_second = None, animate_over = None, 
+                    text_cam = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -459,10 +464,15 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
     annotated_points_to_show = [*argument_annotated_points_brightened, *previous_annotated_points]
 
     ### create previous and base views
-    current_view = View.make(static_cam, static_scene_brightened, annotatedPoints = annotated_points_to_show, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
+    current_view = View.make(static_cam, static_scene_brightened, resolution = argument_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     front_view = View.make(static_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent) 
     dummy_view = View.make(static_cam, previous_dummy_scene, resolution = dummy_resolution)
     base_view = View.make(static_cam, background_scene, resolution = background_resolution)
+
+    if text_cam is None:
+        text_view = View.make(static_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
+    else:
+        text_view = View.make(text_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
 
     if animate_over is None:
         over_array = None
@@ -472,12 +482,12 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
         raise TypeError('animate_over has to be None or Frame')
 
     if argument_blinks_per_second is None:
-        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
+        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
         static_frame = joint_view.snap(over_array = over_array)
         myFrms = BGRFrames.from_frame(static_frame, repetitions = num_frames)
     else:
-        on_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
-        off_view = base_view.combine(dummy_view).combine(front_view)
+        on_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
+        off_view = base_view.combine(dummy_view).combine(front_view).combine(text_view)
         onFrm = on_view.snap(over_array = over_array)
         offFrm = off_view.snap(over_array = over_array)
         
