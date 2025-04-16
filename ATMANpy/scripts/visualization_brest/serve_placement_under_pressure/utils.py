@@ -116,7 +116,7 @@ def is_out_wide(myShot):
             return False
 
 
-def make_stat_string(loShots, hiShots, alpha = 0.05, lo_desc = 'Low Pressure', hi_desc = 'High Pressure'):
+def make_stat_string(loShots, hiShots, alpha = 0.05, lo_desc = 'Low Leverage', hi_desc = 'High Leverage'):
     ######## Tests for similarity of distribution #########
     low_x = np.array([find_intersection_with_service_line(aShot) for aShot in loShots], dtype = float)[:, 0]
     hi_x = np.array([find_intersection_with_service_line(aShot) for aShot in hiShots], dtype = float)[:, 0]
@@ -169,19 +169,19 @@ def is_bounce_in_deuce(myShot, side = 'Top'):
     deuceReg_enlarged = deuceReg.scale(1.25)
     return is_bounce_in_region(myShot, deuceReg_enlarged)
 
-def make_legend_frame(player_name, handedness, side, player_spaces = 15, 
+def make_legend_frame(player_name, handedness, side, player_spaces = 18, 
                       index_color = const.BGR['bright_grey'], data_color = const.BGR['grass_green']):
     from ATMANpy.types.Overlays import Table
 
     if handedness == 'Right':
-        hand_spaces = 16
+        hand_spaces = 20
     elif handedness == 'Left':
-        hand_spaces = 16
+        hand_spaces = 20
 
     if side == 'Deuce':
-        side_spaces = 15
+        side_spaces = 19
     elif side == 'Ad':
-        side_spaces = 16
+        side_spaces = 20
 
     table_data = {'Player': {'': f'{player_name:>{player_spaces}}'}, 
                   'Handedness': {'': f'{handedness:>{hand_spaces}}'},
@@ -189,7 +189,7 @@ def make_legend_frame(player_name, handedness, side, player_spaces = 15,
 
     myTab = Table(  table_data, dimensions = (350, 200), 
                 #   title = 'Legend', title_horizontal_offset = 3.25, title_vertical_offset = 0.25, title_color = color,
-                    header_row_height = 0.5, 
+                    header_row_height = 0.5, index_col_width = 0.7,
                     data_text_color = data_color, index_text_color = index_color,
                     skeleton_shrinkage = 0.2, index_offset = 0.25, automatic_vertical_offset_text_line_height = 0.25)
     
@@ -256,25 +256,29 @@ def split_kde(serveShots_sample, side, p_thresh_lo = 0.04, p_thresh_hi = 0.08,
     origPt = x_ax.weak_intersect(y_ax)
     origPt_3D = Point3D.from_point2D(origPt, z = 0)
 
+    lo_text = f'Low Leverage\n(<4%, n = {len(lowShots)})'
+    mid_text = f'Medium Leverage\n(4-8%, n = {len(midShots)})'
+    hi_text = f'High Leverage\n(>8%, n = {len(hiShots)})'
+
     if side == 'Deuce':
-        loPt = origPt_3D.left(25).annotate(f'Low Pressure \n (Point Impact <4%) \n n = {len(lowShots)}').recolor(const.BGR['grass_green'])
-        midPt = origPt_3D.front(70).left(35).annotate(f'Medium Pressure \n (Point Impact 4-8%) \n n = {len(midShots)}').recolor(const.BGR['soft_yellow'])
-        hiPt = origPt_3D.front(150).left(37).annotate(f'High Pressure \n (Point Impact >8%) \n n = {len(hiShots)}').recolor(const.BGR['intense_red'])
+        loPt = origPt_3D.left(25).annotate(lo_text).recolor(const.BGR['grass_green'])
+        midPt = origPt_3D.front(70).left(35).annotate(mid_text).recolor(const.BGR['soft_yellow'])
+        hiPt = origPt_3D.front(150).left(37).annotate(hi_text).recolor(const.BGR['intense_red'])
 
         tPt = origPt_3D.right(0).back(10).annotate('Down the Middle')    
         wPt = origPt_3D.right(100).back(10).annotate('Out Wide')
 
     elif side == 'Ad':
-        loPt = origPt_3D.right(15).annotate(f'Low Pressure \n (Point Impact <4%) \n n = {len(lowShots)}').recolor(const.BGR['grass_green'])
-        midPt = origPt_3D.front(70).right(20).annotate(f'Medium Pressure \n (Point Impact 4-8%) \n n = {len(midShots)}').recolor(const.BGR['soft_yellow'])
-        hiPt = origPt_3D.front(150).right(25).annotate(f'High Pressure \n (Point Impact >8%) \n n = {len(hiShots)}').recolor(const.BGR['intense_red'])
+        loPt = origPt_3D.right(10).annotate(lo_text).recolor(const.BGR['grass_green'])
+        midPt = origPt_3D.front(70).right(15).annotate(mid_text).recolor(const.BGR['soft_yellow'])
+        hiPt = origPt_3D.front(150).right(20).annotate(hi_text).recolor(const.BGR['intense_red'])
 
         tPt = origPt_3D.left(15).back(10).annotate('Down the Middle')    
         wPt = origPt_3D.left(110).back(10).annotate('Out Wide')
 
     diagPt = Point3D((x_ax.rightPt.x, y_ax.leftPt.y, 0))
     if join_mid_and_high:
-        jntStr = make_stat_string(lowShots, midShots.join(hiShots), lo_desc = 'Low Pressure', hi_desc = 'Medium + High Pressure')
+        jntStr = make_stat_string(lowShots, midShots.join(hiShots), lo_desc = 'Low Leverage', hi_desc = 'Medium + High Leverage')
     else:
         jntStr = make_stat_string(lowShots, hiShots)
     statPt = diagPt.annotate(jntStr).front(110).right(40)
@@ -316,8 +320,11 @@ def morph_split_kdes(splitScn0, xyScn0, annPnts0, legFrm0,
     import ATMANpy.funcs.vis_funcs as vs
 
     ### interpolate the annotated points and legends
-    emFrm0 = View.make(myCam, xyScn0, annotatedPoints = annPnts0, resolution = prmDict['background_resolution']).snap()
-    emFrm1 = View.make(myCam, xyScn1, annotatedPoints = annPnts1[:-1], resolution = prmDict['background_resolution']).snap()
+    annPnts0_bright = [pt.dim(prmDict['argument_luminosity']) for pt in annPnts0]
+    annPnts1_bright = [pt.dim(prmDict['argument_luminosity']) for pt in annPnts1]
+
+    emFrm0 = View.make(myCam, xyScn0, annotatedPoints = annPnts0_bright, resolution = prmDict['background_resolution']).snap()
+    emFrm1 = View.make(myCam, xyScn1, annotatedPoints = annPnts1_bright, resolution = prmDict['background_resolution']).snap()
 
     emFrm0 = overlay(emFrm0, legFrm0, tlPt_leg)
     emFrm1 = overlay(emFrm1, legFrm1, tlPt_leg)
