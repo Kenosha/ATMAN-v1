@@ -86,10 +86,10 @@ adPnts = firstPnts.filter('is_serve_ad')
 deucePnts = firstPnts.filter('is_serve_deuce')
 
 ### PARAMETERS
-RESOLUTION_MODIFIER = 1 # 2
+RESOLUTION_MODIFIER = 30 # 2
 RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
 RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
-RESOLUTION_KDE = 2 * RESOLUTION_MODIFIER
+RESOLUTION_KDE = 1 * RESOLUTION_MODIFIER
 MIX_COLORS_KDE = True
 BANDWIDTH_KDE = 35
 SCENE_FADE = 0.9
@@ -206,16 +206,21 @@ statFrms = overlay(statFrms, legFrm, tlPt_leg)
 all_frames.append(statFrms)
 script_lines.append(script_line)
 
+script_line = ""
+holdFrms = BGRFrames.from_frame(statFrms[-1], 25)
+all_frames.append(holdFrms)
+script_lines.append(script_line)
+
 ### fade out kde, fade in court.
 script_line = "Let's take a look at some interesting cases on the deuce side."
 
-courtScn = Scene.make_court(singles_net = False)
+courtScn = Scene.make_court(singles_net = False, net_mesh_density = 3)
 courtFrm = View.make(boxCam_ad, courtScn, resolution = prmDict['background_resolution']).snap()
-itplFrms = vs.interpolate_frames(statFrms[-1], courtFrm, 50)
+itplFrms = vs.interpolate_frames(statFrms[-1], courtFrm, 75)
 
 ### move over
 moveFrms, animDict = vs.animate_cam_motion(None, background_scene = courtScn, start_cam = boxCam_ad, stop_cam = boxCam_deuce, 
-                                           num_frames = 50,
+                                           num_frames = 75,
                                            **prmDict)
 
 jointFrms = BGRFrames.from_frames([itplFrms, moveFrms])
@@ -272,7 +277,7 @@ script_lines.append(script_line)
 
 ### final statFrm
 script_line =   """
-                    However, when comparing mid and high leverage situations jointly with low leverage, the difference in pattern is significant.
+                    However, when comparing medium and high leverage situations jointly with low leverage, the difference in pattern is significant.
                 """
 
 statFrms_join, _ = vs.animate_static(splitScn, static_cam = boxCam_deuce, background_scene = xyScn, annotated_points = annPnts_join, 
@@ -284,6 +289,11 @@ fadeFrms = vs.interpolate_frames(statFrms[-1], statFrms_join[0], 25)
 jointFrms = BGRFrames.from_frames([fadeFrms, statFrms_join])
 
 all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = ""
+holdFrms = BGRFrames.from_frame(statFrms_join[-1], 25)
+all_frames.append(holdFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)

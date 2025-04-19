@@ -186,7 +186,7 @@ loPnt = filtPnts[min_idx]
 # loPnt.stream(confs = confs).show()
 
 ### initial frame raster ###
-widen_by = 350
+widen_by = 300
 fade_by = 100
 keep_for_end = 150
 hiStm = hiPnt.stream(confs = confs).widen(widen_by)
@@ -206,7 +206,7 @@ pre_hiFrms_post = pre_hiFrms_all[-keep_for_end:]
 pre_loFrms_post = pre_loFrms_all[-keep_for_end:]
 
 last_frame_unframed = pre_hiFrms_all_unframed[-keep_for_end]
-
+last_frames_unframed = pre_hiFrms_all_unframed[-keep_for_end:]
 
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Arrow
@@ -301,6 +301,11 @@ script_line =   """
                 """
 currFrms = BGRFrames.from_frames([rstFrms3, rstFrms4, rstFrms5])
 all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = ""
+holdFrms = BGRFrames.from_frame(currFrms[-1], 25)
+all_frames.append(holdFrms)
 script_lines.append(script_line)
 
 script_line =   """
@@ -543,7 +548,7 @@ currFrms = BGRFrames.from_frames([currFrms0, currFrms1])
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-script_line = "If he wins this point, the outcome of the match is decided in favor of Joao Sousa."
+script_line = "If Joao Sousa wins this point, the outcome of the match is decided in his favor."
 ### brighten win side, dim lose side
 
 curr_scoreFrm = overlay(curr_scoreFrm, scoreFrm_win, top_left_point = tlPt_win)
@@ -567,7 +572,7 @@ all_frames.append(currFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    If he loses this point, the outcome of the match is uncertain: it's now 6-all in the deciding tiebreak.
+                    If Joao Sousa loses this point, the outcome of the match is uncertain: it's now 6-all in the deciding tiebreak.
 
                     What we do in this case is try to figure out the probability of Joao Sousa winning the match.
                 """
@@ -725,6 +730,12 @@ script_lines.append(script_line)
 script_line = "At 6-6, 7-7, 8-8, and so on, play continues until either player wins the match by winning two consecutive points, one on serve, one on return."
 ### ...
 
+currFrms = BGRFrames.from_frame(arrFrm, 270)
+
+all_frames.append(currFrms)
+script_lines.append(script_line)
+
+
 script_line = "By virtue of this symmetry, we therefore take the probability for Joao Sousa to win the match at 6-6 to be 50%."
 ### ... fade out after 6-6, and fade in box with win prob 50%.
 
@@ -788,7 +799,7 @@ resFrm2 = resFrm2.put(loseArr, color = const.BGR['bright_grey'])
 lvrStr = 'Leverage = 100% - 50% = 50%'
 resFrm2 = resFrm2.put(lvrStr, where = meanPt.round_coords(), size = 2, color = const.BGR['bright_grey'])
 
-currFrms = BGRFrames.from_frame(resFrm2, 50)
+currFrms = BGRFrames.from_frame(resFrm2, 110)
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -809,6 +820,11 @@ statFrms = BGRFrames.from_frame(lastFrm, 50)
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
 
 all_frames.append(currFrms)
+script_lines.append(script_line)
+
+script_line = ""
+holdFrms = BGRFrames.from_frame(statFrms[-1], 25)
+all_frames.append(holdFrms)
 script_lines.append(script_line)
 
 ############# PRESSURE CHART #############
@@ -890,7 +906,11 @@ currFrms = BGRFrames.from_frames([fadeFrms,
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
-script_line = "So then let's take a look at serve placement."
+script_line =   """
+                    So then let's take a look at serve placement. 
+                    Our sample consists of twenty matches played during the 2021 Brest Challenger Tournament, 
+                    of which Joao Sousa played four.
+                """
 ### remove all elements except the top left situation.
 
 from ATMANpy.types.Overlays import reverse_cascade
@@ -920,13 +940,13 @@ script_lines.append(script_line)
 script_line = "In all of his tournament matches, when serving from the ad side..."
 ### grow frame
 
-factors = np.linspace(1, 2, num = 50)
+factors = np.linspace(1, 2, num = last_frames_unframed.length())
 
 out_frames = []
 blackFrm = BGRFrame.make_black()
 for idx, f in enumerate(factors):
     ### curr_frame
-    currFrm = pre_hiFrms_post[idx]
+    currFrm = last_frames_unframed[idx]
     ### calculate dim factor
     lmbd = f - 1
     curr_dim_factor = 0.25 * (1 - lmbd) + 1 * lmbd

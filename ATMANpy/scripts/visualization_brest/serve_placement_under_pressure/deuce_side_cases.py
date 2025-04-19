@@ -28,7 +28,6 @@ import ATMANpy.auxil.constants as const
 
 import ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils as vis_ut
 
-
 ########################################
 ########### SAVE FOLDER ################
 ########################################
@@ -91,10 +90,10 @@ firstPnts = dataPnts.filter('is_first_serve').enforce_direction('Top')
 deucePnts = firstPnts.filter('is_serve_deuce')
 
 ### PARAMETERS
-RESOLUTION_MODIFIER = 1 # 2
+RESOLUTION_MODIFIER = 30 # 2
 RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
 RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
-RESOLUTION_KDE = 2 * RESOLUTION_MODIFIER
+RESOLUTION_KDE = 1 * RESOLUTION_MODIFIER
 MIX_COLORS_KDE = True
 BANDWIDTH_KDE = 35
 SCENE_FADE = 0.9
@@ -276,10 +275,12 @@ all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    Liam Broady seems to rely primarily on a serve down the middle; 
-                    This is typically a slice serve again, curving away from the returner to the backhand;
-                    however, this time, the returner is drawn into the court, and not out of it.
+                    Liam Broady seems to rely primarily on a serve down the middle, to a right-handed receiver's backhand.
                 """
+
+# Since the returner would not be drawn out of the court, ...
+# This can be a slice serve, curving away from the returner to the backhand;
+# however, this time, the returner is drawn into the court, and not out of it.
 
 stillFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam = boxCam,
                                 annotated_points = annPnts1[:-1], num_frames = 50,
@@ -300,7 +301,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     For Hugo Gaston, the same pattern holds, with him seeming to mix in serves out wide in low leverage situations a bit more regularly, 
-                    to protect the slice serve down the middle in high leverage situations.
+                    to protect the serve down the middle in high leverage situations.
                 """
 
 splitScn0, xyScn0, annPnts0, legFrm0 = sceneDict['Liam Broady']
@@ -392,9 +393,11 @@ script_line =   """
                     On the other hand, knowing the serve mix at different leverages ahead of time, there is no need to guess.
                 """
 
-fadeoutFrms = BGRFrames.from_frame(stillFrms[-1], 500).dim_progressively(1, 0)
+stillFrms = BGRFrames.from_frame(stillFrms[-1], 500)
+fadeoutFrms = stillFrms.dim_progressively(1, 0)
+jointFrms = BGRFrames.from_frames([stillFrms, fadeoutFrms])
 
-all_frames.append(fadeoutFrms)
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)

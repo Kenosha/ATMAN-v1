@@ -90,10 +90,10 @@ firstPnts = dataPnts.filter('is_first_serve').enforce_direction('Top')
 adPnts = firstPnts.filter('is_serve_ad')
 
 ### PARAMETERS
-RESOLUTION_MODIFIER = 1 # 2
+RESOLUTION_MODIFIER = 30 # 2
 RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
 RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
-RESOLUTION_KDE = 2 * RESOLUTION_MODIFIER
+RESOLUTION_KDE = 1 * RESOLUTION_MODIFIER
 MIX_COLORS_KDE = True
 BANDWIDTH_KDE = 35
 SCENE_FADE = 0.9
@@ -372,7 +372,7 @@ statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam
                                 annotated_points = annPnts1, num_frames = 50,
                                 **prmDict)
 statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-statFrms[-1].show()
+# statFrms[-1].show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -401,7 +401,7 @@ statFrms, _ = vs.animate_static(splitScn1, background_scene = xyScn1, static_cam
                                 annotated_points = annPnts1, num_frames = 50,
                                 **prmDict)
 statFrms = overlay(statFrms, legFrm1, tlPt_leg)
-statFrms[-1].show()
+# statFrms[-1].show()
 
 jointFrms = BGRFrames.from_frames([itplFrms, stillFrms])
 
