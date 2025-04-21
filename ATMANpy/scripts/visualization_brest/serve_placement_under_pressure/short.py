@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.serve_placement_under_pressure.utils 
 ########### SAVE FOLDER ################
 ########################################
 
-SAVE = False
+SAVE = True
 
 DESCRIPTOR = 'short'
 SAVE_FOLDER = 'serve_pressure_new'
@@ -315,7 +315,7 @@ script_lines.append(script_line)
 script_line =   """
                     When there is much less at stake, such as here, at 40-Love, 
                     a player might be more willing to go for sub-optimal serves in order to remain unpredictable, 
-                    and hopefully keep the receiver guessing when the point really matters.
+                    and hopefully keep the receiver guessing at a later time, when the point really matters.
                 """
 currFrms = BGRFrames.from_frames([rstFrms3, rstFrms4, rstFrms5])
 all_frames.append(currFrms)
@@ -328,12 +328,13 @@ script_lines.append(script_line)
 
 
 ############# PRESSURE CHART #############
+
 script_line =   """
                     We quantify what is at stake by a notion of leverage, which essentially measures the impact of winning or losing a point on the
                     outcome of the match, ...
                 """
 
-from ATMANpy.types.Overlays import Graph, LineChart, ScatterChart
+from ATMANpy.types.Overlays import Graph, LineChart, ScatterChart, overlay_footnote
 
 ys = mtcPnts.apply(maybe_get_pressure)
 xs = np.arange(len(ys))
@@ -395,6 +396,8 @@ fadeFrms = vs.interpolate_frames(last_rastFrm, statFrm, 50)
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
 # DecapStream(currFrms, 0, 100).show()
 
+currFrms = overlay_footnote(currFrms, "XX:XX-XX:XX:", "For more info on\nthe construction and interpretation\nof the leverage metric.")
+
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
@@ -410,6 +413,8 @@ arrFrms2 = BGRFrames.from_frame(arrFrm2, 150)
 
 currFrms = BGRFrames.from_frames([arrFrms1,
                                   arrFrms2])
+
+currFrms = overlay_footnote(currFrms, "XX:XX-XX:XX:", "For more info on\nthe construction and interpretation\nof the leverage metric.")
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -838,7 +843,7 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 ### fade out kde, fade in court.
-script_line = "Let's take a look at some interesting cases on the deuce side."
+script_line = "Let's take a look at another interesting case."
 
 courtScn = Scene.make_court(singles_net = False, net_mesh_density = 3)
 courtFrm = View.make(boxCam_ad, courtScn, resolution = prmDict['background_resolution']).snap()
@@ -875,7 +880,7 @@ splitScn, xyScn, annPnts = vis_ut.split_kde(serveShots_sample, 'Deuce', **kde_kw
 _, _, annPnts_join = vis_ut.split_kde(serveShots_sample, 'Deuce', join_mid_and_high = True, **kde_kwargs)
 
 ### first deuce player
-script_line = "First up is Holger Rune. On aggregate, it seems he prefers the deuce serve out wide."
+script_line = "Holger Rune is serving from the deuce side. On aggregate, it seems he prefers the serve out wide, here."
 
 jointScn_null, jointScn = vis_ut.joint_kde(serveShots_sample, 'Deuce', **kde_kwargs)
 
@@ -908,17 +913,15 @@ all_frames.append(splitFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    In this video, we have shown how some players adjust their serve patterns 
-                    based on leverage, a measure of the importance of the point being played. 
-                    Since high leverage points matter disproportionately more than low leverage points, 
-                    it is essential to disaggregate the opponents serve placement by leverage;
-                    otherwise, one might be fooled on important points by expecting serves 
-                    which the server only plays on points he or she can afford to lose.
+                    In this video, we have given a quick overview over two cases 
+                    in which players seem to adjust their serve patterns based on leverage.
+                    
+                    As an opponent, figuring this out during the match can be costly, or even outright impossible,
+                    since high leverage points are consequential, but few in number.
 
-                    Figuring this out in the match can be costly, or even outright impossible:
-                    High leverage points are few and far between, and having to guess sets the receiver up for failure when it matters most. 
+                    On the other hand, knowing the serve mix by leverage ahead of time, there is no need to guess.
 
-                    On the other hand, knowing the serve mix at different leverages ahead of time, there is no need to guess.
+                    For a deeper look into a few more players' serve mixes, and the methodology employed, consult the longer version of this video.
                 """
 
 stillFrms = BGRFrames.from_frame(splitFrms[-1], 250)
@@ -929,3 +932,16 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
+
+### Saving the separate MultiFrame objects and the Joint Script
+if SAVE:
+    assert len(script_lines) == len(all_frames)
+
+    # b) Save segments
+    for idx, frames_and_script in enumerate(zip(all_frames, script_lines)):
+        print(idx)
+        subFrms, script_line = frames_and_script
+        subFrms.save(fullPath, f'seg_{idx}', save_as = 'mp4', lossless = True)
+        
+        with open(os.path.join(fullPath, f'script_{idx}.txt'), mode = 'w') as f:
+            f.write(script_line)
