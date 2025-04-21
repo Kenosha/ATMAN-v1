@@ -1407,7 +1407,19 @@ def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = 
 
     return tabFrm
 
+def overlay_footnote(someFrms, timeStr, footnoteStr, frame_thickness = 2, frame_color = const.BGR['bright_grey']):
+    footnote_where = (50, 950)
+    footnote_dims = (500, 100)
+    
+    blackFrm = BGRFrame.make_black(*footnote_dims)
 
+    footnoteFrm = blackFrm.put(timeStr, size = 1, where = (30, 40), color = const.BGR['grass_green'])
+    footnoteFrm = footnoteFrm.put(footnoteStr, size = 1, where = (150, 40), color = const.BGR['grass_green'])
+
+    footnoteFrm_framed = footnoteFrm.framed(frame_thickness, frame_color)
+    # footnoteFrm_framed.show()
+
+    return overlay(someFrms, footnoteFrm_framed, top_left_point = Point2D(footnote_where))
 
 if __name__ == '__main__':
     TEST_CHART = True
