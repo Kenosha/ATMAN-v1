@@ -96,10 +96,10 @@ heat_color = const.BGR['leafy_green']
 bandwidth = 40
 intermediate_lambdas = [0.25, 0.5, 0.75]
 
-# prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
-#            'interpolate_func': vs.interpolate_camera_naive}
-prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
            'interpolate_func': vs.interpolate_camera_naive}
+# prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+#            'interpolate_func': vs.interpolate_camera_naive}
 prmDict_static = {k: v for k, v in prmDict.items() if k not in ['interpolate_func']}
 
 ### FILTER ###
@@ -126,6 +126,7 @@ def return_is_fair(somePnt):
     return somePnt.get_return().is_fair(thirdShot)
 
 filtPnts_before_fair = filtPnts_before.filter(return_is_fair)
+filtPnts_before_fair = filtPnts_before_fair.filter('is_top_to_bot').join(filtPnts_before_fair.filter('is_bot_to_top')) ### so there is only one helicopter
 retShots_before_fair = filtPnts_before_fair.get_returns() ### unrectified!
 
 ### CAM ###
@@ -210,7 +211,8 @@ fade_length = 10
 fade_thresh = 0.025
 dim_factor = 0.25
 
-kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 10}
+# kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 10}
+kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 0.1}
 
 raster_frames = []
 raster_rot_frames = []
@@ -278,7 +280,7 @@ for idx, myPnt in enumerate(filtPnts_before_fair):
 
     ### filter for serve and return
     serve_and_return = myPnt[:2]
-    myStm = serve_and_return.stream(confs = confs).maybe_to_stream()
+    myStm = serve_and_return.stream(confs = confs).join().maybe_to_stream()
 
     ### real frames
     myFrms = myStm.decap().frames
@@ -537,8 +539,8 @@ interFrms_before, _ = vs.animate_sequence([kde_whole for _ in range(interFrms_10
                                             **prmDict_static)
 # DecapStream(interFrms_before, 0, 100).show()
 
-beforeFrms = lastPnt[:2].stream(confs = confs).maybe_to_stream().decap().frames.rescale(3)
-afterFrms = lastPnt[2:].stream(confs = confs).maybe_to_stream().decap().frames.rescale(3)
+beforeFrms = lastPnt[:2].stream(confs = confs).join().maybe_to_stream().decap().frames.rescale(3)
+afterFrms = lastPnt[2:].stream(confs = confs).join().maybe_to_stream().decap().frames.rescale(3)
 
 kdeFrms_before, _ = vs.animate_sequence([kde_whole for _ in range(beforeFrms.length())], 
                                             start_cam = brestCam_full, stop_cam = brestCam_full,

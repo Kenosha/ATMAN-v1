@@ -282,9 +282,11 @@ def animate_bounce_and_mark_scenes(myPnt, start_cam, stop_cam, confs,
     spline_scenes, bounce_scenes = get_shot_scenes(myPnt, mark_size = mark_size, mark_color = mark_color)
 
     if over:
-        myFrms = myPnt.stream(confs = confs).decap().frames
         if isinstance(myPnt, Point):
+            myFrms = myPnt.stream(confs = confs).decap().frames
             myFrms = myFrms[:-1]
+        else:
+            myFrms = myPnt.stream(confs = confs).join().maybe_to_stream().decap().frames
         myFrms = myFrms.rescale(over_scale)
         myFrms = myFrms.dim_progressively(fs_dim_factor = init_over_dim, ls_dim_factor = last_over_dim)
     else:
