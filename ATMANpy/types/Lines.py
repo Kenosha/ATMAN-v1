@@ -296,9 +296,25 @@ class Line:
         cutPt_left = subPnts[factor_idx_left]
         cutPt_right = subPnts[factor_idx_right]
 
-        return Line(cutPt_left, cutPt_right, 
-                    name = self.name, force_l2r = self.force_l2r)
+        return Line(cutPt_left, cutPt_right, name = self.name, force_l2r = self.force_l2r)
     
+    def lengthen_by(self, factor, which = 'left'):
+        p1, p2 = self.leftPt, self.rightPt
+
+        if which == 'left':
+            add_left = factor - 1
+            add_right = 0
+        elif which == 'right':
+            add_left = 0
+            add_right = factor - 1
+        else:
+            add_left = add_right = (factor - 1)
+
+        p1_new = (p1 - p2) * add_left + p1
+        p2_new = (p2 - p1) * add_right + p2
+
+        return Line(p1_new, p2_new, name = self.name, force_l2r = self.force_l2r)
+
     def dash(self, num_dashes = 10):
         subPnts = self.subdivide(num_dashes * 2)
         subLns = Lines([Line(subPnts[idx], subPnts[idx + 1]) for idx in range(len(subPnts) - 1)])
@@ -683,19 +699,33 @@ class CourtLines(Lines):
         return Lines.rotate(self, angle, origPt = self.get_center_point())
 
     def add_singles_netline(self):
-        netLine = self['Top Baseline'].down(self.side_length)
-        netLine = Line(netLine.leftPt.right(self.doubles_alley_width).left(self.net_beyond_line),
-                                netLine.rightPt.left(self.doubles_alley_width).right(self.net_beyond_line),
-                                name = 'Net Line')
-        return CourtLines(self.append(netLine), 
+        p1a = self[f'Top Singles Ad Line'].weak_intersect(self['Top Baseline'])
+        p2a = self[f'Top Singles Ad Line'].weak_intersect(self['Bottom Baseline'])
+        p1b = self[f'Top Singles Deuce Line'].weak_intersect(self['Top Baseline'])
+        p2b = self[f'Top Singles Deuce Line'].weak_intersect(self['Bottom Baseline'])
+
+        pa, pb = (p1a + p2a) / 2, (p1b + p2b) / 2
+        netLn_flush = Line(pa, pb, name = 'Net Line')
+
+        lengthen_factor = 1 + self.net_beyond_line / self.singles_width
+        netLn_long = netLn_flush.lengthen_by(lengthen_factor, which = 'both')
+
+        return CourtLines(self.append(netLn_long), 
                           name = self.name, scale = self.scale, margin = self.margin, force_dimensions = self.force_dimensions)
         
     def add_doubles_netline(self):
-        netLine = self['Top Baseline'].down(self.side_length)
-        netLine = Line(netLine.leftPt.left(self.net_beyond_line),
-                                netLine.rightPt.right(self.net_beyond_line),
-                                name = 'Net Line')
-        return CourtLines(self.append(netLine), 
+        p1a = self[f'Top Doubles Ad Line'].weak_intersect(self['Top Baseline'])
+        p2a = self[f'Top Doubles Ad Line'].weak_intersect(self['Bottom Baseline'])
+        p1b = self[f'Top Doubles Deuce Line'].weak_intersect(self['Top Baseline'])
+        p2b = self[f'Top Doubles Deuce Line'].weak_intersect(self['Bottom Baseline'])
+
+        pa, pb = (p1a + p2a) / 2, (p1b + p2b) / 2
+        netLn_flush = Line(pa, pb, name = 'Net Line')
+
+        lengthen_factor = 1 + self.net_beyond_line / self.court_width
+        netLn_long = netLn_flush.lengthen_by(lengthen_factor, which = 'both')
+
+        return CourtLines(self.append(netLn_long), 
                           name = self.name, scale = self.scale, margin = self.margin, force_dimensions = self.force_dimensions)
         
     def get_half_region(self, side = 'Top', width = 'Doubles'):
