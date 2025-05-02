@@ -60,7 +60,7 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 cap = confs[0]['cap']
 
 ### PARAMETERS
-RESOLUTION_MODIFIER = 1 # 2
+RESOLUTION_MODIFIER = 30 # 2
 RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
 RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
 RESOLUTION_KDE = 1 * RESOLUTION_MODIFIER
@@ -314,8 +314,8 @@ script_lines.append(script_line)
 
 script_line =   """
                     When there is much less at stake, such as here, at 40-Love, 
-                    a player might be more willing to go for sub-optimal serves in order to remain unpredictable, 
-                    and hopefully keep the receiver guessing at a later time, when the point really matters.
+                    a player might be more willing to go for sub-optimal serves in order to 
+                    hopefully keep the receiver guessing at a later time, when the point really matters.
                 """
 currFrms = BGRFrames.from_frames([rstFrms3, rstFrms4, rstFrms5])
 all_frames.append(currFrms)
@@ -330,8 +330,8 @@ script_lines.append(script_line)
 ############# PRESSURE CHART #############
 
 script_line =   """
-                    We quantify what is at stake by a notion of leverage, which essentially measures the impact of winning or losing a point on the
-                    outcome of the match, ...
+                    We quantify what is at stake by a notion of leverage, 
+                    which essentially measures the impact of the outcome of a point on the outcome of the match.
                 """
 
 from ATMANpy.types.Overlays import Graph, LineChart, ScatterChart, overlay_footnote
@@ -393,15 +393,8 @@ statFrm = overlay_center(fade_backFrm2, graphFrm)
 statFrms = BGRFrames.from_frame(statFrm, 50)
 fadeFrms = vs.interpolate_frames(last_rastFrm, statFrm, 50)
 
-currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+# currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
 # DecapStream(currFrms, 0, 100).show()
-
-currFrms = overlay_footnote(currFrms, "XX:XX-XX:XX:", "For more info on\nthe construction and interpretation\nof the leverage metric.")
-
-all_frames.append(currFrms)
-script_lines.append(script_line)
-
-script_line = "... with our initial situations corresponding to very high and very low leverage, indeed."
 
 scoreArr_hi = Arrow.make(p2.up(30), p2.up(100).right(890), shorten_by = 0.99, hat_length = 20)
 scoreArr_lo = Arrow.make(p1_2.right(100), p1_2.up(300).left(32), shorten_by = 0.97, hat_length = 20)
@@ -409,20 +402,19 @@ scoreArr_lo = Arrow.make(p1_2.right(100), p1_2.up(300).left(32), shorten_by = 0.
 arrFrm1 = statFrm.put(scoreArr_hi, thickness = 2)
 arrFrm2 = arrFrm1.put(scoreArr_lo, thickness = 2)
 arrFrms1 = BGRFrames.from_frame(arrFrm1, 50)
-arrFrms2 = BGRFrames.from_frame(arrFrm2, 150)
+arrFrms2 = BGRFrames.from_frame(arrFrm2, 100)
 
-currFrms = BGRFrames.from_frames([arrFrms1,
-                                  arrFrms2])
+currFrms = BGRFrames.from_frames([fadeFrms, statFrms,
+                                  arrFrms1, arrFrms2])
 
 currFrms = overlay_footnote(currFrms, "XX:XX-XX:XX:", "For more info on\nthe construction and interpretation\nof the leverage metric.")
+
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
 script_line =   """
                     So then let's take a look at serve placement. 
-                    Our sample consists of twenty matches played during the 2021 Brest Challenger Tournament, 
-                    of which Joao Sousa played four.
                 """
 ### remove all elements except the top left situation.
 
@@ -620,8 +612,7 @@ lineFrms = overlay(lineFrms, legFrm, tlPt_leg)
 # DecapStream(lineFrms, 0, 100).show()
 
 statFrms_pre, animDict = vs.animate_static(flight_line_and_mark_scene, background_scene = courtScn, static_cam = boxCam_ad,
-                                        **prmDict, 
-                                        **animDict)
+                                           num_frames = 40, **prmDict, **animDict)
 # statFrms[-1].show()
 
 statFrms_pre = overlay(statFrms_pre, legFrm, tlPt_leg)
@@ -630,7 +621,7 @@ statFrms_pre = overlay(statFrms_pre, legFrm, tlPt_leg)
 bncMark_on_line = Mark.make(interPt, color = MARK_COLOR)
 flight_line_and_mark_scene_end = Scene([*flight_itpl_line_segments, bncMark_on_line])
 
-mark_moving_scenes = vs.interpolate_scenes(flight_line_and_mark_scene, flight_line_and_mark_scene_end, num_frames = 25)
+mark_moving_scenes = vs.interpolate_scenes(flight_line_and_mark_scene, flight_line_and_mark_scene_end, num_frames = 20)
 
 animDict['previous_foreground_scene'] = Scene([shape for shape in animDict['previous_foreground_scene'].shapes if shape != bncMark])
 
@@ -641,15 +632,10 @@ moveFrms, animDict = vs.animate_sequence(mark_moving_scenes, background_scene = 
 
 moveFrms = overlay(moveFrms, legFrm, tlPt_leg)
 
-statFrms_post = BGRFrames.from_frame(moveFrms[-1], 50)
+statFrms_post = BGRFrames.from_frame(moveFrms[-1], 40)
 statFrms_post = overlay(statFrms_post, legFrm, tlPt_leg)
 
-jointFrms = BGRFrames.from_frames([zoomFrms, lineFrms, statFrms_pre, moveFrms, statFrms_post])
-
-all_frames.append(jointFrms)
-script_lines.append(script_line)
-
-script_line = "By projecting onto the service line along the flight path..."
+jointFrms1 = BGRFrames.from_frames([zoomFrms, lineFrms, statFrms_pre, moveFrms, statFrms_post])
 
 ### FADE OTHER MARKS BACK IN
 markScn_mono_bar_one = Scene([*[mk for mk in markScn_mono if mk != bncMark], bncMark_on_line])
@@ -659,7 +645,7 @@ monoView = View.make(boxCam_ad, markScn_mono_bar_one, resolution = prmDict['argu
 backView = View.make(boxCam_ad, courtScn, resolution = prmDict['background_resolution'])
 monoFrm = backView.combine(monoView).snap()
 
-itplFrms = vs.interpolate_frames(moveFrms[-1], monoFrm, 50)
+itplFrms = vs.interpolate_frames(moveFrms[-1], monoFrm, 40)
 
 itplFrms = overlay(itplFrms, legFrm, tlPt_leg)
 
@@ -683,23 +669,25 @@ markScn_mono_moved = Scene(interMarks)
 
 markScn_mono_box = Scene([mark if mark != bncMark else bncMark for mark in markScn_mono.shapes])
 
-all_marks_moving_scenes = vs.interpolate_scenes(markScn_mono_box, markScn_mono_moved, 25)
+all_marks_moving_scenes = vs.interpolate_scenes(markScn_mono_box, markScn_mono_moved, 20)
 
 moveFrms, animDict = vs.animate_sequence(all_marks_moving_scenes, background_scene = courtScn, cumulate_argument = False, 
                                     start_cam = boxCam_ad, stop_cam = boxCam_ad,
                                     **prmDict)
 moveFrms = overlay(moveFrms, legFrm, tlPt_leg)
 
-statFrms, animDict = vs.animate_static(markScn_mono_moved, background_scene = courtScn, static_cam = boxCam_ad, num_frames = 25,
+statFrms, animDict = vs.animate_static(markScn_mono_moved, background_scene = courtScn, static_cam = boxCam_ad, num_frames = 20,
                                         **prmDict)
 statFrms = overlay(statFrms, legFrm, tlPt_leg)
 
-jointFrms = BGRFrames.from_frames([itplFrms, moveFrms, statFrms])
+jointFrms2 = BGRFrames.from_frames([itplFrms, moveFrms, statFrms])
+
+jointFrms = BGRFrames.from_frames([jointFrms1, jointFrms2])
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
-script_line = "... we can easily construct a distribution of serve placement. Indeed, the serve out wide is favored against the serve down the middle."
+script_line = "Indeed, the serve out wide is favored against the serve down the middle."
 
 ### MAKE KDE WITH ALL ON BASELINE
 kde_kwargs = {'position_func': vis_ut.find_intersection_with_service_line, 'normalize_density': True, 
@@ -748,24 +736,15 @@ splitFrms, animDict = vs.animate_sequence(itplScns, background_scene = xyScn, cu
                                         **prmDict)
 splitFrms = overlay(splitFrms, legFrm, tlPt_leg)
 
-jointFrms = BGRFrames.from_frames([fadeFrms, splitFrms])
-
-all_frames.append(jointFrms)
-script_lines.append(script_line)
-
-script_line =   """
-                    In red, we chart the distribution of serves in high leverage situations; 
-                    in yellow, medium leverage situations; 
-                    in green, low leverage situations.
-                """
-
 statFrms, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam_ad, num_frames = 25,
                                         annotated_points = annPnts[:-1],
                                         **prmDict)
 
 statFrms = overlay(statFrms, legFrm, tlPt_leg)
 
-all_frames.append(statFrms)
+jointFrms = BGRFrames.from_frames([fadeFrms, splitFrms, statFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
@@ -837,21 +816,36 @@ script_lines.append(script_line)
 script_line = ""
 
 itplFrms = vs.interpolate_frames(fadedFrms[-1], statFrms[0])
+statFrms = BGRFrames.from_frame(statFrms[0], 75)
 jointFrms = BGRFrames.from_frames([itplFrms, statFrms])
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
+
+# script_line =   """
+#                     Two statistical tests establish that there is a statistically significant difference between high and low leverage serve placement.
+#                 """
+
+# statFrms, animDict = vs.animate_static(splitScn, background_scene = xyScn, static_cam = boxCam_ad, num_frames = 25,
+#                                         annotated_points = annPnts,
+#                                         **prmDict)
+# statFrms = overlay(statFrms, legFrm, tlPt_leg)
+
+# statFrms = overlay_footnote(statFrms, "XX:XX-XX:XX:", "For more info on\nthe Kolmogorov-Smirnov and\nAnderson-Darling tests.")
+
+# all_frames.append(statFrms)
+# script_lines.append(script_line)
 
 ### fade out kde, fade in court.
 script_line = "Let's take a look at another interesting case."
 
 courtScn = Scene.make_court(singles_net = False, net_mesh_density = 3)
 courtFrm = View.make(boxCam_ad, courtScn, resolution = prmDict['background_resolution']).snap()
-itplFrms = vs.interpolate_frames(statFrms[-1], courtFrm, 75)
+itplFrms = vs.interpolate_frames(statFrms[-1], courtFrm, 50)
 
 ### move over
 moveFrms, animDict = vs.animate_cam_motion(None, background_scene = courtScn, start_cam = boxCam_ad, stop_cam = boxCam_deuce, 
-                                           num_frames = 75,
+                                           num_frames = 50,
                                            **prmDict)
 
 jointFrms = BGRFrames.from_frames([itplFrms, moveFrms])
@@ -912,14 +906,17 @@ splitFrms = overlay(splitFrms, legFrm, tlPt_leg)
 all_frames.append(splitFrms)
 script_lines.append(script_line)
 
+script_line = ""
+statFrms = BGRFrames.from_frame(splitFrms[-1], 25)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
 script_line =   """
                     In this video, we have given a quick overview over two cases 
                     in which players seem to adjust their serve patterns based on leverage.
                     
                     As an opponent, figuring this out during the match can be costly, or even outright impossible,
                     since high leverage points are consequential, but few in number.
-
-                    On the other hand, knowing the serve mix by leverage ahead of time, there is no need to guess.
 
                     For a deeper look into a few more players' serve mixes, and the methodology employed, consult the longer version of this video.
                 """

@@ -14,7 +14,10 @@ from ATMANpy.types.Overlays import Table, FramesRaster, overlay, frame_cascade
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Visual3D import Camera, View, Scene
 
-from ATMANpy.types.Abstract import NullPoint, Points, Shots, read_in_data_tables, read_in_placeholder_tables
+from ATMANpy.types.Lines import CourtLines
+from ATMANpy.types.Shapes3D import Region3D
+
+from ATMANpy.types.Abstract import NullPoint, Points, Shots, read_in_data_tables, read_in_placeholder_tables, read_in_colinear_tables
 
 import ATMANpy.funcs.feature_funcs as ff
 import ATMANpy.funcs.sf_apply_funcs as sa
@@ -51,86 +54,39 @@ confs = [cnf_mod.get_conf(vid) for vid in avail_vids]
 vid, sto = confs[0]['video_id'], confs[0]['store_name']
 P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 
-def animate_bounce_and_mark_scenes(myPnt, start_cam, stop_cam, 
-                                    background_scene = None,
-                                    over = False, over_scale = 3, init_over_dim = 1, last_over_dim = 1,
-                                    sub_region = True, region_color = const.BGR['smokey_grey'],
-                                    **anim_kwargs):
-    from ATMANpy.types.Abstract import Point
-
-    spline_scenes, bounce_scenes = vis_ut.get_shot_scenes(myPnt)
-
-    if over:
-        myFrms = myPnt.stream(confs = confs).decap().frames
-        if isinstance(myPnt, Point):
-            myFrms = myFrms[:-1]
-        myFrms = myFrms.rescale(over_scale)
-        myFrms = myFrms.dim_progressively(fs_dim_factor = init_over_dim, ls_dim_factor = last_over_dim)
-    else:
-        myFrms = None
-
-    if background_scene is None:
-        courtScn = Scene.make_empty()
-    else:
-        courtScn = background_scene
-
-    if sub_region:            
-        from ATMANpy.types.Lines import CourtLines
-        from ATMANpy.types.Shapes3D import Region3D
-        subReg = CourtLines.make().get_court_region().scale(1.25)
-        subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(region_color)
-        courtScn = courtScn.put(subReg3D)
-
-    markFrms, _ = vs.animate_sequence(bounce_scenes, start_cam = start_cam, stop_cam = stop_cam,
-                                        background_scene = courtScn, 
-                                        animate_over = myFrms, 
-                                        **anim_kwargs)
-
-    animFrms, _ = vs.animate_sequence(spline_scenes, start_cam = start_cam, stop_cam = stop_cam, 
-                                        animate_over = markFrms,
-                                        cumulative_foreground_transparence = 0.5, cumulate_argument = True,
-                                        **anim_kwargs)
-
-    return animFrms
-
-def make_point_descriptor_box(myPnt, dims = (200, 100), origin = (10, 20), step_px = 20,
-                              text_size = 1,
-                              back_color = const.BGR['smokey_grey'], text_color = const.BGR['leafy_green']):
-    
-    cols, rows = dims
-    o_x, o_y = origin
-
-    textFrm = BGRFrame.make_black(cols, rows)
-    textFrm = textFrm + back_color
-
-    kwargs = {'size': text_size, 'color': text_color}
-
-    shot_frames = []
-    for myShot in myPnt:
-        n = myShot.get_num_frames() - 1
-
-        shotStr = myShot.get_shot_string()
-        dataStr = myShot.get_data_string(with_descriptors = False, get_launch_angle = True)
-
-        fullFrm = textFrm.put(shotStr, where = (o_x, o_y), **kwargs).put(dataStr, where = (o_x, o_y + step_px), **kwargs)
-
-        fullFrms = BGRFrames.from_frame(fullFrm, n)
-        shot_frames.append(fullFrms)
-
-    fullFrms = BGRFrames.from_frames(shot_frames)
-    return fullFrms
-
-
 ###################################
 ######### READ IN DATA ############
 ###################################
 dataTable = read_in_data_tables(confs)
 nullTable = read_in_placeholder_tables(confs)
+coliTable = read_in_colinear_tables(confs)
 
-dataPnts = Points.from_datatable(dataTable, split_by_match = False)
+### replace points suspected of co-linearity with the co-linear stand-in
+to_replace = [(0, 110, 1), (0, 112, 2)] ### match index, point index, shot index
+
+replTable = dataTable.copy()
+
+for mtc_idx, pnt_idx, sht_idx in to_replace:
+    mtc_coliTable = coliTable.loc[mtc_idx]
+    mtc_replTable = replTable.loc[mtc_idx]
+
+    sht_coliTable = mtc_coliTable[(mtc_coliTable['point_idx'] == pnt_idx) & (mtc_coliTable['shot_idx'] == sht_idx)]
+    mtc_replTable.loc[sht_coliTable.index] = sht_coliTable
+
+dataPnts = Points.from_datatable(replTable, split_by_match = False)
 nullPnts = Points.from_placeholder_table(nullTable)
 
 allPnts = dataPnts.join(nullPnts).sort()
+
+#### TESTING COLIPOINTS ####
+coliPnts = Points.from_datatable(coliTable, split_by_match = False)
+
+prevPnt3_coli = coliPnts.get(0, 110)
+prevPnt2_coli = coliPnts.get(0, 111)
+prevPnt1_coli = coliPnts.get(0, 112)
+lastPnt_coli = coliPnts.get(0, 113)
+
+# coliPnts.get(0, 112).stream(confs = confs).show()
 
 ########## Filtering for ad wide serves before the current one
 
@@ -309,10 +265,46 @@ animFrms1 = animate_bounce_and_mark_scenes(prevPnt1, start_cam = brestCam_full, 
 
 animFrms0 = animate_bounce_and_mark_scenes(lastPnt, start_cam = brestCam_full, stop_cam = brestCam_full, over = True,
                                                     sub_region = False, argument_resolution = 10)
-# DecapStream(animFrms0, 0, 100).show()
+# DecapStream(animFrms0, 0, 100).show(
 
-widen_by = 150
-preFrms = prevPnt3.stream(confs = confs).widen(widen_by).decap().frames[:widen_by].rescale(3)
+#### TEST COLINEAR POINTS #####
+
+# animFrms3_coli = animate_bounce_and_mark_scenes(prevPnt3_coli, 
+#                                                 start_cam = brestCam_full, stop_cam = brestCam_full, over = True,
+#                                                 sub_region = False, argument_resolution = 10)
+# animFrms2_coli = animate_bounce_and_mark_scenes(prevPnt2_coli, 
+#                                                 start_cam = brestCam_full, stop_cam = brestCam_full, over = True,
+#                                                 sub_region = False, argument_resolution = 10)
+# animFrms1_coli = animate_bounce_and_mark_scenes(prevPnt1_coli, 
+#                                                 start_cam = brestCam_full, stop_cam = brestCam_full, over = True,
+#                                                 sub_region = False, argument_resolution = 10)
+# animFrms0_coli = animate_bounce_and_mark_scenes(lastPnt_coli, 
+#                                                 start_cam = brestCam_full, stop_cam = brestCam_full, over = True,
+#                                                 sub_region = False, argument_resolution = 10)
+
+
+### figure out intermezzi.
+initial_widen_by = 150
+preFrms = prevPnt3.stream(confs = confs).widen(initial_widen_by).decap().frames[:initial_widen_by].rescale(3)
+
+frms3 = prevPnt3.get_frames()
+frms2 = prevPnt2.get_frames()
+frms1 = prevPnt1.get_frames()
+frms0 = lastPnt.get_frames()
+
+d32 = frms2[0] - frms3[-1]
+d21 = frms1[0] - frms2[-1]
+d10 = frms0[0] - frms1[-1]
+
+interFrms32 = prevPnt2.stream(confs = confs).widen(d32).decap().frames[:d32].rescale(3)
+interFrms21 = prevPnt1.stream(confs = confs).widen(d21).decap().frames[:d21].rescale(3)
+interFrms10 = lastPnt.stream(confs = confs).widen(d10).decap().frames[:d10].rescale(3)
+
+interFrms32_speed = vis_ut.speed_up_frames_progressively(interFrms32, ramp_up_frames = 25)
+interFrms21_speed = vis_ut.speed_up_frames_progressively(interFrms21, ramp_up_frames = 25)
+interFrms10_speed = vis_ut.speed_up_frames_progressively(interFrms10, ramp_up_frames = 25)
+
+#TODO: vis_ut.show feels fast
 
 ##################################
 ### SCRIPT_LINES #################
@@ -529,7 +521,9 @@ script_line  =  """
                 """ ## 4 secs
 
 fullFrms = make_point_descriptor_box(prevPnt3, dims = (cols, rows), origin = (o_x, o_y), step_px = step_px,
-                                     back_color = back_color, text_color = (255, 255, 255), text_size = 1)
+                                     back_color = back_color, text_color = (255, 255, 255), text_size = 1,
+                                     border_color = const.BGR['bright_grey'], border_thickness = 2)
+
 # DecapStream(fullFrms, 0, 100).show()
 
 fullFrms_fade = fullFrms[num_frames:num_frames+fade_in_frames]
@@ -540,12 +534,24 @@ tlPt = Point2D((over_x, over_y))
 fadeFrms = overlay(animFrms_fade, fullFrms_fade, top_left_point = tlPt, start_alpha = 0, stop_alpha = 1)
 postFrms = overlay(animFrms_post, fullFrms_post, top_left_point = tlPt)
 
-jointFrms = BGRFrames.from_frames([fadeFrms, postFrms])
+### intermezzo frames
+fullFrms_blank = make_point_descriptor_box(prevPnt3, dims = (cols, rows), origin = (o_x, o_y), step_px = step_px,
+                                     back_color = back_color, text_color = back_color, text_size = 1,
+                                     border_color = const.BGR['bright_grey'], border_thickness = 2)
+
+interp_fullFrms = vs.interpolate_frames(fullFrms[-1], fullFrms_blank[-1], num_frames = 100)
+rest_fullFrms = BGRFrames.from_frame(fullFrms_blank[-1], interFrms32_speed.length() - interp_fullFrms.length())
+intermezzo_fullFrms = BGRFrames.from_frames([interp_fullFrms, rest_fullFrms])
+
+interFrms_32_speed_dim = interFrms32_speed.dim(fade_factor)
+interFrms_32_speed_dim = overlay(interFrms_32_speed_dim, intermezzo_fullFrms, top_left_point = tlPt)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, postFrms, interFrms_32_speed_dim])
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
-vis_ut.show(all_frames)
+# vis_ut.show(all_frames)
 
 ##############################
 ##### SEC. RALLY TO SHOW #####
@@ -580,12 +586,44 @@ animFrms = animate_bounce_and_mark_scenes(prevPnt2, start_cam = brestCam, stop_c
                                           **prmDict)
 
 fullFrms = make_point_descriptor_box(prevPnt2, dims = (cols, rows), origin = (o_x, o_y), step_px = step_px,
-                                     back_color = back_color, text_color = (255, 255, 255), text_size = 1)
+                                     back_color = back_color, text_color = (255, 255, 255), text_size = 1,
+                                     border_thickness = 2, border_color = const.BGR['bright_grey'])
 
 over_x, over_y = 1635, 650
 tlPt = Point2D((over_x, over_y))
 postFrms = overlay(animFrms, fullFrms, top_left_point = tlPt)
 # DecapStream(postFrms, 0, 100).show()
+
+### intermezzo frames
+fullFrms_blank = make_point_descriptor_box(prevPnt2, dims = (cols, rows), origin = (o_x, o_y), step_px = step_px,
+                                     back_color = back_color, text_color = back_color, text_size = 1,
+                                     border_color = const.BGR['bright_grey'], border_thickness = 2)
+
+interp_fullFrms = vs.interpolate_frames(fullFrms[-1], fullFrms_blank[-1], num_frames = 100)
+rest_fullFrms = BGRFrames.from_frame(fullFrms_blank[-1], interFrms21_speed.length() - interp_fullFrms.length())
+intermezzo_fullFrms = BGRFrames.from_frames([interp_fullFrms, rest_fullFrms])
+
+interFrms_21_speed_dim = interFrms21_speed.dim(fade_factor)
+interFrms_21_speed_dim = overlay(interFrms_21_speed_dim, intermezzo_fullFrms, top_left_point = tlPt)
+
+courtScn = Scene.make_court()
+subReg = CourtLines.make().get_court_region().scale(1.25)
+subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(back_color)
+courtScn = courtScn.put(subReg3D)
+
+interFrms_21_speed_dim_over, _ = vs.animate_sequence([Scene.make_empty() for _ in range(interFrms_21_speed_dim.length())], 
+                                                        start_cam = downCam, stop_cam = downCam, 
+                                                        background_scene = courtScn, animate_over = interFrms_21_speed_dim,
+                                                        **prmDict)
+
+jointFrms = BGRFrames.from_frames([postFrms, interFrms_21_speed_dim_over])
+
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+# vis_ut.show(all_frames)
 
 ###############################
 ###### THIRD RALLY TO SHOW ####
@@ -601,33 +639,28 @@ script_line =   """
 # since we can approximately move them over each other, but not properly.
 # alternative to fading in and out: just leave the full camera view, and have a hole in the raster.
 
-animFrms = animate_bounce_and_mark_scenes(prevPnt1, start_cam = downCam, stop_cam = downCam, background_scene = Scene.make_court(), 
-                                          over = True, sub_region = True, region_color = back_color,
-                                          init_over_dim = 0.5, last_over_dim = 0.5,
-                                          start_later = 0, stop_earlier = 300,
-                                          **prmDict)
+# ####### CAM TESTING ########
+# cntPt = CourtLines.make().get_center_point()
+# cntPt3D = Point3D.from_point2D(cntPt, z = 0).left(750).down(600)
+# camPt3D = Point3D((-300, 2000, 200))
 
-fullFrms = make_point_descriptor_box(prevPnt1, dims = (cols, rows), origin = (o_x, o_y), step_px = step_px,
-                                     back_color = back_color, text_color = (255, 255, 255), text_size = 1)
+# thirdCam = Camera.from_to(camPt3D, cntPt3D)
 
-over_x, over_y = 1635, 650
-tlPt = Point2D((over_x, over_y))
-postFrms = overlay(animFrms, fullFrms, top_left_point = tlPt)
-# DecapStream(postFrms, 0, 100).show()
+# testFrm = View.make(thirdCam, Scene.make_court(), resolution = 5).snap()
+# testFrm.show()
 
+# rs, cs = testFrm.rows, testFrm.cols
+# testFrm[:rs//3, -cs//3:].show()
 
+# cntPt = CourtLines.make().get_center_point()
+# cntPt3D = Point3D.from_point2D(cntPt, z = 0).left(670).back(770)
+# camPt3D = Point3D((-300, 2000, 600))
 
-cntPt = CourtLines.make().get_center_point()
-cntPt3D = Point3D.from_point2D(cntPt, z = 0).left(750).down(600)
-camPt3D = Point3D((-300, 2000, 200))
+# thirdCam = Camera.from_to(camPt3D, cntPt3D).zoom(1.1)
 
-thirdCam = Camera.from_to(camPt3D, cntPt3D)
-
-testFrm = View.make(thirdCam, Scene.make_court(), resolution = 5).snap()
-testFrm.show()
-
-rs, cs = testFrm.rows, testFrm.cols
-testFrm[:rs//3, -cs//3:].show()
+# testFrm = View.make(thirdCam, Scene.make_court(), resolution = 5).snap()
+# testFrm.show()
+# ###############################
 
 cntPt = CourtLines.make().get_center_point()
 cntPt3D = Point3D.from_point2D(cntPt, z = 0).left(670).back(770)
@@ -635,47 +668,83 @@ camPt3D = Point3D((-300, 2000, 600))
 
 thirdCam = Camera.from_to(camPt3D, cntPt3D).zoom(1.1)
 
-testFrm = View.make(thirdCam, Scene.make_court(), resolution = 5).snap()
-testFrm.show()
+animFrms = animate_bounce_and_mark_scenes(prevPnt1, start_cam = downCam, stop_cam = thirdCam, background_scene = Scene.make_court(), 
+                                          over = True, sub_region = True, region_color = back_color,
+                                          init_over_dim = 0.5, last_over_dim = 0.5,
+                                          start_later = 0, stop_earlier = 50,
+                                          **prmDict)
 
-rs, cs = testFrm.rows, testFrm.cols
-testFrm[:rs//3, -cs//3:].show()
+fullFrms = make_point_descriptor_box(prevPnt1, dims = (cols, rows), origin = (o_x, o_y), step_px = step_px,
+                                     back_color = back_color, text_color = (255, 255, 255), text_size = 1,
+                                     border_thickness = 2, border_color = const.BGR['bright_grey'])
 
+over_x, over_y = 1635, 650
+tlPt = Point2D((over_x, over_y))
+postFrms = overlay(animFrms, fullFrms, top_left_point = tlPt)
+# DecapStream(postFrms, 0, 100).show()
 
-moveFrms, _ = vs.animate_cam_motion(Scene.make_court(), start_cam = downCam, stop_cam = thirdCam, num_frames = 100)
+all_frames.append(postFrms)
+script_lines.append(script_line)
 
-DecapStream(moveFrms, 0, 100).show()
+### go up to moment of serve (roughly), and say that he's about to hit a serve wide, on the deuce side.
+script_line =   """
+                    For example, in the final of the 2021 Brest Challenger Tournament, 
+                    Joao Sousa, a break behind and serving at deuce to stay in the match, 
+                    is about to hit a first serve out wide to Brandon Nakashima.
+                """
 
-### test rotating court
+### intermezzo frames
+fullFrms_blank = make_point_descriptor_box(prevPnt1, dims = (cols, rows), origin = (o_x, o_y), step_px = step_px,
+                                     back_color = back_color, text_color = back_color, text_size = 1,
+                                     border_color = const.BGR['bright_grey'], border_thickness = 2)
+
+intermezzo_stop_early = 50 ### stop early so that we have the windup of the serve later.
+interFrms10_speed_pre, interFrms_10_speed_post = interFrms10_speed[:-intermezzo_stop_early], interFrms10_speed[-intermezzo_stop_early:]
+
+interp_fullFrms = vs.interpolate_frames(fullFrms[-1], fullFrms_blank[-1], num_frames = 100)
+rest_fullFrms = BGRFrames.from_frame(fullFrms_blank[-1], interFrms10_speed_pre.length() - interp_fullFrms.length())
+intermezzo_fullFrms = BGRFrames.from_frames([interp_fullFrms, rest_fullFrms])
+
+interFrms_10_speed_pre_dim = interFrms10_speed_pre.dim(fade_factor)
+interFrms_10_speed_pre_dim = overlay(interFrms_10_speed_pre_dim, intermezzo_fullFrms, top_left_point = tlPt)
 
 courtScn = Scene.make_court()
-myCrt = courtScn[0]
+subReg = CourtLines.make().get_court_region().scale(1.25)
+subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(back_color)
+courtScn = courtScn.put(subReg3D)
+
+interFrms_10_speed_dim_over, _ = vs.animate_sequence([Scene.make_empty() for _ in range(interFrms_10_speed_pre_dim.length())], 
+                                                        start_cam = thirdCam, stop_cam = thirdCam, 
+                                                        background_scene = courtScn, animate_over = interFrms_10_speed_pre_dim,
+                                                        **prmDict)
+
+# DecapStream(interFrms_10_speed_dim_over, 0, 100).show()
+
+prmDict_no_interp = {k: v for k, v in prmDict.items() if not k in ['interpolate_func']}
+onlycourtFrms, _ = vs.animate_static(courtScn, static_cam = thirdCam, background_scene = courtScn, **prmDict_no_interp, num_frames = 25)
+onlycourtFrm = onlycourtFrms[0]
+
+fadingFrms = vs.interpolate_frames(interFrms_10_speed_dim_over[-1], onlycourtFrm, num_frames = 50)
+# DecapStream(fadingFrms, 0, 100).show()
+
+pre_raster_frames = [interFrms_10_speed_dim_over, fadingFrms]
+
+pre_rstFrms = BGRFrames.from_frames(pre_raster_frames)
+
+all_frames.append(pre_rstFrms)
+script_lines.append(script_line)
+
+### rotating court
+script_line =   """
+                    It might be advantageous for Joao Sousa to know if Brandon Nakashima has a pattern on these returns:
+                    does he send them back cross-court, or does he send them down-the-line, to Joao Sousa's backhand?
+
+                    With ATMAN, one can filter for occurences in previous matches of the same tournament
+                    in which Brandon Nakashima faced a similar serve, and take a look at where his return
+                    previously landed.
+                """
 
 courtLines = CourtLines.make().add_singles_netline()
-
-from ATMANpy.types.ShapesTennis3D import Court, Net
-
-
-n = 50
-pis = np.linspace(0, np.pi, n)
-
-rot_scenes = []
-rot_frms = []
-for pi in pis:
-    rotLns = courtLines.rotate(pi)
-    rotScn = Scene.make_court(rotLns)
-    rot_scenes.append(rotScn)
-
-    rotFrm = View.make(thirdCam, rotScn, resolution = 1).snap()
-    rot_frms.append(rotFrm)
-
-rotFrms = BGRFrames.from_single_frames(rot_frms)
-DecapStream(rotFrms, 0, 100).show()
-
-top_to_bot_scene = rot_scenes[0]
-bot_to_top_scene = rot_scenes[-1]
-
-rotFrms[-1][:rs//3, -cs//3:].show()
 
 def return_is_fair(somePnt):
     try:
@@ -700,6 +769,13 @@ prmDict = {'background_resolution': 0.05, 'argument_resolution': 0.05, 'interpol
 kdeDict = { 'bandwidth': 40, 'normalize_density': True, 
             'one_color': heat_color, 'zero_color': heat_color, 
             'resolution': 2}
+
+### a little test ###
+# heatScn_test = vs.kde_hillmap(retShots_before_fair.enforce_direction('Top'), **kdeDict)
+# heatView = View.make(downCam, heatScn_test)
+# courtView = View.make(downCam, courtScn)
+# courtView.combine(heatView).snap().show()
+#####
 
 courtScn = Scene.make_court(courtLines) ### todo: rotate this if needed!
 region_color = (60, 60, 60)
@@ -729,7 +805,7 @@ raster_fade_frames = []
 corner_frames = []
 rotate_frames = []
 fade_frames =   []
-for idx, myPnt in enumerate(filtPnts_before_fair[:4]):
+for idx, myPnt in enumerate(filtPnts_before_fair):
     print(idx)
     
     ### get previous shots and current shot (as Shots, i.e: list of length 1)
@@ -740,7 +816,7 @@ for idx, myPnt in enumerate(filtPnts_before_fair[:4]):
         previous_orientation = prevShots[-1].hitPlayer.get_side()
     else:
         previous_orientation = None
-    current_orientation  = allShots[0].hitPlayer.get_side()
+    current_orientation = allShots[-1].hitPlayer.get_side()
 
     ### rectify, so we gather everything in one direction (for corner graphic)
     prevShots_rect_curr = prevShots.enforce_direction(current_orientation.capitalize())
@@ -888,10 +964,9 @@ for idx, myPnt in enumerate(filtPnts_before_fair[:4]):
 
 # DecapStream(testFrms, 0, 100).show(ms_between_frames = 100)
 
-
 joint_raster_frames = [a.join(b).join(c) for a, b, c in zip(raster_rot_frames, raster_frames, raster_fade_frames)]
 joint_corner_frames = [a.join(b).join(c) for a, b, c in zip(rotate_frames, corner_frames, fade_frames)]
-joint_corner_frames = [a[:, :rs//3, -cs//3:] for a in joint_corner_frames]
+joint_corner_frames = [a[:, :1080//3, -1920//3:] for a in joint_corner_frames]
 
 myRst = FramesRaster(3, 3)
 full_raster_frames = []
@@ -916,20 +991,48 @@ for rFrms, cFrms in zip(joint_raster_frames, joint_corner_frames):
     ### increment
     idx += 1
 
-vis_ut.show(full_raster_frames)
+# vis_ut.show(full_raster_frames)
 
-DecapStream(rstFrms, 0, 100).show()
+full_rstFrms = BGRFrames.from_frames(full_raster_frames) ### speed this up...
 
-rstFrms[-1].show()
+####### now, fade out the rasters, and move the heatmap onto the court
+interFrms_10_speed_post_dim = interFrms_10_speed_post.dim(0.5)
 
+map_frames = 100
 
-raster_frames
+myRst[0, 2] = None
+rastFrm = myRst.to_frame_raster().render()
+newFrm = interFrms_10_speed_post_dim[0]
 
-fade_frames
-corner_frames
-rotate_frames
+itplFrms = vs.interpolate_frames(rastFrm, newFrm, num_frames = map_frames)
 
+courtScn = Scene.make_court(courtLines) ### todo: rotate this if needed!
+region_color = (60, 60, 60)
+from ATMANpy.types.Lines import CourtLines
+from ATMANpy.types.Shapes3D import Region3D
+subReg = CourtLines.make().get_court_region().scale(1.25)
+subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(region_color)
+courtScn = courtScn.put(subReg3D)
 
+rotate_backFrms, _ = vs.animate_sequence([heatScn_rect_next for _ in range(map_frames)], start_cam = thirdCam, stop_cam = brestCam_full,
+                                        previous_foreground_scene = courtScn, cumulative_foreground_transparence = 0.9,
+                                        animate_over = itplFrms,
+                                        **prmDict)
+
+# DecapStream(rotate_backFrms, 0, 100).show()
+
+jointFrms = BGRFrames.from_frames([full_rstFrms, rotate_backFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+###### play out the point, compare this to what happened.
+
+BGRFrames.from_frames([interFrms_10_speed_post_dim])
+
+DecapStream(animFrms0, 0, 100).show()
+
+vis_ut.show(all_frames)
 
 #### TESTING ROTATION OF DUMMY SCENE ####
 
