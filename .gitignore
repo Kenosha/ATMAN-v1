@@ -15,6 +15,7 @@ results_video/
 scripts/
 _unused/
 *.ods
+*.ods#
 *.csv
 *.stats
 *.txt
