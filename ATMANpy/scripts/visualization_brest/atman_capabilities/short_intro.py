@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
-SAVE = True
+SAVE = False
 
 ########################################
 ########### SAVE FOLDER ################
@@ -128,8 +128,8 @@ brestCam_full = brestCam_third.resize(3)
 
 prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
            'interpolate_func': vs.interpolate_camera_naive}
-prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
-           'interpolate_func': vs.interpolate_camera_naive}
+# prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+#            'interpolate_func': vs.interpolate_camera_naive}
 
 ######################################
 ### CHECK DISTRO OF BEFORE RETURNS ###
@@ -191,7 +191,7 @@ animFrms0 = vis_ut.animate_bounce_and_mark_scenes(lastPnt, start_cam = brestCam_
 # DecapStream(animFrms0, 0, 100).show()
 
 ### figure out intermezzi.
-initial_widen_by = 325 + 10 + 10 + 75 + 60
+initial_widen_by = 480 + 21 + 12 + 9 + 12 ### -> lineFrms_silent, lineFrms_voice, playerFrms_silent, playerFrms_voice
 preFrms = prevPnt2.stream(confs = confs).widen(initial_widen_by).decap().frames[:initial_widen_by].rescale(3)
 
 # frms3 = prevPnt3.get_frames()
@@ -306,43 +306,98 @@ preFrms_fade_in = preFrms[:fade_in_length].dim_progressively(0, 1)
 preFrms_fade = post_dimFrms_fade_out + preFrms_fade_in
 # DecapStream(preFrms_fade, 0, 100).show()
 
+pre_lines_and_players_frames = 40
+# post_lines_and_players_frames = 5
 
-pre_lines_and_players_frames = 75
-post_lines_and_players_frames = 10
-lines_and_players_frames = pre_lines_and_players_frames + post_lines_and_players_frames
+line_silent_frames = 21
+line_voiced_frames = 12
+player_silent_frames = 9
+player_voiced_frames = 12
+
+frame_list_in_order = [pre_lines_and_players_frames, line_silent_frames, line_voiced_frames,
+                       player_silent_frames, player_voiced_frames]
+
+cumsum = np.cumsum(frame_list_in_order)
+
+lines_and_players_frames = sum(frame_list_in_order)
 
 preFrms_rest = preFrms[fade_in_length:-lines_and_players_frames]
-preFrms_last_pre = preFrms[-lines_and_players_frames:-post_lines_and_players_frames]
-preFrms_last_post = preFrms[-post_lines_and_players_frames:]
+
+preFrms_last = preFrms[-lines_and_players_frames:]
+
+preFrms_last_pre0 = preFrms_last[:cumsum[0]]                    ### "ATMAN autocamtically recognizes the lines..."     
+preFrms_last_pre1 = preFrms_last[cumsum[0]:cumsum[1]]           ### line; silent
+preFrms_last_pre2 = preFrms_last[cumsum[1]:cumsum[2]]           ### line; voice (says "the players")
+preFrms_last_pre3 = preFrms_last[cumsum[2]:cumsum[3]]           ### players; silent
+preFrms_last_pre4 = preFrms_last[cumsum[3]:]                    ### players; voiced (says "the ball")
 
 introFrms = BGRFrames.from_frames([pre_staticFrm, pre_dimFrms_lettered, post_dimFrms_lettered, preFrms_fade, preFrms_rest])
 # DecapStream(introFrms, 0, 100).show()
+
+checkFrms = BGRFrames.from_frames([preFrms_last_pre0, preFrms_last_pre1, preFrms_last_pre2, 
+                                   preFrms_last_pre3, preFrms_last_pre4])
+# DecapStream(checkFrms, 0, 100).show()
+
+# DecapStream(BGRFrames.from_frames([introFrms, checkFrms]), 0, 100).show()
 
 ###############################
 ### TEASE LINES AND PLAYERS ###
 ###############################
 
-curr_frame = prevPnt2.get_frames()[0] - post_lines_and_players_frames
+line_frame_fs = prevPnt2.get_frames()[0] - 1 - lines_and_players_frames + pre_lines_and_players_frames
+line_frame_ls = line_frame_fs + line_silent_frames + line_voiced_frames
+line_frames = list(range(line_frame_fs, line_frame_ls))
+
+player_frame_fs = line_frame_ls
+player_frame_ls = player_frame_fs + player_silent_frames + player_voiced_frames
+player_frames = list(range(player_frame_fs, player_frame_ls))
 
 H = ConstFeature.from_store(vid, sto, featname = 'H').feature
 courtLines = sa.find_courtlines(H).drop('Net Line').rescale(3)
 
 plSF = StreamFeatures.from_store(vid, sto, featnameList = ['botPlayerCnt', 'topPlayerCnt'])
-featDict = plSF[curr_frame]
+plSF_small = plSF[player_frames]
 
-botCnt, topCnt = featDict['botPlayerCnt'], featDict['topPlayerCnt']
-botCnt, topCnt = botCnt.rescale(3), topCnt.rescale(3)
+player_contours = list(plSF_small.values())
+player_contours_silent = player_contours[:player_silent_frames]
+player_contours_voiced = player_contours[player_silent_frames:]
 
-offFrm = preFrms_last_post[0]
-onFrm_line = offFrm.put(courtLines, color = const.BGR['sign_orange'], thickness = 4)
+len(player_contours_silent), len(player_contours_voiced)
 
-lineFrms_blink = vs.blinking(offFrm, onFrm_line, blinks_per_second = 4, duration_in_frames = 50)
-# DecapStream(lineFrms_blink, 0, 100).show()
+botCntSF, topCntSF = plSF_small['botPlayerCnt'], plSF_small['topPlayerCnt']
 
-onFrm_players = offFrm.put([botCnt, topCnt], color = const.BGR['sign_orange'], thickness = 4)
+preFrms_last_pre1_feature = preFrms_last_pre1.put(courtLines, color = const.BGR['sign_orange'], thickness = 4)
+preFrms_last_pre2_feature = preFrms_last_pre2.put(courtLines, color = const.BGR['sign_orange'], thickness = 4)
 
-playerFrms_blink = vs.blinking(offFrm, onFrm_players, blinks_per_second = 4, duration_in_frames = 50)
-# DecapStream(playerFrms_blink, 0, 100).show()
+my_frames = []
+for someFrm, top_bot_cnts in zip(preFrms_last_pre3, player_contours_silent):
+    topCnt, botCnt = top_bot_cnts['topPlayerCnt'].rescale(3), top_bot_cnts['botPlayerCnt'].rescale(3)
+    cntFrm = someFrm.put([topCnt, botCnt], color = const.BGR['sign_orange'], thickness = 4)
+    my_frames.append(cntFrm)
+
+preFrms_last_pre3_feature = BGRFrames.from_single_frames(my_frames)
+
+my_frames = []
+for someFrm, top_bot_cnts in zip(preFrms_last_pre4, player_contours_voiced):
+    topCnt, botCnt = top_bot_cnts['topPlayerCnt'].rescale(3), top_bot_cnts['botPlayerCnt'].rescale(3)
+    cntFrm = someFrm.put([topCnt, botCnt], color = const.BGR['sign_orange'], thickness = 4)
+    my_frames.append(cntFrm)
+
+preFrms_last_pre4_feature = BGRFrames.from_single_frames(my_frames)
+
+# chkFrms = BGRFrames.from_frames([preFrms_last_pre3_feature, preFrms_last_pre4_feature])
+# DecapStream(chkFrms, 0, 100).show()
+
+# offFrm = preFrms_last_post[0]
+# onFrm_line = offFrm.put(courtLines, color = const.BGR['sign_orange'], thickness = 4)
+
+# lineFrms_blink = vs.blinking(offFrm, onFrm_line, blinks_per_second = 4, duration_in_frames = 50)
+# # DecapStream(lineFrms_blink, 0, 100).show()
+
+# onFrm_players = offFrm.put([botCnt, topCnt], color = const.BGR['sign_orange'], thickness = 4)
+
+# playerFrms_blink = vs.blinking(offFrm, onFrm_players, blinks_per_second = 4, duration_in_frames = 50)
+# # DecapStream(playerFrms_blink, 0, 100).show()
 
 # preFrms_last = BGRFrames.from_frames([preFrms_last_pre, lineFrms_blink, playerFrms_blink])
  
@@ -434,8 +489,9 @@ combFrms1_joint = BGRFrames.from_frames([combFrms1_freeze, combFrms1])
 
 ### disappear the box, and brighten the frames during the intermezzo
 fade_out_frames = 60
-cam_move_frames = 100
-interFrms21_speed = vis_ut.speed_up_frames_progressively(interFrms21, ramp_up_frames = fade_out_frames, ramp_down_frames = cam_move_frames)
+cam_move_frames = 120
+# interFrms21_speed = vis_ut.speed_up_frames_progressively(interFrms21, ramp_up_frames = fade_out_frames, ramp_down_frames = cam_move_frames)
+interFrms21_speed = vis_ut.speed_up_frames_progressively(interFrms21, ramp_up_frames = 25, ramp_down_frames = 25)
 interFrms21_speed_begin, interFrms21_speed_rest = interFrms21_speed[:fade_out_frames], interFrms21_speed[fade_out_frames:]
 
 _, markScns = vis_ut.get_shot_scenes(prevPnt2, mark_size = mark_size, mark_color = mark_color)
@@ -580,33 +636,33 @@ all_frames.append(introFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    ATMAN automatically recognizes ...
+                    ATMAN automatically recognizes the lines ...
                 """
 
-all_frames.append(preFrms_last_pre)
+all_frames.append(preFrms_last_pre0.slow(2))
 script_lines.append(script_line)
 
-script_line =   """
-                    ... the lines ...
-                """
-
-all_frames.append(lineFrms_blink)
+script_line =   ""
+all_frames.append(preFrms_last_pre1_feature.slow(2))
 script_lines.append(script_line)
 
 script_line =   """
                     ... the players ...
                 """
 
-all_frames.append(playerFrms_blink)
+all_frames.append(preFrms_last_pre2_feature.slow(2))
+script_lines.append(script_line)
+
+script_line = ""
+
+all_frames.append(preFrms_last_pre3_feature.slow(2))
 script_lines.append(script_line)
 
 script_line =   """
                     ... and the ball.
                 """
 
-staticFrms = BGRFrames.from_frame(playerFrms_blink[-1], 50)
-
-all_frames.append(staticFrms)
+all_frames.append(preFrms_last_pre4_feature.slow(2))
 script_lines.append(script_line)
 
 script_line =   """
@@ -614,9 +670,7 @@ script_line =   """
                     This data is checked against flight simulations to generate ball trajectories even on low quality video. 
                 """ ### 11 sec
 
-jointFrms = BGRFrames.from_frames([preFrms_last_post, animFrms_pre])
-
-all_frames.append(jointFrms)
+all_frames.append(animFrms_pre)
 script_lines.append(script_line)
 
 script_line  =  """
@@ -657,7 +711,8 @@ script_line =   """
                     any point to be displayed in arbitrary virtual space.
                 """ ## 6 secs
 
-interFrms21_speed_middle_accel = vis_ut.speed_up_frames_progressively(interFrms21_speed_middle, ramp_up_frames = 40, ramp_down_frames = 40)
+# interFrms21_speed_middle_accel = vis_ut.speed_up_frames_progressively(interFrms21_speed_middle, ramp_up_frames = 40, ramp_down_frames = 40)
+interFrms21_speed_middle_accel = interFrms21_speed_middle
 
 jointFrms = BGRFrames.from_frames([interFrms21_speed_middle_accel, moveFrms])
 all_frames.append(jointFrms)

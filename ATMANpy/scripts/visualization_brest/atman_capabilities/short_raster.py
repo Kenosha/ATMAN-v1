@@ -429,13 +429,6 @@ _, revFrms = reverse_cascade(myRst, keep_which = [(0, 2)], frames_per_element = 
 prmDict['background_resolution'] = 12 ### first resolution at which the background is solid even in full cam.
 prmDict_static['background_resolution'] = 12 ### first resolution at which the background is solid even in full cam.
 
-####### SOME TESTING, DELETE #######
-
-myScene = kde_whole
-myCamera = brestCam_full
-
-aView.snap()
-
 ####################################
 
 rotate_backFrms_void, _ = vs.animate_cam_motion(kde_whole, start_cam = thirdCam, stop_cam = brestCam_full,
@@ -570,7 +563,7 @@ animFrms_after = vis_ut.animate_bounce_and_mark_scenes(lastPnt[2:], brestCam_ful
                                                 mark_size = mark_size, mark_color = mark_color,
                                                 spline_cumulative_transparence = 0.7, **prmDict)
 # DecapStream(animFrms_after, 0, 100).show()
-widen_by = 100
+widen_by = 300
 finalFrms = lastPnt.stream(confs = confs).widen(widen_by).decap().frames[-widen_by:].rescale(3)
 # DecapStream(finalFrms, 0, 100).show()
 animFrms_after_with_final = BGRFrames.from_frames([animFrms_after, finalFrms])
@@ -651,13 +644,13 @@ textFrm1 = myFrm.put('The Automated Tennis Match ANnotator', size = 2, where = (
 textFrm1 = textFrm1.framed(4, const.BGR['bright_grey'])
 # textFrm1.show()
 
-textFrm2 = myFrm.put('On the Effectiveness of the Chipped Return', size = 2, where = (100, 280))
+textFrm2 = myFrm.put('On the Impact of Leverage on Serve Selection', size = 2, where = (80, 280))
 textFrm2 = textFrm2.framed(4, const.BGR['bright_grey'])
-# textFrm2.show()
-
-textFrm3 = myFrm.put('On the Impact of Pressure on Serve Selection', size = 2, where = (80, 280))
-textFrm3 = textFrm3.framed(4, const.BGR['bright_grey'])
 # textFrm3.show()
+
+textFrm3 = myFrm.put('On the Effectiveness of the Chipped Return', size = 2, where = (100, 280))
+textFrm3 = textFrm3.framed(4, const.BGR['bright_grey'])
+# textFrm2.show()
 
 myRst.add(textFrm0, 0, 0)
 rstFrm0 = myRst.render()
@@ -750,14 +743,21 @@ all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    This example is a short but indicative look into the capabilities of ATMAN, 
-                    the Automated Tennis Match Annotator. 
-                """ # 8 seconds
+                    Professional tennis players knowingly employ patterns of play to their advantage,
+                    but may also fall into patterns unknowingly, potentially to their disadvantage. 
+                    Given enough video data, ATMAN can identify these patterns, and quantify their impact 
+                    on the players chances of winning.
+                """ # 17 seconds
+
+# script_line =   """
+#                     This example is a short but indicative look into the capabilities of ATMAN, 
+#                     the Automated Tennis Match Annotator. 
+#                 """ # 8 seconds
 all_frames.append(animFrms_after_with_final_dim)
 script_lines.append(script_line)
 
 script_line =   """
-                    If you would like to learn more about its workings...
+                    If you would like to learn more about the workings of ATMAN...
                 """ # 4 seconds
 
 rstFrms0 = BGRFrames.from_frame(rstFrm0, 75)
@@ -773,20 +773,28 @@ all_frames.append(rstFrms1)
 script_lines.append(script_line)
 
 script_line =   """
-                    If you would like to see it employed in actual case studies,
-                    take a look at the analysis videos.
-                """ # 8 seconds
+                    For a look into exploitable player-specific serve patterns, 
+                    check out "On the Impact of Leverage on Serve Location".
+                """
 
 rstFrms2 = BGRFrames.from_frame(rstFrm2, 100)
-rstFrms3 = BGRFrames.from_frame(rstFrm3, 100)
-jointFrms = BGRFrames.from_frames([rstFrms2, rstFrms3])
-
-all_frames.append(jointFrms)
+all_frames.append(rstFrms2)
 script_lines.append(script_line)
 
+script_line =   """
+                    For a more general case study, take a look at "On the Effectiveness of the Chipped Return".
+                """
+
+# script_line =   """
+#                     If you would like to see it employed in actual case studies,
+#                     take a look at the analysis videos.
+#                 """ # 8 seconds
+
+rstFrms3 = BGRFrames.from_frame(rstFrm3, 100)
+all_frames.append(rstFrms3)
+script_lines.append(script_line)
 
 vis_ut.show(all_frames)
-
 
 ### Saving the separate MultiFrame objects and the Joint Script
 if SAVE:
