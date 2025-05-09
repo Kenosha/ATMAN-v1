@@ -71,7 +71,7 @@ segBFs = segBF.filter(segBF).split()
 seg_idx = 0 ### lines -> index 0
 my_segBF = segBFs[seg_idx]
 
-fs, ls = 0, 750 ### this may be needed in the next video!
+fs, ls = 200, 750 ### this may be needed in the next video!
 myStm = Stream(cap, fs, ls)
 myDtm = myStm.decap()
 myFrms = myDtm.frames
@@ -87,7 +87,7 @@ preFrms_dimmed = BGRFrames(preArr_dimmed).rescale(3)
 fs_adj = fs + preFrms_dimmed.length()
 
 ### for the recreation of the line finding steps, we need the extracted steps!
-step_frames = 50
+step_frames = 25
 from ATMANpy.scripts.pipeline_brest_tightseg.parameter_files.default import court_lines
 prms = court_lines.courtline_params
 lineSF = myStm.conform(fs_adj, fs_adj + step_frames * 3).recolor('grey').extract(ex.get_courtlines_substeps, **prms)
@@ -99,7 +99,106 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 brestCam = Camera.calibrated_brest_behind()
 brestCam_resized = brestCam.resize(3)
 
-################################
+
+#####################################
+#### ATMAN contraction animation ####
+#####################################
+
+from ATMANpy.types.Shapes3D import Point3D
+z = 1000
+oPt, cPt = Point3D((0, 0, 0)), Point3D((0, 0, z))
+downCam = Camera.from_to(cPt, oPt)
+text_color = const.BGR['leafy_green']
+text_size = 2
+left_pts = 325
+
+titleStr = 'The Automated Tennis Match ANnotator'
+titlePt = oPt.annotate(titleStr).left(left_pts).recolor(text_color).resize(text_size)
+titleView = View.make(downCam, Scene.make_empty(), annotatedPoints = [titlePt])
+titleFrm = titleView.snap()
+# titleFrm.show()
+
+auxil_offset = 0
+move1 = left_pts - 76
+move2 = left_pts - 270
+move3 = left_pts - 392
+move4 = left_pts - 506
+move5 = left_pts - 526
+
+p1 = oPt.annotate('A').front(auxil_offset).left(move1).recolor(text_color).resize(text_size)
+p2 = oPt.annotate('T').front(auxil_offset).left(move2).recolor(text_color).resize(text_size)
+p3 = oPt.annotate('M').front(auxil_offset).left(move3).recolor(text_color).resize(text_size)
+p4 = oPt.annotate('A').front(auxil_offset).left(move4).recolor(text_color).resize(text_size)
+p5 = oPt.annotate('N').front(auxil_offset).left(move5).recolor(text_color).resize(text_size)
+
+target1 = - 40
+target2 = - 20
+target3 = 0
+target4 = 25
+target5 = 47
+
+p1_target = p1.right(target1 + move1)
+p2_target = p2.right(target2 + move2)
+p3_target = p3.right(target3 + move3)
+p4_target = p4.right(target4 + move4)
+p5_target = p5.right(target5 + move5)
+
+titleView = View.make(downCam, Scene.make_empty(), annotatedPoints = [titlePt])
+titleFrm = titleView.snap()
+# titleFrm.show()
+
+letterView = View.make(downCam, Scene.make_empty(), annotatedPoints = [p1, p2, p3, p4, p5])
+letterFrm = letterView.snap()
+# letterFrm.show()
+
+itpl_func = lambda l: [vs.interpolate_shape(p1, p1_target, l), 
+                       vs.interpolate_shape(p2, p2_target, l),
+                       vs.interpolate_shape(p3, p3_target, l),
+                       vs.interpolate_shape(p4, p4_target, l),
+                       vs.interpolate_shape(p5, p5_target, l)]
+
+N = 50
+pre_dim_factor = 0.5
+
+pre_staticFrm = BGRFrames.from_frame(titleFrm, 25)
+
+pre_dimFrms = BGRFrames.from_frame(titleFrm, N).dim_progressively(fs_dim_factor = 1, ls_dim_factor = 0.5)
+post_dimFrms = BGRFrames.from_frame(titleFrm, N).dim_progressively(fs_dim_factor = 0.5, ls_dim_factor = 0)
+lambdas = np.linspace(0, 1, N, endpoint = True)
+
+### deal with pre move dim frames
+pre_dimFrms_lettered, _ = vs.animate_sequence([Scene.make_empty() for _ in range(N)], start_cam = downCam, stop_cam = downCam,
+                            annotated_points = [p1, p2, p3, p4, p5], animate_over = pre_dimFrms)
+
+### deal with post move dim frames
+pt_frames = []
+for i in range(N):
+    l = lambdas[i]
+    frm = post_dimFrms[i]
+
+    annotated_points = itpl_func(l)
+   
+    ptView = View.make(downCam, Scene.make_empty(), annotatedPoints = annotated_points)
+    ptFrm = ptView.snap(over_array = frm.array)
+    pt_frames.append(ptFrm)
+
+post_dimFrms_lettered = BGRFrames.from_single_frames(pt_frames)
+
+introFrms = BGRFrames.from_frames([pre_staticFrm, pre_dimFrms_lettered, post_dimFrms_lettered])
+
+##### fade out letters, fade in play
+fade_in_length = 200
+
+post_dimFrms_fade_out = BGRFrames.from_frame(post_dimFrms_lettered[-1], fade_in_length).dim_progressively(1, 0)
+preFrms_fade_in = preFrms_dimmed[:fade_in_length].dim_progressively(0, 1)
+
+preFrms_fade = post_dimFrms_fade_out + preFrms_fade_in
+# DecapStream(preFrms_fade, 0, 100).show()
+
+preFrms_rest = preFrms_dimmed[fade_in_length:]
+
+# DecapStream(introFrms, 0, 100).show()
+#########################
 ####### BEGIN ANIMATION ########
 ################################
 STATIC_FRAMES = 25
@@ -110,31 +209,42 @@ script_lines = []
 blankFrm = BGRFrame(np.zeros((1080, 1920, 3), dtype = 'uint8'))
 
 script_line =   """
-                    The Automated Tennis Match Annotator (or ATMAN, for short) automatically recognizes the lines, the players, the ball
-                    - and how fast the ball is, how much spin it has, where it bounces - to be able to summarize a match set by set, game by game,
-                    point by point, shot by shot.
-                    Match data can be easily combined with other matches that have been visually recognized by ATMAN.
-                    The system then allows all matches at hand to be easily searched, filtered and aggregated 
-                    to reveal patterns in the style of play of a player, understand how he or she wins matches, or where he or she is vulnerable. 
-                    ATMAN also includes a 3D engine that is used to visualize these patterns and insights.
+                    The Automated Tennis Match Annotator, or ATMAN for short,
+                    is a start-to-end framework for the generation of insights
+                    from tennis matches. 
+
+                    ATMAN generates detailed shot-by-shot data directly from match footage, 
+                    allows all matches at hand to be easily searched, filtered and aggregated, 
+                    and lets the user seamlessly visualize results in a 3D engine.
                 """
 
-titleStr = 'The Automated Tennis Match Annotator (ATMAN)'
-titleFrm = blankFrm.put(titleStr, size = 2, where = (600, 540))
+# script_line =   """
+#                     The Automated Tennis Match Annotator (or ATMAN, for short) automatically recognizes the lines, the players, the ball
+#                     - and how fast the ball is, how much spin it has, where it bounces - to be able to summarize a match set by set, game by game,
+#                     point by point, shot by shot.
+#                     Match data can be easily combined with other matches that have been visually recognized by ATMAN.
+#                     The system then allows all matches at hand to be easily searched, filtered and aggregated 
+#                     to reveal patterns in the style of play of a player, understand how he or she wins matches, or where he or she is vulnerable. 
+#                     ATMAN also includes a 3D engine that is used to visualize these patterns and insights.
+#                 """
 
-titleFrms = BGRFrames.from_frame(titleFrm, STATIC_FRAMES)
-all_frames.append(titleFrms)
+# titleStr = 'The Automated Tennis Match Annotator (ATMAN)'
+# titleFrm = blankFrm.put(titleStr, size = 2, where = (600, 540))
+# titleFrms = BGRFrames.from_frame(titleFrm, STATIC_FRAMES)
+
+all_frames.append(introFrms)
 script_lines.append(script_line)
 
 script_line =   """
                     In this video, we break down how ATMAN does all of these things step-by-step. 
                 """ # 5 seconds
-all_frames.append(preFrms_dimmed[:200])
+all_frames.append(preFrms_fade)
 script_lines.append(script_line)
+#######
 
 script_line =   """
-                    Lines are detected using the simple, but robust probabilistic hough line finding algorithm. 
-                """ # 6 seconds
+                    Lines are detected using the probabilistic hough line finding algorithm. 
+                """ # 4 seconds
 
 ### recreate the line finding steps
 zeroFrm = BGRFrame(np.zeros((360, 640, 3), dtype = 'uint8'))
@@ -182,18 +292,17 @@ currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms2 = lineFrms.mask(lineMask) + currFrms.mask(~lineMask) * dim_factor
 mixFrms2 = mixFrms2.rescale(3)
 
-mixFrms = BGRFrames.from_frames([preFrms_dimmed[200:], mixFrms0, mixFrms1, mixFrms2])
+mixFrms = BGRFrames.from_frames([preFrms_rest, mixFrms0, mixFrms1, mixFrms2])
 
 all_frames.append(mixFrms)
 script_lines.append(script_line)
 
 ### finally, show the court lines detected 
 script_line =   """
-                    Having detected the lines, we can easily reconstruct the characteristics of the camera itself.
-                    A camera is fully described by two matrices.
-                """
+                    Having detected the lines, we can immediately reconstruct the location of the net.
+                """ # 5 secs
 
-start, stop = fs_adj+3*step_frames, fs_adj+6*step_frames
+start, stop = fs_adj+3*step_frames, fs_adj+3*step_frames+150
 HSF = ConstFeature.from_store(vid, sto, featname = 'H')
 H = HSF.feature
 courtLines = sa.find_courtlines(H).drop('Net Line')
@@ -210,63 +319,6 @@ currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
 
-all_frames.append(mixFrms)
-script_lines.append(script_line)
-
-### internal, external, projection matrices
-tab_x, tab_y = 600, 400
-cam0 = Camera.calibrated_brest_behind().resize(3)
-
-intTab = vis_ut.make_matrix_table(cam0.M_int, title = 'Internal Matrix', horizontal_offset = 5.5, dimensions = (tab_x, tab_y))
-extTab = vis_ut.make_matrix_table(cam0.M_ext, title = 'External Matrix', horizontal_offset = 5.5, dimensions = (tab_x, tab_y))
-prjTab = vis_ut.make_matrix_table(cam0.get_P(), title = 'Projection Matrix', horizontal_offset = 4.5, dimensions = (tab_x, tab_y))
-# intTab.render().show()
-# extTab.render().show()
-# prjTab.render().show()
-
-int_coords, ext_coords = (0, 0), (0, tab_y)
-intPt = Point2D(int_coords)
-extPt = Point2D(ext_coords)
-
-# fade in int. matrix
-script_line =   """
-                    The internal camera matrix contains all camera intrinsic parameters, like focal length or sensor dimensions.
-                """
-ls_mixFrms = BGRFrames.from_frame(mixFrms[-1], 25)
-intFrms = vis_ut.render_over_frames(intTab, ls_mixFrms, tlPt = intPt)
-
-all_frames.append(intFrms)
-script_lines.append(script_line)
-
-# fade in ext. matrix
-script_line =   """
-                    The external camera matrix contains all camera extrinsic parameters, like the placement and rotation of the camera in space.
-                """
-ls_intFrms = BGRFrames.from_frame(intFrms[-1], 25)
-ext_intFrms = vis_ut.render_over_frames(extTab, ls_intFrms, tlPt = extPt)
-
-all_frames.append(ext_intFrms)
-script_lines.append(script_line)
-
-# fade out int. and ext. matrices, fade in proj matrix
-script_line =   """
-                    These matrices combine to form a projection matrix, which determines how the camera transforms points in 3-D space into 
-                    a 2-D representation on a screen.
-                    Understanding the broadcast camera tremendously eases the visual recognition of all subsequent features.
-                """
-
-prjFrm = vis_ut.render_over_frames(prjTab, mixFrms[[-1]], tlPt = extPt // 2)
-transFrm = vs.interpolate_frames(ext_intFrms[-1], prjFrm, num_frames = 100)
-# DecapStream(transFrm, 0, 100).show()
-
-all_frames.append(transFrm)
-script_lines.append(script_line)
-
-# show net
-script_line =   """
-                    For example, we can immediately reconstruct the location of the net.
-                """
-
 from ATMANpy.types.ShapesTennis3D import Net
 net_color = const.BGR['salmon_pink']
 net_alpha = 0.75
@@ -274,164 +326,21 @@ net_mesh_density = 0.65
 myNet = Net.make_doubles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
 myNet_null = Net.make_doubles(color = net_color, alpha = 0, net_mesh_density = net_mesh_density)
 
-netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 150)
+netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 100)
 
-netFrms, _ = vs.animate_sequence(netScns, start_cam = cam0, stop_cam = cam0, animate_over = transFrm[-1])
+netScns = [*[myNet_null] * 50, *netScns]
+
+cam0 = Camera.calibrated_brest_behind().resize(3)
+netFrms, _ = vs.animate_sequence(netScns, start_cam = cam0, stop_cam = cam0, animate_over = mixFrms)
 # DecapStream(netFrms, 0, 100).show()
 
 all_frames.append(netFrms)
 script_lines.append(script_line)
 
-script_line =   """
-                    Down the line, an understanding of camera determinants will also form the basis of the 3D engine, 
-                    with which we can visually represent anything that's happened on the court from any perspective we like.
-                """
-
-###### -> idea: show the lines rotating in space with a small, arbitrary 2D representation with axes!
-###### -> also: show the actual projection matrix on the screen!
-from ATMANpy.types.Shapes3D import Point3D, Line3D, Lines3D
-from ATMANpy.auxil.court import cnt_2D, courtLines
-cnt_3D = Point3D.from_point2D(cnt_2D, z = 0)
-
-# court
-courtScn = Scene.make_court(make_net = True, singles_net = False, line_color = line_color, 
-                            net_color = net_color, net_alpha = net_alpha, net_mesh_density = net_mesh_density)
-courtLines3D = Lines3D.from_lines2D(courtLines, z = 0, name = 'CourtLines3D')
-
-# corner points
-c1 = courtLines3D['Top Baseline'].leftPt
-c2 = courtLines3D['Top Baseline'].rightPt
-c3 = courtLines3D['Bottom Baseline'].rightPt
-c4 = courtLines3D['Bottom Baseline'].leftPt
-l, w = 2 * const.SIDE_LENGTH * const.SCALE, const.COURT_WIDTH * const.SCALE
-
-# axes
-ax_len = 100
-ax_col = const.BGR['strong_blue']
-ax_dist = 50
-
-axPt = c1.left(ax_dist).front(ax_dist)
-
-xLn = Line3D(axPt, axPt.right(ax_len), color = ax_col)
-yLn = Line3D(axPt, axPt.back(ax_len), color = ax_col)
-zLn = Line3D(axPt, axPt.up(ax_len), color = ax_col)
-xLn_null = yLn_null = zLn_null = Line3D(axPt, axPt, color = ax_col)
-
-axScn = Scene([xLn, yLn, zLn])
-axScn_null = Scene([xLn_null, yLn_null, zLn_null])
-axScns_itpl = vs.interpolate_scenes(axScn_null, axScn, num_frames = 50)
-
-# court and ax scene
-courtaxScn = courtScn.combine(axScn)
-
-# camera checkpoints to interpolate between
-z = 100
-f = 400
-tilt = 0.1
-
-oPt1 = c1.left(w/2).front(l/2).up(z)
-cam1 = Camera.from_to(oPt1, cnt_3D, f = f).tilt(tilt)
-# View.make(cam1, courtaxScn).snap().show()
-
-oPt2 = c2.right(w/2).front(l/2).up(z)
-cam2 = Camera.from_to(oPt2, cnt_3D, f = f).tilt(tilt)
-# View.make(cam2, courtaxScn).snap().show()
-
-oPt3 = c3.right(w/2).back(l/2).up(z)
-cam3 = Camera.from_to(oPt3, cnt_3D, f = f).tilt(tilt)
-# View.make(cam3, courtaxScn).snap().show()
-
-oPt4 = c4.left(w/2).back(l/2).up(z)
-cam4 = Camera.from_to(oPt4, cnt_3D, f = f).tilt(tilt)
-# View.make(cam4, courtaxScn).snap().show()
-
-oPt2a = cnt_3D.right(5*w/2).up(z)
-cam2a = Camera.from_to(oPt2a, cnt_3D, f = f).tilt(tilt)
-# View.make(cam2a, courtaxScn).snap().show()
-
-oPt4a = cnt_3D.left(5*w/2).up(z)
-cam4a = Camera.from_to(oPt4a, cnt_3D, f = f).tilt(tilt)
-# View.make(cam4a, courtaxScn).snap().show()
-
-## animate transition from court to abstract
-num_frames_rot = 50
-num_frames_trans = 100
-res = 1
-itpl_func = vs.interpolate_camera_naive
-
-## over frame(s)
-overFrm = myStm.get(stop).rescale(3).dim(dim_factor)
-overFrm_dim = overFrm.dim(0.1)
-overFrms_dim = vs.interpolate_frames(overFrm, overFrm_dim, num_frames = num_frames_trans // 2)
-overFrms_still = BGRFrames.from_frame(overFrms_dim[-1], num_frames_trans - overFrms_dim.length())
-overFrms_trans = BGRFrames.from_frames([overFrms_dim, overFrms_still])
-
-transFrms, _ = vs.animate_sequence([courtScn for _ in range(num_frames_trans)], start_cam = cam0, stop_cam = cam3, interpolate_func = itpl_func,
-                                    argument_resolution = res, background_resolution = res, animate_over = overFrms_trans)
-
-cams = itpl_func(cam0, cam3, num_frames = num_frames_trans)
-camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
-transFrms = vis_ut.render_many_over_frames(camTabs, transFrms, tlPt = extPt // 2)
-
-## make the axes appear
-axFrms, _ = vs.animate_sequence(axScns_itpl, start_cam = cam3, stop_cam = cam3, interpolate_func = itpl_func, 
-                                background_scene = courtScn, 
-                                argument_resolution = res, background_resolution = res, animate_over = overFrms_trans[-1])
-camTab = vis_ut.make_matrix_table(cam3.get_P())
-axFrms = vis_ut.render_over_frames(camTab, axFrms, tlPt = extPt // 2) ### todo: projection matrix has to change as we transition!
-
-# DecapStream(axFrms, 0, 100).show()
-
-## animate rotation in abstract space
-def anim_rot(start, stop):
-    outFrms, _ = vs.animate_sequence([courtaxScn for _ in range(num_frames_rot)], start_cam = start, stop_cam = stop, 
-                                    interpolate_func = itpl_func,
-                                    argument_resolution = res, background_resolution = res, animate_over = overFrms_trans[-1])
-    cams = itpl_func(start, stop, num_frames = num_frames_rot)
-    camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
-    outFrms = vis_ut.render_many_over_frames(camTabs, outFrms, tlPt = extPt // 2)
-    return outFrms
-
-rotFrms = BGRFrames.from_frames([anim_rot(cam3, cam2a), 
-                                 anim_rot(cam2a, cam2),
-                                 anim_rot(cam2, cam1),
-                                 anim_rot(cam1, cam4a),
-                                 anim_rot(cam4a, cam4),
-                                 anim_rot(cam4, cam3),
-                                 ])
-# DecapStream(rotFrms, 0, 100).show()
-
-num_rots = 1 ### 3 rotations is too much!
-rotFrms_rep = BGRFrames.from_frames([rotFrms for _ in range(num_rots)])
-# DecapStream(rotFrms_rep, 0, 100).show()
-
-rotFrms_joint = BGRFrames.from_frames([transFrms, axFrms, rotFrms_rep])
-
-all_frames.append(rotFrms_joint)
-script_lines.append(script_line)
-
 ### rotate back to starting position, in time for detection_player to start.
-script_line = "Let's see how ATMAN detects the players on the field."
+script_line = "Let's see how ATMAN detects the players on the field." # 4 secs
 
-start, stop = fs_adj+6*step_frames, fs_adj+9*step_frames
-currFrms = myDtm.conform(start, stop - 1).frames.rescale(3)
-currFrms = currFrms.dim_progressively(0.1, dim_factor, exp = 1)
-# DecapStream(currFrms, 0, 100).show()
-
-axScns_itpl_back = vs.interpolate_scenes(axScn, axScn_null, num_frames = currFrms.length())
-
-transFrms, _ = vs.animate_sequence(axScns_itpl_back, start_cam = cam3, stop_cam = cam0, interpolate_func = itpl_func,
-                                    background_scene = courtScn,
-                                    argument_resolution = res, background_resolution = res, animate_over = currFrms)
-
-cams = itpl_func(cam3, cam0, num_frames = currFrms.length())
-camTabs = [vis_ut.make_matrix_table(cam.get_P(), title = 'Projection Matrix') for cam in cams]
-transFrms = vis_ut.render_many_over_frames(camTabs, transFrms, tlPt = extPt // 2)
-# DecapStream(transFrms, 0, 100).show()
-
-### and go back to lines
-next_fs = segBFs[1].first()[0]
-start, stop = fs_adj+9*step_frames, next_fs
+start, stop = stop, segBFs[1].first()[0]
 
 courtLines = sa.find_courtlines(H).drop('Net Line')
 court_frames = [zeroFrm.put(courtLines, color = line_color) for _ in range(start, stop)]
@@ -442,13 +351,11 @@ currFrms = Stream(cap, start, stop - 1).decap().frames
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
 
+res = 1
 mixFrms, _ = vs.animate_sequence([netScns[-1] for _ in range(currFrms.length())], start_cam = cam0, stop_cam = cam0, animate_over = mixFrms, 
                                  argument_resolution = res, background_resolution = res)
 
-jointFrms = BGRFrames.from_frames([transFrms, mixFrms])
-# DecapStream(jointFrms, 0, 100).show()
-
-all_frames.append(jointFrms)
+all_frames.append(mixFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)

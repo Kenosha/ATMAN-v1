@@ -24,7 +24,6 @@ We can filter for Points and for Shots.
 ### -> how about:
 first, filter by points (i.e. all points that begin with a first serve out wide (by/to player, on ad side?!))
 then, filter return shots. --> has to be to player!
-
 """
 
 import os
@@ -42,7 +41,7 @@ from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.MultiFrames import BGRFrames, GreyFrames, MaskFrames
 from ATMANpy.types.Overlays import Table, FramesRaster, overlay, frame_cascade
 from ATMANpy.types.Points import Point2D
-from ATMANpy.types.Visual3D import Camera, View, Scene
+from ATMANpy.types.Visual3D import Camera, View, Scene, DummyScene
 
 from ATMANpy.types.Abstract import Points, Shots, read_in_data_tables, read_in_placeholder_tables
 
@@ -72,6 +71,7 @@ cnf_mod = ppl.config_files.default
   
 avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
 confs = [cnf_mod.get_conf(vid) for vid in avail_vids]
+cap = confs[0]['cap']
 
 vid, sto = confs[0]['video_id'], confs[0]['store_name']
 P = ConstFeature.from_store(vid, sto, featname = 'P').feature
@@ -177,9 +177,13 @@ row4 = {pStr: p4, sStr: s4}
 tab_dims = (1920 // 2, 1080 // 2)
 # tab_dims = (round(1920 * 2/3), round(1080 * 2/3))
 kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 2, 'skeleton_shrinkage': 0.125,
-            'dimensions': tab_dims, 'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2,
+            'dimensions': tab_dims, 'resolution': 100,
+            'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2,
+            'header_text_thickness': 2, 'index_text_thickness': 2, 'data_text_thickness': 2, 
             'automatic_vertical_offset_text_line_height': 0.3, 'header_offset': 2.5,
-            'title': '2021 Brest Challenger', 'title_horizontal_offset': 8.2, 'title_vertical_offset': -0.4, 'title_color': const.BGR['bright_grey']}
+            'index_line_thickness': 0, 'header_line_thickness': 0.2, 'data_line_thickness': 0.025,
+            'title': '2021 Brest Challenger', 'title_horizontal_offset': 8.2, 'title_vertical_offset': -0.4, 
+            'title_color': const.BGR['bright_grey'], 'title_size': 2, 'title_thickness': 2}
 
 table_data = {'': {}}
 myTab = Table(table_data, **kwargs, null_rows = 4)
@@ -294,7 +298,7 @@ script_lines = []
 script_line =   """
                     Having detected lines, players and ball trajectories, and having segmented every Match into 
                     distinct Points and Shots, we now show how the data gathered is accessed directly within the ATMAN framework.
-                """
+                """ # 11 seconds
 zeroFrms = BGRFrames.from_frame(zeroFrm, 25)
 all_frames.append(zeroFrms)
 script_lines.append(script_line)
@@ -355,9 +359,7 @@ script_lines.append(script_line)
 script_line =   f"""
                     This leaves us with {p4} points.
 
-                    Such filters, and a myriad more, can be applied in a single line of code.
-                    Should these not suffice, custom filters can be easily created due to the intuitive representation
-                    of Trajectories, Players, Shots and Points in the dataclass system of ATMAN.
+                    Such filters, and a myriad more, can be applied with a single line of code.
                 """
 
 overFrm = overlay(zeroFrm, tabFrm4, top_left_point = tlPt_tab)
@@ -365,10 +367,9 @@ overFrms = BGRFrames.from_frame(overFrm, 25)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
-
 ### move the table into the corner
 script_line =   """
-                    Having filtered with ease, Let's quickly check the remaining serves and returns.
+                    Having filtered with ease, let's quickly check the remaining serves and returns.
                 """ ### 5 seconds
 
 itplPts = [tlPt_tab * (1 - lmbd) + tlPt_tab_corner * lmbd for lmbd in np.linspace(0, 1, 125, endpoint = True)]
@@ -416,15 +417,15 @@ script_line =   """
                 """ ### 4 seconds
 
 from ATMANpy.types.Overlays import reverse_cascade
-_, revFrms = reverse_cascade(myRst, frames_per_element = 25)
+_, revFrms = reverse_cascade(myRst, frames_per_element = 12, acceleration = 1.5)
 all_frames.append(revFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    ... such as, for example, the average return speed...
+                    ... such as the average return speed...
                 """
 overFrm = overlay(zeroFrm, aggFrm1, top_left_point = tlPt_tab)
-overFrms = BGRFrames.from_frame(overFrm, 50)
+overFrms = BGRFrames.from_frame(overFrm, 25)
 all_frames.append(overFrms)
 script_lines.append(script_line)
 
@@ -449,12 +450,12 @@ script_lines.append(script_line)
 ### scatter map/heat map
 
 script_line =   """
-                    Beyond these simple numeric averages, ATMAN enables us to display visual representations of data.
+                    Beyond these aggregate statistics, ATMAN enables us to display visual representations of data.
                 """ ### 7 seconds
 ### fade in a point up until moment of return that has Brandon Nakashima on far side.
 pt_idx = 9
 ls_frame = 18
-pre_frames = 160
+pre_frames = 145
 total_frames = ls_frame + pre_frames
 
 # the spline
@@ -504,31 +505,47 @@ script_line =   """
                     Heatmaps can also be created with ease.
                 """ # 3 seconds
 
-### two regions -> opponents court, and behind the own baseline... a bit clumsy, but hey
-from ATMANpy.types.Lines import CourtLines, Region
-courtLines = CourtLines.make().add_singles_netline()
-oppReg = courtLines.get_half_region(side = 'Top').scale(1.55)
-ownReg_behind = Region.from_lines([courtLines['Bottom Baseline'], courtLines['Bottom Baseline'].down(300)])
-
-factor = 2
-in_res = factor * 1
-bh_res = factor * 1.25
-opp_res = factor * 3/4
-
-### animation parameters
-back_res = 12 ##1
-shape_res = 7.5 ##1
-
-heatScn_in = vs.kde_heatmap(retShots_rect_in, one_color = const.BGR['leafy_green'], zero_color = const.BGR['leafy_green'],
-                            bandwidth = 60, resolution = in_res)
-heatScn_out1 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_red'], zero_color = const.BGR['intense_red'],
-                            bandwidth = 30, showReg = ownReg_behind, resolution = bh_res)
-heatScn_out2 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_red'], zero_color = const.BGR['intense_red'],
-                            bandwidth = 30, showReg = oppReg, resolution = opp_res)
-heatScn = heatScn_in.combine(heatScn_out1).combine(heatScn_out2)
-
-heatFrms, _ = vs.animate_static(heatScn, num_frames = 25, static_cam = myCam_full, animate_over = lsFrm_no_traj.dim(0.25))
+background_bgr = tuple(BGRFrame.from_video(cap, 1100).array[200, 350] * 0.25) ### the color of the court, dimmed
+contScn = vis_ut.kde_func(retShots_rect, props = [0.3, 0.5, 0.75, 0.9], resolution = 5,
+                            background_bgr = background_bgr,
+                            heat_bgr = const.BGR['leafy_green'], exp_bgr = 2, bandwidth = 60)
+heatFrms, _ = vs.animate_static(contScn, num_frames = 25, static_cam = myCam_full, animate_over = lsFrm_no_traj.dim(0.25))
 # heatFrms[-1].show()
+
+# for res in [1, 4]:
+#     print(res)
+#     contScn = kde_func(retShots_rect, props = [0.3, 0.5, 0.75, 0.9], resolution = res,
+#                     heat_bgr = const.BGR['leafy_green'], exp_bgr = 2, bandwidth = 60, dim_factor = 0.25)
+    
+#     outFrms, _ = vs.animate_static(contScn, static_cam = myCam_full, background_scene = courtScn, num_frames = 1,
+#                                 argument_resolution = 7.5, background_resolution = 12, foreground_resolution = 7.5)
+#     outFrms[-1].show()
+
+# ### two regions -> opponents court, and behind the own baseline... a bit clumsy, but hey
+# from ATMANpy.types.Lines import CourtLines, Region
+# courtLines = CourtLines.make().add_singles_netline()
+# oppReg = courtLines.get_half_region(side = 'Top').scale(1.55)
+# ownReg_behind = Region.from_lines([courtLines['Bottom Baseline'], courtLines['Bottom Baseline'].down(300)])
+
+# factor = 2
+# in_res = factor * 1
+# bh_res = factor * 1.25
+# opp_res = factor * 3/4
+
+# ### animation parameters
+# back_res = 12 ##1
+# shape_res = 7.5 ##1
+
+# heatScn_in = vs.kde_heatmap(retShots_rect_in, one_color = const.BGR['leafy_green'], zero_color = const.BGR['leafy_green'],
+#                             bandwidth = 60, resolution = in_res)
+# heatScn_out1 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_red'], zero_color = const.BGR['intense_red'],
+#                             bandwidth = 30, showReg = ownReg_behind, resolution = bh_res)
+# heatScn_out2 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_red'], zero_color = const.BGR['intense_red'],
+#                             bandwidth = 30, showReg = oppReg, resolution = opp_res)
+# heatScn = heatScn_in.combine(heatScn_out1).combine(heatScn_out2)
+
+# heatFrms, _ = vs.animate_static(heatScn, num_frames = 25, static_cam = myCam_full, animate_over = lsFrm_no_traj.dim(0.25))
+# # heatFrms[-1].show()
 
 heatFrms_itpl = vs.interpolate_frames(markFrms[-1], heatFrms[1], num_frames = 100)
 # DecapStream(heatFrms_itpl, 0, 100).show()
@@ -549,8 +566,8 @@ script_line =   """
                     We can render and animate directly in virtual space.
                 """
 
-outFrms, _ = vs.animate_static(heatScn, static_cam = myCam_full, background_scene = courtScn, num_frames = 1,
-                               argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
+outFrms, _ = vs.animate_static(contScn, static_cam = myCam_full, background_scene = courtScn, num_frames = 1,
+                               argument_resolution = 7.5, background_resolution = 12, foreground_resolution = 7.5)
 
 itplFrms = vs.interpolate_frames(heatFrms[-1], outFrms[0], num_frames = 150)
 # DecapStream(itplFrms, 0, 100).show(ms_between_frames = 40)
@@ -559,7 +576,6 @@ all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)
-
 
 from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
 saveFolder = DESCRIPTOR + '_' + str(make_timestamp())

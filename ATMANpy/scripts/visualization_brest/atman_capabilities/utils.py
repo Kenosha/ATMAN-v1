@@ -361,3 +361,27 @@ def make_point_descriptor_box(myPnt, dims = (200, 100), origin = (10, 20), para_
         fullFrms = fullFrms.framed(border_thickness, border_color)
 
     return fullFrms
+
+def kde_func(someShots, bandwidth = 40, normalize_density = True, props = [0.2, 0.4, 0.6, 0.8], 
+             display_at_height = False, resolution = 2,
+             heat_bgr = const.BGR['intense_red'], background_bgr = (0, 0, 0),
+             exp_bgr = 1):
+    ### bulls eye look
+    from ATMANpy.funcs.util_funcs import interpolate_tuples
+    from ATMANpy.types.Visual3D import DummyScene
+
+    fill_colors = [interpolate_tuples(background_bgr, heat_bgr, itpl_lambda = p ** exp_bgr) for p in props]
+
+    from functools import reduce
+    cont_scenes = [vs.kde_contourmap(someShots, bandwidth = bandwidth,
+                                     normalize_density = normalize_density, 
+                                     display_at_height = display_at_height,
+                                     resolution = resolution, 
+                                     fill = True, zero_color = background_bgr,
+                                     threshold_proportion = prop, contour_color = col)[0] for prop, col in zip(props, fill_colors)]
+    contScn = reduce(DummyScene.combine, cont_scenes, DummyScene.make_empty())
+
+    contScn = contScn.consolidate()
+    contScn.rastArrs[0] += [0, 0, 0.1] ### this is to avoid line artefacts
+
+    return contScn

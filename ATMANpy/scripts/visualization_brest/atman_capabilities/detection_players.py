@@ -155,12 +155,13 @@ lambdas = np.linspace(0, 1, duration)[:, np.newaxis, np.newaxis, np.newaxis]
 backFrms1 = medFrms * lambdas + currFrms * (1 - lambdas)
 backFrms1 = backFrms1.rescale(3)
 
-duration = 150
+duration = 100
 medFrms = BGRFrames.from_frame(medStms[1].recolor('bgr').stillFrm, duration)
 backFrms2 = medFrms * dim_factor
 backFrms2 = backFrms2.rescale(3)
 
 backFrms = BGRFrames.from_frames([backFrms0, backFrms1, backFrms2])
+# DecapStream(backFrms, 0, 100).show()
 
 all_frames.append(backFrms)
 script_lines.append(script_line)
@@ -168,8 +169,8 @@ script_lines.append(script_line)
 ### fade players back in
 script_line =   """
                     The players, the ball kids and the line judges are then clearly visibly against this background.
-                """
-duration = 100
+                """ # 5 seconds
+duration = 80
 start, stop = stop, stop + duration 
 currStm = Stream(cap, start, stop - 1)
 currFrms = currStm.decap().frames
@@ -184,7 +185,7 @@ lambdas = np.linspace(0, 1, duration)[:, np.newaxis, np.newaxis, np.newaxis]
 plFrms0 = mixFrms * lambdas + medFrms * (1 - lambdas)
 plFrms0 = plFrms0.rescale(3)
 
-duration = 100
+duration = 80
 start, stop = stop, stop + duration 
 currStm = Stream(cap, start, stop - 1)
 currFrms = currStm.decap().frames
@@ -201,8 +202,8 @@ script_lines.append(script_line)
 
 ### now, show how we use this to find the players
 script_line =   """
-                    Notice how the player's shadows are still detected as foreground.
-                """
+                    ATMAN automatically detects and removes shadows.
+                """ # 4 secs
 duration = 2
 start, stop = stop, stop + duration 
 currStm = Stream(cap, start, stop - 1)
@@ -213,7 +214,7 @@ burnMask = burnStms[1].conform(start, stop - 1).decap().frames
 shadFrms0 = currFrms.mask(burnMask) + currFrms.mask(~burnMask) * dim_factor
 shadFrms0 = shadFrms0.rescale(3)
 
-duration = 200
+duration = 125
 
 currFrm = currStm.get(stop - 1)
 shadMask = shadStms[1].get(stop - 1)
@@ -233,9 +234,9 @@ shadFrms = BGRFrames.from_frames([shadFrms0, shadFrms1])
 all_frames.append(shadFrms)
 script_lines.append(script_line)
 
-script_line = "These shadows are automatically removed by ATMAN."
+script_line = ""
 
-duration = 110
+duration = 50
 start, stop = stop, stop + duration 
 currStm = Stream(cap, start, stop - 1)
 currFrms = currStm.decap().frames
@@ -252,10 +253,10 @@ script_lines.append(script_line)
 
 # DecapStream(mixFrms, 0, 100).show()
 
-script_line = "The remaining contours are our player candidates..."
+script_line = "The remaining contours are player candidates..."
 
 player_color = const.BGR['rose_orange']
-duration = 110
+duration = 100
 start, stop = stop, stop + duration
 my_foreSF = foreSF[list(range(start,stop))]
 
@@ -277,7 +278,7 @@ script_lines.append(script_line)
 
 # DecapStream(mixFrms_with_contours, 0, 100).show()
 
-script_line = "... from which the players can easily be found and tracked."
+script_line = "... from which the players can easily be found and tracked." # 4 secs
 
 player_color = const.BGR['strong_pink']
 # duration = 100
@@ -299,7 +300,10 @@ mixFrms = currFrms * dim_factor
 mixFrms_with_contours = BGRFrames.from_single_frames([mixFrm.put(featDict['topPlayerCnt'], color = player_color, thickness = 2).put(featDict['botPlayerCnt'], color = player_color, thickness = 2) for mixFrm, featDict in zip(mixFrms, my_plySF.values())])
 mixFrms_with_contours = mixFrms_with_contours.rescale(3)
 
-all_frames.append(mixFrms_with_contours)
+mixFrms_with_contours_pre = mixFrms_with_contours[:125]
+mixFrms_with_contours_post = mixFrms_with_contours[125:]
+
+all_frames.append(mixFrms_with_contours_pre)
 script_lines.append(script_line)
 
 ### intermezzo -> introduce that we're about to look for the ball.
@@ -310,8 +314,11 @@ start, stop = stop, motiStms[2].start_frame
 
 interFrms = Stream(cap, start, stop).decap().frames
 interFrms = interFrms * dim_factor
-interFrms = vis_ut.speed_up_frames_progressively(interFrms)
 interFrms = interFrms.rescale(3)
+
+jointFrms = BGRFrames.from_frames([mixFrms_with_contours_post, interFrms])
+
+interFrms = vis_ut.speed_up_frames_progressively(jointFrms, ramp_up_frames = 25, ramp_down_frames = 25)
 
 all_frames.append(interFrms)
 script_lines.append(script_line)

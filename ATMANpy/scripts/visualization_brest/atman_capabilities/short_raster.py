@@ -153,50 +153,6 @@ subReg = CourtLines.make().get_court_region().scale(1.25)
 subReg3D = Region3D.from_region2D(subReg, z = -1).recolor(region_color)
 courtScn = courtScn.put(subReg3D)
 
-### ANIMATION ###
-def kde_func(someShots):    
-    ### hill map
-    kdeDict = { 'bandwidth': 40, 'normalize_density': True, 
-                'one_color': heat_color, 'zero_color': heat_color, 
-                'resolution': 2}
-    return vs.kde_hillmap(someShots, **kdeDict)
-
-def kde_func(someShots):
-    ### just rings
-    kdeDict = { 'bandwidth': 40, 'normalize_density': True, 
-                'contour_color': heat_color, 'display_at_height': False,
-                'resolution': 2, 'preserve_showarr_shape': True}
-    props = [0.25, 0.5, 0.75]
-
-    from functools import reduce
-    cont_scenes = [vs.kde_contourmap(someShots, **kdeDict, threshold_proportion = prop)[0] for prop in props]
-    contScn = reduce(DummyScene.combine, cont_scenes, DummyScene.make_empty())
-
-    contScn = contScn.consolidate()
-
-    return contScn
-
-def kde_func(someShots, bandwidth = 40, normalize_density = True, display_at_height = False, resolution = 2,
-             heat_bgr = const.BGR['intense_red'], props = [0.2, 0.4, 0.6, 0.8]):
-    ### bulls eye look
-    
-    from ATMANpy.funcs.util_funcs import interpolate_tuples
-    background_bgr = tuple(BGRFrame.from_video(cap, 1100).array[200, 350]) ### the color of the court.
-    fill_colors = [interpolate_tuples(background_bgr, heat_bgr, itpl_lambda = p) for p in props]
-
-    from functools import reduce
-    cont_scenes = [vs.kde_contourmap(someShots, bandwidth = bandwidth,
-                                     normalize_density = normalize_density, 
-                                     display_at_height = display_at_height,
-                                     resolution = resolution, 
-                                     fill = True, zero_color = background_bgr,
-                                     threshold_proportion = prop, contour_color = col)[0] for prop, col in zip(props, fill_colors)]
-    contScn = reduce(DummyScene.combine, cont_scenes, DummyScene.make_empty())
-
-    contScn = contScn.consolidate()
-
-    return contScn
-
 ### TODO: maybe also a map that is like a marriage between heatmap and contourmap
 # -> fixed colour areas, filled out within a contour
 # -> kde_contourmap with fill = True!!!
@@ -237,11 +193,11 @@ for idx, myPnt in enumerate(filtPnts_before_fair):
     prevShots_rect_curr = prevShots.enforce_direction(current_orientation.capitalize())
     prevShots_rect_next = allShots.enforce_direction(current_orientation.capitalize())
 
-    heatScn_rect_next = kde_func(prevShots_rect_next, **kdeDict)
+    heatScn_rect_next = vis_ut.kde_func(prevShots_rect_next, **kdeDict)
 
     ### previous heat scene
     if len(prevShots) > 0:
-        heatScn_rect_curr = kde_func(prevShots_rect_curr, **kdeDict)
+        heatScn_rect_curr = vis_ut.kde_func(prevShots_rect_curr, **kdeDict)
         # heatScn_rect_curr = vs.kde_heatmap(prevShots_rect_curr, one_color = heat_color, zero_color = heat_color,
         #                                     bandwidth = bandwidth, resolution = 2, normalize_density = True)
     else:
@@ -256,7 +212,7 @@ for idx, myPnt in enumerate(filtPnts_before_fair):
     else:
         prevShots_rect_prev = prevShots.enforce_direction(previous_orientation.capitalize())
         
-        heatScn_rect_prev = kde_func(prevShots_rect_prev, **kdeDict)
+        heatScn_rect_prev = vis_ut.kde_func(prevShots_rect_prev, **kdeDict)
         # heatScn_rect_prev = vs.kde_heatmap(prevShots_rect_prev, one_color = heat_color, zero_color = heat_color,
         #                                     bandwidth = bandwidth, resolution = 2, normalize_density = True)
 
@@ -402,7 +358,7 @@ interFrms10_speed_pre, interFrms_10_speed_post = interFrms10_speed[:-intermezzo_
 interFrms_10_speed_post_dim = interFrms_10_speed_post.dim(0.5)
 
 retShots_before_fair_rectified = retShots_before_fair.enforce_direction('Top')
-kde_whole = kde_func(retShots_before_fair_rectified, **kdeDict)
+kde_whole = vis_ut.kde_func(retShots_before_fair_rectified, **kdeDict)
 
 map_frames = 30
 transparence = 0.05 ** (1 / (map_frames - 5))
@@ -518,7 +474,7 @@ diagFrms_all = BGRFrames.from_frames([diagFrms0, diagFrms1, diagFrms2, diagFrms3
 newFrm = interFrms_10_speed_post[0]
 newFrm_dim = interFrms_10_speed_post_dim[0]
 
-kde_whole = kde_func(retShots_before_fair_rectified, **kdeDict)
+kde_whole = vis_ut.kde_func(retShots_before_fair_rectified, **kdeDict)
 
 # View.make(brestCam_full, kde_whole, resolution = 1).snap(over_array = newFrm.array.copy()).show()
 

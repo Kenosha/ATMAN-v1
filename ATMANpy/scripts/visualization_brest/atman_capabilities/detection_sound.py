@@ -145,18 +145,24 @@ bnc_color = const.BGR['soft_yellow']
 now_color = const.BGR['bright_blue']
 now_line_points = 400
 
-start_seconds = 0
+start_seconds = - window_width_in_seconds / 2
 wave_graphs = []
 prob_graphs = []
 spec_graphs = []
 for frame in range(fs_wave, ls_wave + 1): 
-    ### TODO: actually, the waveforms, spectrograms and graphs produced are not lined up with the frame in the middle,
-    # but with the frame at the start... either fix here or just shift the Stream that is shown by half the window_width_in_seconds * 25 frames
     stop_seconds = start_seconds + window_width_in_seconds
-    start_sample = int(start_seconds * sr)
+    
+    start_sample = int(max(start_seconds, 0) * sr) 
     stop_sample = int(stop_seconds * sr)
 
-    snippet = my_wave[start_sample:stop_sample]
+    ### waveform
+    wave_snippet = my_wave[start_sample:stop_sample]
+
+    pad_left = -min(start_seconds, 0) ### to pad with zeros, if there is no waveform (at the very beginning)
+    pad_samples = int(pad_left * sr)
+    pad_snippet = np.zeros(pad_samples)
+
+    snippet = np.concatenate([pad_snippet, wave_snippet])
     xs = np.linspace(0, 1, num = len(snippet))
     waveChart = ScatterChart(xs, snippet, color = wav_color)
 
@@ -176,13 +182,16 @@ for frame in range(fs_wave, ls_wave + 1):
     waveFrm = waveView.snap()
     wave_graphs.append(waveFrm)
 
-    start_frame = fs_wave + start_seconds * 25
-    stop_frame = fs_wave + stop_seconds * 25
+    frames_left_right = (window_width_in_seconds * 25 - 1) / 2
+    start_frame = frame - frames_left_right
+    stop_frame = frame + frames_left_right
+    # start_frame = fs_wave + start_seconds * 25
+    # stop_frame = fs_wave + stop_seconds * 25
     # print(start_frame, stop_frame) ### make sure to choose window width so that these line up with exact frames, not fractional
     start_frame = int(start_frame)
     stop_frame = int(stop_frame)
 
-    sub_audFrm = audFrm.loc[start_frame - 1:stop_frame]
+    sub_audFrm = audFrm.loc[start_frame-1:stop_frame+1]
     subArr = sub_audFrm.values
     prev_val, inner_vals, next_val = subArr[0], subArr[1:-1], subArr[-1]
     
@@ -231,6 +240,8 @@ for frame in range(fs_wave, ls_wave + 1):
     prob_graphs.append(probFrm)
 
     ### get the spectrogram
+    # start_sample = int(start_seconds * sr)
+    # stop_sample = int(stop_seconds * sr)
     # a) central -> what is happening currently
     fs_win = first_window_with_sample(start_sample, params['hop_length'], params['window_length'])
     ls_win = last_window_with_sample(stop_sample, params['hop_length'], params['window_length'])
@@ -337,6 +348,8 @@ myRst = FramesRaster(2, 2)
 myRst_static = FrameRaster(2, 2)
 tl_x, tl_y = int((1 - rescale_ratio) * 1920), 0
 tlPt = Point2D((tl_x, tl_y))
+frame_thickness = 2
+frame_color = const.BGR['bright_grey']
 
 fsFrm = Stream(cap, fs_wave, fs_wave).decap().frames[0].rescale(3)
 fs_wave_graphFrm = wave_graphFrms[0].rescale(rescale_ratio)
@@ -350,7 +363,7 @@ script_line =   """
                 """
 
 myRst_static.add(fs_wave_graphFrm, 0, 0)
-rstFrm = myRst_static.render()
+rstFrm = myRst_static.render().framed(frame_thickness, frame_color)
 
 fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
 fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
@@ -366,7 +379,7 @@ script_line =   """
                 """
 
 myRst_static.add(fs_spec_graphFrm, 0, 1)
-rstFrm = myRst_static.render()
+rstFrm = myRst_static.render().framed(frame_thickness, frame_color)
 
 fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
 fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
@@ -384,7 +397,7 @@ script_line =   """
 
 myRst_static.add(fs_prob_graphFrm, 1, 0)
 myRst_static.add(curr_legFrm, 1, 1)
-rstFrm = myRst_static.render()
+rstFrm = myRst_static.render().framed(frame_thickness, frame_color)
 
 fsFrm_over = overlay(fsFrm, rstFrm, top_left_point = tlPt)
 fsFrms_over = BGRFrames.from_frame(fsFrm_over, 50)
@@ -413,7 +426,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
 ### FADE IN SOUND
@@ -448,7 +461,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 # DecapStream(overFrms, 0, 100).show(ms_between_frames = 100)
 
@@ -480,7 +493,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
 # PLAY SOUND
@@ -510,7 +523,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms = overFrms.slow(2)
 
@@ -543,7 +556,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms = overFrms.slow(2).slow(2)
 
@@ -576,7 +589,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms = overFrms.slow(2).slow(2).slow(2)
 
@@ -611,7 +624,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms8 = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms8 = overFrms8.slow(2).slow(2).slow(2)
 
@@ -640,7 +653,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms4 = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms4 = overFrms4.slow(2).slow(2)
 
@@ -669,7 +682,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms2 = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 overFrms2 = overFrms2.slow(2)
 
@@ -708,7 +721,7 @@ myRst.add(curr_spec_graphFrms, 0, 1, set_size = True)
 myRst.add(curr_prob_graphFrms, 1, 0, set_size = True)
 myRst.add(curr_legFrm, 1, 1, set_size = True)
 
-showFrms = myRst.render()
+showFrms = myRst.render().framed(frame_thickness, frame_color)
 overFrms = overlay(myFrms_full, showFrms, top_left_point = tlPt)
 
 ### FADE OUT SLOWED SOUND SOFTLY

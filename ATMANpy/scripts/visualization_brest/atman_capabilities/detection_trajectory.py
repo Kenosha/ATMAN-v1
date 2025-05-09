@@ -69,10 +69,10 @@ cap = conf['cap']
 segBF = StreamFeature.from_store(vid, sto, featname = 'isRally')
 segBFs = segBF.filter(segBF).split()
 
-
 dim_factor = 0.5
 
-myPnt = allPnts[0]
+point_idx = 0 #191
+myPnt = allPnts.get(idx, point_idx)
 # myPnt.stream_ball(P, cap = cap).show()
 
 sht0, sht1, sht2 = myPnt[0], myPnt[1], myPnt[2]
@@ -246,7 +246,7 @@ def animate_example_trajectory(ypf, zpf, rpf, ballScn, sim_frames = 62, sim_res 
     return outFrms, prevScn, currCam
 
 ### parameters
-sim_res = 25
+sim_res = 0.5 # 25
 sim_frames = 62
 
 ### SIMULATION ANIMATION ###
@@ -614,22 +614,26 @@ rstFrms_init = dimRst.render()
 all_frames.append(rstFrms_init)
 script_lines.append(script_line)
 
+# script_line =   """
+#                     The serve is tracked well, coming off the racket almost flat at 159 km/h, slightly out wide. 
+#                 """ ### 8 seconds
 script_line =   """
-                    The serve is recognized as more of a kick serve than a flat serve; the landing location is very well detected, however. 
-                    The serve is generally more challenging to recognize since it flies faster; 
-                    therefore there are fewer frames for the ball to be tracked in, and the balls are blurry within the frames.
-                    This would very likely be much less of an issue at image qualities higher than the 640-by-360, low-bitrate video analyzed here.
-                """ ### 22 seconds
+                    The serve down the middle is well tracked, even though ATMAN sees it as having a slight bit
+                    more kick than it probably has. 
+                """ # 8 seconds
 rstFrms_slow = rstFrms0.slow(2)
-rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 600)
+rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 200)
 rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow, rstFrms_slow_add])
 
 all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
 
+# script_line =   """
+#                     The forehand return is tremendously well hit, going deep cross-court at 124 km/h and 2500 RPM of topspin.
+#                 """ # 11 seconds
 script_line =   """
-                    Despite these limitations, the return is well recognized as a backhand slice at 77 km/h, 2500 RPM and a launch angle of 10.8 degrees.
-                """ # 10 seconds
+                    The return is well recognized as a backhand slice at 77 km/h, 2500 RPM and a launch angle of 10.8 degrees.
+                """ # 8 seconds
 rstFrms_slow = rstFrms1.slow(2)
 rstFrms_slow_pre = BGRFrames.from_frame(rstFrms_slow[0], 25)
 rstFrms_slow_add = BGRFrames.from_frame(rstFrms_slow[-1], 200)
@@ -639,6 +643,10 @@ rstFrms_slow_all = BGRFrames.from_frames([rstFrms_slow_pre, rstFrms_slow, rstFrm
 all_frames.append(rstFrms_slow_all)
 script_lines.append(script_line)
 
+# script_line =   """
+#                     Pressed for time, Thomas Fabbiano's half-volley reply ends up in the net, leaving the racket at a launch angle of 2 degrees.
+#                     Again, the ball's short flight is tracked very well by ATMAN.
+#                 """ # 13 seconds
 script_line =   """
                     The server's subsequent forehand is tracked perfectly, flying out of the court at 111 km/h at a considerable topspin rate of 3750 RPM.
                 """ # 11 seconds
@@ -655,7 +663,7 @@ from ATMANpy.types.Overlays import reverse_cascade, overlay
 
 script_line = ""
 finRst = myRst.to_frame_raster()
-revRst, revFrms = reverse_cascade(finRst, [(1, 0)], frames_per_element = 15)
+revRst, revFrms = reverse_cascade(finRst, [(1, 0)], frames_per_element = 8)
 all_frames.append(revFrms)
 script_lines.append(script_line)
 
@@ -667,7 +675,7 @@ blackFrm = BGRFrame(np.zeros((1080, 1920, 3), dtype = 'uint8'))
 
 tlPt = Point2D((0, 1080 - y))
 overFrm = overlay(blackFrm, lsFrm, tlPt)
-overFrms = BGRFrames.from_frame(overFrm, 10)
+overFrms = BGRFrames.from_frame(overFrm, 8)
 
 all_frames.append(overFrms)
 script_lines.append(script_line)
@@ -678,6 +686,13 @@ nextPnt2 = allPnts[2]
 
 stm_p1 = nextPnt1.stream(cap = cap)
 stm_p2 = nextPnt2.stream(cap = cap)
+
+# ### prep next points
+# nextPnt1 = allPnts.get(12, point_idx + 1)
+# nextPnt2 = allPnts.get(12, point_idx + 2)
+
+# stm_p1 = nextPnt1.stream(cap = cap)
+# stm_p2 = nextPnt2.stream(cap = cap)
 
 ### next few rallyes --> slowly zoom out at the end of the last shot.
 script_line =   """
@@ -727,46 +742,28 @@ splnFrms1, _ = animate_sequence(scns, start_cam = myCam_full, stop_cam = myCam_f
                                 argument_resolution = 3)
 # DecapStream(splnFrms1, 0, 100).show()
 
-all_frames.append(splnFrms1)
-script_lines.append(script_line)
+splnFrms1_stop_early = splnFrms1[:-50]
+splnFrms1_rest = splnFrms1[-50:]
 
-### transition to the next trajectory
-script_line = ""
-start, stop = stm_p1.stop_frame, stm_p2.start_frame
-
-transStm2 = Stream(cap, start, stop - 1)
-transFrms = transStm2.decap().frames.rescale(3)
-transFrms = vis_ut.speed_up_frames_progressively(transFrms, ramp_up_frames = 25)
-
-all_frames.append(transFrms)
-script_lines.append(script_line)
-
-script_line = ""
-
-point_splns = nextPnt2.feat_spline_cumul(which_endpoint = 'penultimate').values()
-point_splns = [[spln for spln in splns if not vis_ut.has_nan_point_or_is_none(spln)] for splns in point_splns ]
-scns = [Scene([spln.recolor(ball_color).resize(line_thickness) for spln in splns]) for splns in point_splns]
-
-frms = stm_p2.decap().frames[:-1].rescale(3)
-
-splnFrms2, _ = animate_sequence(scns, start_cam = myCam_full, stop_cam = myCam_full, cumulate_argument = False, animate_over = frms,
-                                argument_resolution = 3)
-# DecapStream(splnFrms2, 0, 100).show()
-
-all_frames.append(splnFrms2)
+all_frames.append(splnFrms1_stop_early)
 script_lines.append(script_line)
 
 ### finish up this traj -> not quite done!
-script_line = ""
-start, stop = stm_p2.stop_frame, stm_p2.stop_frame + 100 
+script_line =   """
+                    Having detected lines, players and ball trajectories, 
+                    we now show how the data gathered is accessed, point-by-point, shot-by-shot, directly within ATMAN.
+                """ # 9 seconds
+start, stop = stm_p1.stop_frame, stm_p1.stop_frame + 100 
 
 transStm3 = Stream(cap, start, stop - 1)
 transFrms = transStm3.decap().frames.rescale(3)
 
-transFrms_dimmed = transFrms.dim_progressively(fs_dim_factor = 1, ls_dim_factor = 0)
-# DecapStream(transFrms_dimmed, 0, 100).show()
+jointFrms = BGRFrames.from_frames([splnFrms1_rest, transFrms])
 
-all_frames.append(transFrms_dimmed)
+jointFrms_dimmed = jointFrms.dim_progressively(fs_dim_factor = 1, ls_dim_factor = 0)
+# DecapStream(jointFrms_dimmed, 0, 100).show()
+
+all_frames.append(jointFrms_dimmed)
 script_lines.append(script_line)
 
 vis_ut.show(all_frames)

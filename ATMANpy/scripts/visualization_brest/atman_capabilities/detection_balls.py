@@ -163,7 +163,7 @@ script_lines.append(script_line)
 
 ### the SVM
 # -> idea: show a few frames in super-slo mo with ball probabilities.
-script_line = "To this end, we train a support vector machine to recognize shapes that look like a ball."
+script_line = "To this end, we train a support vector machine to recognize shapes that look like a ball." # 5 secs
 
 duration = 15
 start, stop = stop, stop + duration
@@ -194,6 +194,7 @@ normTable['isBall_proba'] = svm.predict_proba(normTable[features].values)[:,1]
 currStm = Stream(cap, start, stop)
 sub_shadStm = shadStms[2].conform(start, stop) ### (so we can filter out the contours in the shadow...)
 
+hold_for = 12 # 25
 out_frames = []
 for i in range(duration):
     cnts = sub_cntSF[start + i]
@@ -234,7 +235,7 @@ for i in range(duration):
         x, y = where
         mixFrm = mixFrm.put(pStr, where = (3*x, 3*y), size = 2)
 
-    mixFrms = BGRFrames.from_frame(mixFrm, 25)
+    mixFrms = BGRFrames.from_frame(mixFrm, hold_for)
 
     out_frames.append(mixFrms)
 

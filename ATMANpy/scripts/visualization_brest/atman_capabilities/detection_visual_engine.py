@@ -82,6 +82,7 @@ cnf_mod = ppl.config_files.default
   
 avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
 confs = [cnf_mod.get_conf(vid) for vid in avail_vids]
+cap = confs[0]['cap']
 
 vid, sto = confs[0]['video_id'], confs[0]['store_name']
 P = ConstFeature.from_store(vid, sto, featname = 'P').feature
@@ -89,6 +90,9 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 myCam = Camera.calibrated_brest_behind()
 
 courtScn = Scene.make_court(singles_net = False, net_alpha = 0.3)
+
+from ATMANpy.types.Lines import CourtLines, Region
+courtLines = CourtLines.make().add_singles_netline()
 
 ball_color = const.BGR['ball_yellow']
 
@@ -121,6 +125,11 @@ retShots_rect = retShots.enforce_direction('Top')
 slc_retShots = retShots.filter('is_slice_visual')
 top_retShots = retShots.filter('is_topspin_visual')
 
+background_bgr = tuple(BGRFrame.from_video(cap, 1100).array[200, 350] * 0.25) ### the color of the court, dimmed
+contScn = vis_ut.kde_func(retShots_rect, props = [0.3, 0.5, 0.75, 0.9], resolution = 5,
+                            background_bgr = background_bgr,
+                            heat_bgr = const.BGR['leafy_green'], exp_bgr = 2, bandwidth = 60)
+
 ### fade in a point up until moment of return that has Brandon Nakashima on far side.
 pt_idx = 9 ### this is from the detection_filtering script
 
@@ -130,24 +139,6 @@ retShots_rect = retShots.enforce_direction('Top')
 retShots_rect_out = retShots_rect.filter('is_fair', nextShot = None, negate = True)
 retShots_rect_in = retShots_rect.filter('is_fair', nextShot = None)
 
-### two regions -> opponents court, and behind the own baseline... a bit clumsy, but hey
-from ATMANpy.types.Lines import CourtLines, Region
-courtLines = CourtLines.make().add_singles_netline()
-oppReg = courtLines.get_half_region(side = 'Top').scale(1.55)
-ownReg_behind = Region.from_lines([courtLines['Bottom Baseline'], courtLines['Bottom Baseline'].down(300)])
-
-in_res = 2
-bh_res = 2.5
-opp_res = 1.5
-
-heatScn_in = vs.kde_heatmap(retShots_rect_in, one_color = const.BGR['leafy_green'], zero_color = const.BGR['leafy_green'],
-                            bandwidth = 60, resolution = in_res)
-heatScn_out1 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_red'], zero_color = const.BGR['intense_red'],
-                            bandwidth = 30, showReg = ownReg_behind, resolution = bh_res)
-heatScn_out2 = vs.kde_heatmap(retShots_rect_out, one_color = const.BGR['intense_red'], zero_color = const.BGR['intense_red'],
-                            bandwidth = 30, showReg = oppReg, resolution = opp_res)
-heatScn = heatScn_in.combine(heatScn_out1).combine(heatScn_out2)
-
 from ATMANpy.auxil.court import birds_eye_half_court_cam, baseline_side_cam, central_side_cam, back_view_asymmetric_cam
 topCam = birds_eye_half_court_cam(side = 'Bot')
 cnt_sideCam = central_side_cam(from_where = 'right', width = 400)
@@ -155,8 +146,8 @@ bsl_sideCam = baseline_side_cam(which = 'Ad', side = 'Top', width = 200)
 behindCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
 
 ### animation parameters
-back_res = 12 ##1
-shape_res = 7.5 ##1
+back_res = 1 #12# 12 ##1 
+shape_res = 2 #7.5# 7.5 ##1 ### -> double the shape resolution to at least 15, maybe even 20
 
 ######################
 ###### ANIMATION #####
@@ -167,7 +158,7 @@ script_lines = []
 script_line =   """
                     In this example, it might be more instructive to look at the heatmap from above.
                 """
-myFrms, _ = vs.animate_cam_motion(heatScn, start_cam = myCam.resize(3), stop_cam = topCam, num_frames = 50, 
+myFrms, _ = vs.animate_cam_motion(contScn, start_cam = myCam.resize(3), stop_cam = topCam, num_frames = 50, 
                                 background_scene = courtScn, interpolate_func = vs.interpolate_camera_naive,
                                 argument_resolution = shape_res, background_resolution = back_res, foreground_resolution = shape_res)
 
@@ -355,13 +346,17 @@ moveFrms, animDict = vs.animate_cam_motion(Scene([meanBall]), start_cam = behind
                                         **animDict)
 # DecapStream(moveFrms, 0, 100).show(ms_between_frames = 100)
 
+from ATMANpy.types.ShapesTennis3D import Arrow
+
+ax_color = const.BGR['marine_blue']
+
 y_len = 35
 z_len = 25
-yLn = Line3D(meanPt, meanPt.back(y_len))
-zLn = Line3D(meanPt, meanPt.up(z_len))
+yLn = Arrow.make(meanPt, meanPt.back(y_len), rot_angle = np.pi / 2, color = ax_color)
+zLn = Arrow.make(meanPt, meanPt.up(z_len), rot_angle = np.pi / 2, color = ax_color)
 lineScn = Scene([yLn, zLn])
 
-nullLn = Line3D(meanPt, meanPt)
+nullLn = Arrow.make(meanPt, meanPt.back(0.1), color = ax_color)
 nullScn = Scene([nullLn, nullLn])
 
 axisScns = vs.interpolate_scenes(nullScn, lineScn, num_frames = 25)
@@ -372,6 +367,23 @@ axisFrms, animDict = vs.animate_sequence(axisScns, start_cam = ax_sideCam, stop_
                                         argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
                                         **animDict
                                         ) 
+
+### annotate axes
+yPt = (meanPt + meanPt.back(y_len)) / 2
+zPt = (meanPt + meanPt.up(z_len)) / 2
+
+yPt = yPt.annotate('Ground Speed').recolor(ax_color).down(1.5).back(1.5)
+zPt = zPt.annotate('Vertical\nSpeed').recolor(ax_color).front(1)
+
+annotFrms1, animDict = vs.animate_static(axisScns[-1], static_cam = ax_sideCam, background_scene = courtScn,
+                                        argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
+                                        annotated_points = [yPt], num_frames = 10,
+                                        **animDict)
+
+annotFrms2, animDict = vs.animate_static(axisScns[-1], static_cam = ax_sideCam, background_scene = courtScn,
+                                        argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
+                                        annotated_points = [yPt, zPt], num_frames = 10,
+                                        **animDict)
 
 ### show angle
 mean_angle = np.mean(retShots_rect_in.get_launch_angle())
@@ -384,6 +396,7 @@ angPt = meanPt.back(y).up(z)
 ang_color = const.BGR['bright_blue']
 
 angLn = Line3D(meanPt, angPt)
+nullLn = Line3D(meanPt, meanPt)
 
 nullScn = Scene([nullLn.recolor(ang_color).resize(0.15)])
 angScn = Scene([angLn.recolor(ang_color).resize(0.15)])
@@ -391,10 +404,11 @@ angScns = vs.interpolate_scenes(nullScn, angScn, num_frames = 50)
 
 angFrms, animDict = vs.animate_sequence(angScns, start_cam = ax_sideCam, stop_cam = ax_sideCam, background_scene = courtScn,
                                         argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
+                                        annotated_points = [yPt, zPt],
                                         **animDict)
 # DecapStream(angFrms, 0, 100).show()
 
-jntFrms = BGRFrames.from_frames([moveFrms, axisFrms, angFrms])
+jntFrms = BGRFrames.from_frames([moveFrms, axisFrms, annotFrms1, annotFrms2, angFrms])
 # DecapStream(jntFrms, 0, 100).show()
 
 all_frames.append(jntFrms)
@@ -412,6 +426,7 @@ degScns = vs.interpolate_scenes(nullScn.combine(angScn), degScn.combine(angScn),
 
 angFrms_stat, animDict = vs.animate_sequence(degScns, start_cam = ax_sideCam, stop_cam = ax_sideCam, background_scene = courtScn,
                                             argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
+                                            annotated_points = [yPt, zPt],
                                             **animDict)
 # DecapStream(angFrms_stat, 0, 100).show()
 
@@ -419,7 +434,7 @@ angFrms_stat, animDict = vs.animate_sequence(degScns, start_cam = ax_sideCam, st
 degPnt = meanPt.back(0.82 * z_len).up(0.75).annotate(f'Launch Angle: {mean_angle:.1f} deg.').recolor(ang_color)
 
 degFrms, animDict = vs.animate_static(degScns[-1], static_cam = ax_sideCam, background_scene = courtScn, 
-                                    annotated_points = [degPnt], num_frames = 200,
+                                    annotated_points = [degPnt, yPt, zPt], num_frames = 200,
                                     argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
                                     **animDict)
 
@@ -432,9 +447,13 @@ script_line =   """
                     ATMAN, as we have shown, is a start-to-end-framework for the analysis of tennis matches, 
                     a system that, even when fed with comparatively low-quality video of tennis matches, 
                     is able to deal with visual recognition, data search, filtering and analysis, and the visualization of results and insights.
+                    Every facet of a player's game can be analyzed to track progress, reveal vulnerabilities, assist in training design
+                    and help work out a game plan tailored to specific opponents.
                     To see examples of the framework employed in actual case studies, 
                     check out the two analyses on serve and return behaviour supplied along with this video.  
                 """
+
+
 ## for this: rotate camera to a bird's eye view of the court.
 
 from ATMANpy.auxil.court import cnt_2D
