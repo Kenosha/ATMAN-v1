@@ -806,7 +806,9 @@ class Diagram:
                     if origin_point == target_point:
                         row_arrows.append(None)
                     else:
-                        arrLn = Line3D(origin_point, target_point).shorten_by(shorten_arrows, N = 1000, which = 'both')
+                        arrLn = Line3D(origin_point, target_point)
+                        if shorten_arrows > 0:
+                            arrLn = arrLn.shorten_by(shorten_arrows, N = 1000, which = 'both')
                         origin_point, target_point = arrLn.leftPt, arrLn.rightPt
 
                         myArrow = Arrow.make(origin_point, target_point, 
