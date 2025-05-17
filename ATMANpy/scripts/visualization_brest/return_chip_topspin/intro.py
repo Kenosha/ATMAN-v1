@@ -4,17 +4,18 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
+import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
-from ATMANpy.types.Abstract import Points, Point, NullPoint, read_in_data_tables, read_in_all_placeholder_tables
+from ATMANpy.types.Abstract import Points, Point, NullPoint, read_in_data_tables, read_in_placeholder_tables
 from ATMANpy.types.MultiFrames import BGRFrames
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.Lines import CourtLines, Line
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Features import ConstFeature
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
-from ATMANpy.types.Overlays import overlay
+from ATMANpy.types.Overlays import overlay, overlay_center
 from ATMANpy.types.Shapes3D import Region3D
 
 from statsmodels.discrete.discrete_model import Logit
@@ -47,7 +48,7 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 ######### READ IN DATA ############
 ###################################
 dataTable = read_in_data_tables(confs)
-nullTable = read_in_all_placeholder_tables(confs)
+nullTable = read_in_placeholder_tables(confs)
 
 dataPnts = Points.from_datatable(dataTable, split_by_match = False)
 nullPnts = Points.from_placeholder_table(nullTable)
@@ -60,6 +61,17 @@ firstPnts = dataPnts.filter('is_first_serve')
 def get_returned_balls(myPnt):
     return len(myPnt) > 1
 all_retPnts = firstPnts.filter(get_returned_balls)
+
+##################################
+############### CAM ##############
+##################################
+
+M_ext = ConstFeature.from_store(vid, sto, featname = 'M_ext').feature
+M_int = ConstFeature.from_store(vid, sto, featname = 'M_int').feature
+
+brestCam_third = Camera(M_int, M_ext, (640, 360))
+brestCam_half = brestCam_third.resize(1.5)
+brestCam_full = brestCam_third.resize(3)
 
 ############################################
 ####### FILTER OUT NON-DECISIVE POINTS #####
@@ -88,19 +100,19 @@ dec_winSer = all_winSer[all_winSer != 0].reset_index(drop = True)
 THRESHOLD_SPEED = 140
 THRESHOLD_FRAMES = 35
 
-retPnts = dec_retPnts.filter(vis_ut.is_not_pathological, threshold_speed = THRESHOLD_SPEED, threshold_frames = THRESHOLD_FRAMES)
-pathPnts = dec_retPnts.filter(vis_ut.is_pathological, threshold_speed = THRESHOLD_SPEED, threshold_frames = THRESHOLD_FRAMES)
+retPnts_pre = dec_retPnts.filter(vis_ut.is_not_pathological, threshold_speed = THRESHOLD_SPEED, threshold_frames = THRESHOLD_FRAMES)
+pathPnts_pre = dec_retPnts.filter(vis_ut.is_pathological, threshold_speed = THRESHOLD_SPEED, threshold_frames = THRESHOLD_FRAMES)
 
 pathSer = pd.Series(dec_retPnts.apply(vis_ut.is_pathological))
 winSer = dec_winSer[pathSer != 1].reset_index(drop = True)
 
 ##### ENFORCE DIRECTION
-change_direction_array = retPnts.apply('is_top_to_bot', dtype = bool) ### for convenience, store whether we'll change the direction of the point.
-indices = [(pt.get_match_index(), pt.get_point_index()) for pt in retPnts]
+change_direction_array = retPnts_pre.apply('is_top_to_bot', dtype = bool) ### for convenience, store whether we'll change the direction of the point.
+indices = [(pt.get_match_index(), pt.get_point_index()) for pt in retPnts_pre]
 idxFrm = pd.DataFrame(indices, columns = ['match_idx', 'point_idx'])
 idxFrm['is_top_to_bot'] = change_direction_array
 
-retPnts = retPnts.enforce_direction('Bot') ### Server is at the Bottom, Receiver at the Top
+retPnts = retPnts_pre.enforce_direction('Bot') ### Server is at the Bottom, Receiver at the Top
 indices_new = [(pt.get_match_index(), pt.get_point_index()) for pt in retPnts]
 idxFrm_new = pd.DataFrame(indices, columns = ['match_idx', 'point_idx'])
 idxFrm_new = idxFrm_new.merge(idxFrm, on = ['match_idx', 'point_idx'])
@@ -576,6 +588,14 @@ table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1, 'resolution': TABLE_RESOLUTION,
                         }
 
+table_kwargs_mid =  {   'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
+                        'skip_after_how_many_symbols': 15, 'dimensions': (int(1.75 * x), int(1.75 * y)),
+                        'skeleton_shrinkage': 0.2, 'skeleton_vertical_offset': 1, 
+                        # 'title_vertical_offset': 0, 'title_horizontal_offset': 3.5,
+                        'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2,
+                        'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1, 'resolution': TABLE_RESOLUTION,
+                        }
+
 table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False, 
                         'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
                         'skip_after_how_many_symbols': 15, 'dimensions': (int(2.7 * x), int(2.7 * y)),
@@ -589,9 +609,9 @@ table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False,
 t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
 c0, c1, c2, c3 = chips_naive['total'], chips_smart['total'], chips_smart_bal['total'], chips_smart_bal_len['total']
 
-tdict = {'Unadjusted': t0}
-cdict = {'Unadjusted': c0}
-table_data = {index_name_t: tdict, index_name_c: cdict}
+tDict = {'Unadjusted': t0}
+cDict = {'Unadjusted': c0}
+table_data = {index_name_t: tDict, index_name_c: cDict}
 
 initial_naive_table = Table(table_data, **table_kwargs_small, title = title, header_text_size = 0)
 # initial_naive_table.render().show()
@@ -599,23 +619,23 @@ initial_naive_table = Table(table_data, **table_kwargs_small, title = title, hea
 naive_table = Table(table_data, **table_kwargs_large, title = title)
 naive_table.render().show()
 
-tdict = {'Unadjusted': t0, '+Choice Adj.': t1}
-cdict = {'Unadjusted': c0, '+Choice Adj.': c1}
-table_data = {index_name_t: tdict, index_name_c: cdict}
+tDict = {'Unadjusted': t0, '+Choice Adj.': t1}
+cDict = {'Unadjusted': c0, '+Choice Adj.': c1}
+table_data = {index_name_t: tDict, index_name_c: cDict}
 
 smart_table = Table(table_data, **table_kwargs_large, title = title)
 smart_table.render().show()
 
-tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2}
-cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2}
-table_data = {index_name_t: tdict, index_name_c: cdict}
+tDict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2}
+cDict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2}
+table_data = {index_name_t: tDict, index_name_c: cDict}
 
 smart_bal_table = Table(table_data, **table_kwargs_large, title = title)
 smart_bal_table.render().show()
 
-tdict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2, '+Attrib. Adj.': t3}
-cdict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2, '+Attrib. Adj.': c3}
-table_data = {index_name_t: tdict, index_name_c: cdict}
+tDict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2, '+Attrib. Adj.': t3}
+cDict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2, '+Attrib. Adj.': c3}
+table_data = {index_name_t: tDict, index_name_c: cDict}
 
 smart_bal_len_table = Table(table_data, **table_kwargs_large, title = title)
 smart_bal_len_table.render().show()
@@ -633,24 +653,73 @@ table_offsetPt = Point2D((c_d, r_d))
 num_chip, num_tops = regFrm['is_chipped'].sum(), (~regFrm['is_chipped']).sum()  
 num_tot = num_tops + num_chip
 
-str_chips = f'{num_chip:>4} ({num_chip/num_tot:.0%})'
-str_tops = f'{num_tops:>4} ({num_tops/num_tot:.0%})'
+str_chips0 = f'{num_chip:>4}'
+str_tops0 = f'{num_tops:>4}'
 
-tdict = {'Sample Size': str_tops}
-cdict = {'Sample Size': str_chips}
+str_chips1 = f'{num_chip:>4} ({num_chip/num_tot:.0%})'
+str_tops1 = f'{num_tops:>4} ({num_tops/num_tot:.0%})'
+
+tDict = {'Sample Size': str_tops1}
+cDict = {'Sample Size': str_chips1}
 totDict = {'Sample Size': str(num_tot)}
-table_data = {index_name_t: tdict, index_name_c: cdict, index_name_a: totDict}
 
-sample_table = Table(table_data, **table_kwargs_small, null_columns = 1)
-sample_table.render().show()
+table_data = {'': {'Sample Size': ''}, ' ': {'Sample Size': ''}, 'Total': totDict}
+null_table = Table(table_data, **table_kwargs_mid, null_columns = 1,
+                      title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                      title_horizontal_offset = 3.5)
+null_table.render().show()
 
-tdict = {'Sample Size': str_tops, 'Returner Win%': t0}
-cdict = {'Sample Size': str_chips, 'Returner Win%': c0}
+table_data = {index_name_t: tDict, ' ': {'Sample Size': ''}, 'Total': totDict}
+tops_table = Table(table_data, **table_kwargs_mid, null_columns = 1,
+                      title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                      title_horizontal_offset = 3.5)
+tops_table.render().show()
+
+table_data = {index_name_t: tDict, index_name_c: cDict, index_name_a: totDict}
+chip_table = Table(table_data, **table_kwargs_mid, null_columns = 1,
+                      title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                      title_horizontal_offset = 3.5)
+chip_table.render().show()
+
+tDict = {'Sample Size': str_tops1, 'Returner Win%': ''}
+cDict = {'Sample Size': str_chips1, 'Returner Win%': ''}
+totDict = {'Sample Size': str(num_tot), 'Returner Win%': ''}
+table_data = {index_name_t: tDict, index_name_c: cDict, index_name_a: totDict}
+
+sample_and_win_table_null = Table(table_data, **table_kwargs_mid,
+                            title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                            title_horizontal_offset = 7.5)
+sample_and_win_table_null.render().show()
+
+tDict = {'Sample Size': str_tops1, 'Returner Win%': t0}
+cDict = {'Sample Size': str_chips1, 'Returner Win%': ''}
+totDict = {'Sample Size': str(num_tot), 'Returner Win%': ''}
+table_data = {index_name_t: tDict, index_name_c: cDict, index_name_a: totDict}
+
+sample_and_win_table_tops = Table(table_data, **table_kwargs_mid,
+                            title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                            title_horizontal_offset = 7.5)
+sample_and_win_table_tops.render().show()
+
+tDict = {'Sample Size': str_tops1, 'Returner Win%': t0}
+cDict = {'Sample Size': str_chips1, 'Returner Win%': c0}
+totDict = {'Sample Size': str(num_tot), 'Returner Win%': ''}
+table_data = {index_name_t: tDict, index_name_c: cDict, index_name_a: totDict}
+
+sample_and_win_table_chip = Table(table_data, **table_kwargs_mid,
+                            title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                            title_horizontal_offset = 7.5)
+sample_and_win_table_chip.render().show()
+
+tDict = {'Sample Size': str_tops1, 'Returner Win%': t0}
+cDict = {'Sample Size': str_chips1, 'Returner Win%': c0}
 totDict = {'Sample Size': str(num_tot), 'Returner Win%': (num_chip * c0 + num_tops * t0) / num_tot}
-table_data = {index_name_t: tdict, index_name_c: cdict, index_name_a: totDict}
+table_data = {index_name_t: tDict, index_name_c: cDict, index_name_a: totDict}
 
-sample_and_win_table = Table(table_data, **table_kwargs_small)
-sample_and_win_table.render().show()
+sample_and_win_table_all = Table(table_data, **table_kwargs_mid,
+                            title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                            title_horizontal_offset = 7.5)
+sample_and_win_table_all.render().show()
 
 ###############################################
 ###### GET HIGH AND LOW PROPENSITY CHIPS ######
@@ -658,11 +727,10 @@ sample_and_win_table.render().show()
 dirFrm = regFrm[(regFrm['is_top_to_bot'])]
 
 high_pred_exFrm = dirFrm.sort_values('pred_is_chipped').iloc[-8:]
-high_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).decap().frames for idx in high_pred_exFrm.index]
+high_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).join().maybe_to_stream().decap().frames for idx in high_pred_exFrm.index]
 
 low_pred_exFrm = dirFrm[dirFrm.is_chipped].sort_values('pred_is_chipped').iloc[:8]
-low_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).decap().frames for idx in low_pred_exFrm.index]
-
+low_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).join().maybe_to_stream().decap().frames for idx in low_pred_exFrm.index]
 
 ###################################
 #### FRAMES RASTER WITH TABLE #####
@@ -677,13 +745,18 @@ script_lines = []
 
 blankFrm = BGRFrame(np.zeros((1080, 1920, 3), dtype = 'uint8'))
 
+# script_line =   """
+#                     At the most basic level, there are two ways to return a first-serve. 
+#                     A player can either adjust his grip to his or her preferred backhand or forehand grip, 
+#                     and attempt to return the ball with topspin,
+#                     or he or she can keep a neutral, continental grip, and chip the ball back into play.
+#                     The resulting chip will have underspin, but, as we will see in the course of this analysis, 
+#                     it will have typically less RPM, greater net clearance, and lower speed than a slice employed in a rally.
+#                 """
+
 script_line =   """
-                    At the most basic level, there are two ways to return a first-serve. 
-                    A player can either adjust his grip to his or her preferred backhand or forehand grip, 
-                    and attempt to return the ball with topspin,
-                    or he or she can keep a neutral, continental grip, and chip the ball back into play.
-                    The resulting chip will have underspin, but, as we will see in the course of this analysis, 
-                    it will have typically less RPM, greater net clearance, and lower speed than a slice employed in a rally.
+                    At the most basic level, there are two ways to return a first-serve: 
+                    a player can return the ball with topspin, or chip the ball back into play with backspin. 
                 """
 
 titleStr = 'On the Effectiveness of the Chipped Return'
@@ -694,123 +767,173 @@ all_frames.append(titleFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The chipped return is infrequently employed by choice; 
-                    in our sample of 1,451 first-serve returns, only 28% of first-serves are returned as a chip, 
-                    and even fewer, as we will see, by choice.
-                    However, some highly successful players consistently use it as a tool 
-                    to either neutralize the rally with a deep, floating chip, or draw the server into the court with a shallow, low-bouncing chip.
+                    The chipped return is infrequently employed; 
+                    in our sample of 1,451 first-serve returns observed in 20 matches of the 2021 Brest Challenger Tournament...
+                """
+fadeFrms = titleFrms[:50].dim_progressively()
+blackFrms = BGRFrames.from_frame(BGRFrame.make_black(), 25)
 
+tabFrm = overlay_center(BGRFrame.make_black(), null_table.render())
+tabFrms = BGRFrames.from_frame(tabFrm, 25)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, blackFrms, tabFrms])
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    72% of first serves are returned with topspin, ...
+                """
+tabFrm = overlay_center(BGRFrame.make_black(), tops_table.render())
+tabFrms = BGRFrames.from_frame(tabFrm, 25)
+all_frames.append(tabFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... and only 28% of first-serves are returned as a chip, 
+                    and even fewer, as we will see, are chipped back by choice.
+                """
+tabFrm = overlay_center(BGRFrame.make_black(), chip_table.render())
+tabFrms = BGRFrames.from_frame(tabFrm, 25)
+all_frames.append(tabFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    However, some highly successful players consistently use the chipped return as a tool 
+                    to either neutralize the rally with a deep, floating chip, 
+                    or draw the server into the court with a shallow, low-bouncing chip.
+                """
+stillFrms = BGRFrames.from_frame(tabFrm, 200)
+fadeFrms = BGRFrames.from_frame(tabFrm, 100).dim_progressively()
+jointFrms = BGRFrames.from_frames([stillFrms, fadeFrms])
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
                     The primary goal of this analysis is to take a good look at these chip return varieties, 
                     and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
                 """
 
-baseRst = FrameRaster(3, 3, borders = None)
-baseRst.add(sample_table.render(), 1, 1)
-baseFrm = baseRst.render()
-# baseFrm.show()
-baseFrms = BGRFrames.from_frame(baseFrm, repetitions = STATIC_FRAMES)
-all_frames.append(baseFrms)
+someStr = "The primary goal of this analysis is to\nunderstand the effectiveness of\nthe chip return compared to the topspin return,\nas measured by\nthe expected probability to win the point."
+
+import cv2 as cv
+
+def typewriter_effect(someStr, frames_per_char = 2,
+                      text_where = (800, 500), text_color = const.BGR['leafy_green'], text_size = 1, text_font = cv.FONT_HERSHEY_PLAIN,
+                      align = 'left', manual_aligners = None):
+    emptyFrm = BGRFrame.make_black()
+    
+    lines = someStr.split('\n')
+
+    ### figure out how to center text
+    if align == 'left':
+        spaces = [0 for l in lines]
+    elif align == 'center':
+        lens = [len(l) for l in lines]
+        m = max(lens)
+        spaces = [(m - l) // 2 for l in lens]
+    elif align == 'right':
+        lens = [len(l) for l in lines]
+        m = max(lens)
+        spaces = [(m - l) for l in lens]
+
+    if manual_aligners is not None:
+        spaces = [s + m for s, m in zip(spaces, manual_aligners)]
+
+    out_frames = []
+    prev_lines = ['']
+    for idx in range(len(lines)):
+        lineStr = lines[idx]
+        num_spaces = spaces[idx]
+
+        remaining_lines = len(lines) - len(prev_lines) + 1
+        # prevStr = '\n' * remaining_lines + '\n'.join(prev_lines) 
+        prevStr = '\n'.join(prev_lines)
+
+        curr_chars = []
+        for curr_char in lineStr:
+            curr_chars.append(curr_char)
+
+            currStr = ' ' * num_spaces + ''.join(curr_chars)
+            currFrm = emptyFrm.put(prevStr + '\n' + currStr, where = text_where, color = text_color, size = text_size, font = text_font)
+            currFrms = BGRFrames.from_frame(currFrm, frames_per_char)
+            out_frames.append(currFrms)
+        
+        prev_lines.append(currStr)
+    
+    return BGRFrames.from_frames(out_frames)
+
+typeFrms = typewriter_effect(someStr, frames_per_char = 1, 
+                             text_where = (520, 420), text_color = const.BGR['bright_grey'], text_size = 1, text_font = cv.FONT_HERSHEY_TRIPLEX,
+                             align = 'center', manual_aligners = [2, 2, 0, 2, 2])
+# DecapStream(typeFrms, 0, 100).show()
+# typeFrms[-1].show()
+
+fadeFrms = BGRFrames.from_frame(typeFrms[-1], 50).dim_progressively()
+jointFrms = BGRFrames.from_frames([typeFrms, fadeFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   "At first glance, it doesn't look good for the chipped return."
+
+tabFrm = overlay_center(BGRFrame.make_black(), sample_and_win_table_null.render())
+tabFrms = BGRFrames.from_frame(tabFrm, 25)
+all_frames.append(tabFrms)
+script_lines.append(script_line)
+
+script_line =   "On average, in our sample, the returner wins around 40% of points whenever he returns topspin, ..."
+
+tabFrm = overlay_center(BGRFrame.make_black(), sample_and_win_table_tops.render())
+tabFrms = BGRFrames.from_frame(tabFrm, 25)
+all_frames.append(tabFrms)
+script_lines.append(script_line)
+
+script_line =   "... versus only around 20% of points when he chips the ball back."
+
+tabFrm = overlay_center(BGRFrame.make_black(), sample_and_win_table_chip.render())
+tabFrms = BGRFrames.from_frame(tabFrm, 25)
+all_frames.append(tabFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    At first glance, it doesn't look good for the chipped return. 
-                    On average, in our sample, the returner wins around 40% of points whenever he returns topspin, 
-                    versus only around 20% of points when he chips the ball back.
-
                     However, this view is slightly unfair toward the chipped return. 
                     To understand why, carefully consider these eight returns, and what they have in common.
                 """
-baseRst.add(sample_and_win_table.render(), 1, 1)
-baseFrm = baseRst.render()
-# baseFrm.show()
-baseFrms = BGRFrames.from_frame(baseFrm, repetitions = STATIC_FRAMES)
-all_frames.append(baseFrms)
+tabFrm = overlay_center(BGRFrame.make_black(), sample_and_win_table_all.render())
+tabFrms = BGRFrames.from_frame(tabFrm, 25)
+all_frames.append(tabFrms)
 script_lines.append(script_line)
 
 script_line = ""
-baseRst = FramesRaster(3, 3, borders = None)
-baseRst.add(sample_and_win_table.render(), 1, 1)
-finalRst, cascFrms = frame_cascade(high_pred_exFrms, baseRst)
-# DecapStream(cascFrms, 0, 100).show()
-# cascFrms[-1].show()
-all_frames.append(cascFrms)
+
+high_pred_exFrms_tight = [myFrms[:-15] for myFrms in high_pred_exFrms] ## shorten the example frames a bit, to tighten the flow
+silentFrms = BGRFrames.from_frames(high_pred_exFrms_tight[:3]).rescale(3)
+all_frames.append(silentFrms)
 script_lines.append(script_line)
 
 script_line =   """
                     All these returns have three things in common. They're played off the backhand, on the stretch, as a chip!
-                    In fact, there is virtually no way to return these with topspin; 
-                    and not just because a great majority of players play a two-handed topspin backhand, and the serve can only be reached with one hand.
+                    In fact, there is virtually no way to return these with topspin.
                     On these serves, the returner has no choice: he is forced to block the ball back in, 
                     usually resulting in a short chip that is easy to attack if it lands fair at all.
                     
-                    On these returns, then, there is nothing to discuss, for the lack of choice. 
+                    For the lack of choice, there is nothing to discuss:
                     The serve is almost an ace - do what you can, chip it back in, and pray for the best.
                     
                     What can be discussed are returns that are chipped by choice: given that the returner could either play a topspin or a chip return, 
                     we want to assess the quality of said choice. 
-                    We want to find out how one should chip, or how one should play topspin, to maximize one's chances of winning the point. 
                     
-                    Therefore, the ability to make a choice matters, and we shall have to put in some work to find out on which serves the returner actually had a choice.
+                    Therefore, we shall have to put in some work to find out on which serves the returner actually had a choice.
                 """
-staticFrms = BGRFrames.from_frame(cascFrms[-1], STATIC_FRAMES)
-all_frames.append(staticFrms)
-script_lines.append(script_line)
 
-script_line = ""
-revRst, revFrms = reverse_cascade(finalRst, keep_which = [(1, 1)], acceleration = 1.2, frames_per_element = 15)
-# DecapStream(revFrms, 0, 100).show()
-# revFrms[-1].show()
-
-all_frames.append(revFrms)
+voicedFrms = BGRFrames.from_frames(high_pred_exFrms_tight[3:]).rescale(3)
+all_frames.append(voicedFrms)
 script_lines.append(script_line)
 
 #################################
 ##### PROPENSITY SCORE MODEL ####
 #################################
  
-RESOLUTION = 10
-renameDict = {  'serve_speed': 'Serve Speed', 'serve_depth': 'Return Depth', 'serve_height': 'Bounce Height', 
-                'ret_is_back': 'Returner uses Backhand', 'serve_dist_sq': 'Stretch Distance'}
-fitted_model = logReg
-max_line_thickness = 2.5
-thickness_taper = 0.05
-shape_offset = 0.1
-model_name = 'Propensity to Chip'
-
-
-outDiag = vis_ut.model_to_diagram(fitted_model, renameDict = renameDict, model_name = 'Propensity to Chip', 
-                                    max_line_thickness = 3, resolution = RESOLUTION, shape_offset = shape_offset, 
-                                    shape_color = const.BGR['marine_blue'], text_color = const.BGR['bright_grey'])
-
-for col in range(5):
-    outDiag[0, col][0].text_vertical_offset = -8
-
-outDiag[0, 0][0].text_horizontal_offset = 6
-outDiag[0, 1][0].text_horizontal_offset = 4
-outDiag[0, 2][0].text_horizontal_offset = 9
-outDiag[0, 3][0].text_horizontal_offset = 9
-outDiag[0, 4][0].text_horizontal_offset = 10
-# outDiag[0, 5][0].text_horizontal_offset = 4
-# outDiag[0, 6][0].text_horizontal_offset = 5
-
-outDiag[1, 0][0].text_skip_after_how_many_symbols = None
-outDiag[1, 0][0].text_horizontal_offset = 40
-outDiag[1, 0][0].text_vertical_offset = 0
-outDiag[1, 0][0].text_size = 2
-outDiag[1, 0][0].text_thickness = 2
-
-### staggered diagram
-def remove_all_diagram_shapes_after_index(myDiag, idx):
-    myDiag.shapes[0] = [shape for i, shape in enumerate(myDiag.shapes[0]) if i < idx]
-    myDiag.arrows[0] = [arrow for i, arrow in enumerate(myDiag.arrows[0]) if i < idx]
-    return myDiag
-
-outDiags = [remove_all_diagram_shapes_after_index(outDiag.deepcopy(), idx) for idx in range(6)]
-
-for myDiag in outDiags:
-    diagFrm = myDiag.render()
-    diagFrm.show()
-
 ### Propensity Wording:
 # To be able to differentiate between forced chips and choice chips, we employ a technique called Propensity Score Matching, or PSM for short.
 # PSM calculates the propensity to chip a ball given a set of explanatory variables.
@@ -824,16 +947,439 @@ for myDiag in outDiags:
 # (maybe show a continuum line: low propensity -> choice; high propensity -> forced)
 # To illuminate this, consider the 8 lowest propensity chipped returns.
 
-
 script_line =   """
                     To be able to differentiate between forced chips and choice chips, 
                     we employ a technique called Propensity Score Matching, or PSM for short.
                 """
-blankFrms = BGRFrames.from_frame(blankFrm, STATIC_FRAMES)
-all_frames.append(blankFrms)
+
+ball_color = const.BGR['ball_yellow']
+which_example = 745
+
+high_pred_exSer = dirFrm.sort_values('pred_is_chipped').iloc[which_example]
+which_example_idx = high_pred_exSer.name
+srvShot = retPnts_pre[int(which_example_idx)][0]
+srvFrms = srvShot.stream(confs = confs).decap().frames.rescale(3)
+
+srvFrms_pre = srvShot.stream(confs = confs).widen(50).decap().frames[:50].rescale(3)
+
+shot_splines = srvShot.feat_spline(which_endpoint = 'penultimate').values()
+serveScns = [Scene([spln.recolor(ball_color).resize(1.5)]) for spln in shot_splines if spln is not None]
+serveScns = [Scene.make_empty(), *serveScns]
+len(serveScns)
+
+### interpolate between last voicedFrms and first srvFrms
+itplFrms = vs.interpolate_frames(voicedFrms[-1], srvFrms_pre[0], 50)
+
+### get the stats
+speed = high_pred_exSer['serve_speed']
+depth = high_pred_exSer['serve_depth']
+height = high_pred_exSer['serve_height']
+is_back = high_pred_exSer['ret_is_back']
+ret_dist = high_pred_exSer['ret_dist']
+pred = high_pred_exSer['pred_is_topspin']
+
+### read players to be able to stagger their shapes
+from ATMANpy.types.Features import StreamFeatures
+from ATMANpy.types.Frames import MaskFrame
+from ATMANpy.types.Contours import Contours
+
+mtc_idx = srvShot.get_match_index()
+vid, sto = confs[mtc_idx]['video_id'], confs[mtc_idx]['store_name']
+plSF = StreamFeatures.from_store(vid, sto, featnameList = ['botPlayerCnt', 'topPlayerCnt'])
+mySF = plSF[srvShot.get_frames()[:-1]]
+
+prevMask = MaskFrame.false(srvFrms[-1])
+prevFrm = None
+out_frames = []
+for frameNum, frame in zip(mySF, srvFrms):
+    featDict = mySF[frameNum]
+    botCnt, topCnt = featDict['botPlayerCnt'].rescale(3), featDict['topPlayerCnt'].rescale(3)    
+    
+    darkMask = MaskFrame.make_black()
+    playMask = darkMask.within_contour(topCnt) | darkMask.within_contour(botCnt)
+    maskFrm = frame.mask(playMask)
+
+    if prevFrm is not None:
+        currFrm = prevFrm.mask(prevMask) + frame.mask(~prevMask)
+    else:
+        currFrm = frame
+    
+    out_frames.append(currFrm)
+
+    prevMask = prevMask | playMask
+    prevFrm = currFrm
+    
+outFrms = BGRFrames.from_single_frames(out_frames)    
+DecapStream(outFrms, 0, 100).show()
+outFrms[-1].show()
+
+arg_res = 20
+
+animFrms, animDict = vs.animate_sequence(serveScns, start_cam = brestCam_full, stop_cam = brestCam_full, 
+                                animate_over = outFrms, cumulative_foreground_transparence = 0.9, cumulate_argument = True,
+                                argument_resolution = arg_res, foreground_resolution = arg_res)
+DecapStream(animFrms, 0, 100).show(ms_between_frames = 40)
+animFrms[-1].show()
+
+### dim the frame, without dimming the features
+prevScn = animDict['previous_foreground_scene']
+
+dim_frames = 25
+dim_backFrms = BGRFrames.from_frame(outFrms[-1], dim_frames).dim_progressively(1, 0.5)
+dimFrms, animDict = vs.animate_sequence([prevScn] * dim_frames, start_cam = brestCam_full, stop_cam = brestCam_full, 
+                                        argument_resolution = arg_res, foreground_resolution = arg_res,
+                                        animate_over = dim_backFrms)
+DecapStream(dimFrms, 0, 100).show(ms_between_frames = 40)
+dimFrms[-1].show()
+
+jointFrms = BGRFrames.from_frames([itplFrms, srvFrms_pre, animFrms, dimFrms])
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
-diagRaster = FrameRaster(3, 3, borders = None)
+script_line =   """
+                    The PSM looks at the speed of the serve...
+                """
+
+### speed arrow:
+from ATMANpy.types.ShapesTennis3D import Arrow
+arr_color = const.BGR['sign_orange']
+text_color = const.BGR['salmon_pink']
+arg_lum = 1.25
+
+arr_params = {'hat_length': 10, 'thickness': 1, 'color': arr_color}
+
+speedLn = serveScns[1][0]
+speedLn = speedLn.lengthen_by(2, which = 'right')
+speedArr = Arrow.make(speedLn.leftPt, speedLn.rightPt, **arr_params)
+
+speedPt = (speedLn.leftPt + speedLn.rightPt) / 2
+speedPt = speedPt.annotate(f'Speed: {speed:.0f} km/h').recolor(text_color)
+speedPt = speedPt.right(10).down(5)
+
+statFrms, animDict = vs.animate_static(speedArr, static_cam = brestCam_full, animate_over = dimFrms[-1],
+                                        annotated_points = [speedPt], 
+                                        argument_resolution = arg_res, foreground_resolution = arg_res,
+                                        argument_luminosity = arg_lum, num_frames = 25,
+                                        **animDict)
+# statFrms[-1].show()
+
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... the height of the bounce...
+                """
+
+### height arrow:
+from ATMANpy.types.Shapes3D import Point3D, Line3D
+x, y, z = srvShot.get_apex_post_bounce()
+postPnt = Point3D((x, y, z))
+postPnt_ground = Point3D((x, y, 0))
+
+heightLn = Line3D(postPnt_ground, postPnt).shorten_by(0.15, which = 'both')
+postPnt_ground, postPnt = heightLn.leftPt, heightLn.rightPt
+
+heightArr = Arrow.make(postPnt_ground, postPnt, **arr_params)
+
+heightPt = (postPnt + postPnt_ground) / 2
+heightPt = heightPt.annotate(f'Bounce Height: {height:.1f} m').recolor(text_color)
+heightPt = heightPt.right(10).up(7.5)
+
+statFrms, animDict = vs.animate_static(heightArr, static_cam = brestCam_full, animate_over = dimFrms[-1],
+                                annotated_points = [heightPt], argument_resolution = arg_res, foreground_resolution = arg_res,
+                                argument_luminosity = arg_lum, num_frames = 25,
+                                **animDict)
+# statFrms[-1].show()
+
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    ... how deep the returner is positioned ...
+                """
+
+### depth arrow:
+x, y = srvShot.recPlayer.get_initial_position()
+y_baseline = CourtLines.make()['Bottom Baseline'].leftPt.y
+
+depthPnt = Point3D((x, y, 0))
+depthPnt_base = Point3D((x, y_baseline, 0))
+
+depthLn = Line3D(depthPnt_base, depthPnt).shorten_by(0.15, which = 'both')
+depthPnt_base, depthPnt = depthLn.leftPt, depthLn.rightPt
+
+depthArr = Arrow.make(depthPnt_base, depthPnt, **arr_params)
+
+depthPt = (depthPnt + depthPnt_base) / 2
+depthPt = depthPt.annotate(f'Return Depth: {depth:.1f} m').recolor(text_color)
+depthPt = depthPt.right(10)
+
+statFrms, animDict = vs.animate_static(depthArr, static_cam = brestCam_full, animate_over = dimFrms[-1],
+                                annotated_points = [depthPt], argument_resolution = arg_res, foreground_resolution = arg_res,
+                                argument_luminosity = arg_lum, num_frames = 25,
+                                **animDict)
+# statFrms[-1].show()
+
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    ... whether the serve is to the backhand or forehand ...
+                """
+### bh arrow
+x, y = srvShot.recPlayer.get_initial_position()
+
+retPnt = Point3D((x, y, 0)).back(25)
+retPnt_bh = retPnt.left(70)
+
+retLn = Line3D(retPnt, retPnt_bh).shorten_by(0.1, which = 'both')
+retPnt, retPnt_bh = retLn.leftPt, retLn.rightPt
+
+retArr = Arrow.make(retPnt, retPnt_bh, **arr_params)
+
+retPt = (retPnt + retPnt_bh) / 2
+retPt = retPt.annotate(f'Hit to Backhand').recolor(text_color)
+retPt = retPt.back(10).left(15)
+
+statFrms, animDict = vs.animate_static(retArr, static_cam = brestCam_full, animate_over = dimFrms[-1],
+                                annotated_points = [retPt], argument_resolution = arg_res, foreground_resolution = arg_res,
+                                argument_luminosity = arg_lum, num_frames = 25,
+                                **animDict)
+# statFrms[-1].show()
+
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... and how far the returner has to stretch to get to the ball.
+                """
+
+### dist arrow
+x, y = srvShot.recPlayer.get_initial_position()
+x2, y2 = srvShot.get_ball_last_position()[:2]
+
+retPnt = Point3D((x, y, 0)).back(10)
+hitPnt = Point3D((x2, y2, 0)).back(10)
+
+stretch_dist = retPnt.distance_to(hitPnt) / const.SCALE * const.FOOT_TO_METER
+
+stretchLn = Line3D(retPnt, hitPnt).shorten_by(0.1, which = 'both')
+retPnt, hitPnt = stretchLn.leftPt, stretchLn.rightPt
+
+stretchArr = Arrow.make(retPnt, hitPnt, **arr_params)
+
+stretchPt = (retPnt + hitPnt) / 2
+stretchPt = stretchPt.annotate(f'Stretch Distance: {stretch_dist:.1f} m').recolor(text_color)
+stretchPt = stretchPt.back(15).left(55)
+
+statFrms, animDict = vs.animate_static(stretchArr, static_cam = brestCam_full, animate_over = dimFrms[-1],
+                                annotated_points = [stretchPt], argument_resolution = arg_res, foreground_resolution = arg_res,
+                                argument_luminosity = arg_lum, num_frames = 25,
+                                **animDict)
+# statFrms[-1].show()
+
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    From this data, the PSM predicts the probability of the ball being chipped back by the returner, 
+                    as opposed to being returned with topspin.
+                """
+
+### fade into virtual court
+back_res = 5
+arrScn_pre = Scene([speedArr, depthArr, heightArr, retArr, stretchArr])
+arrPts_pre = [speedPt, depthPt, heightPt, retPt, stretchPt]
+virtFrms, animDict2 = vs.animate_static(arrScn_pre, static_cam = brestCam_full, 
+                                        background_scene = Scene.make_court(),
+                                        annotated_points = arrPts_pre, 
+                                        argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                        )
+
+itplFrms = vs.interpolate_frames(statFrms[-1], virtFrms[0], 50)
+
+#### make into diagram
+from ATMANpy.auxil.court import birds_eye_service_box_cam
+bot_adCam = birds_eye_service_box_cam(which = 'Ad', side = 'Bot', height = 180)
+
+arr_len = 22
+arr_off = 10
+arr_side = 15
+arr_text = 25
+rot_angle = np.pi / 2
+
+p1 = Point3D((200, 645, 0))
+p2 = p1.back(arr_len)
+speedArr_diag = Arrow.make(p2, p1.right(arr_side), **arr_params, rot_angle = rot_angle)
+
+p3 = p2.back(arr_off)
+p4 = p3.back(arr_len)
+heightArr_diag = Arrow.make(p3, p4.right(arr_side), **arr_params, rot_angle = rot_angle)
+
+p5 = p4.back(arr_off)
+p6 = p5.back(arr_len)
+depthArr_diag = Arrow.make(p5, p6.right(arr_side), **arr_params, rot_angle = rot_angle) 
+
+p7 = p6.back(arr_off)
+p8 = p7.back(arr_len)
+stretchArr_diag = Arrow.make(p8, p7.right(arr_side), **arr_params, rot_angle = rot_angle)
+
+p9 = p8.back(arr_off)
+p10 = p9.back(arr_len)
+retArr_diag = Arrow.make(p10, p9.right(arr_side), **arr_params, rot_angle = rot_angle)
+
+speedPt_post = (p1 + p2) / 2
+heightPt_post = (p3 + p4) / 2
+depthPt_post = (p5 + p6) / 2
+stretchPt_post = (p7 + p8) / 2
+retPt_post = (p9 + p10) / 2
+
+speedPt_post = speedPt_post.annotate(speedPt.text).right(arr_text).recolor(text_color)
+heightPt_post = heightPt_post.annotate(heightPt.text).right(arr_text).recolor(text_color)
+depthPt_post = depthPt_post.annotate(depthPt.text).right(arr_text).recolor(text_color)
+stretchPt_post = stretchPt_post.annotate(stretchPt.text).right(arr_text).recolor(text_color)
+retPt_post = retPt_post.annotate(retPt.text).right(arr_text).recolor(text_color)
+
+arrScn_post = Scene([speedArr_diag, depthArr_diag, heightArr_diag, retArr_diag, stretchArr_diag])
+
+move_frames = 50
+itplScns = vs.interpolate_scenes(arrScn_pre, arrScn_post, move_frames)
+
+moveFrms, _ = vs.animate_sequence(itplScns, start_cam = brestCam_full, stop_cam = bot_adCam, background_scene = Scene.make_court(),
+                                  argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                  interpolate_func = vs.interpolate_camera_naive,
+                                )
+# DecapStream(moveFrms, 0, 100).show()
+
+### overlay the text.
+from ATMANpy.types.Visual3D import View
+itplCams = vs.interpolate_camera_naive(brestCam_full, bot_adCam, move_frames)
+
+out_frames = []
+for i in range(move_frames):
+    lmbd = i / (move_frames - 1)
+    myCam = itplCams[i]
+    myArr = moveFrms[i].array
+
+    speedPt_itpl = speedPt * (1 - lmbd) + speedPt_post * lmbd
+    heightPt_itpl = heightPt * (1 - lmbd) + heightPt_post * lmbd
+    depthPt_itpl = depthPt * (1 - lmbd) + depthPt_post * lmbd
+    stretchPt_itpl = stretchPt * (1 - lmbd) + stretchPt_post * lmbd
+    retPt_itpl = retPt * (1 - lmbd) + retPt_post * lmbd
+    
+    speedPt_itpl = speedPt_itpl.annotate(speedPt.text).recolor(text_color)
+    heightPt_itpl = heightPt_itpl.annotate(heightPt.text).recolor(text_color)
+    depthPt_itpl = depthPt_itpl.annotate(depthPt.text).recolor(text_color)
+    stretchPt_itpl = stretchPt_itpl.annotate(stretchPt.text).recolor(text_color)
+    retPt_itpl = retPt_itpl.annotate(retPt.text).recolor(text_color)
+
+    myView = View.make(myCam, Scene.make_empty(), annotatedPoints = [speedPt_itpl, heightPt_itpl, depthPt_itpl, stretchPt_itpl, retPt_itpl])
+    myFrm = myView.snap(over_array = myArr)
+    out_frames.append(myFrm)
+
+outFrms = BGRFrames.from_single_frames(out_frames)
+DecapStream(outFrms, 0, 100).show()
+outFrms[-1].show()
+
+probPt = depthPt_post.right(85).retext(f'Probability to Chip: {1 - pred:.1%}').recolor(const.BGR['light_brown']).resize(2)
+
+probFrms, animDict = vs.animate_static(arrScn_post, static_cam = bot_adCam, background_scene = Scene.make_court(), 
+                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                annotated_points = [speedPt_post, heightPt_post, depthPt_post, stretchPt_post, retPt_post, probPt],
+                                )
+
+itplFrms2 = vs.interpolate_frames(outFrms[-1], probFrms[0], 50)
+# DecapStream(itplFrms2, 0, 100).show()
+
+jointFrms = BGRFrames.from_frames([itplFrms, outFrms, itplFrms2, probFrms])
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    The arrows here indicate how each factor influences the predicted probability to chip.
+                    A chip return is LIKELIER if...
+                """
+
+all_frames.append(probFrms)
+script_lines.append(script_line)
+
+brighten_factor = 2
+bright_text_color = tuple([min(c, 255) for c in np.array(text_color) * brighten_factor])
+
+script_line =   """
+                    ... the serve is faster ...
+                """
+
+probFrms1, _ = vs.animate_static(speedArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
+                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                annotated_points = [speedPt_post.recolor(bright_text_color), probPt],
+                                **animDict
+                                )
+# probFrms1[-1].show()
+
+all_frames.append(probFrms1)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... the ball bounces lower ...
+                """
+
+probFrms2, _ = vs.animate_static(heightArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
+                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                annotated_points = [heightPt_post.recolor(bright_text_color), probPt],
+                                **animDict
+                                )
+# probFrms2[-1].show()
+
+all_frames.append(probFrms2)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... the returner is closer to the baseline ...
+                """
+
+probFrms3, _ = vs.animate_static(depthArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
+                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                annotated_points = [depthPt_post.recolor(bright_text_color), probPt],
+                                **animDict
+                                )
+# probFrms3[-1].show()
+
+all_frames.append(probFrms3)
+script_lines.append(script_line)
+
+script_line =   """
+                    ... the returner has to stretch farther to reach the serve ...
+                """
+
+probFrms4, _ = vs.animate_static(stretchArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
+                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                annotated_points = [stretchPt_post.recolor(bright_text_color), probPt],
+                                **animDict
+                                )
+# probFrms4[-1].show()
+
+all_frames.append(probFrms4)
+script_lines.append(script_line)
+
+
+script_line =   """
+                    ... and finally if the serve is to the backhand.
+                """
+
+probFrms5, _ = vs.animate_static(retArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
+                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                annotated_points = [retPt_post.recolor(bright_text_color), probPt],
+                                **animDict
+                                )
+# probFrms5[-1].show()
+
+all_frames.append(probFrms5)
+script_lines.append(script_line)
+
 
 script_line = """
                 PSM estimates, from the data at hand, the propensity to chip a ball, given a set of explanatory variables. 
