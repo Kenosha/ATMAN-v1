@@ -100,7 +100,7 @@ def put(someFrm, someObj,
         if verbose: print('String!')
         ### Determine text height, to be able to offset
         text_size, _ = cv.getTextSize(someObj, font, size, thickness)
-        line_offset = text_size[1] + 5
+        line_offset = text_size[1] + text_size[1] * 5 // 6
         
         text_lines = someObj.split('\n')
         for idx, ln in enumerate(text_lines):
