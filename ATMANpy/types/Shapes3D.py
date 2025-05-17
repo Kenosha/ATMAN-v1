@@ -1309,6 +1309,28 @@ class Line3D:
         updDict = {'leftPt': cutPt_left, 'rightPt': cutPt_right}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return Line3D(**newDict)
+    
+    def lengthen_by(self, factor, which = 'left'):
+        assert which in ['both', 'left', 'right']
+
+        p1, p2 = self.leftPt, self.rightPt
+
+        if which == 'left':
+            add_left = factor - 1
+            add_right = 0
+        elif which == 'right':
+            add_left = 0
+            add_right = factor - 1
+        else:
+            add_left = add_right = (factor - 1)
+
+        p1_new = (p1 - p2) * add_left + p1
+        p2_new = (p2 - p1) * add_right + p2
+
+        updDict = {'leftPt': p1_new, 'rightPt': p2_new}
+        newDict = get_updated_attribute_dictionary(self, updDict)
+        return Line3D(**newDict)
+
 
 @dataclass(frozen = True)
 class Region3D():
