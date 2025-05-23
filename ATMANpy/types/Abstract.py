@@ -155,6 +155,9 @@ class Trajectory:
         else:
             return self.trajFrm.loc[item]
     
+    def __len__(self):
+        return len(self.get_frames())
+    
     def get_match_index(self):
         return int(self['match_num'].iloc[0])
 
@@ -168,7 +171,7 @@ class Trajectory:
         return self.trajFrm.frame_num.to_list()
     
     def get_num_frames(self):
-        return len(self.get_frames())
+        return len(self)
     
     def get_num_frames_until_bounce(self):
         try:
@@ -725,6 +728,9 @@ class Shot:
         event_strings = '->'.join(events)
         hitStr, recStr = self.hitPlayer.get_name(), self.recPlayer.get_name()
         return f'Shot({event_strings}, hitting: {hitStr}, receiving: {recStr}. Duration: {len(frames)} frames)'
+
+    def __len__(self):
+        return len(self.shotTraj)
 
     def get_match_index(self):
         return self.shotTraj.get_match_index() 
