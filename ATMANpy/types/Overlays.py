@@ -36,6 +36,17 @@ def make_region_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
     myReg = myReg.recolor(color)
     return myReg
 
+def make_circle_in(subReg, offset = 0.1, color = const.BGR['smokey_grey']):
+    from ATMANpy.types.Shapes3D import Circle3D
+    cntPt3D = subReg.center_point()
+    
+    topLn, lftLn = Line3D(subReg.p1, subReg.p2), Line3D(subReg.p1, subReg.p4)
+    max_radius = min(topLn.length(), lftLn.length()) / 2
+    radius = max_radius * (1 - offset)
+
+    myCrc = Circle3D(cntPt3D.coords, color = color, radius = radius)
+    return myCrc
+
 def make_text_in(subReg, data_or_string, target_len = None,
                  size = 1, thickness = 1, color = const.BGR['leafy_green'], 
                  horizontal_offset = 0, vertical_offset = 0, automatic_vertical_offset_text_line_height = None,
@@ -886,7 +897,9 @@ class LegendRow:
 class Legend:
     def __init__(self, legend_rows, legend_dimensions = (600, 400), 
                  render_height = 100, resolution = 10, split_denominator = 4, borders = True,
-                 header_text = 'Legend', header_size = 2, header_thickness = 2, header_offset = 10, header_color = const.BGR['bright_grey']):
+                 shape_func = make_region_in,
+                 header_text = 'Legend', header_size = 2, header_thickness = 2, 
+                 header_offset = 10, header_color = const.BGR['bright_grey']):
         self.legend_rows = legend_rows
 
         self.legend_dimensions = legend_dimensions
@@ -895,6 +908,7 @@ class Legend:
 
         self.split_denominator = split_denominator
         self.borders = borders
+        self.shape_func = shape_func
 
         self.header_text = header_text
         self.header_size = header_size
@@ -971,7 +985,7 @@ class Legend:
             except KeyError:
                 pass
             else:
-                shapeReg = make_region_in(subReg_left, offset = shape_offset, color = shape_color)
+                shapeReg = self.shape_func(subReg_left, offset = shape_offset, color = shape_color)
                 legend_shapes.append(shapeReg)
 
             # ### text to add on the left side of the legend element, on top of shape potentially
@@ -1066,9 +1080,16 @@ def overlay(baseFrm, overFrm, top_left_point = None,
 
 def overlay_center(baseFrm, overFrm, start_alpha = 1, stop_alpha = 1, alpha_exp = 1):
     try:
-        rs, cs = (baseFrm.rows - overFrm.rows) // 2, (baseFrm.cols - overFrm.cols) // 2
-    except:
-        rs, cs = (baseFrm.rows() - overFrm.rows()) // 2, (baseFrm.cols() - overFrm.cols()) // 2
+        base_rs, base_cs = baseFrm.rows(), baseFrm.cols()
+    except TypeError:
+        base_rs, base_cs = baseFrm.rows, baseFrm.cols
+    
+    try:
+        over_rs, over_cs = overFrm.rows(), overFrm.cols()
+    except TypeError:
+        over_rs, over_cs = overFrm.rows, overFrm.cols
+    
+    rs, cs = (base_rs - over_rs) // 2, (base_cs - over_cs) // 2
     outFrm = overlay(baseFrm, overFrm, top_left_point = Point2D((cs, rs)),
                     start_alpha = start_alpha, stop_alpha = stop_alpha, alpha_exp = alpha_exp)
     return outFrm
