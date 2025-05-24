@@ -865,7 +865,8 @@ class Shot:
         return self.shotTraj.get_num_bounces()
     
     def get_optimal_repositioning_position(self, courtLines = None,
-                                           reposition_to_meters_behind_baseline = 1, shot_is_met_at_meters_behind_baseline = 1):
+                                           reposition_to_meters_behind_baseline = 1, shot_is_met_at_meters_behind_baseline = 1,
+                                           as_array = False):
         ### calculate the optimal point for the hitting player to move to after the shot has been made
 
         ### get two court halves
@@ -904,7 +905,10 @@ class Shot:
         mirrorLn = Line(intPt, cntPt)
         optPt = mirrorLn.weak_intersect(ownLn)
         
-        return optPt
+        if as_array:
+            return np.array(optPt.coords)
+        else:
+            return optPt
         
     def get_intersection_with_service_line(self, courtLines = None):
         from ATMANpy.types.Points import Point2D
