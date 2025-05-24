@@ -264,7 +264,7 @@ heatCam = Camera.from_to(p_orig, p_target, f = 1000, sensor_dims = (1920, 1080))
 courtScn = Scene.make_court()
 
 ### Legends
-from ATMANpy.types.Overlays import Legend, LegendRow, overlay
+from ATMANpy.types.Overlays import Legend, LegendRow, overlay, overlay_center
 
 from ATMANpy.funcs.util_funcs import interpolate_tuples
 CHIP_COLOR = interpolate_tuples(CHIP_LO_COLOR, CHIP_HI_COLOR)
@@ -314,8 +314,32 @@ leg_base = Legend([tpRow_faint, cpRow], **leg_params)
 legFrm_chip = leg_base.render()
 # legFrm_chip.show()
 
-anchorPt = Point2D((1920 // 24, 1080 // 24))
+### legends with circles
+from ATMANpy.types.Overlays import make_circle_in
+hiRow.shape_offset = 0.35
+loRow.shape_offset = 0.35
+tpRow.shape_offset = 0.35
 
+leg1_crc_lo = Legend([LegendRow(None), loRow, LegendRow(None)], **leg_params, shape_func = make_circle_in)
+leg1Frm_crc_lo = leg1_crc_lo.render()
+# leg1Frm_crc_lo.show()
+
+leg1_crc_hi = Legend([hiRow, LegendRow(None), LegendRow(None)], **leg_params, shape_func = make_circle_in)
+leg1Frm_crc_hi = leg1_crc_hi.render()
+# leg1Frm_crc_hi.show()
+
+leg2_crc = Legend([hiRow, loRow, LegendRow(None)], **leg_params, shape_func = make_circle_in)
+leg2Frm_crc = leg2_crc.render()
+# leg2Frm_crc.show()
+
+leg3_crc = Legend([hiRow, loRow, tpRow], **leg_params, shape_func = make_circle_in)
+leg3Frm_crc = leg3_crc.render()
+# leg3Frm_crc.show()
+
+subReg = Region3D.from_points3D(Point3D((10, 10, 0)), Point3D((50, 10, 0)), Point3D((50, 50, 0)), Point3D((10, 50, 0)))
+
+### anchor points for legend
+anchorPt = Point2D((1920 // 24, 1080 // 24))
 anchorPt_middle = Point2D((1200, 200))
 
 ### Flight Splines
@@ -1355,19 +1379,20 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     text_thickness = 2
 
     fade_len = 50
+    dim_factor = 0.5
 
     origStm = myShots.stream(confs = confs).join().maybe_to_stream()
     origDtm = origStm.decap()
     orig_scaledFrms = myDtm.frames.rescale(scale_factor)
 
-    orig_scaledFrms_dim = orig_scaledFrms.dim_progressively(1, 0.5)
+    orig_scaledFrms_dim = orig_scaledFrms.dim_progressively(1, dim_factor)
     orig_scaledFrms = orig_scaledFrms.put('Low Chip', size = text_size, color = text_color, where = text_where, thickness = text_thickness)
 
     bestStm = bestShots.stream(confs = confs).join().maybe_to_stream()
     bestDtm = bestStm.decap()
     best_scaledFrms = bestDtm.frames.rescale(scale_factor)
     
-    best_scaledFrms_dim = best_scaledFrms.dim_progressively(1, 0.5)
+    best_scaledFrms_dim = best_scaledFrms.dim_progressively(1, dim_factor)
     best_scaledFrms = best_scaledFrms.put('High Chip', size = text_size, color = text_color, where = text_where, thickness = text_thickness)
 
     early_origFrms = origStm.widen(fade_len).decap().frames[:fade_len]
@@ -1413,7 +1438,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     splineFrms_best, _ = vs.animate_sequence(best_spline_scenes, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
                                         cumulate_argument = False, animate_over = best_scaledFrms, **prmDict)
     # DecapStream(splineFrms_best, 0, 100).show(ms_between_frames = 100)
-    # splineFrms_best[-1].show()
+    
+    splineFrms_best_dim, _ = vs.animate_sequence(best_spline_scenes, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
+                                        cumulate_argument = False, animate_over = best_scaledFrms_dim, **prmDict)
+    # DecapStream(splineFrms_best_dim, 0, 100).show()
 
     # rasterize frames, and fade in the point being played
     script_line = ""
@@ -1645,12 +1673,57 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     player_speed_mps = 15 * const.KPH_TO_MPS
     seconds_needed_to_recover = 1/3 ### can't immediately start running after contact
     
+    myPnt = dataPnts[0]
+
+    repPts = dataPnts.get_returns().get_optimal_repositioning_position(as_array = True)
+    retPts = dataPnts.get_returns().get_player_hit_position()
+
+    px_dist = ((repPts - retPts) ** 2).sum(axis = 1) ** 0.5
+    met_dist = px_dist / const.SCALE * const.FOOT_TO_METER
+    
+    path_dist = 20
+    min_dist = 8
+
+    dist_filter = (min_dist < met_dist) & (met_dist < path_dist)
+    dist_filter.sum() ### for these points, the player has to sprint to get in position
+
+    def get_ret_move_speed(myPnt, cutoff = 25, ramp_up = 8, min_dist = 8, max_dist = 20):
+        myRet = myPnt.get_return()
+        if myRet is None:
+            return np.nan
+        
+        diffArr = myRet.get_optimal_repositioning_position(as_array = True) - myRet.get_player_hit_position()
+        if np.isnan(diffArr.all()):
+            return np.nan
+
+        px_dist = (diffArr ** 2).sum() ** 0.5 
+        met_dist = px_dist / const.SCALE * const.FOOT_TO_METER
+
+        if not min_dist < met_dist < max_dist:
+            return np.nan
+
+        myPM = myRet.hitPlayer
+        xSer, ySer = myPM['x'].iloc[:-1], myPM['y'].iloc[:-1]
+        xSer_use, ySer_use = xSer.loc[ramp_up:cutoff], ySer.loc[ramp_up:cutoff]
+        step_speed = (xSer_use.diff() ** 2 + ySer_use.diff() ** 2) ** 0.5
+        step_speed = step_speed.dropna()
+        pix_per_frame_speed = step_speed.sum() / len(step_speed)
+        met_per_second_speed = pix_per_frame_speed / const.SCALE * const.FOOT_TO_METER * 25
+        km_per_hour_speed = met_per_second_speed * const.M_TO_KM / (const.SEC_TO_MIN * const.MIN_TO_HOUR)
+        return km_per_hour_speed
+
+    speeds = dataPnts.apply(get_ret_move_speed, cutoff = 25)
+    speeds = speeds[~np.isnan(speeds)]
+    q9, q8, q7, q6, q5 = np.quantile(speeds, [0.9, 0.8, 0.7, 0.6, 0.5])
+    print(q9, q8, q7, q6, q5) ### 80% quantile looks alright.
+
+    player_speed_kph = 15 ### this is taken from https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
+    player_speed_mps = 15 * const.KPH_TO_MPS
 
     name = 'Return_Analysis_g600_v300_s13_h3'
     from ATMANpy.models.BallTrajectory.flight_bounce_model import load_trajectories, initialize
     xArr, zArr, rpmArr, infoDict = load_trajectories(name)
         
-
     ######## THEORETICAL CALCULATION --> purely with trajectories ### 
     def find_time_to_bounce(xArr, zArr, infoDict, 
                             height = 1.5, rpm = -2500, launch_degree = 10, travel_meters = 8):
@@ -1732,9 +1805,6 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     time_dist_frame['dist_met'] = time_dist_frame['time_adj'] * player_speed_mps
     time_dist_frame['dist_pix'] = time_dist_frame['dist_met'] * const.METER_TO_FOOT * const.SCALE
 
-    script_line =   """
-                        First, consider the original example in the top left...
-                    """
     from ATMANpy.types.Overlays import reverse_cascade
     revRst, revFrms = reverse_cascade(myRst, keep_which = [(0, 0), (1, 1)], frames_per_element = 10)
     DecapStream(revFrms, 0, 100).show()
@@ -1746,13 +1816,13 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     DecapStream(splineFrms_best_rev, 0, 100).show()
 
     ### Play serve again
-    splineFrms_orig_srv = BGRFrames.from_frames([early_orig_scaledFrms[-10:], splineFrms_orig[:len(myShots[0])]])
-    splineFrms_best_srv = BGRFrames.from_frames([early_best_scaledFrms[-10:], splineFrms_best[:len(bestShots[0])]])
+    splineFrms_orig_srv = BGRFrames.from_frames([early_orig_scaledFrms[-10:], splineFrms_orig_dim[:len(myShots[0])]])
+    splineFrms_best_srv = BGRFrames.from_frames([early_best_scaledFrms[-10:], splineFrms_best_dim[:len(bestShots[0])]])
     DecapStream(splineFrms_orig_srv, 0, 100).show()
     DecapStream(splineFrms_best_srv, 0, 100).show()
 
-    splineFrms_orig_ret = splineFrms_orig[len(myShots[0]):]
-    splineFrms_best_ret = splineFrms_best[len(bestShots[0]):]
+    splineFrms_orig_ret = splineFrms_orig_dim[len(myShots[0]):]
+    splineFrms_best_ret = splineFrms_best_dim[len(bestShots[0]):]
     DecapStream(splineFrms_orig_ret, 0, 100).show()
     DecapStream(splineFrms_best_ret, 0, 100).show()
 
@@ -1825,11 +1895,14 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # a) for the original shot
     x, y = myShots[1].hitPlayer.get_initial_position()
 
-    minCrc = make_thick_circle(x, y, min_px, 0, 2)
+    minCrc = make_thick_circle(x, y, min_px, 0, 2).recolor(CHIP_LO_COLOR)
 
     max_px = time_dist_frame.loc['orig_lo', 'dist_pix']
-    maxCrc = make_thick_circle(x, y, max_px, 0, 2)
+    maxCrc = make_thick_circle(x, y, max_px, 0, 2).recolor(CHIP_LO_COLOR)
     flight_frames = flightSer['orig_lo']
+
+    step_dim = (1 - dim_factor) / (orig_scaledFrms.length() - 1) 
+    step_dim = 0.011
 
     crc_frames = []
     for i, myFrm in enumerate(splineFrms_orig_ret):
@@ -1845,7 +1918,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
         myView = View.make(brestCam_resized_half, Scene([itplCrc]), resolution = prmDict_nolum['argument_resolution'])
         crcFrm = myView.snap(over_array = myFrm.array.copy())
-        crcFrm_mixed = crcFrm.mask(~keepMask_orig) + orig_scaledFrms[shot_idx_orig].mask(keepMask_orig)
+        crcFrm_mixed = crcFrm.mask(~keepMask_orig) + orig_scaledFrms_dim[shot_idx_orig].dim((1 - step_dim) ** i).mask(keepMask_orig)
         crc_frames.append(crcFrm_mixed)
 
     maxCrc_orig = maxCrc
@@ -1855,11 +1928,13 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # b) for the original shot
     x, y = bestShots[1].hitPlayer.get_initial_position()
 
-    minCrc = make_thick_circle(x, y, min_px, 0, 2)
+    minCrc = make_thick_circle(x, y, min_px, 0, 2).recolor(CHIP_HI_COLOR)
 
     max_px = time_dist_frame.loc['best_hi', 'dist_pix']
-    maxCrc = make_thick_circle(x, y, max_px, 0, 2)
+    maxCrc = make_thick_circle(x, y, max_px, 0, 2).recolor(CHIP_HI_COLOR)
     flight_frames = flightSer['best_hi']
+
+    step_dim = 0.01
 
     crc_frames = []
     for i, myFrm in enumerate(splineFrms_best_ret):
@@ -1875,7 +1950,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
         myView = View.make(brestCam_resized_half, Scene([itplCrc]), resolution = prmDict_nolum['argument_resolution'])
         crcFrm = myView.snap(over_array = myFrm.array.copy())
-        crcFrm_mixed = crcFrm.mask(~keepMask_best) + best_scaledFrms[shot_idx_best].mask(keepMask_best)
+        crcFrm_mixed = crcFrm.mask(~keepMask_best) + best_scaledFrms_dim[shot_idx_best].dim((1 - step_dim) ** i).mask(keepMask_best)
         crc_frames.append(crcFrm_mixed)
 
     maxCrc_best = maxCrc
@@ -1902,10 +1977,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     ### a) low chip
     shapeFrms, _ = vs.animate_static(Scene([maxCrc_orig, origMark_repos, origMark]), static_cam = brestCam_resized_half, 
                                     argument_resolution = prmDict_nolum['argument_resolution'],
-                                    animate_over = backFrm_orig)
+                                    animate_over = backFrm_orig.dim(dim_factor))
     shapeFrm = shapeFrms[0]
 
-    endFrm_orig = orig_scaledFrms[shot_idx_orig].mask(keepMask_orig) + shapeFrm.mask(~keepMask_orig)
+    endFrm_orig = crcFrms_orig[-1].mask(keepMask_orig) + shapeFrm.mask(~keepMask_orig)
 
     itplFrms_orig = vs.interpolate_frames(crcFrms_orig[-1], endFrm_orig, 50)
     DecapStream(itplFrms_orig, 0, 100).show()
@@ -1913,142 +1988,83 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     ### b) hi chip
     shapeFrms, _ = vs.animate_static(Scene([maxCrc_best, bestMark_repos, bestMark]), static_cam = brestCam_resized_half, 
                                     argument_resolution = prmDict_nolum['argument_resolution'],
-                                    animate_over = backFrm_best)
+                                    animate_over = backFrm_best.dim(dim_factor))
     shapeFrm = shapeFrms[0]
 
-    endFrm_best = best_scaledFrms[shot_idx_best].mask(keepMask_best) + shapeFrm.mask(~keepMask_best)
+    endFrm_best = crcFrms_best[-1].mask(keepMask_best) + shapeFrm.mask(~keepMask_best)
 
     itplFrms_best = vs.interpolate_frames(crcFrms_best[-1], endFrm_best, 50)
     DecapStream(itplFrms_best, 0, 100).show()
 
-
-
-
-    
-
-    itplFrms = vs.interpolate_frames(orig_scaledFrms[-1], orig_maskFrm, 50)
-    DecapStream(itplFrms, 0, 100).show()
-
-    orig_maskFrm.show()
-
-    crcFrms_orig
-
-    crcFrms_orig[-1].put(featDict['botPlayerCnt'].rescale(1.5)).show()
-
-    # a) for the original shot
-    x, y = myShots[1].hitPlayer.get_initial_position()
-
-    loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.2)
-    loCrcs2 = make_thick_circle(x, y, lo_dist, 0.8, 2)
-    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
-
-    hiCrcs1 = make_thick_circle(x, y, hi_dist, 0, 0.165)
-    hiCrcs2 = make_thick_circle(x, y, hi_dist, 0.84, 2)
-    hiCrcs = hiCrcs1.join(hiCrcs2).recolor(CHIP_HI_COLOR)
-
-    tpCrcs = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
-
-    origPt = Point3D.from_point2D(Point2D(myShots[1].get_first_bounce_position()), z = 0)
-    bestPt = Point3D.from_point2D(Point2D(bestShots[1].get_first_bounce_position()), z = 0)
-
-    MARK_SIZE = 10
-    from ATMANpy.types.ShapesTennis3D import Mark
-    origMark = Mark.make(origPt, size = MARK_SIZE)
-    bestMark = Mark.make(bestPt, size = MARK_SIZE)
-
-    origPt_repos = myShots[1].get_optimal_repositioning_position(reposition_to_meters_behind_baseline = 2, shot_is_met_at_meters_behind_baseline = 0)
-    origPt_repos = Point3D.from_point2D(origPt_repos, z = 0)
-    origMark_repos = Mark.make(origPt_repos, size = MARK_SIZE, color = const.BGR['intense_red'])
-    
-    bestPt_repos = bestShots[1].get_optimal_repositioning_position(reposition_to_meters_behind_baseline = 2, shot_is_met_at_meters_behind_baseline = 0)
-    bestPt_repos = Point3D.from_point2D(bestPt_repos, z = 0)
-    bestMark_repos = Mark.make(bestPt_repos, size = MARK_SIZE, color = const.BGR['intense_red'])
-
-    splinerevFrms_orig, _ = vs.animate_sequence(spline_scenes_rev, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
-                                                cumulate_argument = False, animate_over = revFrms_orig, previous_foreground_scene = Scene([origMark]),
-                                                **prmDict_nolum)
-    splinerevFrms_best, _ = vs.animate_sequence(spline_scenes_best_rev, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, background_scene = None, 
-                                                cumulate_argument = False, animate_over = revFrms_best, previous_foreground_scene = Scene([bestMark]),
-                                                **prmDict_nolum)
-
-    DecapStream(splinerevFrms_orig, 0, 100).show()
-    DecapStream(splinerevFrms_best, 0, 100).show()
-
-
-
-    script_line = ""
-    myRst = FramesRaster(2, 2, borders = None)
-    myRst.add(splinerevFrms_orig, 0, 0)
-    myRst.add(splineFrms_best[-1], 1, 1)
-    myFrms_rev_orig = myRst.render()
-    all_frames.append(myFrms_rev_orig)
-    script_lines.append(script_line)
-
-    ### add in the position mark
     script_line =   """
-                        Notice first that the return down-the-line requires the returner to recover to the opposite side of the court, 
-                        roughly to the red X.
+                        First, consider the original example in the top left. 
+                        The expanding range of motion depicted here represents the court positions
+                        that the returner can comfortably reach, assuming a third of a second of recovery time 
+                        and a brisk shuffle speed of 15 km/h, which is estimated from our data.
                     """
-    staticFrms_orig, _ = vs.animate_static(origMark_repos, static_cam = brestCam_resized_half, background_scene = None, animate_over = revFrms_orig[-1], 
-                                            previous_foreground_scene = Scene([origMark]), **prmDict_nolum)
     
-    myRst = FramesRaster(2, 2, borders = None)
-    myRst.add(staticFrms_orig, 0, 0)
-    myRst.add(splineFrms_best[-1], 1, 1)
-    staticFrms_orig = myRst.render()
-    all_frames.append(staticFrms_orig)
+    myRst = FramesRaster(2, 2)
+    myRst.add(splineFrms_orig_rev, 0, 0)
+    myRst.add(splineFrms_best[-1].dim(dim_factor), 1, 1)
+
+    revFrms = myRst.render()
+    # DecapStream(revFrms, 0, 100).show()
+
+    myRst.add(splineFrms_orig_srv, 0, 0)
+    srvFrms = myRst.render()
+    # DecapStream(srvFrms, 0, 100).show()
+    
+    myRst.add(crcFrms_orig, 0, 0)
+    crcFrms = myRst.render()
+    crcFrms = overlay_center(crcFrms, leg1Frm_crc_lo)
+    # DecapStream(crcFrms, 0, 100).show()
+
+    jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms])
+    DecapStream(jointFrms, 0, 100).show()
+
+    all_frames.append(jointFrms)
     script_lines.append(script_line)
-
-    ### Show distance circles
-    last_origFrm = revFrms_orig[-1]
-    last_bestFrm = revFrms_best[-1]
-
-    lo_dist, hi_dist, tp_dist = time_dist_frame.loc['orig_lo', 'dist_pix'], time_dist_frame.loc['orig_hi', 'dist_pix'], time_dist_frame.loc['orig_tp', 'dist_pix']
-    
-    def make_thick_circle(x, y, radius, theta_lo, theta_hi):
-        cntPt = Point3D((x, y, 0))
-        radii = [0.995 * radius, radius, 1.005 * radius]
-        return Circles3D([Circle3D.from_point3D(cntPt, limit_theta = (theta_lo * np.pi, theta_hi * np.pi), radius = r) for r in radii])
-
-    # a) for the original shot
-    x, y = myShots[1].hitPlayer.get_initial_position()
-
-    loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.2)
-    loCrcs2 = make_thick_circle(x, y, lo_dist, 0.8, 2)
-    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
-
-    hiCrcs1 = make_thick_circle(x, y, hi_dist, 0, 0.165)
-    hiCrcs2 = make_thick_circle(x, y, hi_dist, 0.84, 2)
-    hiCrcs = hiCrcs1.join(hiCrcs2).recolor(CHIP_HI_COLOR)
-
-    tpCrcs = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
 
     script_line =   """
-                        The low-angled chip shot gives him enough time to recover to the optimal spot. 
-                        The range of motion implied by the return's time until bounce is indicated in blue.
-                        It assumes a third of a second of recovery time after the return has been made, and a running speed of 15 km/h,
-                        which is roughly in line with the ATP average for short distance sprints from a standing start.
+                        The low-angled chip shot gives the returner enough time to recover to the optimal spot, marked with a red X.
                     """
-    myFrms, _ = vs.animate_static(Scene([loCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1), 
-                                  previous_foreground_scene = Scene([origMark, origMark_repos]),
-                                  **prmDict)
-    myRst = FramesRaster(2, 2, borders = None)
-    myRst.add(myFrms, 0, 0)
-    myRst.add(splineFrms_best[-1], 1, 1)
-    crcFrms_orig = myRst.render()
-    all_frames.append(crcFrms_orig)
-    script_lines.append(script_line)
+
+    myRst.add(itplFrms_orig, 0, 0)
+    rastFrms0 = myRst.render()
+    rastFrms0 = overlay_center(rastFrms0, leg1Frm_crc_lo)
+    DecapStream(rastFrms0, 0, 100).show()
 
     script_line =   """
                         Had he played a high angle return, the additional .25 seconds of time-until-bounce would have given him more range of motion, 
                         which, in this case, would not have been necessary to reach the optimal point.
                     """
-    myFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
-                                  previous_foreground_scene = Scene([origMark, origMark_repos]),
-                                  **prmDict)
-    myRst.add(myFrms, 0, 0)
-    crcFrms_orig = myRst.render()
-    all_frames.append(crcFrms_orig)
+    x, y = myShots[1].hitPlayer.get_initial_position()
+
+    px = time_dist_frame.loc['orig_lo', 'dist_pix']
+    loCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_LO_COLOR)
+    
+    px = time_dist_frame.loc['orig_hi', 'dist_pix']
+    hiCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_HI_COLOR)
+
+    px = time_dist_frame.loc['orig_tp', 'dist_pix']
+    tpCrcs = make_thick_circle(x, y, px, 0, 2).recolor(TOPS_COLOR)
+    
+    statFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, origMark_repos, origMark]), static_cam = brestCam_resized_half, 
+                                    argument_resolution = prmDict_nolum['argument_resolution'],
+                                    animate_over = backFrm_orig.dim(dim_factor))
+    
+    endFrm = crcFrms_orig[-1].mask(keepMask_orig) + statFrms[-1].mask(~keepMask_orig)
+    endFrms = BGRFrames.from_frame(endFrm, 50)
+
+    myRst.add(endFrms, 0, 0)
+    rastFrms1 = myRst.render()
+    rastFrms1 = overlay_center(rastFrms1, leg2Frm_crc)
+    DecapStream(rastFrms1, 0, 100).show()
+
+    itplFrms = vs.interpolate_frames(rastFrms0[-1], rastFrms1[0], 50)
+    DecapStream(itplFrms, 0, 100).show()
+
+    all_frames.append(itplFrms)
     script_lines.append(script_line)
 
     script_line =   f"""
@@ -2060,113 +2076,197 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
                         Now, consider the situation in the lower right corner. 
                     """
-    staticFrms_orig, _ = vs.animate_static(Scene([loCrcs, hiCrcs, tpCrcs]), static_cam = brestCam_resized_half, animate_over = last_origFrm.dim(1),
-                                  previous_foreground_scene = Scene([origMark, origMark_repos]),
-                                  **prmDict)
-    myRst.add(staticFrms_orig, 0, 0)
-    crcFrms_orig = myRst.render()
-    all_frames.append(crcFrms_orig)
-    script_lines.append(script_line)
 
-    orig_markScn = Scene([origMark, origMark_repos]) ### save for later
-    orig_circScn = Scene([loCrcs, hiCrcs, tpCrcs]) ### save for later
-    ls_staticFrm_orig = staticFrms_orig[-1]
-
-    # b) for the best match shot
-    x, y = bestShots[1].hitPlayer.get_initial_position()
-
-    lo_dist, hi_dist, tp_dist = time_dist_frame.loc['best_lo', 'dist_pix'], time_dist_frame.loc['best_hi', 'dist_pix'], time_dist_frame.loc['best_tp', 'dist_pix']
-
-    loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.26)
-    loCrcs2 = make_thick_circle(x, y, lo_dist, 0.74, 2)
-    loCrcs = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
-
-    hiCrcs = make_thick_circle(x, y, hi_dist, 0.8, 1.815).recolor(CHIP_HI_COLOR)
-    tpCrcs = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
+    script_line =   f"""
+                        A comparable topspin shot down the line would travel {time_dist_frame.loc['orig_tp', 'time']:.1f} seconds, 
+                        which does not afford the returning player with enough time to recover to the optimal spot. 
+                    """
     
+    statFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, tpCrcs, origMark_repos, origMark]), static_cam = brestCam_resized_half, 
+                                    argument_resolution = prmDict_nolum['argument_resolution'],
+                                    animate_over = backFrm_orig.dim(dim_factor))
+    
+    endFrm = crcFrms_orig[-1].mask(keepMask_orig) + statFrms[-1].mask(~keepMask_orig)
+    endFrms = BGRFrames.from_frame(endFrm, 50)
 
-    script_line = ""
-    myRst = FramesRaster(2, 2, borders = None)
-    myRst.add(ls_staticFrm_orig, 0, 0)
-    myRst.add(splinerevFrms_best, 1, 1)
-    myFrms_rev_best = myRst.render()
-    all_frames.append(myFrms_rev_best)
+    myRst.add(endFrms, 0, 0)
+    rastFrms2 = myRst.render()
+    rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
+    DecapStream(rastFrms2, 0, 100).show()
+
+    itplFrms = vs.interpolate_frames(rastFrms1[-1], rastFrms2[0], 50)
+    DecapStream(itplFrms, 0, 100).show()
+
+    all_frames.append(itplFrms)
     script_lines.append(script_line)
 
-    ### add in the position mark
+    script_line =   """
+                        Now, consider the situation in the lower right corner.
+                    """
+
+    myRst = FramesRaster(2, 2)
+    myRst.add(endFrms[-1].dim(dim_factor), 0, 0)
+    myRst.add(splineFrms_best_rev, 1, 1)
+
+    revFrms = myRst.render()
+    revFrms = overlay_center(revFrms, leg3Frm_crc)
+    # DecapStream(revFrms, 0, 100).show()
+
+    myRst.add(splineFrms_best_srv, 1, 1)
+    srvFrms = myRst.render()
+    srvFrms = overlay_center(srvFrms, leg3Frm_crc)
+    # DecapStream(srvFrms, 0, 100).show()
+    
+    myRst.add(crcFrms_best, 1, 1)
+    crcFrms = myRst.render()
+    crcFrms = overlay_center(crcFrms, leg3Frm_crc)
+    # DecapStream(crcFrms, 0, 100).show()
+
+    jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms])
+    DecapStream(jointFrms, 0, 100).show()
+
+    all_frames.append(jointFrms)
+    script_lines.append(script_line)
+
     script_line =   """
                         Since the return goes cross-court, the returner is not required to recover to the other half of the baseline, 
                         so he has less distance to cover.
                     """
-    staticFrms_best, _ = vs.animate_static(bestMark_repos, static_cam = brestCam_resized_half, background_scene = None, animate_over = last_bestFrm.dim(1), 
-                                            previous_foreground_scene = Scene([bestMark]), **prmDict)
 
-    myRst = FramesRaster(2, 2, borders = None)
-    myRst.add(ls_staticFrm_orig, 0, 0)
-    myRst.add(staticFrms_best, 1, 1)
-    staticFrms = myRst.render()
-    all_frames.append(staticFrms)
+    myRst.add(itplFrms_best, 1, 1)
+    rastFrms0 = myRst.render()
+    rastFrms0 = overlay_center(rastFrms0, leg3Frm_crc)
+    DecapStream(rastFrms0, 0, 100).show()
+
+    all_frames.append(rastFrms0)
     script_lines.append(script_line)
 
-    orig_markScn = Scene([origMark, origMark_repos])
-    best_markScn = Scene([bestMark, bestMark_repos])
-
-    script_line =   f"""
+    script_line =   """
                         Again, the low-angled chip's flight time would have been more than enough to recover to the optimal spot.
-                        Even the topspin return cross-court would have afforded the returning player with enough time to make it to an adequate position on court; 
-                        he can not quite reach the optimal position, but he is not far away.
-
-                        However, notice that the returner is pulled out wide for this serve. 
-                        If, in this situation, he were to play a return down-the-line, the returner would have more ground to cover to the optimal spot. 
-                        At the same time, the reduced flight-time of a return down the line affords the returner with less time to make up that distance.
                     """
-    staticFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, tpCrcs]), static_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1),
-                                  previous_foreground_scene = best_markScn,
-                                  **prmDict)
-    myRst.add(staticFrms, 1, 1)
-    crcFrms_best = myRst.render()
-    all_frames.append(crcFrms_best)
+
+    x, y = bestShots[1].hitPlayer.get_initial_position()
+
+    px = time_dist_frame.loc['best_lo', 'dist_pix']
+    loCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_LO_COLOR)
+    
+    px = time_dist_frame.loc['best_hi', 'dist_pix']
+    hiCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_HI_COLOR)
+
+    px = time_dist_frame.loc['best_tp', 'dist_pix']
+    tpCrcs = make_thick_circle(x, y, px, 0, 2).recolor(TOPS_COLOR)
+    
+    statFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, bestMark_repos, bestMark]), static_cam = brestCam_resized_half, 
+                                    argument_resolution = prmDict_nolum['argument_resolution'],
+                                    animate_over = backFrm_best.dim(dim_factor))
+    
+    endFrm = crcFrms_best[-1].mask(keepMask_best) + statFrms[-1].mask(~keepMask_best)
+    endFrms = BGRFrames.from_frame(endFrm, 50)
+
+    myRst.add(endFrms, 1, 1)
+    rastFrms1 = myRst.render()
+    rastFrms1 = overlay_center(rastFrms1, leg3Frm_crc)
+    DecapStream(rastFrms1, 0, 100).show()
+
+    itplFrms = vs.interpolate_frames(rastFrms0[-1], rastFrms1[0], 50)
+    DecapStream(itplFrms, 0, 100).show()
+
+    all_frames.append(itplFrms)
     script_lines.append(script_line)
 
-    script_line = ""
+    script_line =   """
+                        Even the topspin return cross-court would have afforded the returning player with enough time to make it to an adequate position on court; 
+                        he can not quite reach the optimal position comfortably, but he is not far away.
+                    """
+
+    statFrms, _ = vs.animate_static(Scene([loCrcs, hiCrcs, tpCrcs, bestMark_repos, bestMark]), static_cam = brestCam_resized_half, 
+                                    argument_resolution = prmDict_nolum['argument_resolution'],
+                                    animate_over = backFrm_best.dim(dim_factor))
+    
+    endFrm = crcFrms_best[-1].mask(keepMask_best) + statFrms[-1].mask(~keepMask_best)
+    endFrms = BGRFrames.from_frame(endFrm, 50)
+
+    myRst.add(endFrms, 1, 1)
+    rastFrms2 = myRst.render()
+    rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
+    DecapStream(rastFrms2, 0, 100).show()
+
+    itplFrms = vs.interpolate_frames(rastFrms1[-1], rastFrms2[0], 50)
+    DecapStream(itplFrms, 0, 100).show()
+
+    all_frames.append(itplFrms)
+    script_lines.append(script_line)
+
+    script_line =   """
+                        However, notice that the returner is pulled out wide for this serve. 
+                        If, in this situation, he were to play a return down-the-line ...
+                    """
+    all_frames.append(rastFrms2)
+    script_lines.append(script_line)
+
+    script_line =   """
+                        ... the returner would have more ground to cover to the optimal spot. 
+                        At the same time, the reduced flight-time of a return down the line 
+                        affords the returner with less time to make up that distance.
+                    """
     
     ## interpolate marks and circles
-    lo_dist, hi_dist, tp_dist = time_dist_frame.loc['best_lo', 'dist_pix'], time_dist_frame.loc['best_hi', 'dist_pix'], time_dist_frame.loc['best_tp', 'dist_pix']
-    loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.26)
-    loCrcs2 = make_thick_circle(x, y, lo_dist, 0.74, 2)
-    loCrcs_best = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
+    x, y = bestShots[1].hitPlayer.get_initial_position()
 
-    hiCrcs_best = make_thick_circle(x, y, hi_dist, 0.8, 1.815).recolor(CHIP_HI_COLOR)
-    tpCrcs_best = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
+    px = time_dist_frame.loc['best_lo', 'dist_pix']
+    loCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_LO_COLOR)
     
-    lo_dist, hi_dist, tp_dist = time_dist_frame.loc['cntr_lo', 'dist_pix'], time_dist_frame.loc['cntr_hi', 'dist_pix'], time_dist_frame.loc['cntr_tp', 'dist_pix']
-    
-    loCrcs1 = make_thick_circle(x, y, lo_dist, 0, 0.24)
-    loCrcs2 = make_thick_circle(x, y, lo_dist, 0.72, 2)
-    loCrcs_cntr = loCrcs1.join(loCrcs2).recolor(CHIP_LO_COLOR)
-    
-    hiCrcs_cntr = make_thick_circle(x, y, hi_dist, 0.78, 1.85).recolor(CHIP_HI_COLOR)
-    tpCrcs_cntr = make_thick_circle(x, y, tp_dist, 0, 2).recolor(TOPS_COLOR)
+    px = time_dist_frame.loc['best_hi', 'dist_pix']
+    hiCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_HI_COLOR)
 
-    crcScn0 = Scene([hiCrcs_best, loCrcs_best, tpCrcs_best])
-    crcScn1 = Scene([hiCrcs_cntr, loCrcs_cntr, tpCrcs_cntr])
+    px = time_dist_frame.loc['best_tp', 'dist_pix']
+    tpCrcs = make_thick_circle(x, y, px, 0, 2).recolor(TOPS_COLOR)
+
+    crcScn0 = Scene([loCrcs, hiCrcs, tpCrcs])
+    
+    px = time_dist_frame.loc['orig_lo', 'dist_pix']
+    loCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_LO_COLOR)
+    
+    px = time_dist_frame.loc['orig_hi', 'dist_pix']
+    hiCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_HI_COLOR)
+
+    px = time_dist_frame.loc['orig_tp', 'dist_pix']
+    tpCrcs = make_thick_circle(x, y, px, 0, 2).recolor(TOPS_COLOR)
+
+    crcScn1 = Scene([loCrcs, hiCrcs, tpCrcs])
+
+    best_markScn = Scene([bestMark_repos, bestMark])
+    orig_markScn = Scene([origMark_repos, origMark])
 
     startScn, endScn = best_markScn.combine(crcScn0), orig_markScn.combine(crcScn1)
 
     itplScns = vs.interpolate_scenes(startScn, endScn, 50)
 
-    itplFrms, _ = vs.animate_sequence(itplScns, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, animate_over = last_bestFrm.dim(1),
-                                                **prmDict)
-    myRst.add(itplFrms, 1, 1)
-    crcFrms_cntr = myRst.render()
-    all_frames.append(crcFrms_cntr)
+    crcFrms_cntr, _ = vs.animate_sequence(itplScns, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, 
+                                            animate_over = backFrm_best.dim(dim_factor), **prmDict)
+    DecapStream(crcFrms_cntr, 0, 100).show()
+
+    end_frames = []
+    for frm in crcFrms_cntr:
+        endFrm = crcFrms_best[-1].mask(keepMask_best) + frm.mask(~keepMask_best)
+        end_frames.append(endFrm)
+
+    endFrms = BGRFrames.from_single_frames(end_frames)
+    DecapStream(endFrms, 0, 100).show()
+
+    myRst.add(endFrms, 1, 1)
+    rastFrms_cntr = myRst.render()
+    rastFrms_cntr = overlay_center(rastFrms_cntr, leg3Frm_crc)
+    DecapStream(rastFrms_cntr, 0, 100).show()
+
+    all_frames.append(rastFrms_cntr)
     script_lines.append(script_line)
 
     script_line =   """
                         In this situation, where the returner is pulled somewhat out wide and attempts a return down the line, 
                         only the high-arcing chip buys him enough time to get into the optimal position at the time of bounce.
                     """
-    staticFrms = BGRFrames.from_frame(crcFrms_cntr[-1], STATIC_FRAMES)
+    staticFrms = BGRFrames.from_frame(rastFrms_cntr[-1], STATIC_FRAMES)
     all_frames.append(staticFrms)
     script_lines.append(script_line)
 
