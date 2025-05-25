@@ -1805,26 +1805,327 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     time_dist_frame['dist_met'] = time_dist_frame['time_adj'] * player_speed_mps
     time_dist_frame['dist_pix'] = time_dist_frame['dist_met'] * const.METER_TO_FOOT * const.SCALE
 
+    ### Tables
+    def f(which):
+        if which is None:
+            return {'Time to Bounce\n(in seconds)\n\n': ''}
+        else:   
+            return {'Time to Bounce\n(in seconds)\n\n': f'{timeDict[which]}'}
+
+    DARK_GREEN_COLOR = interpolate_tuples(const.BGR['leafy_green'], (0, 0, 0), 0.75)
+    DARK_CHIP_LO_COLOR = interpolate_tuples(CHIP_LO_COLOR, (0, 0, 0), 0.95)
+    DARK_CHIP_HI_COLOR = interpolate_tuples(CHIP_HI_COLOR, (0, 0, 0), 0.95)
+    DARK_TOPS_COLOR = interpolate_tuples(TOPS_COLOR, (0, 0, 0), 0.95)
+    table_text_thickness = 2
+
+    kwargDict = {'dimensions': (960, 540), 'skeleton_shrinkage': 0.42, 'index_offset': 0.1,
+                 'header_text_size': 2, 'index_text_size': 2, 'data_text_size': 2, 'resolution': 2000,
+                 'automatic_vertical_offset_text_line_height': 0.2, 
+                 'data_text_color': (255, 255, 255), #const.BGR['leafy_green'], 
+                 'header_text_color': (255, 255, 255), #const.BGR['leafy_green'], 
+                 'index_text_color': (255, 255, 255), #const.BGR['leafy_green'],
+                 'data_text_thickness': table_text_thickness, 
+                 'header_text_thickness': table_text_thickness, 
+                 'index_text_thickness': table_text_thickness,
+                 }
+
+    tabDict = {'High Chip': f('orig_hi'),
+               'Low Chip': f('orig_lo'),
+               'Topspin': f('orig_tp')}
+    myTab = Table(tabDict, **kwargDict)
+    myTab.set_back_color(DARK_CHIP_HI_COLOR, 1, 0)
+    myTab.set_back_color(DARK_CHIP_HI_COLOR, 1, 1)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 0)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 1)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 1)
+
+    myTab.set_text_color(DARK_CHIP_HI_COLOR, 1, 0)
+    myTab.set_text_color(DARK_CHIP_HI_COLOR, 1, 1)
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 1)
+    tabFrm_orig1 = myTab.render()
+    # tabFrm_orig1.show()
+
+    tabDict = {'High Chip': f('orig_hi'),
+               'Low Chip': f('orig_lo'),
+               'Topspin': f('orig_tp')}
+    myTab = Table(tabDict, **kwargDict)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 0)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 1)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 0)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 1)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 1)
+    
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 1)
+
+    tabFrm_orig2 = myTab.render()
+    # tabFrm_orig2.show()
+
+    tabDict = {'High Chip': f('orig_hi'),
+               'Low Chip': f('orig_lo'),
+               'Topspin': f('orig_tp')}
+    myTab = Table(tabDict, **kwargDict)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 0)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 1)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 0)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 1)
+    myTab.set_back_color(TOPS_COLOR, 3, 0)
+    myTab.set_back_color(TOPS_COLOR, 3, 1)
+    tabFrm_orig3 = myTab.render()
+    # tabFrm_orig3.show()
+
+    tabDict = {'High Chip': f('best_hi'),
+               'Low Chip': f('best_lo'),
+               'Topspin': f('best_tp')}
+    myTab = Table(tabDict, **kwargDict)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 0)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 1)
+    myTab.set_back_color(DARK_CHIP_LO_COLOR, 2, 0)
+    myTab.set_back_color(DARK_CHIP_LO_COLOR, 2, 1)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 1)
+
+    myTab.set_text_color(DARK_CHIP_LO_COLOR, 2, 0)
+    myTab.set_text_color(DARK_CHIP_LO_COLOR, 2, 1)
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 1)
+    tabFrm_best1 = myTab.render()
+    # tabFrm_best1.show()
+
+    tabDict = {'High Chip': f('best_hi'),
+               'Low Chip': f('best_lo'),
+               'Topspin': f('best_tp')}
+    myTab = Table(tabDict, **kwargDict)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 0)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 1)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 0)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 1)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_back_color(DARK_TOPS_COLOR, 3, 1)
+    
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 0)
+    myTab.set_text_color(DARK_TOPS_COLOR, 3, 1)
+
+    tabFrm_best2 = myTab.render()
+    # tabFrm_best2.show()
+
+    tabDict = {'High Chip': f('best_hi'),
+               'Low Chip': f('best_lo'),
+               'Topspin': f('best_tp')}
+    myTab = Table(tabDict, **kwargDict)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 0)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 1)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 0)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 1)
+    myTab.set_back_color(TOPS_COLOR, 3, 0)
+    myTab.set_back_color(TOPS_COLOR, 3, 1)
+    tabFrm_best3 = myTab.render()
+    # tabFrm_best3.show()
+
+    tabDict = {'High Chip': f('cntr_hi'),
+               'Low Chip': f('cntr_lo'),
+               'Topspin': f('cntr_tp')}
+    myTab = Table(tabDict, **kwargDict)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 0)
+    myTab.set_back_color(CHIP_HI_COLOR, 1, 1)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 0)
+    myTab.set_back_color(CHIP_LO_COLOR, 2, 1)
+    myTab.set_back_color(TOPS_COLOR, 3, 0)
+    myTab.set_back_color(TOPS_COLOR, 3, 1)
+    tabFrm_cntr3 = myTab.render()
+    # tabFrm_cntr3.show()
+
+
+    # tabDict = {'High Chip': f('orig_hi'),
+    #            'Low Chip': f('orig_lo'),
+    #            'Topspin': f('orig_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 1, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 1, 1)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_orig1 = myTab.render()
+    # # tabFrm_orig1.show()
+
+    # tabDict = {'High Chip': f('orig_hi'),
+    #            'Low Chip': f('orig_lo'),
+    #            'Topspin': f('orig_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_orig2 = myTab.render()
+    # # tabFrm_orig2.show()
+
+    # tabDict = {'High Chip': f('orig_hi'),
+    #            'Low Chip': f('orig_lo'),
+    #            'Topspin': f('orig_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # tabFrm_orig3 = myTab.render()
+    # # tabFrm_orig3.show()
+
+    # tabDict = {'High Chip': f('best_hi'),
+    #            'Low Chip': f('best_lo'),
+    #            'Topspin': f('best_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 2, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 2, 1)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_best1 = myTab.render()
+    # # tabFrm_best1.show()
+
+    # tabDict = {'High Chip': f('best_hi'),
+    #            'Low Chip': f('best_lo'),
+    #            'Topspin': f('best_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_best2 = myTab.render()
+    # # tabFrm_best2.show()
+
+    # tabDict = {'High Chip': f('best_hi'),
+    #            'Low Chip': f('best_lo'),
+    #            'Topspin': f('best_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # tabFrm_best3 = myTab.render()
+    # # tabFrm_best3.show()
+
+    # tabDict = {'High Chip': f('cntr_hi'),
+    #            'Low Chip': f('cntr_lo'),
+    #            'Topspin': f('cntr_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # tabFrm_cntr3 = myTab.render()
+    # # tabFrm_cntr3.show()
+
+
+    # tabDict = {'High Chip': f('orig_hi'),
+    #            'Low Chip': f('orig_lo'),
+    #            'Topspin': f('orig_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 1, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 1, 1)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_orig1 = myTab.render()
+    # # tabFrm_orig1.show()
+
+    # tabDict = {'High Chip': f('orig_hi'),
+    #            'Low Chip': f('orig_lo'),
+    #            'Topspin': f('orig_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 1, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 1, 1)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_orig1 = myTab.render()
+    # # tabFrm_orig1.show()
+
+    # tabDict = {'High Chip': f('orig_hi'),
+    #            'Low Chip': f('orig_lo'),
+    #            'Topspin': f('orig_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_orig2 = myTab.render()
+    # # tabFrm_orig2.show()
+
+    # tabDict = {'High Chip': f('orig_hi'),
+    #            'Low Chip': f('orig_lo'),
+    #            'Topspin': f('orig_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # tabFrm_orig3 = myTab.render()
+    # # tabFrm_orig3.show()
+
+    # tabDict = {'High Chip': f('best_hi'),
+    #            'Low Chip': f('best_lo'),
+    #            'Topspin': f('best_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 2, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 2, 1)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_best1 = myTab.render()
+    # # tabFrm_best1.show()
+
+    # tabDict = {'High Chip': f('best_hi'),
+    #            'Low Chip': f('best_lo'),
+    #            'Topspin': f('best_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 0)
+    # myTab.set_text_color(DARK_GREEN_COLOR, 3, 1)
+    # tabFrm_best2 = myTab.render()
+    # # tabFrm_best2.show()
+
+    # tabDict = {'High Chip': f('best_hi'),
+    #            'Low Chip': f('best_lo'),
+    #            'Topspin': f('best_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # tabFrm_best3 = myTab.render()
+    # # tabFrm_best3.show()
+
+    # tabDict = {'High Chip': f('cntr_hi'),
+    #            'Low Chip': f('cntr_lo'),
+    #            'Topspin': f('cntr_tp')}
+    # myTab = Table(tabDict, **kwargDict)
+    # tabFrm_cntr3 = myTab.render()
+    # # tabFrm_cntr3.show()
+
+    ### LINES FOR RASTER ###
+    put_kwargs = {'thickness': 2, 'color': const.BGR['bright_grey']}
+    y = 145
+
+    from ATMANpy.types.Lines import Arrow
+    aPt, bPt = Point2D((430, y)), Point2D((30, y))
+    tabArr_orig = Arrow.make(aPt, bPt, hat_length = 20)
+
+    aPt, bPt = Point2D((780, y)), Point2D((930, y))
+    tabArr_best = Arrow.make(aPt, bPt, hat_length = 20)
+
+    aPt, bPt = Point2D((600, y + 55)), Point2D((600, y + 370))
+    tabArr_cntr = Arrow.make(aPt, bPt, hat_length = 20)
+
+    # testRst = FrameRaster(2, 2)
+    # testRst.add(tabFrm_orig3.put(tabArr_orig, **put_kwargs), 0, 1)
+    # testRst.add(tabFrm_best3.put(tabArr_best, **put_kwargs), 1, 0)
+    # testRst.render().show()
+
+    # testRst = FrameRaster(2, 2)
+    # testRst.add(tabFrm_orig3.put(tabArr_cntr, **put_kwargs), 0, 1)
+    # testRst.add(tabFrm_best3.put(tabArr_best, **put_kwargs), 1, 0)
+    # testRst.render().show()
+
+    tabFrm_orig1 = tabFrm_orig1.put(tabArr_orig, **put_kwargs)
+    tabFrm_orig2 = tabFrm_orig2.put(tabArr_orig, **put_kwargs)
+    tabFrm_orig3 = tabFrm_orig3.put(tabArr_orig, **put_kwargs)
+    tabFrm_best1 = tabFrm_best1.put(tabArr_best, **put_kwargs)
+    tabFrm_best2 = tabFrm_best2.put(tabArr_best, **put_kwargs)
+    tabFrm_best3 = tabFrm_best3.put(tabArr_best, **put_kwargs)
+    tabFrm_cntr3 = tabFrm_cntr3.put(tabArr_cntr, **put_kwargs)
+
+    ###########################
     from ATMANpy.types.Overlays import reverse_cascade
     revRst, revFrms = reverse_cascade(myRst, keep_which = [(0, 0), (1, 1)], frames_per_element = 10)
-    DecapStream(revFrms, 0, 100).show()
+    # DecapStream(revFrms, 0, 100).show()
 
     ### Reverse return
     splineFrms_orig_rev = BGRFrames.from_frames([early_orig_scaledFrms[-10:], splineFrms_orig]).reverse()
     splineFrms_best_rev = BGRFrames.from_frames([early_best_scaledFrms[-10:], splineFrms_best]).reverse()
-    DecapStream(splineFrms_orig_rev, 0, 100).show()
-    DecapStream(splineFrms_best_rev, 0, 100).show()
+    # DecapStream(splineFrms_orig_rev, 0, 100).show()
+    # DecapStream(splineFrms_best_rev, 0, 100).show()
 
     ### Play serve again
     splineFrms_orig_srv = BGRFrames.from_frames([early_orig_scaledFrms[-10:], splineFrms_orig_dim[:len(myShots[0])]])
     splineFrms_best_srv = BGRFrames.from_frames([early_best_scaledFrms[-10:], splineFrms_best_dim[:len(bestShots[0])]])
-    DecapStream(splineFrms_orig_srv, 0, 100).show()
-    DecapStream(splineFrms_best_srv, 0, 100).show()
+    # DecapStream(splineFrms_orig_srv, 0, 100).show()
+    # DecapStream(splineFrms_best_srv, 0, 100).show()
 
     splineFrms_orig_ret = splineFrms_orig_dim[len(myShots[0]):]
     splineFrms_best_ret = splineFrms_best_dim[len(bestShots[0]):]
-    DecapStream(splineFrms_orig_ret, 0, 100).show()
-    DecapStream(splineFrms_best_ret, 0, 100).show()
+    # DecapStream(splineFrms_orig_ret, 0, 100).show()
+    # DecapStream(splineFrms_best_ret, 0, 100).show()
 
     ###### prepare player masks #######
     ### a) low chip
@@ -1923,7 +2224,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     maxCrc_orig = maxCrc
     crcFrms_orig = BGRFrames.from_single_frames(crc_frames)    
-    DecapStream(crcFrms_orig, 0, 100).show()
+    # DecapStream(crcFrms_orig, 0, 100).show()
 
     # b) for the original shot
     x, y = bestShots[1].hitPlayer.get_initial_position()
@@ -1955,7 +2256,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     maxCrc_best = maxCrc
     crcFrms_best = BGRFrames.from_single_frames(crc_frames)    
-    DecapStream(crcFrms_best, 0, 100).show()
+    # DecapStream(crcFrms_best, 0, 100).show()
 
     #### fade out players, fade out trajectories, and fade in Xs
     origPt = Point3D.from_point2D(Point2D(myShots[1].get_first_bounce_position()), z = 0)
@@ -1983,7 +2284,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrm_orig = crcFrms_orig[-1].mask(keepMask_orig) + shapeFrm.mask(~keepMask_orig)
 
     itplFrms_orig = vs.interpolate_frames(crcFrms_orig[-1], endFrm_orig, 50)
-    DecapStream(itplFrms_orig, 0, 100).show()
+    # DecapStream(itplFrms_orig, 0, 100).show()
 
     ### b) hi chip
     shapeFrms, _ = vs.animate_static(Scene([maxCrc_best, bestMark_repos, bestMark]), static_cam = brestCam_resized_half, 
@@ -1994,7 +2295,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrm_best = crcFrms_best[-1].mask(keepMask_best) + shapeFrm.mask(~keepMask_best)
 
     itplFrms_best = vs.interpolate_frames(crcFrms_best[-1], endFrm_best, 50)
-    DecapStream(itplFrms_best, 0, 100).show()
+    # DecapStream(itplFrms_best, 0, 100).show()
 
     script_line =   """
                         First, consider the original example in the top left. 
@@ -2016,10 +2317,16 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     myRst.add(crcFrms_orig, 0, 0)
     crcFrms = myRst.render()
-    crcFrms = overlay_center(crcFrms, leg1Frm_crc_lo)
+    # crcFrms = overlay_center(crcFrms, leg1Frm_crc_lo)
     # DecapStream(crcFrms, 0, 100).show()
 
-    jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms])
+    myRst.add(crcFrms_orig[-1], 0, 0)
+    myRst.add(BGRFrames.from_frame(tabFrm_orig1, 50), 0, 1)
+    statFrms = myRst.render()
+
+    itplFrms = vs.interpolate_frames(crcFrms[-1], statFrms[0], 50)
+
+    jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms, itplFrms, statFrms])
     DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
@@ -2031,8 +2338,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     myRst.add(itplFrms_orig, 0, 0)
     rastFrms0 = myRst.render()
-    rastFrms0 = overlay_center(rastFrms0, leg1Frm_crc_lo)
+    # rastFrms0 = overlay_center(rastFrms0, leg1Frm_crc_lo)
     DecapStream(rastFrms0, 0, 100).show()
+    all_frames.append(rastFrms0)
+    script_lines.append(script_line)
 
     script_line =   """
                         Had he played a high angle return, the additional .25 seconds of time-until-bounce would have given him more range of motion, 
@@ -2057,8 +2366,9 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
     myRst.add(endFrms, 0, 0)
+    myRst.add(tabFrm_orig2, 0, 1)
     rastFrms1 = myRst.render()
-    rastFrms1 = overlay_center(rastFrms1, leg2Frm_crc)
+    # rastFrms1 = overlay_center(rastFrms1, leg2Frm_crc)
     DecapStream(rastFrms1, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms0[-1], rastFrms1[0], 50)
@@ -2066,16 +2376,6 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     all_frames.append(itplFrms)
     script_lines.append(script_line)
-
-    script_line =   f"""
-                        A comparable topspin shot down the line would travel {time_dist_frame.loc['orig_tp', 'time']:.1f} seconds, 
-                        which does not afford the returning player with enough time to recover to the optimal spot. 
-                        In this sense, the topspin return down-the-line is a forcing shot: it must be so good as to end the rally
-                        on the spot, or at least force a weak ball or even an error from the serving player; 
-                        otherwise, the returner will have opened himself up to a low-margin serve + 1 cross-court.
-
-                        Now, consider the situation in the lower right corner. 
-                    """
 
     script_line =   f"""
                         A comparable topspin shot down the line would travel {time_dist_frame.loc['orig_tp', 'time']:.1f} seconds, 
@@ -2090,8 +2390,9 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
     myRst.add(endFrms, 0, 0)
+    myRst.add(tabFrm_orig3, 0, 1)
     rastFrms2 = myRst.render()
-    rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
+    # rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
     DecapStream(rastFrms2, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms1[-1], rastFrms2[0], 50)
@@ -2106,23 +2407,30 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     myRst = FramesRaster(2, 2)
     myRst.add(endFrms[-1].dim(dim_factor), 0, 0)
+    myRst.add(tabFrm_orig3.dim(dim_factor), 0, 1)
     myRst.add(splineFrms_best_rev, 1, 1)
 
     revFrms = myRst.render()
-    revFrms = overlay_center(revFrms, leg3Frm_crc)
+    # revFrms = overlay_center(revFrms, leg3Frm_crc)
     # DecapStream(revFrms, 0, 100).show()
 
     myRst.add(splineFrms_best_srv, 1, 1)
     srvFrms = myRst.render()
-    srvFrms = overlay_center(srvFrms, leg3Frm_crc)
+    # srvFrms = overlay_center(srvFrms, leg3Frm_crc)
     # DecapStream(srvFrms, 0, 100).show()
     
     myRst.add(crcFrms_best, 1, 1)
     crcFrms = myRst.render()
-    crcFrms = overlay_center(crcFrms, leg3Frm_crc)
+    # crcFrms = overlay_center(crcFrms, leg3Frm_crc)
     # DecapStream(crcFrms, 0, 100).show()
 
-    jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms])
+    myRst.add(crcFrms_best[-1], 1, 1)
+    myRst.add(BGRFrames.from_frame(tabFrm_best1, 50), 1, 0)
+    statFrms = myRst.render()
+
+    itplFrms = vs.interpolate_frames(crcFrms[-1], statFrms[0], 50)
+
+    jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms, itplFrms, statFrms])
     DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
@@ -2134,8 +2442,9 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                     """
 
     myRst.add(itplFrms_best, 1, 1)
+    myRst.add(tabFrm_best1, 1, 0)
     rastFrms0 = myRst.render()
-    rastFrms0 = overlay_center(rastFrms0, leg3Frm_crc)
+    # rastFrms0 = overlay_center(rastFrms0, leg3Frm_crc)
     DecapStream(rastFrms0, 0, 100).show()
 
     all_frames.append(rastFrms0)
@@ -2164,8 +2473,9 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
     myRst.add(endFrms, 1, 1)
+    myRst.add(tabFrm_best2, 1, 0)
     rastFrms1 = myRst.render()
-    rastFrms1 = overlay_center(rastFrms1, leg3Frm_crc)
+    # rastFrms1 = overlay_center(rastFrms1, leg3Frm_crc)
     DecapStream(rastFrms1, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms0[-1], rastFrms1[0], 50)
@@ -2187,8 +2497,9 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
     myRst.add(endFrms, 1, 1)
+    myRst.add(tabFrm_best3, 1, 0)
     rastFrms2 = myRst.render()
-    rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
+    # rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
     DecapStream(rastFrms2, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms1[-1], rastFrms2[0], 50)
@@ -2254,9 +2565,12 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrms = BGRFrames.from_single_frames(end_frames)
     DecapStream(endFrms, 0, 100).show()
 
+    tabFrms_itpl = vs.interpolate_frames(tabFrm_orig3, tabFrm_cntr3, 50)
+
     myRst.add(endFrms, 1, 1)
+    myRst.add(tabFrms_itpl, 0, 1)
     rastFrms_cntr = myRst.render()
-    rastFrms_cntr = overlay_center(rastFrms_cntr, leg3Frm_crc)
+    # rastFrms_cntr = overlay_center(rastFrms_cntr, leg3Frm_crc)
     DecapStream(rastFrms_cntr, 0, 100).show()
 
     all_frames.append(rastFrms_cntr)
@@ -2269,6 +2583,11 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     staticFrms = BGRFrames.from_frame(rastFrms_cntr[-1], STATIC_FRAMES)
     all_frames.append(staticFrms)
     script_lines.append(script_line)
+
+
+
+
+
 
     ### SEGUE TO INFERENCE
     # given all of this -> where SHOULD a chipped ball go to improve the returners chances of winning?
