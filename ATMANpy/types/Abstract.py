@@ -1999,43 +1999,50 @@ for methodStr in dir(Shot):
 #####################################
 ####### DATA READ-IN FUNCTIONS ######
 #####################################
-def read_in_data_table(conf, conf_idx = 0):
+def read_in_data_table(conf, conf_idx = 0, before_y_m_d = None, after_y_m_d = None):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
-    dataTable = ff.read_feature_frame('dataTable', vid, sto, keep_only = 'last')
+    dataTable = ff.read_feature_frame('dataTable', vid, sto, keep_only = 'last', 
+                                      before_y_m_d = before_y_m_d, after_y_m_d = after_y_m_d)
     dataTable.index = pd.MultiIndex.from_product([[conf_idx], dataTable.index])
     dataTable.index.names = ['match_idx', 'frame_num']
     return dataTable
 
-def read_in_placeholder_table(conf, conf_idx = 0):
+def read_in_placeholder_table(conf, conf_idx = 0, before_y_m_d = None, after_y_m_d = None):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
-    placeTable = ff.read_feature_frame('placeTable', vid, sto, keep_only = 'last')
+    placeTable = ff.read_feature_frame('placeTable', vid, sto, keep_only = 'last',
+                                       before_y_m_d = before_y_m_d, after_y_m_d = after_y_m_d)
     placeTable['match_idx'] = conf_idx
     return placeTable
 
-def read_in_colinear_table(conf, conf_idx = 0):
+def read_in_colinear_table(conf, conf_idx = 0, before_y_m_d = None, after_y_m_d = None):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
-    dataTable = ff.read_feature_frame('dataTable_colinear', vid, sto, keep_only = 'last')
+    dataTable = ff.read_feature_frame('dataTable_colinear', vid, sto, keep_only = 'last',
+                                      before_y_m_d = before_y_m_d, after_y_m_d = after_y_m_d)
     dataTable.index = pd.MultiIndex.from_product([[conf_idx], dataTable.index])
     dataTable.index.names = ['match_idx', 'frame_num']
     return dataTable
 
-def _read_tables_and_concat(confs, readFunc):
+def _read_tables_and_concat(confs, readFunc, before_y_m_d = None, after_y_m_d = None):
     ### READ IN DATA
     tables = []
     for conf_idx, conf in enumerate(confs):
-        dataTable = readFunc(conf, conf_idx = conf_idx)
+        dataTable = readFunc(conf, conf_idx = conf_idx, 
+                             before_y_m_d = before_y_m_d, after_y_m_d = after_y_m_d)
         tables.append(dataTable)
     allTable = pd.concat(tables)    
     return allTable
 
-def read_in_data_tables(confs):
-    return _read_tables_and_concat(confs, read_in_data_table)
+def read_in_data_tables(confs, before_y_m_d = None, after_y_m_d = None):
+    return _read_tables_and_concat(confs, read_in_data_table, 
+                             before_y_m_d = before_y_m_d, after_y_m_d = after_y_m_d)
 
-def read_in_placeholder_tables(confs):
-    return _read_tables_and_concat(confs, read_in_placeholder_table)
+def read_in_placeholder_tables(confs, before_y_m_d = None, after_y_m_d = None):
+    return _read_tables_and_concat(confs, read_in_placeholder_table, 
+                             before_y_m_d = before_y_m_d, after_y_m_d = after_y_m_d)
 
-def read_in_colinear_tables(confs):
-    return _read_tables_and_concat(confs, read_in_colinear_table)
+def read_in_colinear_tables(confs, before_y_m_d = None, after_y_m_d = None):
+    return _read_tables_and_concat(confs, read_in_colinear_table, 
+                             before_y_m_d = before_y_m_d, after_y_m_d = after_y_m_d)
 
 if __name__ == '__main__':
     from ATMANpy.funcs.util_funcs import get_folder_struct

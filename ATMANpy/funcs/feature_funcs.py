@@ -208,7 +208,8 @@ def save_events(stream_features, featureName, videoName, storeName):
 
 ###### Loading #############
 
-def read_feature_frame(featureName, videoName, storeName, keep_which = 'last', keep_only = None):
+def read_feature_frame(featureName, videoName, storeName, keep_which = 'last', keep_only = None,
+                       before_y_m_d = None, after_y_m_d = None):
     ### keep_only -> in case we want ONLY the last or the first. None for default behaviour with consolidation among all frames.
 
     print(f'Reading {featureName}...')
@@ -221,11 +222,41 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last', k
         frmList = []
 
         files = os.listdir(savePath)
-        ### TODO: this is imperfect! first and last should be determined by date -> need to parse the date and sort it.
+
+        # if keep_only == 'first':
+        #     files = [files[0]]
+        # elif keep_only == 'last':
+        #     files = [files[-1]]
+
+        import datetime as dt        
+        date_string_lists = [f.split('-')[:3] for f in files]
+        date_int_lists = [[int(dStr) for dStr in l] for l in date_string_lists]
+        dates = [dt.datetime(*ds) for ds in date_int_lists]
+
+        if before_y_m_d is not None:
+            y, m, d = before_y_m_d
+            thresh_date = dt.datetime(y, m, d)
+            date_filt_before = [date < thresh_date for date in dates]
+        else:
+            date_filt_before = [True for date in dates]
+
+        if after_y_m_d is not None:
+            y, m, d = after_y_m_d
+            thresh_date = dt.datetime(y, m, d)
+            date_filt_after = [date > thresh_date for date in dates]
+        else:
+            date_filt_after = [True for date in dates]
+
+        dates_filter = [f_b & f_a for f_b, f_a in zip(date_filt_before, date_filt_after)]
+        dates_filtered = [d for d, f in zip(dates, dates_filter) if f]
+        
         if keep_only == 'first':
-            files = [files[0]]
+            my_date = min(dates_filtered)
         elif keep_only == 'last':
-            files = [files[-1]]
+            my_date = max(dates_filtered)
+
+        file_idx = dates.index(my_date)
+        files = [files[file_idx]]
 
         for file in files:
             ### read file
