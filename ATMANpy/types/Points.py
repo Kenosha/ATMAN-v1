@@ -55,6 +55,9 @@ class Point2D:
         op_x, op_y = Point2D.get_operant(y)
         outCoords = self.coords[0] / op_x, self.coords[1] / op_y
         return Point2D(outCoords)
+    def __neg__(self):
+        outCoords = -self.coords[0], -self.coords[1]
+        return Point2D(outCoords)
     
     ### METHODS ###
     def up(self, points):
