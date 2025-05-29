@@ -331,9 +331,12 @@ class Line:
     def center(self):
         return (self.leftPt + self.rightPt) // 2
     
+    def to_vector(self):
+        return self.rightPt - self.leftPt
+
     def distance_to(self, aPt):
         ### find perpendicular distance of a line to a point
-        lineVec = self.rightPt - self.leftPt
+        lineVec = self.to_vector()
         orthLine = Line(aPt, aPt + lineVec.find_perpendicular())
         nearestPt = self.weak_intersect(orthLine, to_int = False)
         return aPt.distance_to(nearestPt)
