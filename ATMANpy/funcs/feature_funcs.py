@@ -255,8 +255,11 @@ def read_feature_frame(featureName, videoName, storeName, keep_which = 'last', k
         elif keep_only == 'last':
             my_date = max(dates_filtered)
 
-        file_idx = dates.index(my_date)
-        files = [files[file_idx]]
+        try:
+            file_idx = dates.index(my_date)
+            files = [files[file_idx]]
+        except UnboundLocalError:
+            pass ### if my_date is not defined, use all files.
 
         for file in files:
             ### read file
