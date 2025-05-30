@@ -208,6 +208,9 @@ TOPS_COLOR = const.BGR['light_brown']
 
 BANDWIDTH = 45
 
+FRAME_THICKNESS = 2
+FRAME_COLOR = const.BGR['bright_grey']
+
 ########################################
 ###### LOOK AT RETURNS MADE ############
 ########################################
@@ -1446,7 +1449,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # rasterize frames, and fade in the point being played
     script_line = ""
     fadeinRst = FramesRaster(2, 2, borders = None)
-    fadeinRst.add(orig_itplFrms, 0, 0)
+    fadeinRst.add(orig_itplFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     fadeinFrms = fadeinRst.render()
     all_frames.append(fadeinFrms)
     script_lines.append(script_line)
@@ -1454,7 +1457,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # play out point with spline
     script_line = ""
     myRst = FramesRaster(2, 2, borders = None)
-    myRst.add(splineFrms_orig, 0, 0)
+    myRst.add(splineFrms_orig.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     playFrms_orig = myRst.render()
     all_frames.append(playFrms_orig)
     script_lines.append(script_line)
@@ -1467,14 +1470,14 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     # fade in best comparison in lower right
     fadeinRst = FramesRaster(2, 2, borders = None)
-    fadeinRst.add(splineFrms_orig[-1], 0, 0)
-    fadeinRst.add(best_itplFrms, 1, 1)
+    fadeinRst.add(splineFrms_orig[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    fadeinRst.add(best_itplFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     fadeinFrms = fadeinRst.render()
 
     # play out point with spline
     playRst = FramesRaster(2, 2, borders = None)
-    playRst.add(splineFrms_orig[-1], 0, 0)
-    playRst.add(splineFrms_best, 1, 1)
+    playRst.add(splineFrms_orig[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    playRst.add(splineFrms_best.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     playFrms = playRst.render()
 
     jointFrms = BGRFrames.from_frames([staticFrms, fadeinFrms, playFrms])
@@ -1505,10 +1508,13 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                     'Hit Height': {     lo_name: f'{lo_hgt:.1f} m',     hi_name: f'{hi_hgt:.1f} m'}} ### adjust hit height? obviously not correct for lo_name?
     
     dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
-    myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.25, 
-                  title = 'Initial Conditions', title_horizontal_offset = 11, header_text_color = const.BGR['bright_grey'],
+    myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, skeleton_vertical_offset = 1, 
+                  title = 'Initial Conditions', title_horizontal_offset = 11, title_vertical_offset = 0.5,
+                  header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
+                  index_offset = 0.25, 
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
-                  skip_after_how_many_symbols = None)
+                  skip_after_how_many_symbols = None,
+                  automatic_vertical_offset_text_line_height = 0.25)
     tabFrm_match = myTab.render()
     # tabFrm_match.show()
 
@@ -1524,8 +1530,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     #                     We therefore isolate the effect of launch angle on trajectory characteristics, which we will look at now.
     #                 """
     myRst = FrameRaster(2, 2)
-    myRst.add(splineFrms_orig[-1], 0, 0)
-    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(splineFrms_orig[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    myRst.add(splineFrms_best[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_match, 0, 1)
     tabFrms_match = BGRFrames.from_frame(myRst.render(), STATIC_FRAMES)
     all_frames.append(tabFrms_match)
@@ -1582,32 +1588,44 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     #               skip_after_how_many_symbols = None)
     # tabFrm_comp_2 = myTab_2.render()
     
-    myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
-                  title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
+    myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1,
+                  title_vertical_offset = 0.5, skeleton_vertical_offset = 1, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10, 
+                  header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
-                  skip_after_how_many_symbols = None, resolution = 2000)
+                  skip_after_how_many_symbols = None, resolution = 2000,
+                  automatic_vertical_offset_text_line_height = 0.25)
     myTab.set_back_color(const.BGR['darker_grey'], 2, 0)
     myTab.set_back_color(const.BGR['darker_grey'], 2, 1)
     myTab.set_back_color(const.BGR['darker_grey'], 2, 2)
     tabFrm_comp_0 = myTab.render()
+    # tabFrm_comp_0.show()
 
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
-                  title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
+                  title_vertical_offset = 0.5, skeleton_vertical_offset = 1, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10, 
+                  header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
-                  skip_after_how_many_symbols = None, resolution = 2000)
+                  skip_after_how_many_symbols = None, resolution = 2000,
+                  automatic_vertical_offset_text_line_height = 0.25)
     myTab.set_back_color(const.BGR['darker_grey'], 3, 0)
     myTab.set_back_color(const.BGR['darker_grey'], 3, 1)
     myTab.set_back_color(const.BGR['darker_grey'], 3, 2)
     tabFrm_comp_1 = myTab.render()
+    # tabFrm_comp_1.show()
 
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
-                  title = 'Trajectory Comparison', title_horizontal_offset = 10, header_text_color = const.BGR['bright_grey'],
+                  title_vertical_offset = 0.5, skeleton_vertical_offset = 1, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 10, 
+                  header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
-                  skip_after_how_many_symbols = None, resolution = 2000)
+                  skip_after_how_many_symbols = None, resolution = 2000,
+                  automatic_vertical_offset_text_line_height = 0.25)
     myTab.set_back_color(const.BGR['darker_grey'], 4, 0)
     myTab.set_back_color(const.BGR['darker_grey'], 4, 1)
     myTab.set_back_color(const.BGR['darker_grey'], 4, 2)
     tabFrm_comp_2 = myTab.render()
+    # tabFrm_comp_2.show()
 
     # tabFrms_blink_0 = vs.blinking(tabFrm_comp_1, tabFrm_comp_0, blinks_per_second = 1.5, duration_in_frames = 300)
     # tabFrms_blink_1 = vs.blinking(tabFrm_comp_2, tabFrm_comp_1, blinks_per_second = 1.5, duration_in_frames = 300)
@@ -1626,8 +1644,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     #                 """
     script_line =   "The high-arcing chip bounces 70 cm higher than the low chip, which makes it easier to attack if it lacks sufficient depth."
     myRst = FramesRaster(2, 2)
-    myRst.add(splineFrms_orig[-1], 0, 0)
-    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(splineFrms_orig[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    myRst.add(splineFrms_best[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_match, 0, 1)
     myRst.add(tabFrm_comp_0, 1, 0)
     tabFrms_match = BGRFrames.from_frame(myRst.render()[0], 25)
@@ -1640,8 +1658,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     #                 """
     script_line =   "On the other hand, the high chip loses more of its speed; it is up to the server to inject pace."
     myRst = FramesRaster(2, 2)
-    myRst.add(splineFrms_orig[-1], 0, 0)
-    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(splineFrms_orig[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    myRst.add(splineFrms_best[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_match, 0, 1)
     myRst.add(tabFrm_comp_1, 1, 0)
     tabFrms_match = BGRFrames.from_frame(myRst.render()[0], 25)
@@ -1653,8 +1671,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         With respect to this latter point, let's visualize the impact of a ball's time in flight on the receiving player's ability to reposition on the court.
                     """
     myRst = FramesRaster(2, 2)
-    myRst.add(splineFrms_orig[-1], 0, 0)
-    myRst.add(splineFrms_best[-1], 1, 1)
+    myRst.add(splineFrms_orig[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    myRst.add(splineFrms_best[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_match, 0, 1)
     myRst.add(tabFrm_comp_2, 1, 0)
     tabFrms_match = BGRFrames.from_frame(myRst.render()[0], 25)
@@ -2305,22 +2323,22 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                     """
     
     myRst = FramesRaster(2, 2)
-    myRst.add(splineFrms_orig_rev, 0, 0)
-    myRst.add(splineFrms_best[-1].dim(dim_factor), 1, 1)
+    myRst.add(splineFrms_orig_rev.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    myRst.add(splineFrms_best[-1].framed(FRAME_THICKNESS, FRAME_COLOR).dim(dim_factor), 1, 1)
 
     revFrms = myRst.render()
     # DecapStream(revFrms, 0, 100).show()
 
-    myRst.add(splineFrms_orig_srv, 0, 0)
+    myRst.add(splineFrms_orig_srv.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     srvFrms = myRst.render()
     # DecapStream(srvFrms, 0, 100).show()
     
-    myRst.add(crcFrms_orig, 0, 0)
+    myRst.add(crcFrms_orig.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     crcFrms = myRst.render()
     # crcFrms = overlay_center(crcFrms, leg1Frm_crc_lo)
     # DecapStream(crcFrms, 0, 100).show()
 
-    myRst.add(crcFrms_orig[-1], 0, 0)
+    myRst.add(crcFrms_orig[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     myRst.add(BGRFrames.from_frame(tabFrm_orig1, 50), 0, 1)
     statFrms = myRst.render()
 
@@ -2336,7 +2354,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         The low-angled chip shot gives the returner enough time to recover to the optimal spot, marked with a red X.
                     """
 
-    myRst.add(itplFrms_orig, 0, 0)
+    myRst.add(itplFrms_orig.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     rastFrms0 = myRst.render()
     # rastFrms0 = overlay_center(rastFrms0, leg1Frm_crc_lo)
     DecapStream(rastFrms0, 0, 100).show()
@@ -2365,7 +2383,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrm = crcFrms_orig[-1].mask(keepMask_orig) + statFrms[-1].mask(~keepMask_orig)
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
-    myRst.add(endFrms, 0, 0)
+    myRst.add(endFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     myRst.add(tabFrm_orig2, 0, 1)
     rastFrms1 = myRst.render()
     # rastFrms1 = overlay_center(rastFrms1, leg2Frm_crc)
@@ -2389,7 +2407,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrm = crcFrms_orig[-1].mask(keepMask_orig) + statFrms[-1].mask(~keepMask_orig)
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
-    myRst.add(endFrms, 0, 0)
+    myRst.add(endFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     myRst.add(tabFrm_orig3, 0, 1)
     rastFrms2 = myRst.render()
     # rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
@@ -2406,25 +2424,25 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                     """
 
     myRst = FramesRaster(2, 2)
-    myRst.add(endFrms[-1].dim(dim_factor), 0, 0)
+    myRst.add(endFrms[-1].framed(FRAME_THICKNESS, FRAME_COLOR).dim(dim_factor), 0, 0)
     myRst.add(tabFrm_orig3.dim(dim_factor), 0, 1)
-    myRst.add(splineFrms_best_rev, 1, 1)
+    myRst.add(splineFrms_best_rev.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
 
     revFrms = myRst.render()
     # revFrms = overlay_center(revFrms, leg3Frm_crc)
     # DecapStream(revFrms, 0, 100).show()
 
-    myRst.add(splineFrms_best_srv, 1, 1)
+    myRst.add(splineFrms_best_srv.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     srvFrms = myRst.render()
     # srvFrms = overlay_center(srvFrms, leg3Frm_crc)
     # DecapStream(srvFrms, 0, 100).show()
     
-    myRst.add(crcFrms_best, 1, 1)
+    myRst.add(crcFrms_best.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     crcFrms = myRst.render()
     # crcFrms = overlay_center(crcFrms, leg3Frm_crc)
     # DecapStream(crcFrms, 0, 100).show()
 
-    myRst.add(crcFrms_best[-1], 1, 1)
+    myRst.add(crcFrms_best[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(BGRFrames.from_frame(tabFrm_best1, 50), 1, 0)
     statFrms = myRst.render()
 
@@ -2441,7 +2459,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         so he has less distance to cover.
                     """
 
-    myRst.add(itplFrms_best, 1, 1)
+    myRst.add(itplFrms_best.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_best1, 1, 0)
     rastFrms0 = myRst.render()
     # rastFrms0 = overlay_center(rastFrms0, leg3Frm_crc)
@@ -2472,7 +2490,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrm = crcFrms_best[-1].mask(keepMask_best) + statFrms[-1].mask(~keepMask_best)
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
-    myRst.add(endFrms, 1, 1)
+    myRst.add(endFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_best2, 1, 0)
     rastFrms1 = myRst.render()
     # rastFrms1 = overlay_center(rastFrms1, leg3Frm_crc)
@@ -2496,7 +2514,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     endFrm = crcFrms_best[-1].mask(keepMask_best) + statFrms[-1].mask(~keepMask_best)
     endFrms = BGRFrames.from_frame(endFrm, 50)
 
-    myRst.add(endFrms, 1, 1)
+    myRst.add(endFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_best3, 1, 0)
     rastFrms2 = myRst.render()
     # rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
@@ -2580,7 +2598,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     tabFrms_itpl = vs.interpolate_frames(tabFrm_best3, tabFrm_cntr3, 50)
 
-    myRst.add(endFrms, 1, 1)
+    myRst.add(endFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrms_itpl, 1, 0)
     rastFrms_cntr = myRst.render()
     # rastFrms_cntr = overlay_center(rastFrms_cntr, leg3Frm_crc)
@@ -2623,7 +2641,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                     """
 
     myRst = FramesRaster(2, 2, borders = None)
-    myRst.add(endFrms[-1], 1, 1)
+    myRst.add(endFrms[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_orig3.dim(0.5), 0, 1)
     myRst.add(tabFrm_cntr3, 1, 0)
 
@@ -2652,7 +2670,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     derFrms = BGRFrames.from_frames(derender_list)
     # DecapStream(derFrms, 0, 100).show()
 
-    myRst.add(derFrms, 0, 0)
+    myRst.add(derFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     rstFrms_der0 = myRst.render()
     DecapStream(rstFrms_der0, 0, 100).show()
 
@@ -2689,7 +2707,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     derFrms = BGRFrames.from_frames(derender_list)
     DecapStream(derFrms, 0, 100).show()
 
-    myRst.add(derFrms, 1, 1)
+    myRst.add(derFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     rstFrms_der3 = myRst.render()
     DecapStream(rstFrms_der3, 0, 100).show()
 

@@ -69,7 +69,8 @@ all_retPnts = firstPnts.filter(get_returned_balls)
 M_ext = ConstFeature.from_store(vid, sto, featname = 'M_ext').feature
 M_int = ConstFeature.from_store(vid, sto, featname = 'M_int').feature
 
-brestCam_third = Camera(M_int, M_ext, (640, 360))
+# brestCam_third = Camera(M_int, M_ext, (640, 360))
+brestCam_third = Camera.calibrated_brest_behind()
 brestCam_half = brestCam_third.resize(1.5)
 brestCam_full = brestCam_third.resize(3)
 
@@ -1199,6 +1200,7 @@ virtFrms, animDict2 = vs.animate_static(arrScn_pre, static_cam = brestCam_full,
                                         )
 
 itplFrms = vs.interpolate_frames(statFrms[-1], virtFrms[0], 50)
+DecapStream(itplFrms, 0, 100).show()
 
 #### make into diagram
 from ATMANpy.auxil.court import birds_eye_service_box_cam
