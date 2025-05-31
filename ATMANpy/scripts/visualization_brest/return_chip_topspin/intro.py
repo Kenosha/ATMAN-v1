@@ -10,6 +10,7 @@ import ATMANpy.auxil.constants as const
 from ATMANpy.funcs.util_funcs import get_folder_struct, maybe_make_folder, make_timestamp
 from ATMANpy.types.Abstract import Points, Point, NullPoint, read_in_data_tables, read_in_placeholder_tables
 from ATMANpy.types.MultiFrames import BGRFrames
+from ATMANpy.types.Frames import BGRFrame
 from ATMANpy.types.Streams import DecapStream
 from ATMANpy.types.Lines import CourtLines, Line
 from ATMANpy.types.Points import Point2D
@@ -664,23 +665,38 @@ tDict = {'Sample Size': str_tops1}
 cDict = {'Sample Size': str_chips1}
 totDict = {'Sample Size': str(num_tot)}
 
-table_data = {'': {'Sample Size': ''}, ' ': {'Sample Size': ''}, 'Total': totDict}
-null_table = Table(table_data, **table_kwargs_mid, null_columns = 1,
+tDict = {'Sample Size': str_tops1, '': ''}
+cDict = {'Sample Size': str_chips1, '': ''}
+totDict = {'Sample Size': str(num_tot), '': ''}
+
+tDict_null = {'Sample Size': '', '': ''}
+cDict_null = {'Sample Size': '', '': ''}
+totDict_null = {'Sample Size': '', '': ''}
+
+table_data = {'': tDict_null, ' ': cDict_null, 'Total': totDict}
+null_table = Table(table_data, **table_kwargs_mid, #null_columns = 1,
                       title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
-                      title_horizontal_offset = 3.5)
+                      title_horizontal_offset = 7.5)
 # null_table.render().show()
 
-table_data = {index_name_t: tDict, ' ': {'Sample Size': ''}, 'Total': totDict}
-tops_table = Table(table_data, **table_kwargs_mid, null_columns = 1,
+table_data = {index_name_t: tDict, ' ': cDict_null, 'Total': totDict}
+tops_table = Table(table_data, **table_kwargs_mid, #null_columns = 1,
                       title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
-                      title_horizontal_offset = 3.5)
+                      title_horizontal_offset = 7.5)
 # tops_table.render().show()
 
 table_data = {index_name_t: tDict, index_name_c: cDict, index_name_a: totDict}
-chip_table = Table(table_data, **table_kwargs_mid, null_columns = 1,
+chip_table = Table(table_data, **table_kwargs_mid, #null_columns = 1,
                       title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
-                      title_horizontal_offset = 3.5)
+                      title_horizontal_offset = 7.5)
 # chip_table.render().show()
+
+### 
+tabScn = chip_table.preview()[0]
+lnScn = Scene([*tabScn[0:3], *tabScn[6:9]])
+lnFrm = View.make(chip_table.tabCam, lnScn, resolution = table_kwargs_mid['resolution']).snap()
+lnFrm = overlay_center(BGRFrame.make_black(), lnFrm)
+lnFrm.show()
 
 tDict = {'Sample Size': str_tops1, 'Returner Win%': ''}
 cDict = {'Sample Size': str_chips1, 'Returner Win%': ''}
@@ -802,9 +818,10 @@ script_line =   """
                     However, some highly successful players consistently use the chipped return as a tool 
                     to either neutralize the rally with a deep, floating chip, 
                     or draw the server into the court with a shallow, low-bouncing chip.
-                """
-stillFrms = BGRFrames.from_frame(tabFrm, 200)
-fadeFrms = BGRFrames.from_frame(tabFrm, 100).dim_progressively()
+                """ # 14 sec
+stillFrms = BGRFrames.from_frame(tabFrm, 250)
+# fadeFrms = BGRFrames.from_frame(tabFrm, 100).dim_progressively()
+fadeFrms = vs.interpolate_frames(tabFrm, lnFrm, 100)
 jointFrms = BGRFrames.from_frames([stillFrms, fadeFrms])
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -814,14 +831,16 @@ script_line =   """
                     and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
                 """
 
-someStr = "The primary goal of this analysis is to\nunderstand the effectiveness of\nthe chip return compared to the topspin return,\nas measured by\nthe expected probability to win the point."
+someStr = "The primary goal of this analysis is to\nunderstand the effectiveness of\nthe chipped return versus the topspin return,\nas measured by\nthe expected probability to win the point."
 
 import cv2 as cv
 
 def typewriter_effect(someStr, frames_per_char = 2,
                       text_where = (800, 500), text_color = const.BGR['leafy_green'], text_size = 1, text_font = cv.FONT_HERSHEY_PLAIN,
+                      overFrm = None,
                       align = 'left', manual_aligners = None):
-    emptyFrm = BGRFrame.make_black()
+    if overFrm is None:
+        overFrm = BGRFrame.make_black()
     
     lines = someStr.split('\n')
 
@@ -855,7 +874,7 @@ def typewriter_effect(someStr, frames_per_char = 2,
             curr_chars.append(curr_char)
 
             currStr = ' ' * num_spaces + ''.join(curr_chars)
-            currFrm = emptyFrm.put(prevStr + '\n' + currStr, where = text_where, color = text_color, size = text_size, font = text_font)
+            currFrm = overFrm.put(prevStr + '\n' + currStr, where = text_where, color = text_color, size = text_size, font = text_font)
             currFrms = BGRFrames.from_frame(currFrm, frames_per_char)
             out_frames.append(currFrms)
         
@@ -864,13 +883,62 @@ def typewriter_effect(someStr, frames_per_char = 2,
     return BGRFrames.from_frames(out_frames)
 
 typeFrms = typewriter_effect(someStr, frames_per_char = 1, 
+                             overFrm = fadeFrms[-1],
                              text_where = (520, 420), text_color = const.BGR['bright_grey'], text_size = 1, text_font = cv.FONT_HERSHEY_TRIPLEX,
-                             align = 'center', manual_aligners = [2, 2, 0, 2, 2])
+                             align = 'center', manual_aligners = [2, 2, 1, 2, 3])
 # DecapStream(typeFrms, 0, 100).show()
 # typeFrms[-1].show()
 
-fadeFrms = BGRFrames.from_frame(typeFrms[-1], 50).dim_progressively()
-jointFrms = BGRFrames.from_frames([typeFrms, fadeFrms])
+
+tFrm = typeFrms[-1]
+tFrms = BGRFrames.from_frame(tFrm, 100)
+# tFrm.show()
+
+start_coords_tops = (1091, 540)
+start_coords_chip = (609, 540)
+
+stop_coords_tops = (521, 468)
+stop_coords_chip = (521, 612)
+
+start_color = const.BGR['bright_grey']
+stop_color = const.BGR['leafy_green']
+
+text_kwargs_nil = {'size': 1, 'font': cv.FONT_HERSHEY_TRIPLEX, 'color': start_color}
+text_kwargs_one = {'size': 2, 'color': stop_color}
+# tFrm.put('topspin return', where = start_coords_tops, **text_kwargs_nil).show()
+# tFrm.put('chipped return', where = start_coords_chip, **text_kwargs_nil).show()
+# tabFrm.put('Topspin Return', where = stop_coords_tops, **text_kwargs_one).show()
+# tabFrm.put('Chipped Return', where = stop_coords_chip, **text_kwargs_one).show()
+
+wordFrm = lnFrm.put('topspin return', where = start_coords_tops, **text_kwargs_nil).put('chipped return', where = start_coords_chip, **text_kwargs_nil)
+# wordFrm.show()
+
+fadeFrms = vs.interpolate_frames(typeFrms[-1], wordFrm, 50)
+# DecapStream(fadeFrms, 0, 100).show()
+
+from ATMANpy.funcs.util_funcs import interpolate_tuples
+
+num_move_frames = 50
+move_frames = []
+for i in range(num_move_frames):
+    lmbd = i / (num_move_frames - 1)
+
+    itpl_coords_tops = interpolate_tuples(start_coords_tops, stop_coords_tops, lmbd, as_integer = True)
+    itpl_coords_chip = interpolate_tuples(start_coords_chip, stop_coords_chip, lmbd, as_integer = True)
+
+    nilFrm = lnFrm.put('topspin return', where = itpl_coords_tops, **text_kwargs_nil).put('chipped return', where = itpl_coords_chip, **text_kwargs_nil)
+    oneFrm = lnFrm.put('Topspin Return', where = itpl_coords_tops, **text_kwargs_one).put('Chipped Return', where = itpl_coords_chip, **text_kwargs_one)
+
+    combFrm = nilFrm.dim(1 - lmbd) + oneFrm.dim(lmbd)
+
+    move_frames.append(combFrm)
+
+moveFrms = BGRFrames.from_single_frames(move_frames)
+# DecapStream(moveFrms, 0, 100).show()
+
+fadeFrms2 = vs.interpolate_frames(moveFrms[-1], tabFrm, 50)
+
+jointFrms = BGRFrames.from_frames([typeFrms, tFrms, fadeFrms, moveFrms, fadeFrms2])
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
