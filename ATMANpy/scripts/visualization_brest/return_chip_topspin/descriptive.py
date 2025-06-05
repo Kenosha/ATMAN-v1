@@ -170,7 +170,7 @@ def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_res
             }
 
 
-RESOLUTION_MODIFIER_NORMAL = 1#15
+RESOLUTION_MODIFIER_NORMAL = 15 #15
 RESOLUTION_MODIFIER_HEATMAP = 0.5
 RESOLUTION_MODIFIER_ANGLE = 5
 prmDict = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1.25, 
@@ -391,8 +391,8 @@ def scene_to_graph_scene(splnScn, cutoff_frames = None):
 # _, botPly = botSF.last()
 # plyScn = Scene([topPly, botPly])
 
-DO_METHOD_SECTION = False
-DO_HEATMAP_SECTION = False
+DO_METHOD_SECTION = True
+DO_HEATMAP_SECTION = True
 DO_LAUNCH_ANGLE_INTRO = True
 DO_LAUNCH_ANGLE_DISTRO = True
 DO_LAUNCH_ANGLE_MODES = True
@@ -654,7 +654,7 @@ if DO_METHOD_SECTION:
     chipFrms_share = overlay(chipFrms_share, legFrm_chip, top_left_point = anchorPt)
     
     itplFrms = vs.interpolate_frames(itplFrms[-1], chipFrms_share[0], 50)
-    DecapStream(itplFrms, 0, 100).show()
+    # DecapStream(itplFrms, 0, 100).show()
 
     x, y, z = 1, 1, 3
     s = x + y + z
@@ -736,7 +736,7 @@ if DO_METHOD_SECTION:
     
 
     jointFrms = BGRFrames.from_frames([itplFrms, moveFrms1, moveFrms2])
-    DecapStream(jointFrms, 0, 100).show()
+    # DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
     script_lines.append(script_line)
@@ -905,17 +905,17 @@ chip_angleScn = chip_angleScn.drop(2).drop(1)
 kdeScn = tops_angleScn.combine(chip_angleScn)
 kdeView = View.make(sideretCam, kdeScn)
 backView = View.make(sideretCam, court_and_axScn)
-backView.combine(kdeView).snap().show()
+# backView.combine(kdeView).snap().show()
 
 ##### TEST LITTLE RACKET ######
 from ATMANpy.types.Shapes3D import Ellipse3D
 myEll = Ellipse3D.from_point3D(x0.back(2).down(2), radius_long = 10, radius_short = 5, fixed_dimension = 'y', rot_x = np.pi / 7, rot_y = 0)
 ellView = View.make(sideretCam, Scene([myEll]))
-backView.combine(kdeView).combine(ellView).snap().show()
+# backView.combine(kdeView).combine(ellView).snap().show()
 
 ### get modes
 # a) chip
-chip_mode_lo, chip_mode_hi = 11.8, 18.2
+chip_mode_lo, chip_mode_hi = 11.8, 18.1
 mode_angles = [chip_mode_lo, chip_mode_hi]
 modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict_chip['axis_length'] * 2.1, 
                                  x_ax = kwargDict_chip['x_unit_vector'], y_ax = kwargDict_chip['y_unit_vector'],
@@ -936,6 +936,15 @@ modeScn_tp = Scene([modeLns[0].recolor(TOPS_COLOR).resize(thickness)]).dim(1.2)
 
 itpl_lns_tp = vs.interpolate_scenes(nullScn, modeScn_tp, num_frames = 25)
 
+# c) example line
+mode_angles = [11.9]
+exLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict_chip['axis_length'] * 2.1, 
+                                 x_ax = kwargDict_chip['x_unit_vector'], y_ax = kwargDict_chip['y_unit_vector'],
+                                 orig = kwargDict_chip['axis_origin_point'])
+modeScn_ex = Scene([exLns[0].recolor(BALL_COLOR).resize(thickness)])
+
+itpl_lns_ex = vs.interpolate_scenes(nullScn, modeScn_ex, num_frames = 25)
+
 ### build a distribution of launch angles on choice chips.
 sorted_chip_retShots_rectified = chip_retShots_rectified.sort(weightArr_preds, descending = True)
 
@@ -944,7 +953,7 @@ if DO_LAUNCH_ANGLE_INTRO:
     script_lines = []
     
     script_line =   """
-                        The example return that we saw just two minutes ago is chipped back at an angle of 11.9 degrees. 
+                        The example return that we saw just now is chipped back at an angle of 11.9 degrees. 
                     """
 
     splnScn_thin_short = scene_to_graph_scene(splnScn, cutoff_frames = 5)
@@ -1153,17 +1162,22 @@ if DO_LAUNCH_ANGLE_DISTRO:
     ################
     jntFrms = BGRFrames.from_frames(frms)
     jntFrms = overlay(jntFrms, legFrm_chip, top_left_point = anchorPt_middle)
-    DecapStream(jntFrms, 0, 100).show()
+    # DecapStream(jntFrms, 0, 100).show()
 
     script_line = "Let's see how launch angles are distributed for choice chipped returns in general."
     itplFrms = vs.interpolate_frames(degFrms1[-1], jntFrms[0], 50)
-    DecapStream(itplFrms, 0, 100).show()
+    # DecapStream(itplFrms, 0, 100).show()
     
-    all_frames.append(itplFrms)
-    script_lines.append(script_line)
+    ## fade out axes -> not needed! we have distro now
+    statFrms, _ = vs.animate_static(kde, background_scene = court_and_axScn, previous_foreground_scene = splnScn_simul, **prmDict_angle,
+                                    static_cam = sideretCam)
+    statFrms = overlay(statFrms, legFrm_chip, top_left_point = anchorPt_middle)
+    fadeFrms = vs.interpolate_frames(jntFrms[-1], statFrms[0], 50)
 
-    script_line = ""
-    all_frames.append(jntFrms)
+    jntFrms_all = BGRFrames.from_frames([itplFrms, jntFrms, fadeFrms])
+    # DecapStream(jntFrms_all, 0, 100).show()
+
+    all_frames.append(jntFrms_all)
     script_lines.append(script_line)
 
     ### Saving the separate MultiFrame objects and the Joint Script
@@ -1198,7 +1212,7 @@ if DO_LAUNCH_ANGLE_MODES:
     kdeFrms, animDict = vs.animate_static(kde, background_scene = court_and_axScn, **prmDict_angle,
                                     static_cam = sideretCam, num_frames = STATIC_FRAMES)
     kdeFrms = overlay(kdeFrms, legFrm_chip, top_left_point = anchorPt_middle)
-    itplFrms = vs.interpolate_frames(jntFrms[-1], kdeFrms[0], 25)
+    itplFrms = vs.interpolate_frames(jntFrms_all[-1], kdeFrms[0], 25)
     # DecapStream(itplFrms, 0, 100).show()
 
     lineFrms0, animDict = vs.animate_sequence(itpl_lns_hi, background_scene = court_and_axScn, **prmDict_angle, **animDict,
@@ -1210,7 +1224,7 @@ if DO_LAUNCH_ANGLE_MODES:
     lineFrms1 = overlay(lineFrms1, leg2Frm, top_left_point = anchorPt_middle)
 
     jointFrms = BGRFrames.from_frames([itplFrms, lineFrms0, lineFrms1])
-    DecapStream(jointFrms, 0, 100).show()
+    # DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
     script_lines.append(script_line)
@@ -1247,7 +1261,7 @@ if DO_LAUNCH_ANGLE_MODES:
     statFrms2 = overlay(statFrms2, leg3Frm, top_left_point = anchorPt_middle)
 
     jointFrms = BGRFrames.from_frames([statFrms0, itplFrms, statFrms1, lineFrms2, statFrms2])
-    DecapStream(jointFrms, 0, 100).show()
+    # DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
     script_lines.append(script_line)
@@ -1266,34 +1280,49 @@ if DO_LAUNCH_ANGLE_MODES:
 
     script_line = f"To put numbers to it: the typical topspin return is launched at an angle of {tops_mode:.1f} Degrees..."
     animDict['previous_foreground_scene'] = animDict['previous_foreground_scene'].drop(2)
+
     myFrms, animDict = vs.animate_static(Scene([degCrc0]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = 25, annotated_points = [angPt0])
     myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
-    all_frames.append(myFrms)
+
+    fadeFrms = vs.interpolate_frames(jointFrms[-1], myFrms[0], 50)
+
+    all_frames.append(fadeFrms)
     script_lines.append(script_line)
 
     script_line = f"... the low-angle choice chip return at {chip_mode_lo:.1f} Degrees..."
     myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = 25, annotated_points = [angPt0, angPt1])
     myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
-    all_frames.append(myFrms)
+
+    fadeFrms = vs.interpolate_frames(fadeFrms[-1], myFrms[0], 50)
+    
+    all_frames.append(fadeFrms)
     script_lines.append(script_line)
 
     script_line = f"... and the high_angle choice chip return at {chip_mode_hi:.1f} Degrees."
     myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     static_cam = sideretCam, num_frames = 25, annotated_points = [angPt0, angPt1, angPt2])
     myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
-    all_frames.append(myFrms)
+
+    fadeFrms = vs.interpolate_frames(fadeFrms[-1], myFrms[0], 50)
+
+    all_frames.append(fadeFrms)
     script_lines.append(script_line)
 
     ang = myShots[1].get_launch_angle()
     script_line =   f"""
                         Our example chip return left the racket at an {ang:.1f} degree angle, very close to our low-angle chip mode. 
                     """
-    myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
-                                    static_cam = sideretCam, num_frames = 25, annotated_points = [angPt0, angPt1, angPt2])
-    myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
-    all_frames.append(myFrms)
+    lnFrms, animDict = vs.animate_sequence(itpl_lns_ex, background_scene = court_and_axScn, **prmDict_angle, **animDict,
+                                    start_cam = sideretCam, stop_cam = sideretCam, annotated_points = [angPt0, angPt1, angPt2])
+    # DecapStream(lnFrms, 0, 100).show()
+
+    # myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
+    #                                 static_cam = sideretCam, num_frames = 25, annotated_points = [angPt0, angPt1, angPt2])
+    # myFrms = overlay(myFrms, leg3Frm, top_left_point = anchorPt_middle)
+
+    all_frames.append(lnFrms)
     script_lines.append(script_line)
 
     script_line =   "Let's watch it again, in this light."
@@ -1481,14 +1510,14 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     playFrms = playRst.render()
 
     jointFrms = BGRFrames.from_frames([staticFrms, fadeinFrms, playFrms])
-    DecapStream(jointFrms, 0, 100).show()
+    # DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
     script_lines.append(script_line)
 
     # Matching Table
-    lo_name = 'Low Launch Angle'
-    hi_name = 'High Launch Angle'
+    lo_name = 'Low Chip'
+    hi_name = 'High Chip'
 
     lo_ang = myShots[1].get_launch_angle()
     lo_spd = myShots[1].get_initial_speed()
@@ -1735,7 +1764,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     q9, q8, q7, q6, q5 = np.quantile(speeds, [0.9, 0.8, 0.7, 0.6, 0.5])
     print(q9, q8, q7, q6, q5) ### 80% quantile looks alright.
 
-    player_speed_kph = 15 ### this is taken from https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
+    player_speed_kph = 15 ### this is validated also by https://tennismash.com/2016/11/24/gig-djokovic-fastest-tennis-player-world/#:~:text=As%20many%20might%20expect%2C%20Novak,top%20speed%20of%2014.89kph.
     player_speed_mps = 15 * const.KPH_TO_MPS
 
     name = 'Return_Analysis_g600_v300_s13_h3'
@@ -2164,8 +2193,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     playerMask = MaskFrame.false(like = splineFrms_orig_ret[-1]).within_contour(botCnt)
 
     # keep the scoreboard the same
-    scoreReg = Region.from_points(Point2D((0, 450)), Point2D((960, 540)))
+    scoreReg = Region.from_points(Point2D((0, 442)), Point2D((960, 540)))
     scoreMask = MaskFrame.false(like = splineFrms_orig_ret[-1]).within_region(scoreReg)
+
+    # splineFrms_orig_ret[-1].put(scoreReg).show()
 
     keepMask_orig = playerMask | scoreMask
     shot_idx_orig = len(myShots[0])
@@ -2319,7 +2350,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         First, consider the original example in the top left. 
                         The expanding range of motion depicted here represents the court positions
                         that the returner can comfortably reach, assuming a third of a second of recovery time 
-                        and a brisk shuffle speed of 15 km/h, which is estimated from our data.
+                        and a maximum shuffle speed of 4.2 m/s, which is estimated from our data.
                     """
     
     myRst = FramesRaster(2, 2)
@@ -2328,6 +2359,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     revFrms = myRst.render()
     # DecapStream(revFrms, 0, 100).show()
+
+    fadeFrms = vs.interpolate_frames(tabFrms_match[-1], revFrms[0], 50)
 
     myRst.add(splineFrms_orig_srv.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     srvFrms = myRst.render()
@@ -2344,8 +2377,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     itplFrms = vs.interpolate_frames(crcFrms[-1], statFrms[0], 50)
 
-    jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms, itplFrms, statFrms])
-    DecapStream(jointFrms, 0, 100).show()
+    jointFrms = BGRFrames.from_frames([fadeFrms, revFrms, srvFrms, crcFrms, itplFrms, statFrms])
+    # DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
     script_lines.append(script_line)
@@ -2362,7 +2395,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     script_lines.append(script_line)
 
     script_line =   """
-                        Had he played a high angle return, the additional .25 seconds of time-until-bounce would have given him more range of motion, 
+                        Had he played a high angle return, the additional .24 seconds of time-until-bounce would have given him more range of motion, 
                         which, in this case, would not have been necessary to reach the optimal point.
                     """
     x, y = myShots[1].hitPlayer.get_initial_position()
@@ -2387,16 +2420,16 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     myRst.add(tabFrm_orig2, 0, 1)
     rastFrms1 = myRst.render()
     # rastFrms1 = overlay_center(rastFrms1, leg2Frm_crc)
-    DecapStream(rastFrms1, 0, 100).show()
+    # DecapStream(rastFrms1, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms0[-1], rastFrms1[0], 50)
-    DecapStream(itplFrms, 0, 100).show()
+    # DecapStream(itplFrms, 0, 100).show()
 
     all_frames.append(itplFrms)
     script_lines.append(script_line)
 
     script_line =   f"""
-                        A comparable topspin shot down the line would travel {time_dist_frame.loc['orig_tp', 'time']:.1f} seconds, 
+                        A comparable topspin shot down the line would travel {time_dist_frame.loc['orig_tp', 'time']:.2f} seconds, 
                         which does not afford the returning player with enough time to recover to the optimal spot. 
                     """
     
@@ -2411,10 +2444,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     myRst.add(tabFrm_orig3, 0, 1)
     rastFrms2 = myRst.render()
     # rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
-    DecapStream(rastFrms2, 0, 100).show()
+    # DecapStream(rastFrms2, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms1[-1], rastFrms2[0], 50)
-    DecapStream(itplFrms, 0, 100).show()
+    # DecapStream(itplFrms, 0, 100).show()
 
     all_frames.append(itplFrms)
     script_lines.append(script_line)
@@ -2449,7 +2482,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     itplFrms = vs.interpolate_frames(crcFrms[-1], statFrms[0], 50)
 
     jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms, itplFrms, statFrms])
-    DecapStream(jointFrms, 0, 100).show()
+    # DecapStream(jointFrms, 0, 100).show()
 
     all_frames.append(jointFrms)
     script_lines.append(script_line)
@@ -2463,7 +2496,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     myRst.add(tabFrm_best1, 1, 0)
     rastFrms0 = myRst.render()
     # rastFrms0 = overlay_center(rastFrms0, leg3Frm_crc)
-    DecapStream(rastFrms0, 0, 100).show()
+    # DecapStream(rastFrms0, 0, 100).show()
 
     all_frames.append(rastFrms0)
     script_lines.append(script_line)
@@ -2494,10 +2527,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     myRst.add(tabFrm_best2, 1, 0)
     rastFrms1 = myRst.render()
     # rastFrms1 = overlay_center(rastFrms1, leg3Frm_crc)
-    DecapStream(rastFrms1, 0, 100).show()
+    # DecapStream(rastFrms1, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms0[-1], rastFrms1[0], 50)
-    DecapStream(itplFrms, 0, 100).show()
+    # DecapStream(itplFrms, 0, 100).show()
 
     all_frames.append(itplFrms)
     script_lines.append(script_line)
@@ -2518,10 +2551,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     myRst.add(tabFrm_best3, 1, 0)
     rastFrms2 = myRst.render()
     # rastFrms2 = overlay_center(rastFrms2, leg3Frm_crc)
-    DecapStream(rastFrms2, 0, 100).show()
+    # DecapStream(rastFrms2, 0, 100).show()
 
     itplFrms = vs.interpolate_frames(rastFrms1[-1], rastFrms2[0], 50)
-    DecapStream(itplFrms, 0, 100).show()
+    # DecapStream(itplFrms, 0, 100).show()
 
     all_frames.append(itplFrms)
     script_lines.append(script_line)
@@ -2564,6 +2597,8 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     crcScn_cntr = Scene([loCrcs, hiCrcs, tpCrcs])
 
+    x, y = myShots[1].hitPlayer.get_initial_position()
+
     px = time_dist_frame.loc['orig_lo', 'dist_pix']
     loCrcs = make_thick_circle(x, y, px, 0, 2).recolor(CHIP_LO_COLOR)
     
@@ -2586,7 +2621,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     crcFrms_cntr, _ = vs.animate_sequence(itplScns, start_cam = brestCam_resized_half, stop_cam = brestCam_resized_half, 
                                             animate_over = backFrm_best.dim(dim_factor), **prmDict)
-    DecapStream(crcFrms_cntr, 0, 100).show()
+    # DecapStream(crcFrms_cntr, 0, 100).show()
 
     end_frames = []
     for frm in crcFrms_cntr:
@@ -2594,7 +2629,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
         end_frames.append(endFrm)
 
     endFrms = BGRFrames.from_single_frames(end_frames)
-    DecapStream(endFrms, 0, 100).show()
+    # DecapStream(endFrms, 0, 100).show()
 
     tabFrms_itpl = vs.interpolate_frames(tabFrm_best3, tabFrm_cntr3, 50)
 
@@ -2602,7 +2637,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     myRst.add(tabFrms_itpl, 1, 0)
     rastFrms_cntr = myRst.render()
     # rastFrms_cntr = overlay_center(rastFrms_cntr, leg3Frm_crc)
-    DecapStream(rastFrms_cntr, 0, 100).show()
+    # DecapStream(rastFrms_cntr, 0, 100).show()
 
     all_frames.append(rastFrms_cntr)
     script_lines.append(script_line)
@@ -2640,12 +2675,14 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
                         We can then use this model to find the most promising return in any specific situation.
                     """
 
+    staticFrms = BGRFrames.from_frame(staticFrms[-1], 250)
+
     myRst = FramesRaster(2, 2, borders = None)
     myRst.add(endFrms[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_orig3.dim(0.5), 0, 1)
     myRst.add(tabFrm_cntr3, 1, 0)
 
-    num_frames = 10
+    num_frames = 17
     blackFrm = BGRFrame.make_black(960, 540)
     blackFrms = BGRFrames.from_frame(blackFrm, num_frames)
 
@@ -2672,20 +2709,20 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     myRst.add(derFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
     rstFrms_der0 = myRst.render()
-    DecapStream(rstFrms_der0, 0, 100).show()
+    # DecapStream(rstFrms_der0, 0, 100).show()
 
     ### derender table top right
     myRst.add(derFrms[-1], 0, 0)
     myRst.add(blackFrms, 0, 1)
 
     rstFrms_der1 = myRst.render()
-    DecapStream(rstFrms_der1, 0, 100).show()
+    # DecapStream(rstFrms_der1, 0, 100).show()
 
     ### derender table bottom left
     myRst.add(blackFrms, 1, 0)
 
     rstFrms_der2 = myRst.render()
-    DecapStream(rstFrms_der2, 0, 100).show()
+    # DecapStream(rstFrms_der2, 0, 100).show()
 
     ### derender bottom right
     derender_list = []
@@ -2705,11 +2742,33 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # derender_list.append(blackFrms) ### -> this stays!
 
     derFrms = BGRFrames.from_frames(derender_list)
-    DecapStream(derFrms, 0, 100).show()
+    # DecapStream(derFrms, 0, 100).show()
 
     myRst.add(derFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     rstFrms_der3 = myRst.render()
-    DecapStream(rstFrms_der3, 0, 100).show()
+    # DecapStream(rstFrms_der3, 0, 100).show()
+
+    def get_spline_frames(myPnt):
+        from ATMANpy.types.Visual3D import Camera
+        myCam = Camera.calibrated_brest_behind().resize(3)
+        serve_splines = myPnt[0].feat_spline_cumul(which_endpoint = 'penultimate').values()
+        splnScns = [Scene([spln.recolor(BALL_COLOR).resize(1.5) for spln in splns if spln is not None]) for splns in serve_splines]
+        realFrms = myPnt[0].stream(confs = confs).decap().frames
+        myFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False, animate_over = realFrms.rescale(3), **prmDict)
+        return myFrms
+    
+    firstFrm = get_spline_frames(bestPnt)[-1].rescale(0.5) ### first inference frame
+
+    itplFrms = vs.interpolate_frames(derFrms[-1], firstFrm, 200)
+    itplFrms = itplFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
+    myRst.add(itplFrms, 1, 1)
+    rstFrms_itpl = myRst.render()
+
+    jointFrms_der = BGRFrames.from_frames([staticFrms, rstFrms_der0, rstFrms_der1, rstFrms_der2, rstFrms_der3, rstFrms_itpl])
+    # DecapStream(jointFrms_der, 0, 100).show()
+
+    all_frames.append(jointFrms_der)
+    script_lines.append(script_line)
 
     ### Saving the separate MultiFrame objects and the Joint Script
     assert len(script_lines) == len(all_frames)

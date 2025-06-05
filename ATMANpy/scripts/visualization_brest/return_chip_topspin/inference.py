@@ -147,7 +147,7 @@ savePath = get_folder_struct('results_video')[SAVE_FOLDER]
 ########################################
 ######## INSTRUCTIONS ##################
 ########################################
-SAVE_REGS = False
+SAVE_REGS = True
 
 ########################################
 ############# PARAMETERS ###############
@@ -168,7 +168,7 @@ def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_res
             }
 
 
-RESOLUTION_MODIFIER_NORMAL = 1 #35
+RESOLUTION_MODIFIER_NORMAL = 35
 RESOLUTION_MODIFIER_HEATMAP = 0.5
 prmDict = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1.25, 
                         adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
@@ -804,7 +804,8 @@ script_line =   """
                     Luca van Assche's serve from the deuce side.
                 """
 
-myRst.add(realFrms_resc_last.framed(FRAME_THICKNESS, FRAME_COLOR), i, j)
+realFrms_resc_last_long = BGRFrames.from_frame(realFrms_resc_last[0], 210)
+myRst.add(realFrms_resc_last_long.framed(FRAME_THICKNESS, FRAME_COLOR), i, j)
 statFrms = myRst.render()
 # rastFrms[-1].show()
 
@@ -818,15 +819,15 @@ rastFrms = myRst.render()
 rastFrms = overlay(rastFrms, leg1Frm, top_left_point = tlPt)
 
 jointFrms = BGRFrames.from_frames([statFrms, rastFrms])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The orange area shows the target zone for the returning player on a topspin shot; 
+                    The orange area shows our model's target zone for the returning player on a topspin shot; 
                     A typical topspin shot that lands within the target zone 
-                    improves the returner's chance of winning the point to above 50%, according to the data and our model.
+                    improves the returner's chance of winning the point to above 50%.
 
                     In calculating this target zone, the model not only takes into account the probability of winning 
                     the point if a ball lands anywhere in the court, but also the deviation of the landing location from the
@@ -896,7 +897,7 @@ def flip(self, along_line):
     return BGRFrame(newArr)
 
 myFrm_no_annot_flip = flip(myFrm_no_annot, courtLines['Top Service Line'])
-myFrm_no_annot_flip.show()
+# myFrm_no_annot_flip.show()
 
 from ATMANpy.types.Lines import Region
 p1, p2, p3, p4 = Point2D((0, 370)), Point2D((960, 370)), Point2D((960, 540)), Point2D((0, 540))
@@ -919,7 +920,7 @@ blackMask = MaskFrame.false(myFrm_no_annot_flip)
 keepMask = blackMask.within_region(keepReg1) | blackMask.within_region(keepReg2) | blackMask.within_region(keepReg3)
 
 flipFrm = myFrm_no_annot_flip.mask(~keepMask) + myFrm_no_annot.mask(keepMask)
-flipFrm.show()
+# flipFrm.show()
 
 fhPt_inv = fhPt_annot_heat.retext(bhPt_annot_heat.text).left(50)
 bhPt_inv = bhPt_annot_heat.retext(fhPt_annot_heat.text).left(50)
@@ -934,12 +935,12 @@ myFrm_annot_put = myFrm_annot.put('Righty Server', size = 2, where = (700, 70))
 flipFrm_annot_put = flipFrm_annot.put('Lefty Server', size = 2, where = (714, 70))
 
 blinkFrms = vs.blinking(myFrm_annot_put, flipFrm_annot_put, blinks_per_second = 0.5, duration_in_frames = 400)
-DecapStream(blinkFrms, 0, 100).show()
+# DecapStream(blinkFrms, 0, 100).show()
 
 myRst.add(blinkFrms.framed(FRAME_THICKNESS, FRAME_COLOR), i, j)
 rastFrms = myRst.render()
 rastFrms = overlay(rastFrms, leg1Frm, top_left_point = tlPt)
-DecapStream(rastFrms, 0, 100).show()
+# DecapStream(rastFrms, 0, 100).show()
 
 all_frames.append(rastFrms)
 script_lines.append(script_line)
@@ -1117,7 +1118,7 @@ rastFrms2 = myRst.render()
 rastFrms2 = overlay(rastFrms2, leg3Frm, top_left_point = tlPt)
 
 jointFrms = BGRFrames.from_frames([rastFrms0, rastFrms1, rastFrms2])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -1173,9 +1174,10 @@ script_lines.append(script_line)
 # myRst.add(lsFrm, i, j)
 
 script_line =   """
-                    A perfect low chip deep into the forehand side is the best possible outcome  
-                    for the returner, but win probabilities fall off fast around the peak, making the target zone
-                    smaller than for the topspin return, which is the safe bet. 
+                    The topspin return is the safe bet, having not only the largest target zone, but
+                    also a solid peak win probability of 60%. 
+                    The best possible outcome is a perfect low chip, deep into the forehand side,
+                    but win probabilities fall off fast around the peak, making for a smaller target zone.
                     The high chip appears to be the inferior choice on aggregate.
                 """
 
@@ -1303,7 +1305,7 @@ rastFrms2 = myRst.render()
 rastFrms2 = overlay(rastFrms2, leg3Frm, top_left_point = tlPt)
 
 jointFrms = BGRFrames.from_frames([rastFrms0, rastFrms1, rastFrms2])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -1323,7 +1325,7 @@ script_lines.append(script_line)
 
 zoneScn = zoneDict['tp']
 script_line =   """
-                    Similarly to the forehand-side return down the middle, the backhand-side return down the middle should be played
+                    Similarly to the forehand-side serve down the middle, the backhand-side serve down the middle should be returned
                     anywhere from down the line to the server's feet. 
                     However, presumably because now the return lands on the server's FOREHAND side, the model requires greater depth
                     to bring the returner's chances to above 50%.
@@ -1520,9 +1522,7 @@ script_lines.append(script_line)
 
 zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']))
 script_line =   """
-                    The low-chip target zone is on the forehand side again, 
-                    though decidedly smaller in this case, probably owing to the fact that the returner plays himself out of 
-                    position.
+                    The low-chip target zone is on the forehand side again, though decidedly smaller in this case.
                 """
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
 myFrms = put_desc(myFrms, descStr, desc_side, desc_height)
@@ -1613,7 +1613,7 @@ myRst.add(lsFrm.framed(FRAME_THICKNESS, FRAME_COLOR), i, j)
 
 # postFrms[-1].show()
 
-vis_ut.show(all_frames)
+# vis_ut.show(all_frames)
 
 ####### POST-STUFF #######
 
@@ -1636,13 +1636,16 @@ vis_ut.show(all_frames)
 # script_lines.append(script_line)
 
 script_line =   """
-                    So in all cases except the ad-side serve out wide, the low chip is a high-risk high-reward alternative to the topspin return.
+                    So in all cases except the backhand-side serve out wide, the low chip is a high-risk high-reward alternative to the topspin return.
 
-                    The remaining mystery is the model's consistent infatuation with chip returns to the 
-                    server's forehand side. Typically, these would be easier to attack; a player can redirect balls more easily on the forehand,
-                    and inject more pace on a floating ball; 
-                    why then does the model want the chip to be played to the forehand?
+                    The remaining mystery is why the model wants the chip to be played to the forehand in all situations.
+                    Typically, the serving player can redirect the ball and inject pace more easily. So why chip to the forehand?
                  """
+                    # The remaining mystery is the model's consistent infatuation with chip returns to the 
+                    # server's forehand side. Typically, these would be easier to attack; a player can redirect balls more easily on the forehand,
+                    # and inject more pace on a floating ball; 
+                    # why then does the model want the chip to be played to the forehand?
+                    
                     # We have alluded to one potential factor earlier: serve + 1 winners are not as promising on chip returns
                     # as serve + 2 combinations; The returner may therefore bait the serving player 
                     # into premature aggression with a well-placed chip to the forehand.
@@ -1873,7 +1876,7 @@ for i in range(move_frames):
     out_frames.append(combFrm_full)
 
 itplFrms0 = BGRFrames.from_single_frames(out_frames)
-DecapStream(itplFrms0, 0, 100).show()
+# DecapStream(itplFrms0, 0, 100).show()
 
 from ATMANpy.types.Shapes3D import Region3D
 from ATMANpy.auxil.court import top_a, top_b, top_c, top_d
@@ -1894,7 +1897,7 @@ backFrms1, _ = vs.animate_static(regLines3D, background_scene = courtScn, annota
 itplFrms1 = vs.interpolate_frames(backFrms0[-1], backFrms1[0], 50)
 
 jointFrms = BGRFrames.from_frames([revFrms, itplFrms0, backFrms0, itplFrms1, backFrms1])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -1969,7 +1972,7 @@ from ATMANpy.types.Overlays import Legend, LegendRow, overlay
 legRows = [LegendRow('... Topspin', TOPS_COLOR, text_size = 2),
            LegendRow('... (Choice) Chip', CHIP_COLOR, text_size = 2)]
 myLeg_chip_tops = Legend(legRows, header_text = 'Return is ...', header_offset = 2.7, header_thickness = 1,
-                            legend_dimensions = (400, 200), resolution = 2000, borders = False)
+                            legend_dimensions = (400, 200), resolution = 2000, borders = None)
 legFrm_chip_tops = myLeg_chip_tops.render()
 # legFrm_chip_tops.show()
 
@@ -1977,7 +1980,7 @@ legFrm_chip_tops = myLeg_chip_tops.render()
 legRows = [LegendRow('... Forehand', fore_color, text_size = 2),
            LegendRow('... Backhand', back_color, text_size = 2)]
 myLeg_chip_tops = Legend(legRows, header_text = 'Serve + 1 is ...', header_offset = 2.7, header_thickness = 1,
-                            legend_dimensions = (400, 200), resolution = 2000, borders = False)
+                            legend_dimensions = (400, 200), resolution = 2000, borders = None)
 legFrm_fore_back = myLeg_chip_tops.render()
 # legFrm_fore_back.show()
 
@@ -2021,7 +2024,7 @@ def truncate_line(someLn3D, stop_y = 470):
 
 regLines3D_trunc = [truncate_line(someLn) for someLn in regLines3D]
 
-reg_color = (80, 80, 80) #const.BGR['smokey_grey']
+reg_color = (40, 40, 40) #const.BGR['smokey_grey']
 top_a_3D_trunc = Region3D(regLines3D_trunc[0:4]).down(1).recolor(reg_color)
 top_b_3D_trunc = Region3D(regLines3D_trunc[4:8]).down(1).recolor(reg_color)
 top_c_3D_trunc = Region3D(regLines3D_trunc[8:12]).down(1).recolor(reg_color)
@@ -2041,7 +2044,7 @@ itplFrms = vs.interpolate_frames(staticFrms[0], staticFrms2[0], num_frames = 100
 
 
 jointFrms = BGRFrames.from_frames([motionFrms, staticFrms, itplFrms, staticFrms2])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -2121,6 +2124,11 @@ jointFrms = BGRFrames.from_frames([graphFrms_itpl, graphFrms_chip_c])
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
+script_line = ""
+statFrms = BGRFrames.from_frame(jointFrms[-1], 30)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
 script_line =   """
                     One reason for this could be that chip returns, by virtue of their longer time-in-flight, are easier to run around,
                     allowing the server to hit a forehand on a ball to the backhand. 
@@ -2165,7 +2173,10 @@ graphFrms_fore = overlay(graphFrms_fore, legFrm_fore_back, top_left_point = tlPt
 
 itplFrms = vs.interpolate_frames(graphFrms[-1], graphFrms_fore[0], 25)
 jointFrms = BGRFrames.from_frames([itplFrms, graphFrms_fore])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
 
 script_line =   """
                     However, more than 80% of chipped returns into C are run around, and hit with the forehand. 
@@ -2184,7 +2195,7 @@ graphFrms_chip_c = overlay(graphFrms_chip_c, legFrm_fore_back, top_left_point = 
 
 graphFrms_itpl = vs.interpolate_frames(graphFrms_fore[-1], graphFrms_chip_c[0], 25)
 jointFrms = BGRFrames.from_frames([graphFrms_itpl, graphFrms_chip_c])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -2200,7 +2211,7 @@ graphFrms_chip_d = overlay(graphFrms_chip_d, legFrm_fore_back, top_left_point = 
 
 graphFrms_itpl = vs.interpolate_frames(graphFrms_chip_c[-1], graphFrms_chip_d[0], 25)
 jointFrms = BGRFrames.from_frames([graphFrms_itpl, graphFrms_chip_d])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -2210,6 +2221,12 @@ graph_annPnts.pop(2)
 
 jntLns = [*regLines3D_trunc, *graphScn.shapes[2:]]
 jntPts = [*annotated_points, *graph_annPnts]
+
+script_line = ""
+statFrms = BGRFrames.from_frame(jointFrms[-1], 50)
+all_frames.append(statFrms)
+script_lines.append(script_line)
+
 
 script_line =   """
                     The data also shows that running around returns to the backhand pays off for the server: 
@@ -2238,7 +2255,7 @@ graphFrms_c = overlay(graphFrms_c, legFrm_fore_back, top_left_point = tlPt)
 
 graphFrms_itpl = vs.interpolate_frames(graphFrms[-1], graphFrms_c[0], 25)
 jointFrms = BGRFrames.from_frames([graphFrms_itpl, graphFrms_c])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -2255,7 +2272,7 @@ graphFrms_d = overlay(graphFrms_d, legFrm_fore_back, top_left_point = tlPt)
 
 graphFrms_itpl = vs.interpolate_frames(graphFrms_c[-1], graphFrms_d[0], 25)
 jointFrms = BGRFrames.from_frames([graphFrms_itpl, graphFrms_d])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -2263,12 +2280,13 @@ script_lines.append(script_line)
 script_line =   """
                     This might be the key in understanding why the chip return should be played to the forehand right away:
                     if it goes to the forehand, the only real attacking shot is a high-risk topspin down-the-line serve + 1, which, 
-                    as we have shown earlier, is often employed prematurely, with a markedly lower success rate than a serve + 2 combination.
+                    as we have shown earlier, is often employed prematurely against the chip, 
+                    with a markedly lower success rate than a serve + 2 combination.
                 """
 
-
-
-
+statFrms = BGRFrames.from_frame(jointFrms[-1], 50)
+all_frames.append(statFrms)
+script_lines.append(script_line)
 
 ######### EXAMPLES #########
 def get_example_spline_frames(myPnt, third_color = BALL_COLOR, only_last = False, rescale_factor = 3/4, which_regions = ['a']):
@@ -2370,7 +2388,7 @@ script_line =   """
                     he can still go down the line with the forehand inside-in - forcing, but risky.
                 """
 
-bigRst = FramesRaster(4, 4, borders = 1)
+bigRst = FramesRaster(4, 4, borders = None)
 
 ### Forehand INSIDE-IN
 fore_a_cands = [2, 5, 7, 8, 20, 22, 23, 29, 32, 33, 39]
@@ -2401,7 +2419,7 @@ statFrm = bigRst.render()[0]
 bigFrms4 = BGRFrames.from_frame(statFrm, 10)
 
 jointFrms = BGRFrames.from_frames([bigFrms0, bigFrms1, bigFrms2, bigFrms3, bigFrms4])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -2455,7 +2473,7 @@ statFrm = bigRst.render()[0]
 bigFrms7 = BGRFrames.from_frame(statFrm, 10)
 
 jointFrms = BGRFrames.from_frames([bigFrms0, bigFrms1, bigFrms2, bigFrms3, bigFrms4, bigFrms5, bigFrms6, bigFrms7])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
@@ -2484,7 +2502,7 @@ bigFrms2 = bigRst.render()
 bigRst.add(myFrms[-1], 3, 3)
 
 jointFrms = BGRFrames.from_frames([bigFrms0, bigFrms1, bigFrms2])
-DecapStream(jointFrms, 0, 100).show()
+# DecapStream(jointFrms, 0, 100).show()
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
@@ -2664,11 +2682,11 @@ all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    Ok then, so there it is: for a specific set of players in a sample of twenty tournament matches played, 
+                    So - to summarize: for a specific set of players in a sample of twenty tournament matches played, 
                     the chip return is a viable strategy as long as it is hit low and wide to the forehand of the server, 
                     with maybe an exception on a serve out wide from the server's backhand side. 
                     The topspin return is always a solid choice: The way to go here is to hit cross court if pulled out wide, 
-                    and back down the middle if the serve is down the middle. 
+                    and back down the middle or away from the server if the serve is down the middle. 
                     Note that these are aggregate results; they relate to the "average" challenger-level player.
                     Strictly speaking, however, the "average" challenger-level player does not exist:
                     This analysis would be more actionable if it was tailor-made for one specific player, 

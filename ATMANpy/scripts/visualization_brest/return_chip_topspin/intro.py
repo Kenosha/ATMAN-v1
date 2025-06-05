@@ -398,7 +398,7 @@ shr_graphFrm = overlay(shr_graphFrm, legFrm2, top_left_point = tlPt)
 
 ###### INVESTIGATE SELECTION BIAS #########
 
-TABLE_RESOLUTION = 50
+TABLE_RESOLUTION = 2500
 
 ### A) example tables with Player A and B
 
@@ -493,7 +493,7 @@ def make_null_region(reg):
     t1, t2 = reg['Top'].leftPt, reg['Top'].rightPt
     b1, b2 = reg['Bottom'].leftPt, reg['Bottom'].rightPt
 
-    return Region3D.from_points3D(b1, t1.back(h), t2.back(h), b2)
+    return Region3D.from_points3D(b1, t1.back(h), t2.back(h), b2).recolor(const.BGR['leafy_green'])
 
 g1_null, g2_null, g3_null, g4_null = make_null_region(g1), make_null_region(g2), make_null_region(g3), make_null_region(g4) 
 
@@ -577,21 +577,21 @@ cond_smart_table =  Table(table_data, **table_kwargs, null_columns = 0)
 ### Tables with incremental adjustments ###
 ###########################################
 
-x, y = DIMENSIONS
+dim_x, dim_y = DIMENSIONS
 index_name_t = 'Topspin Returns (on first serve)'
 index_name_c = 'Chipped Returns (on first serve)'
 index_name_a = 'Total' ### weirdly, need two extra spaces...
 title = 'Returner Point Win%'
 
 table_kwargs_small = {  'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
-                        'skip_after_how_many_symbols': 15, 'dimensions': (x, y),
+                        'skip_after_how_many_symbols': 15, 'dimensions': (dim_x, dim_y),
                         'skeleton_shrinkage': 0.2, 'skeleton_vertical_offset': 1, 
                         'title_vertical_offset': 0, 'title_horizontal_offset': 3.5,
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1, 'resolution': TABLE_RESOLUTION,
                         }
 
 table_kwargs_mid =  {   'number_format': '.1%', 'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
-                        'skip_after_how_many_symbols': 15, 'dimensions': (int(1.75 * x), int(1.75 * y)),
+                        'skip_after_how_many_symbols': 15, 'dimensions': (int(1.75 * dim_x), int(1.75 * dim_y)),
                         'skeleton_shrinkage': 0.2, 'skeleton_vertical_offset': 1, 
                         # 'title_vertical_offset': 0, 'title_horizontal_offset': 3.5,
                         'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2,
@@ -600,7 +600,7 @@ table_kwargs_mid =  {   'number_format': '.1%', 'index_offset': 0.25, 'index_col
 
 table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False, 
                         'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
-                        'skip_after_how_many_symbols': 15, 'dimensions': (int(2.7 * x), int(2.7 * y)),
+                        'skip_after_how_many_symbols': 15, 'dimensions': (int(2.7 * dim_x), int(2.7 * dim_y)),
                         'skeleton_shrinkage': 0.15, 'skeleton_vertical_offset': 1,
                         'title_vertical_offset': -2, 'title_horizontal_offset': 19,
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
@@ -618,7 +618,7 @@ table_data = {index_name_t: tDict, index_name_c: cDict}
 initial_naive_table = Table(table_data, **table_kwargs_small, title = title, header_text_size = 0)
 # initial_naive_table.render().show()
 
-naive_table = Table(table_data, **table_kwargs_large, title = title)
+naive_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 1)
 # naive_table.render().show()
 
 tDict = {'Unadjusted': t0, '+Choice Adj.': t1}
@@ -626,13 +626,19 @@ cDict = {'Unadjusted': c0, '+Choice Adj.': c1}
 table_data = {index_name_t: tDict, index_name_c: cDict}
 
 smart_table = Table(table_data, **table_kwargs_large, title = title)
+smart_table.set_back_color(const.BGR['darker_grey'], 0, 2)
+smart_table.set_back_color(const.BGR['darker_grey'], 1, 2)
+smart_table.set_back_color(const.BGR['darker_grey'], 2, 2)
 # smart_table.render().show()
 
 tDict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2}
 cDict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2}
 table_data = {index_name_t: tDict, index_name_c: cDict}
 
-smart_bal_table = Table(table_data, **table_kwargs_large, title = title)
+smart_bal_table = Table(table_data, **table_kwargs_large, title = title, null_columns = 1)
+smart_bal_table.set_back_color(const.BGR['darker_grey'], 0, 3)
+smart_bal_table.set_back_color(const.BGR['darker_grey'], 1, 3)
+smart_bal_table.set_back_color(const.BGR['darker_grey'], 2, 3)
 # smart_bal_table.render().show()
 
 tDict = {'Unadjusted': t0, '+Choice Adj.': t1, '+Balance Adj.': t2, '+Attrib. Adj.': t3}
@@ -640,6 +646,9 @@ cDict = {'Unadjusted': c0, '+Choice Adj.': c1, '+Balance Adj.': c2, '+Attrib. Ad
 table_data = {index_name_t: tDict, index_name_c: cDict}
 
 smart_bal_len_table = Table(table_data, **table_kwargs_large, title = title)
+smart_bal_len_table.set_back_color(const.BGR['darker_grey'], 0, 4)
+smart_bal_len_table.set_back_color(const.BGR['darker_grey'], 1, 4)
+smart_bal_len_table.set_back_color(const.BGR['darker_grey'], 2, 4)
 # smart_bal_len_table.render().show()
 
 r_f, c_f = 1080, 1920
@@ -691,12 +700,20 @@ chip_table = Table(table_data, **table_kwargs_mid, #null_columns = 1,
                       title_horizontal_offset = 7.5)
 # chip_table.render().show()
 
+table_kwargs_mid['skip_after_how_many_symbols'] = 20
+table_data = {'\n(on first serve)': tDict, '\n(on first serve) ': cDict, index_name_a: totDict}
+chip_table_blind = Table(table_data, **table_kwargs_mid, #null_columns = 1,
+                      title = "2021 Brest Challenger Tournament", title_color = const.BGR['bright_grey'],
+                      title_horizontal_offset = 7.5)
+table_kwargs_mid['skip_after_how_many_symbols'] = 15
+# chip_table_blind.render().show()
+
 ### 
 tabScn = chip_table.preview()[0]
 lnScn = Scene([*tabScn[0:3], *tabScn[6:9]])
 lnFrm = View.make(chip_table.tabCam, lnScn, resolution = table_kwargs_mid['resolution']).snap()
 lnFrm = overlay_center(BGRFrame.make_black(), lnFrm)
-lnFrm.show()
+# lnFrm.show()
 
 tDict = {'Sample Size': str_tops1, 'Returner Win%': ''}
 cDict = {'Sample Size': str_chips1, 'Returner Win%': ''}
@@ -748,6 +765,8 @@ high_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).join().maybe_to_strea
 
 low_pred_exFrm = dirFrm[dirFrm.is_chipped].sort_values('pred_is_chipped').iloc[:8]
 low_pred_exFrms = [retPnts[idx][:2].stream(confs = confs).join().maybe_to_stream().decap().frames for idx in low_pred_exFrm.index]
+
+high_pred_exFrms_pre = retPnts[int(high_pred_exFrm.index[0])].stream(confs = confs).widen(100).decap().frames[:100].rescale(3)
 
 ###################################
 #### FRAMES RASTER WITH TABLE #####
@@ -814,22 +833,7 @@ tabFrms = BGRFrames.from_frame(tabFrm, 25)
 all_frames.append(tabFrms)
 script_lines.append(script_line)
 
-script_line =   """
-                    However, some highly successful players consistently use the chipped return as a tool 
-                    to either neutralize the rally with a deep, floating chip, 
-                    or draw the server into the court with a shallow, low-bouncing chip.
-                """ # 14 sec
-stillFrms = BGRFrames.from_frame(tabFrm, 250)
-# fadeFrms = BGRFrames.from_frame(tabFrm, 100).dim_progressively()
-fadeFrms = vs.interpolate_frames(tabFrm, lnFrm, 100)
-jointFrms = BGRFrames.from_frames([stillFrms, fadeFrms])
-all_frames.append(jointFrms)
-script_lines.append(script_line)
-
-script_line =   """
-                    The primary goal of this analysis is to take a good look at these chip return varieties, 
-                    and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
-                """
+tabFrm_blind = overlay_center(BGRFrame.make_black(), chip_table_blind.render())
 
 someStr = "The primary goal of this analysis is to\nunderstand the effectiveness of\nthe chipped return versus the topspin return,\nas measured by\nthe expected probability to win the point."
 
@@ -883,16 +887,11 @@ def typewriter_effect(someStr, frames_per_char = 2,
     return BGRFrames.from_frames(out_frames)
 
 typeFrms = typewriter_effect(someStr, frames_per_char = 1, 
-                             overFrm = fadeFrms[-1],
+                             overFrm = None,
                              text_where = (520, 420), text_color = const.BGR['bright_grey'], text_size = 1, text_font = cv.FONT_HERSHEY_TRIPLEX,
                              align = 'center', manual_aligners = [2, 2, 1, 2, 3])
 # DecapStream(typeFrms, 0, 100).show()
 # typeFrms[-1].show()
-
-
-tFrm = typeFrms[-1]
-tFrms = BGRFrames.from_frame(tFrm, 100)
-# tFrm.show()
 
 start_coords_tops = (1091, 540)
 start_coords_chip = (609, 540)
@@ -910,10 +909,11 @@ text_kwargs_one = {'size': 2, 'color': stop_color}
 # tabFrm.put('Topspin Return', where = stop_coords_tops, **text_kwargs_one).show()
 # tabFrm.put('Chipped Return', where = stop_coords_chip, **text_kwargs_one).show()
 
-wordFrm = lnFrm.put('topspin return', where = start_coords_tops, **text_kwargs_nil).put('chipped return', where = start_coords_chip, **text_kwargs_nil)
+wordFrm = BGRFrame.make_black().put('topspin return', where = start_coords_tops, **text_kwargs_nil).put('chipped return', where = start_coords_chip, **text_kwargs_nil)
 # wordFrm.show()
 
 fadeFrms = vs.interpolate_frames(typeFrms[-1], wordFrm, 50)
+fadeFrms = fadeFrms + BGRFrames.from_frame(lnFrm, 50)
 # DecapStream(fadeFrms, 0, 100).show()
 
 from ATMANpy.funcs.util_funcs import interpolate_tuples
@@ -926,8 +926,8 @@ for i in range(num_move_frames):
     itpl_coords_tops = interpolate_tuples(start_coords_tops, stop_coords_tops, lmbd, as_integer = True)
     itpl_coords_chip = interpolate_tuples(start_coords_chip, stop_coords_chip, lmbd, as_integer = True)
 
-    nilFrm = lnFrm.put('topspin return', where = itpl_coords_tops, **text_kwargs_nil).put('chipped return', where = itpl_coords_chip, **text_kwargs_nil)
-    oneFrm = lnFrm.put('Topspin Return', where = itpl_coords_tops, **text_kwargs_one).put('Chipped Return', where = itpl_coords_chip, **text_kwargs_one)
+    nilFrm = BGRFrame.make_black().put('topspin return', where = itpl_coords_tops, **text_kwargs_nil).put('chipped return', where = itpl_coords_chip, **text_kwargs_nil)
+    oneFrm = BGRFrame.make_black().put('Topspin Return', where = itpl_coords_tops, **text_kwargs_one).put('Chipped Return', where = itpl_coords_chip, **text_kwargs_one)
 
     combFrm = nilFrm.dim(1 - lmbd) + oneFrm.dim(lmbd)
 
@@ -935,7 +935,40 @@ for i in range(num_move_frames):
 
 moveFrms = BGRFrames.from_single_frames(move_frames)
 # DecapStream(moveFrms, 0, 100).show()
+moveFrms_rev = moveFrms.reverse()
+# DecapStream(moveFrms_rev, 0, 100).show()
 
+script_line =   """
+                    However, some highly successful players consistently use the chipped return as a tool 
+                    to either neutralize the rally with a deep, floating chip, 
+                    or draw the server into the court with a shallow, low-bouncing chip.
+                """ # 14 sec
+stillFrms = BGRFrames.from_frame(tabFrm, 275)
+# fadeFrms = BGRFrames.from_frame(tabFrm, 100).dim_progressively()
+itplFrms = vs.interpolate_frames(tabFrm_blind, lnFrm, 50)
+# DecapStream(itplFrms, 0, 100).show()
+combFrms = itplFrms + moveFrms_rev.dim_progressively(1, 0.3)
+# DecapStream(combFrms, 0, 100).show()
+jointFrms = BGRFrames.from_frames([stillFrms, combFrms])
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line =   """
+                    The primary goal of this analysis is to take a good look at these chip return varieties, 
+                    and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
+                """
+typeFrms = typewriter_effect(someStr, frames_per_char = 1, 
+                             overFrm = combFrms[-1],
+                             text_where = (520, 420), text_color = const.BGR['bright_grey'], text_size = 1, text_font = cv.FONT_HERSHEY_TRIPLEX,
+                             align = 'center', manual_aligners = [2, 2, 1, 2, 3])
+# DecapStream(typeFrms, 0, 100).show()
+# typeFrms[-1].show()
+
+tFrm = typeFrms[-1]
+tFrms = BGRFrames.from_frame(tFrm, 100)
+# tFrm.show()
+
+moveFrms = moveFrms + BGRFrames.from_frame(lnFrm, 50)
 fadeFrms2 = vs.interpolate_frames(moveFrms[-1], tabFrm, 50)
 
 jointFrms = BGRFrames.from_frames([typeFrms, tFrms, fadeFrms, moveFrms, fadeFrms2])
@@ -975,27 +1008,31 @@ script_lines.append(script_line)
 
 script_line = ""
 
+fadeinFrms = high_pred_exFrms_pre.dim_progressively(0, 1)
+fadeoutFrms = BGRFrames.from_frame(tabFrm, 50).dim_progressively(1, 0).join(BGRFrames.from_frame(BGRFrame.make_black(), 50))
+
+fadeFrms = fadeinFrms + fadeoutFrms
+
 high_pred_exFrms_tight = [myFrms[:-15] for myFrms in high_pred_exFrms] ## shorten the example frames a bit, to tighten the flow
-silentFrms = BGRFrames.from_frames(high_pred_exFrms_tight[:3]).rescale(3)
-all_frames.append(silentFrms)
+silentFrms = BGRFrames.from_frames(high_pred_exFrms_tight[:2]).rescale(3)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, silentFrms])
+DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
                     All these returns have three things in common. They're played off the backhand, on the stretch, as a chip!
                     In fact, there is virtually no way to return these with topspin.
-                    On these serves, the returner has no choice: he is forced to block the ball back in, 
-                    usually resulting in a short chip that is easy to attack if it lands fair at all.
+                    On these serves, the returner has no choice: he is forced to chip the ball back in.
                     
                     For the lack of choice, there is nothing to discuss:
                     The serve is almost an ace - do what you can, chip it back in, and pray for the best.
-                    
-                    What can be discussed are returns that are chipped by choice: given that the returner could either play a topspin or a chip return, 
-                    we want to assess the quality of said choice. 
-                    
-                    Therefore, we shall have to put in some work to find out on which serves the returner actually had a choice.
                 """
 
-voicedFrms = BGRFrames.from_frames(high_pred_exFrms_tight[3:]).rescale(3)
+voicedFrms = BGRFrames.from_frames(high_pred_exFrms_tight[2:]).slow(2).rescale(3)
+DecapStream(voicedFrms, 0, 100).show()
 all_frames.append(voicedFrms)
 script_lines.append(script_line)
 
@@ -1017,8 +1054,8 @@ script_lines.append(script_line)
 # To illuminate this, consider the 8 lowest propensity chipped returns.
 
 script_line =   """
-                    To be able to differentiate between forced chips and choice chips, 
-                    we employ a technique called Propensity Score Matching, or PSM for short.
+                    What can be discussed are returns where the topspin AND the chip are available.
+                    To distinguish these cases from forced chips, we employ a technique called Propensity Score Matching, or PSM for short.
                 """
 
 ball_color = const.BGR['ball_yellow']
@@ -1102,6 +1139,8 @@ DecapStream(dimFrms, 0, 100).show(ms_between_frames = 40)
 # dimFrms[-1].show()
 
 jointFrms = BGRFrames.from_frames([itplFrms, srvFrms_pre, animFrms, dimFrms])
+DecapStream(jointFrms, 0, 100).show()
+
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
@@ -1268,7 +1307,7 @@ virtFrms, animDict2 = vs.animate_static(arrScn_pre, static_cam = brestCam_full,
                                         )
 
 itplFrms = vs.interpolate_frames(statFrms[-1], virtFrms[0], 50)
-DecapStream(itplFrms, 0, 100).show()
+# DecapStream(itplFrms, 0, 100).show()
 
 #### make into diagram
 from ATMANpy.auxil.court import birds_eye_service_box_cam
@@ -1360,6 +1399,7 @@ probPt2 = depthPt_post.right(146).retext(f'{1 - pred:.1%}').recolor(const.BGR['l
 probFrms, animDict = vs.animate_static(arrScn_post, static_cam = bot_adCam, background_scene = Scene.make_court(), 
                                 argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
                                 annotated_points = [speedPt_post, heightPt_post, depthPt_post, stretchPt_post, retPt_post, probPt1, probPt2],
+                                num_frames = 50,
                                 )
 # probFrms[-1].show()
 
@@ -1373,92 +1413,61 @@ script_lines.append(script_line)
 
 script_line =   """
                     The arrows here indicate how each factor influences the predicted probability to chip.
-                    A chip return is LIKELIER if...
+                    For example, a chip return is likelier if...
                 """
 
 all_frames.append(probFrms)
 script_lines.append(script_line)
 
 brighten_factor = 2
-bright_text_color = tuple([min(c, 255) for c in np.array(text_color) * brighten_factor])
+# bright_text_color = tuple([min(c, 255) for c in np.array(text_color) * brighten_factor])
+# darken_text_color = tuple([min(c, 255) for c in np.array(text_color) / 3])
 
 script_line =   """
-                    ... the serve is faster ...
+                    ... the serve is faster, ...
                 """
+
+arrScn_post_dim = arrScn_post.dim(1 / brighten_factor)
+annPnts_dim = [pt.dim(1 / brighten_factor) for pt in [speedPt_post, heightPt_post, depthPt_post, stretchPt_post, retPt_post, probPt1, probPt2]]
 
 probFrms1, _ = vs.animate_static(speedArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
                                 argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
-                                annotated_points = [speedPt_post.recolor(bright_text_color), probPt1, probPt2],
-                                **animDict
+                                annotated_points = [speedPt_post.dim(brighten_factor), probPt1, probPt2],
+                                num_frames = 25,
+                                previous_foreground_scene = arrScn_post_dim, previous_annotated_points = annPnts_dim
                                 )
-# probFrms1[-1].show()
 
-all_frames.append(probFrms1)
+itplFrms = vs.interpolate_frames(probFrms[-1], probFrms1[0], 25)
+jointFrms = BGRFrames.from_frames([itplFrms, probFrms1])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    ... the ball bounces lower ...
+                    ... or if the returner has to stretch, to reach the serve.
                 """
 
-probFrms2, _ = vs.animate_static(heightArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
-                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
-                                annotated_points = [heightPt_post.recolor(bright_text_color), probPt1, probPt2],
-                                **animDict
-                                )
-# probFrms2[-1].show()
-
-all_frames.append(probFrms2)
-script_lines.append(script_line)
-
-script_line =   """
-                    ... the returner is closer to the baseline ...
-                """
-
-probFrms3, _ = vs.animate_static(depthArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
-                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
-                                annotated_points = [depthPt_post.recolor(bright_text_color), probPt1, probPt2],
-                                **animDict
-                                )
-# probFrms3[-1].show()
-
-all_frames.append(probFrms3)
-script_lines.append(script_line)
-
-script_line =   """
-                    ... the returner has to stretch farther to reach the serve ...
-                """
+arrScn_post_dim = arrScn_post.dim(1 / brighten_factor)
+annPnts_dim = [pt.dim(1 / brighten_factor) for pt in [speedPt_post, heightPt_post, depthPt_post, stretchPt_post, retPt_post, probPt1, probPt2]]
 
 probFrms4, _ = vs.animate_static(stretchArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
                                 argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
-                                annotated_points = [stretchPt_post.recolor(bright_text_color), probPt1, probPt2],
-                                **animDict
+                                annotated_points = [stretchPt_post.dim(brighten_factor), probPt1, probPt2],
+                                num_frames = 25,
+                                previous_foreground_scene = arrScn_post_dim, previous_annotated_points = annPnts_dim
                                 )
-# probFrms4[-1].show()
 
-all_frames.append(probFrms4)
+itplFrms = vs.interpolate_frames(probFrms[-1], probFrms4[0], 25)
+jointFrms = BGRFrames.from_frames([itplFrms, probFrms4])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
-
-
-script_line =   """
-                    ... and finally if the serve is to the backhand.
-                """
-
-probFrms5, _ = vs.animate_static(retArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
-                                argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
-                                annotated_points = [retPt_post.recolor(bright_text_color), probPt1, probPt2],
-                                **animDict
-                                )
-# probFrms5[-1].show()
-
-all_frames.append(probFrms5)
-script_lines.append(script_line)
-
 
 script_line =   """
                     So how does this propensity model help us differentiate between chips that are forced and chips that are done by choice?
                 """
 
-itplFrms = vs.interpolate_frames(probFrms5[-1], probFrms[0], 50)
+itplFrms = vs.interpolate_frames(probFrms4[-1], probFrms[0], 50)
 # DecapStream(itplFrms, 0, 100).show()
 
 moveFrms, _ = vs.animate_cam_motion(None, start_cam = bot_adCam, stop_cam = bot_dcCam, num_frames = 25, interpolate_func = vs.interpolate_camera_naive,
@@ -1542,7 +1551,7 @@ all_frames.append(blinkFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    On the other hand, Let's say we observe a chip in a situation where the propensity of playing a chip is low, 
+                    On the other hand, let's say we observe a chip in a situation where the propensity of playing a chip is low, 
                     that is, where we would usually see a topspin return.
                     In this case, the chip return is the returner's strong choice: he could have played topspin, but he went for the chip.
                 """
@@ -1576,7 +1585,7 @@ moveFrms_prev, _ = vs.animate_cam_motion(None, start_cam = bot_dcCam, stop_cam =
 
 moveFrms = moveFrms_prev.dim_progressively(1, 0, exp = 0.5) + moveFrms_blank.dim_progressively(0, 1, exp = 0.5)
 
-DecapStream(moveFrms, 0, 100).show()
+# DecapStream(moveFrms, 0, 100).show()
 
 trans_frames = 50
 first_idx = int(low_pred_exFrm.index[0])
@@ -1608,36 +1617,40 @@ script_line =   """
                     We can now use these propensities to focus on chipped returns where the returner actually had a choice, 
                     and thereby assess the quality of this choice.
                 """
-fadeFrms = BGRFrames.from_frame(voicedFrms[-1], 100).dim_progressively(1, 0)
-all_frames.append(fadeFrms)
+tabFrm = naive_table.render()
+tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
+itplFrms = vs.interpolate_frames(voicedFrms[-1], tabFrm, 100)
+
+all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    As we saw earlier, the probability to win a point following a chipped return is just under 20%. 
-                    If we concentrate on choice chips, we expect that probability to increase, since we discount
+                    As we saw earlier, the proportion of points won by the returner on a chip return is just under 20%. 
+                    If we concentrate on choice chips, we expect that proportion to increase, since we discount
                     those serves that are returned on the stretch, under great difficulty.
                 """
-
-tabFrm = naive_table.render()
-tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
 tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
-
 all_frames.append(tabFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    Indeed, the returner's win probability increases, if only modestly, to 23.3%.  
+                    Indeed, we see a modest increase, to 23.3%.  
                 """
 
 tabFrm = smart_table.render()
 tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
-tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
+tabFrms = BGRFrames.from_frame(tabFrm, 75)
+
+all_frames.append(tabFrms)
+script_lines.append(script_line)
+
+script_line = ""
 
 all_frames.append(tabFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    Unfortunately, even after adjusting for choice chips, the data is not yet ready to reveal a true, unbiased picture
+                    Unfortunately, even after adjusting for choice chips, we have not yet arrived at a true, unbiased picture
                     of return win probabilities. 
 
                     Why? Well, in a perfect world, we'd ask each player to hit 100 serves to each other player in our sample.
@@ -1693,13 +1706,15 @@ script_line =   """
 all_frames.append(rstFrms)
 script_lines.append(script_line)
 
-graphScns_itpl = vs.interpolate_scenes(bar_graphScn_null, bar_graphScn, num_frames = TRANSITION_FRAMES)
+script_line = ""
+
+graphScns_itpl = vs.interpolate_scenes(bar_graphScn_null, bar_graphScn, num_frames = 50)
 myFrms, _ = vs.animate_sequence(graphScns_itpl, start_cam = myGraph.cam, stop_cam = myGraph.cam,
                                 annotated_points = bar_annotatedPnts_start, argument_resolution = BAR_RESOLUTION)
 
-ovrFrms = overlay_center(BGRFrames.from_frame(BGRFrame.make_black(), 100), myFrms)
+ovrFrms = overlay_center(BGRFrames.from_frame(BGRFrame.make_black(), 50), myFrms)
+# DecapStream(ovrFrms, 0, 100).show()
 
-script_line = ""
 all_frames.append(ovrFrms)
 script_lines.append(script_line)
 
@@ -1728,7 +1743,17 @@ script_line =   """
 
 tabFrm = smart_bal_table.render()
 tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
-tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
+tabFrms = BGRFrames.from_frame(tabFrm, 75)
+
+itplFrms = vs.interpolate_frames(ovrFrms[-1], tabFrm, 50)
+
+jointFrms = BGRFrames.from_frames([itplFrms, tabFrms])
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = ""
 all_frames.append(tabFrms)
 script_lines.append(script_line)
 
@@ -1756,7 +1781,7 @@ script_line =   """
 tabFrm = smart_bal_len_table.render()
 tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
 tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
-all_frames.append(ovrFrms)
+all_frames.append(tabFrms)
 script_lines.append(script_line)
 
 
@@ -1771,7 +1796,7 @@ all_frames.append(graphFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    On a chipped return, the server's probability to make the (serve + 1) winner is "only" 62%. 
+                    On a chipped return, the server's probability to win the point on a serve + 1 is 63%. 
                     On aggregate, the server's patience would pay off: if he were to play a set-up shot instead of an immediate winner, 
                     let the returner scramble, and attempt a winner on the fifth shot of the rally, his success rate would rise to 82%.
                 """
@@ -1782,8 +1807,7 @@ all_frames.append(graphFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    In other words, on a chipped return, a serve + 2 is more successful on average than a serve + 1. 
-                    We will illuminate some of the causes for this later.
+                    On a chipped return, a serve + 2 is more successful on average than a serve + 1. 
                 """
 
 graphFrm = overlay_center(BGRFrame.make_black(), avg_graphFrm2)
@@ -1792,7 +1816,7 @@ all_frames.append(graphFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The bad news for the server is that the more promising serve + 2 pattern is attempted only about half as often as the serve + 1. 
+                    The bad news for the server is that the more promising serve + 2 happens only about half as often as the serve + 1. 
                     The typical server is, in a way, slightly too impatient on chipped returns.
                     Since the attribution adjustment correctly values the return's impact on the outcome of short rallyes higher than on long rallyes, 
                     the server's "impatience" is reflected in an increase in the success rate of the chip return after the attribution adjustment.
@@ -1811,16 +1835,35 @@ script_line =   """
                     In the following, we will attempt to answer these questions.
                 """
 
-tabFrm = smart_bal_len_table.render()
-tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
-tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
-all_frames.append(tabFrms)
+### 
+tabScn, annPnts = smart_bal_len_table.preview()
+
+topsPt, chipPt = annPnts[-5].right(1.25).back(0.5), annPnts[-1].right(1.25).front(1)
+
+deltArr = Arrow.make(topsPt, chipPt, color = const.BGR['intense_red'])
+tabScn = tabScn.put(deltArr)
+
+delStr = f'{c3 - t3:.0%}'
+deltPt = (topsPt + chipPt) / 2
+deltPt = deltPt.right(0.1)
+deltPt = deltPt.annotate(delStr).resize(2).recolor(const.BGR['intense_red'])
+
+annPnts = [*annPnts, deltPt]
+
+smart_bal_len_frm_with_arrow = View.make(smart_bal_len_table.tabCam, tabScn, annPnts, resolution = TABLE_RESOLUTION).snap()
+# smart_bal_len_frm_with_arrow.show()
+
+tabFrm = overlay_center(BGRFrame.make_black(), smart_bal_len_frm_with_arrow)
+
+itplFrms = vs.interpolate_frames(graphFrm, tabFrm, 50)
+
+all_frames.append(itplFrms)
 script_lines.append(script_line)
 
 ### Saving the separate MultiFrame objects and the Joint Script
 assert len(script_lines) == len(all_frames)
 
-show(all_frames)
+# show(all_frames)
 
 from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
 saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
