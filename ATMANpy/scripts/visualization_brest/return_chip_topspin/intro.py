@@ -337,7 +337,7 @@ graph_kwargs = {'color': const.BGR['bright_grey'], 'y_label_format': '>4.0%', 'y
                 'y_label_dist': 2.5, 'dimensions': (x2, y2), 'x_label_dist': 1.15, 'x_label_left_shift': 3.75, 
                 'x_tick_label_left_shift': 0.3,
                 'label_size': 2, 'tick_label_size': 2, 
-                'header_text': 'Server Success against Choice Chipped Returns', 'header_size': 2, 'header_horizontal_offset': 5,
+                'header_text': 'Server Success against Choice Chipped Returns', 'header_size': 2, 'header_horizontal_offset': 6,
                 'x_label': 'Shots in Rally', 'resolution': GRAPH_RESOLUTION}
 
 avg_color = const.BGR['leafy_green']

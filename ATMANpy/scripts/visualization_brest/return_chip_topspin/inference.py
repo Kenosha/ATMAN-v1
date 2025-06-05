@@ -740,6 +740,118 @@ def put_desc(someFrms, descStr, side, height, color = const.BGR['leafy_green'], 
 
     return textFrms
 
+#### S+1/S+2 Table #######
+
+GRAPH_RESOLUTION = 50
+
+DIMENSIONS = (1920 // 3, 1080 // 3)
+x1, y1 = DIMENSIONS
+x2, y2 = x1 * 2, y1 * 2
+
+jntFrm, jntFrm_decayed, shrFrm, diffFrm_chip, diffFrm_top, avgFrm = vis_ut.chip_topspin_return_avgs_by_length(regFrm, decay_rate = DECAY_RATE)
+
+cond_shrFrm = shrFrm.loc[3:] / (1 - shrFrm.loc[2])
+
+combFrm = avgFrm * shrFrm
+
+chip_shareFrm = shrFrm['chip_smart']
+chip_avgFrm = avgFrm['chip_smart']
+
+shares_2_6 = chip_shareFrm.loc[2:6].values
+shares_7_8 = chip_shareFrm.loc[7:8].sum()
+shares_9_10 = chip_shareFrm.loc[9:10].sum()
+shares_11 = chip_shareFrm.loc[11:].sum()
+
+share_ys = [*shares_2_6, shares_7_8, shares_9_10, shares_11]
+
+avg_2_6 = chip_avgFrm.loc[2:6].values
+avg_7_8 = (chip_shareFrm * chip_avgFrm).loc[7:8].sum() / shares_7_8
+avg_9_10 = (chip_shareFrm * chip_avgFrm).loc[9:10].sum() / shares_9_10
+avg_11 = (chip_shareFrm * chip_avgFrm).loc[11:].sum() / shares_11
+
+avg_ys = [*avg_2_6, avg_7_8, avg_9_10, avg_11]
+
+shares_2_6 = chip_shareFrm.loc[2:6].values
+shares_7   = chip_shareFrm.loc[7:].sum()
+
+shr_ys = [*shares_2_6, shares_7]
+shr_ys = np.array(shr_ys)
+
+avg_2_6 = chip_avgFrm.loc[2:6].values
+avg_7 = (chip_shareFrm * chip_avgFrm).loc[7:].sum() / shares_7
+
+avg_ys = [*avg_2_6, avg_7]
+avg_ys = 1 - np.array(avg_ys) ### from perspective of server
+
+xs = [1, 2, 3, 4, 5, 6]
+x_labels = ['2', '3', '4', '5', '6', '7+']
+
+from ATMANpy.types.Overlays import LineChart, ScatterChart, Graph, Legend, LegendRow
+
+graph_kwargs = {'color': const.BGR['bright_grey'], 'y_label_format': '>4.0%', 'y_label': None, 'offset': 0.3, 
+                'make_default_x_labels': False,
+                'y_label_dist': 2.5, 'dimensions': (x2, y2), 'x_label_dist': 1.15, 'x_label_left_shift': 3.75, 
+                'x_tick_label_left_shift': 0.3,
+                'label_size': 2, 'tick_label_size': 2, 
+                'header_text': 'Server Success against Choice Chipped Returns', 'header_size': 2, 'header_horizontal_offset': 6,
+                'x_label': 'Shots in Rally', 'resolution': GRAPH_RESOLUTION}
+
+avg_color = const.BGR['leafy_green']
+shr_color = const.BGR['bright_blue']
+
+nullChart = LineChart([0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0], color = const.BGR['bright_grey'], thickness = 0)
+shrChart = LineChart(xs, shr_ys, color = shr_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
+avgChart = LineChart(xs, avg_ys, color = avg_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
+
+n = 30
+x_idx = 1
+v_xs = np.ones(n) * xs[x_idx]
+v_ys = np.linspace(0, avg_ys[x_idx], num = n)
+vChart1 = ScatterChart(v_xs, v_ys, color = const.BGR['intense_red'])
+
+n = 40
+x_idx = 3
+v_xs = np.ones(n) * xs[x_idx]
+v_ys = np.linspace(0, avg_ys[x_idx], num = n)
+vChart2 = ScatterChart(v_xs, v_ys, color = const.BGR['intense_red'])
+
+### make legend
+avgRow = LegendRow(text = 'Server Win%', shape_color = avg_color, text_size = 2, shape_offset = 0.25, text_vertical_offset = 0.3)
+shrRow = LegendRow(text = 'Frequency', shape_color = shr_color, text_size = 2, shape_offset = 0.25, text_vertical_offset = 0.3)
+nulRow = LegendRow(text = None)
+
+leg1 = Legend([avgRow, nulRow], legend_dimensions = (300, 150), borders = False, header_text = '', resolution = 2000)
+leg2 = Legend([avgRow, shrRow], legend_dimensions = (300, 150), borders = False, header_text = '', resolution = 2000)
+legFrm1 = leg1.render()
+legFrm2 = leg2.render()
+
+tlPt = Point2D((900, 100))
+
+myGraph = Graph([nullChart, avgChart], **graph_kwargs)
+avg_graphFrm0 = myGraph.render()
+avg_graphFrm0 = overlay(avg_graphFrm0, legFrm1, top_left_point = tlPt)
+# avg_graphFrm0.show()
+
+myGraph.add(vChart1)
+avg_graphFrm1 = myGraph.render()
+avg_graphFrm1 = avg_graphFrm1.put('Serve+1', color = const.BGR['intense_red'], where = (460, 425), size = 1)
+avg_graphFrm1 = overlay(avg_graphFrm1, legFrm1, top_left_point = tlPt)
+# avg_graphFrm1.show()
+
+myGraph.add(vChart2)
+avg_graphFrm2 = myGraph.render()
+avg_graphFrm2 = avg_graphFrm2.put('Serve+1', color = const.BGR['intense_red'], where = (460, 425), size = 1)
+avg_graphFrm2 = avg_graphFrm2.put('Serve+2', color = const.BGR['intense_red'], where = (716, 425), size = 1)
+avg_graphFrm2 = overlay(avg_graphFrm2, legFrm1, top_left_point = tlPt)
+# avg_graphFrm2.show()
+
+myGraph.add(shrChart)
+shr_graphFrm = myGraph.render()
+shr_graphFrm = shr_graphFrm.put('Serve+1', color = const.BGR['intense_red'], where = (460, 425), size = 1)
+shr_graphFrm = shr_graphFrm.put('Serve+2', color = const.BGR['intense_red'], where = (716, 425), size = 1)
+shr_graphFrm = overlay(shr_graphFrm, legFrm2, top_left_point = tlPt)
+# shr_graphFrm.show()
+
 ###### DEUCE WIDE ######
 side, where = 'deuce', 'wide'
 i, j = 1, 1
@@ -972,8 +1084,6 @@ zoneScn = consolidate_dummy_scene(zoneDict['tp'].combine(zoneDict['lo']).combine
 script_line =   """
                     For a high-arching chip, shown here in light-blue, 
                     the target zone is considerably smaller than either the topspin return or the low chip.
-                    The data therefore confirms what we hypothesized earlier: 
-                    The high chip needs much more depth than the low chip; it may not land as shallow in the court.
                 """
 myFrms, _ = vs.animate_static(zoneScn, static_cam = halfCam, **prmDict_annot, animate_over = realFrms_resc[-1].dim(dim_factor))
 myFrms = put_desc(myFrms, descStr, desc_side, desc_height)
@@ -1431,7 +1541,7 @@ myRst.add(lsFrm.framed(FRAME_THICKNESS, FRAME_COLOR), i, j)
 side, where = 'ad', 'wide'
 i, j = 1, 0
 
-descStr = 'Backhand Side Serve\nDown The Middle'
+descStr = 'Backhand Side Serve\nOut Wide'
 desc_side = 'left'
 desc_height = 'down'
 
@@ -2154,7 +2264,7 @@ script_line =   """
 graphFrms, _ = vs.animate_static(jntLns, static_cam = topCam, **prmDict, 
                                       background_scene = courtScn_subset,
                                       annotated_points = jntPts, num_frames = 25)
-graphFrms = overlay(graphFrms, legFrm_fore_back, top_left_point = tlPt)
+graphFrms = overlay(graphFrms, legFrm_chip_tops, top_left_point = tlPt)
 
 itplFrms = vs.interpolate_frames(jointFrms[-1], graphFrms[0], 25)
 jointFrms = BGRFrames.from_frames([itplFrms, graphFrms])
@@ -2169,7 +2279,7 @@ script_line =   """
 graphFrms_fore, _ = vs.animate_static(Scene([*jntLns, top_a_3D_trunc, top_b_3D_trunc]), static_cam = topCam, **prmDict, 
                                       background_scene = courtScn_subset,
                                       annotated_points = jntPts, num_frames = 25)
-graphFrms_fore = overlay(graphFrms_fore, legFrm_fore_back, top_left_point = tlPt)
+graphFrms_fore = overlay(graphFrms_fore, legFrm_chip_tops, top_left_point = tlPt)
 
 itplFrms = vs.interpolate_frames(graphFrms[-1], graphFrms_fore[0], 25)
 jointFrms = BGRFrames.from_frames([itplFrms, graphFrms_fore])
@@ -2191,7 +2301,7 @@ annPnts_chip = [*annotated_points, *graph_annPnts[:2], *[p.dim(0.5) for p in gra
 graphFrms_chip_c, _ = vs.animate_static(Scene([*jntLns_chip, top_c_3D_trunc]), static_cam = topCam, **prmDict, 
                                         background_scene = courtScn_subset,
                                         annotated_points = annPnts_chip, num_frames = 25)
-graphFrms_chip_c = overlay(graphFrms_chip_c, legFrm_fore_back, top_left_point = tlPt)
+graphFrms_chip_c = overlay(graphFrms_chip_c, legFrm_chip_tops, top_left_point = tlPt)
 
 graphFrms_itpl = vs.interpolate_frames(graphFrms_fore[-1], graphFrms_chip_c[0], 25)
 jointFrms = BGRFrames.from_frames([graphFrms_itpl, graphFrms_chip_c])
@@ -2207,7 +2317,7 @@ script_line =   """
 graphFrms_chip_d, _ = vs.animate_static(Scene([*jntLns_chip, top_d_3D_trunc]), static_cam = topCam, **prmDict, 
                                         background_scene = courtScn_subset,
                                         annotated_points = annPnts_chip, num_frames = 25)
-graphFrms_chip_d = overlay(graphFrms_chip_d, legFrm_fore_back, top_left_point = tlPt)
+graphFrms_chip_d = overlay(graphFrms_chip_d, legFrm_chip_tops, top_left_point = tlPt)
 
 graphFrms_itpl = vs.interpolate_frames(graphFrms_chip_c[-1], graphFrms_chip_d[0], 25)
 jointFrms = BGRFrames.from_frames([graphFrms_itpl, graphFrms_chip_d])
@@ -2284,8 +2394,11 @@ script_line =   """
                     with a markedly lower success rate than a serve + 2 combination.
                 """
 
-statFrms = BGRFrames.from_frame(jointFrms[-1], 50)
-all_frames.append(statFrms)
+statFrms = BGRFrames.from_frame(jointFrms[-1], 150)
+fadeFrms = vs.interpolate_frames(jointFrms[-1], shr_graphFrm, 150)
+jointFrms = BGRFrames.from_frames([statFrms, fadeFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 ######### EXAMPLES #########
@@ -2514,7 +2627,7 @@ inin_idxs = [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0)]
 inout_idxs = [(1, 1), (1, 2), (1, 3), (2, 0), (2, 1), (2, 2), (2, 3), (3, 0)]
 mid_idxs = [(3, 1), (3, 2), (3, 3)]
 
-dim_factor = 0.125
+dim_factor = 0.1
 for r, c in inout_idxs + mid_idxs:
     bigRst_inin[r, c] = bigRst_inin[r, c].dim(dim_factor)
 
@@ -2541,7 +2654,7 @@ all_frames.append(bigFrms_itpl1)
 script_lines.append(script_line)
 
 script_line = ""
-revRst, revFrms = reverse_cascade(bigRst_inin, frames_per_element = 10, acceleration = 1.25)
+revRst, revFrms = reverse_cascade(bigRst_inin, frames_per_element = 10, acceleration = 1.15)
 all_frames.append(revFrms)
 script_lines.append(script_line)
 

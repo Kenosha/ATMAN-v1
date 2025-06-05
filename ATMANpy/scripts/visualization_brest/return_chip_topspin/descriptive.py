@@ -171,8 +171,8 @@ def make_prm_dict(resolution_modifier = 1, argument_luminosity = 1, adaptive_res
 
 
 RESOLUTION_MODIFIER_NORMAL = 15 #15
-RESOLUTION_MODIFIER_HEATMAP = 0.5
-RESOLUTION_MODIFIER_ANGLE = 5
+RESOLUTION_MODIFIER_HEATMAP = 1.25
+RESOLUTION_MODIFIER_ANGLE = 15
 prmDict = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1.25, 
                         adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
 prmDict_nolum = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1, 
@@ -522,11 +522,12 @@ if DO_METHOD_SECTION:
     from ATMANpy.scripts.visualization_brest.atman_capabilities.utils import kde_func
     topsScn = kde_func(tops_retShots_rectified, bandwidth = 40, props = [0.2, 0.4, 0.6, 0.8],
                        resolution = RESOLUTION_KDE, heat_bgr = TOPS_COLOR, background_bgr = (0, 0, 0),
-                       exp_bgr = 1)
+                       exp_bgr = 1, reg_scale_factor = 0.98)
 
     topsFrms, animDict = vs.animate_static(topsScn, background_scene = courtScn, static_cam = heatCam, **prmDict_nolum,
                                     previous_annotated_points = animDict['previous_annotated_points'])
     topsFrms = overlay(topsFrms, legFrm_tops, top_left_point = anchorPt)
+    # topsFrms[-1].show()
 
     itplFrms = vs.interpolate_frames(itplFrms[-1], topsFrms[0], 50)
     # DecapStream(itplFrms, 0, 100).show()
@@ -623,7 +624,7 @@ if DO_METHOD_SECTION:
     
     chipScn = kde_func(chip_retShots_rectified, bandwidth = 40, props = [0.2, 0.4, 0.6, 0.8],
                        resolution = RESOLUTION_KDE, heat_bgr = CHIP_COLOR, background_bgr = (0, 0, 0),
-                       exp_bgr = 1)
+                       exp_bgr = 1, reg_scale_factor = 0.98)
 
     chipFrms, animDict = vs.animate_static(chipScn, background_scene = courtScn, static_cam = heatCam, 
                                            annotated_points = [fhPt, bhPt], **prmDict_nolum)
@@ -849,22 +850,22 @@ nullScn = Scene([nullLn])
 _, player = myShots[1].feat_top_player().first()
 
 # get topspin and chip dists, with axes
-kwargDict_chip = {  'bandwidth': 2,
+kwargDict_chip = {  'bandwidth': 2.4,
                     'resolution': 1000,
                     'axis_length': 45,
                     'axis_origin_point': bPt,
                     'x_unit_vector': Point3D((0, -1, 0)), 
                     'y_unit_vector': Point3D((0, 0, 1)),
                     'normalize_density': False, 
-                    'stretch_density': 10}
-kwargDict_tops = {  'bandwidth': 2,
+                    'stretch_density': 7}
+kwargDict_tops = {  'bandwidth': 2.4,
                     'resolution': 1000,
                     'axis_length': 45,
                     'axis_origin_point': bPt,
                     'x_unit_vector': Point3D((0, -1, 0)), 
                     'y_unit_vector': Point3D((0, 0, 1)),
                     'normalize_density': False, 
-                    'stretch_density': 8}
+                    'stretch_density': 6.5}
 
 
 weightArr = regFrm_in.loc[regFrm_in.is_chipped == 1, 'weight_topspin'].values
@@ -915,7 +916,7 @@ ellView = View.make(sideretCam, Scene([myEll]))
 
 ### get modes
 # a) chip
-chip_mode_lo, chip_mode_hi = 11.8, 18.1
+chip_mode_lo, chip_mode_hi = 11.9, 18.1
 mode_angles = [chip_mode_lo, chip_mode_hi]
 modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict_chip['axis_length'] * 2.1, 
                                  x_ax = kwargDict_chip['x_unit_vector'], y_ax = kwargDict_chip['y_unit_vector'],
@@ -927,7 +928,7 @@ itpl_lns_lo = vs.interpolate_scenes(nullScn, modeScn_lo, num_frames = 25)
 itpl_lns_hi = vs.interpolate_scenes(nullScn, modeScn_hi, num_frames = 25)
 
 # b) topspin
-tops_mode = tops_modes[1]
+tops_mode = 7.5 #tops_modes[1]
 mode_angles = [tops_mode]
 modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict_tops['axis_length'] * 2.1,
                                  x_ax = kwargDict_tops['x_unit_vector'], y_ax = kwargDict_tops['y_unit_vector'],
@@ -935,6 +936,13 @@ modeLns = vis_ut.make_mode_lines(mode_angles, line_len = kwargDict_tops['axis_le
 modeScn_tp = Scene([modeLns[0].recolor(TOPS_COLOR).resize(thickness)]).dim(1.2)
 
 itpl_lns_tp = vs.interpolate_scenes(nullScn, modeScn_tp, num_frames = 25)
+
+### check lines
+lineView = View.make(sideretCam, modeScn_lo.combine(modeScn_hi).combine(modeScn_tp))
+
+# backView.combine(kdeView).snap().show()
+# lineView.combine(backView).combine(kdeView).snap().show()
+
 
 # c) example line
 mode_angles = [11.9]
@@ -1312,10 +1320,11 @@ if DO_LAUNCH_ANGLE_MODES:
 
     ang = myShots[1].get_launch_angle()
     script_line =   f"""
-                        Our example chip return left the racket at an {ang:.1f} degree angle, very close to our low-angle chip mode. 
+                        Our example chip return left the racket at {ang:.1f} degrees, making it a good representative of the low angle mode. 
                     """
     lnFrms, animDict = vs.animate_sequence(itpl_lns_ex, background_scene = court_and_axScn, **prmDict_angle, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam, annotated_points = [angPt0, angPt1, angPt2])
+    lnFrms = overlay(lnFrms, leg3Frm, top_left_point = anchorPt_middle)
     # DecapStream(lnFrms, 0, 100).show()
 
     # myFrms, animDict = vs.animate_static(Scene([degCrc0, degCrc1, degCrc2]), background_scene = court_and_axScn, **prmDict_angle, **animDict,
@@ -2654,35 +2663,35 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # given all of this -> where SHOULD a chipped ball go to improve the returners chances of winning?
     # -> what chip is more promising than an average topspin return?
 
-    script_line = ""
-    all_frames.append(staticFrms[:50])
-    script_lines.append(script_line)
+    # script_line = ""
+    # all_frames.append(staticFrms[:50])
+    # script_lines.append(script_line)
 
     # de-render the shapes in the top left
     script_line =   """
                         Up until this point, we have tackled the chip return entirely descriptively.
-                        We know, roughly, what an average challenger-level player does 
-                        with respect to the chipped return versus the topspin return,
+                        We know, roughly, what an average challenger-level player does;
                         what we are lacking is an answer to the question: what should he do.
 
                         Given the 12% win-rate deficit of the chip return on aggregate: 
                         should a return be chipped by choice, at all? And if yes: where, and how?
 
-                        To this end, we use the data collected by us to estimate a model that 
-                        calculates the returner's win probability by taking into account a variety of factors, 
+                        To this end, we estimate a model on our data that calculates the returner's win probability 
+                        by taking into account a variety of factors, 
                         such as return placement, launch angle, speed, spin and on-court positioning of the returner and server.
-
-                        We can then use this model to find the most promising return in any specific situation.
                     """
 
-    staticFrms = BGRFrames.from_frame(staticFrms[-1], 250)
+    all_frames.append(staticFrms)
+    script_lines.append(script_line)
+    
+    script_line = "We can then use this model to find the most promising return in any specific situation."
 
     myRst = FramesRaster(2, 2, borders = None)
     myRst.add(endFrms[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
     myRst.add(tabFrm_orig3.dim(0.5), 0, 1)
     myRst.add(tabFrm_cntr3, 1, 0)
 
-    num_frames = 17
+    num_frames = 10
     blackFrm = BGRFrame.make_black(960, 540)
     blackFrms = BGRFrames.from_frame(blackFrm, num_frames)
 
@@ -2697,7 +2706,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
         statFrm = statFrms[0]
         
         derFrm = crcFrms_orig[-1].mask(keepMask_orig) + statFrm.mask(~keepMask_orig)
-        derFrm = derFrm.dim(0.5)
+        derFrm = derFrm.framed(FRAME_THICKNESS, FRAME_COLOR).dim(0.5)
         derFrms =  BGRFrames.from_frame(derFrm, num_frames)
 
         derender_list.append(derFrms)
@@ -2707,7 +2716,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     derFrms = BGRFrames.from_frames(derender_list)
     # DecapStream(derFrms, 0, 100).show()
 
-    myRst.add(derFrms.framed(FRAME_THICKNESS, FRAME_COLOR), 0, 0)
+    myRst.add(derFrms, 0, 0)
     rstFrms_der0 = myRst.render()
     # DecapStream(rstFrms_der0, 0, 100).show()
 
@@ -2759,12 +2768,12 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     firstFrm = get_spline_frames(bestPnt)[-1].rescale(0.5) ### first inference frame
 
-    itplFrms = vs.interpolate_frames(derFrms[-1], firstFrm, 200)
+    itplFrms = vs.interpolate_frames(derFrms[-1], firstFrm, 40)
     itplFrms = itplFrms.framed(FRAME_THICKNESS, FRAME_COLOR)
     myRst.add(itplFrms, 1, 1)
     rstFrms_itpl = myRst.render()
 
-    jointFrms_der = BGRFrames.from_frames([staticFrms, rstFrms_der0, rstFrms_der1, rstFrms_der2, rstFrms_der3, rstFrms_itpl])
+    jointFrms_der = BGRFrames.from_frames([rstFrms_der0, rstFrms_der1, rstFrms_der2, rstFrms_der3, rstFrms_itpl])
     # DecapStream(jointFrms_der, 0, 100).show()
 
     all_frames.append(jointFrms_der)
