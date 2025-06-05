@@ -602,10 +602,11 @@ table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False,
                         'index_offset': 0.25, 'index_col_width': 1.25, 'header_row_height': 0.5,
                         'skip_after_how_many_symbols': 15, 'dimensions': (int(2.7 * dim_x), int(2.7 * dim_y)),
                         'skeleton_shrinkage': 0.15, 'skeleton_vertical_offset': 1,
-                        'title_vertical_offset': -2, 'title_horizontal_offset': 19,
+                        'title_vertical_offset': -2, 'title_horizontal_offset': 19.5,
                         'title_size': 2, 'title_thickness': 1, 'header_line_thickness': 0.1,
                         'data_text_size': 2, 'header_text_size': 2, 'index_text_size': 2,
                         'title_color': const.BGR['bright_grey'], 'resolution': TABLE_RESOLUTION,
+                        'header_offset': 0.5, 'data_offset': 0.5
                         }
 
 t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
@@ -825,7 +826,7 @@ all_frames.append(tabFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    ... and only 28% of first-serves are returned as a chip, 
+                    ... and only 28% are returned as a chip, 
                     and even fewer, as we will see, are chipped back by choice.
                 """
 tabFrm = overlay_center(BGRFrame.make_black(), chip_table.render())
@@ -1450,7 +1451,7 @@ script_line =   """
 arrScn_post_dim = arrScn_post.dim(1 / brighten_factor)
 annPnts_dim = [pt.dim(1 / brighten_factor) for pt in [speedPt_post, heightPt_post, depthPt_post, stretchPt_post, retPt_post, probPt1, probPt2]]
 
-probFrms4, _ = vs.animate_static(stretchArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
+probFrms4, animDict_2 = vs.animate_static(stretchArr_diag.dim(brighten_factor), static_cam = bot_adCam, background_scene = Scene.make_court(), 
                                 argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
                                 annotated_points = [stretchPt_post.dim(brighten_factor), probPt1, probPt2],
                                 num_frames = 25,
@@ -1476,6 +1477,15 @@ moveFrms, _ = vs.animate_cam_motion(None, start_cam = bot_adCam, stop_cam = bot_
                                     **animDict)
 # DecapStream(moveFrms, 0, 100).show()
 # moveFrms[-1].show()
+
+moveFrms_alt, _ = vs.animate_cam_motion(None, start_cam = bot_adCam, stop_cam = bot_dcCam, num_frames = 25, interpolate_func = vs.interpolate_camera_naive,
+                                    background_scene = Scene.make_court(),
+                                    argument_resolution = arg_res, foreground_resolution = arg_res, background_resolution = back_res,
+                                    **animDict_2)
+# DecapStream(moveFrms_alt, 0, 100).show()
+
+moveFrms_comb = moveFrms.dim_progressively(0, 1) + moveFrms_alt.dim_progressively(1, 0)
+# DecapStream(moveFrms_comb, 0, 100).show()
 
 number_line_color = const.BGR['bright_grey']
 grow_frames = 25
@@ -1524,7 +1534,7 @@ statFrms, animDict = vs.animate_static(numlnArr, static_cam = bot_dcCam, backgro
                                 **animDict_no_prob_1)
 # statFrms[-1].show()
 
-jointFrms = BGRFrames.from_frames([moveFrms, outFrms, statFrms])
+jointFrms = BGRFrames.from_frames([moveFrms_comb, outFrms, statFrms])
 # DecapStream(jointFrms, 0, 100).show()
 
 all_frames.append(jointFrms)
@@ -1637,16 +1647,21 @@ script_line =   """
                     Indeed, we see a modest increase, to 23.3%.  
                 """
 
-tabFrm = smart_table.render()
-tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
-tabFrms = BGRFrames.from_frame(tabFrm, 75)
+tabFrm_smart = smart_table.render()
+tabFrm_smart = overlay_center(BGRFrame.make_black(), tabFrm_smart)
+tabFrms_smart = BGRFrames.from_frame(tabFrm_smart, 50)
 
-all_frames.append(tabFrms)
+fadeFrms = vs.interpolate_frames(tabFrm, tabFrm_smart, 25)
+
+jointFrms = BGRFrames.from_frames([fadeFrms, tabFrms_smart])
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line = ""
 
-all_frames.append(tabFrms)
+all_frames.append(tabFrms_smart)
 script_lines.append(script_line)
 
 script_line =   """
@@ -1659,7 +1674,7 @@ script_line =   """
                     In a tennis match, the amount of returns observed by player is systematically biased: 
                     what happens is that we observe more returns from the better player.
                 """
-all_frames.append(tabFrms)
+all_frames.append(tabFrms_smart)
 script_lines.append(script_line)
 
 script_line =   "To illuminate why, imagine player A has a great serve and average return; player B has an average return and serve."
@@ -1778,10 +1793,15 @@ script_line =   """
                     the most intuitively accessible of which is as follows:
                 """
 
-tabFrm = smart_bal_len_table.render()
-tabFrm = overlay_center(BGRFrame.make_black(), tabFrm)
-tabFrms = BGRFrames.from_frame(tabFrm, STATIC_FRAMES)
-all_frames.append(tabFrms)
+tabFrm_len = smart_bal_len_table.render()
+tabFrm_len = overlay_center(BGRFrame.make_black(), tabFrm_len)
+tabFrms_len = BGRFrames.from_frame(tabFrm_len, STATIC_FRAMES)
+
+fadeFrms = vs.interpolate_frames(tabFrm, tabFrm_len, 25)
+jointFrms = BGRFrames.from_frames([fadeFrms, tabFrms_len])
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 
@@ -1838,7 +1858,7 @@ script_line =   """
 ### 
 tabScn, annPnts = smart_bal_len_table.preview()
 
-topsPt, chipPt = annPnts[-5].right(1.25).back(0.5), annPnts[-1].right(1.25).front(1)
+topsPt, chipPt = annPnts[-5].right(1.10).back(0.5).up(1), annPnts[-1].right(1.1).front(1).up(1)
 
 deltArr = Arrow.make(topsPt, chipPt, color = const.BGR['intense_red'])
 tabScn = tabScn.put(deltArr)
