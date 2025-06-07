@@ -146,8 +146,8 @@ bsl_sideCam = baseline_side_cam(which = 'Ad', side = 'Top', width = 200)
 behindCam = back_view_asymmetric_cam(which = 'Ad', side = 'Top')
 
 ### animation parameters
-back_res = 1 #12# 12 ##1 
-shape_res = 2 #7.5# 7.5 ##1 ### -> double the shape resolution to at least 15, maybe even 20
+back_res = 12# 12 ##1 
+shape_res = 20 # 7.5 ##1 ### -> double the shape resolution to at least 15, maybe even 20
 
 ######################
 ###### ANIMATION #####
@@ -247,7 +247,7 @@ all_frames.append(anim_and_dashFrms)
 script_lines.append(script_line)
 
 ### annotate height and depth
-script_line = "We can extract average hit height and depth, for example."
+script_line = "We can extract average hit height and depth..."
 
 dash_and_ball_scene = dash_scenes[-1].put(meanBall)
 
@@ -273,13 +273,13 @@ script_lines.append(script_line)
 
 ### splines rectified to average hitting point
 script_line =   """
-                    We can also calculate the return launch angle with ease. 
+                    ... or we can visualize the average return launch angle with ease. 
                 """
 
 all_frames.append(annFrms)
 script_lines.append(script_line)
 
-script_line = "To visualize it, we make as if all shots had originated from the mean impact point..."
+script_line = "To ths end, we make as if all shots had originated from the mean impact point..."
 
 reanchored_trajs = [shot.shotTraj.reanchor(meanPt) for shot in retShots_rect_in]
 reanchored_splnLns = [full_splines_until_bounce(myTraj) for myTraj in reanchored_trajs]
@@ -445,7 +445,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     ATMAN, as we have shown, is a start-to-end-framework for the analysis of tennis matches, 
-                    a system that, even when fed with comparatively low-quality video of tennis matches, 
+                    a system that, even when fed with comparatively low-quality match footage, 
                     is able to deal with visual recognition, data search, filtering and analysis, and the visualization of results and insights.
                     Every facet of a player's game can be analyzed to track progress, reveal vulnerabilities, assist in training design
                     and help work out a game plan tailored to specific opponents.

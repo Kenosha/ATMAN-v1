@@ -176,10 +176,11 @@ row4 = {pStr: p4, sStr: s4}
 
 tab_dims = (1920 // 2, 1080 // 2)
 # tab_dims = (round(1920 * 2/3), round(1080 * 2/3))
-kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 2, 'skeleton_shrinkage': 0.125,
-            'dimensions': tab_dims, 'resolution': 100,
+kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 2, 
+          'skeleton_shrinkage': 0.125, 'skeleton_vertical_offset': 0.75,
+            'dimensions': tab_dims, 'resolution': 100, 
             'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2,
-            'header_text_thickness': 2, 'index_text_thickness': 2, 'data_text_thickness': 2, 
+            'header_text_thickness': 1, 'index_text_thickness': 1, 'data_text_thickness': 1, 
             'automatic_vertical_offset_text_line_height': 0.3, 'header_offset': 2.5,
             'index_line_thickness': 0, 'header_line_thickness': 0.2, 'data_line_thickness': 0.025,
             'title': '2021 Brest Challenger', 'title_horizontal_offset': 8.2, 'title_vertical_offset': -0.4, 
@@ -469,7 +470,7 @@ script_lines.append(script_line)
 script_line =   """
                     In this simple example, we can for instance show the bounce points of all returns made,
                     after rectifying them to be all on one side of the court. 
-                    Note that two bounce points on the other side of the court stem from mishit returns that were practically aces.
+                    Note that two bounce points on the other side of the court stem from mishit returns on serves that were practically aces.
                 """
 lsFrm = prexFrms_dimmed[-1]
 
