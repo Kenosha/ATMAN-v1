@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
-SAVE = False
+SAVE = True
 
 ########################################
 ########### SAVE FOLDER ################
@@ -126,10 +126,10 @@ brestCam_full = brestCam_third.resize(3)
 ######### PARAMETERS #########
 ##############################
 
-prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
-           'interpolate_func': vs.interpolate_camera_naive}
-# prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+# prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
 #            'interpolate_func': vs.interpolate_camera_naive}
+prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+           'interpolate_func': vs.interpolate_camera_naive} ### TAKES VERY LONG! TRY LOWER OR DO SOMETHING ELSE IN THE MEANTIME
 
 ######################################
 ### CHECK DISTRO OF BEFORE RETURNS ###
@@ -416,7 +416,7 @@ num_frames = 250
 fade_in_frames = 25
 
 dim_factor = 0.5
-frm_offset = 0 ### so the motion is complete.
+frm_offset = 4 ### so the motion is complete.
 
 cols, rows = 243, 100
 back_color = (60, 60, 60)

@@ -26,7 +26,7 @@ import ATMANpy.funcs.vis_funcs as vs
 import ATMANpy.auxil.constants as const
 import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 
-SAVE = False
+SAVE = True
 
 ########################################
 ########### SAVE FOLDER ################
@@ -96,10 +96,10 @@ heat_color = const.BGR['leafy_green']
 bandwidth = 40
 intermediate_lambdas = [0.25, 0.5, 0.75]
 
-prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
-           'interpolate_func': vs.interpolate_camera_naive}
-# prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+# prmDict = {'background_resolution': 0.1, 'argument_resolution': 0.1, 'foreground_resolution': 0.1,
 #            'interpolate_func': vs.interpolate_camera_naive}
+prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
+           'interpolate_func': vs.interpolate_camera_naive}
 prmDict_static = {k: v for k, v in prmDict.items() if k not in ['interpolate_func']}
 
 ### FILTER ###
@@ -167,8 +167,8 @@ fade_length = 10
 fade_thresh = 0.025
 dim_factor = 0.25
 
-# kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 10}
-kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 0.1}
+kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 10}
+# kdeDict = {'props': [0.25, 0.5, 0.75, 0.9], 'heat_bgr': const.BGR['intense_red'], 'bandwidth': 50, 'resolution': 0.1}
 
 raster_frames = []
 raster_rot_frames = []
@@ -296,10 +296,12 @@ for idx, myPnt in enumerate(filtPnts_before_fair):
     previous_orientation = current_orientation
     currentFrm = fadeFrms[-1]
 
-
 joint_raster_frames = [a.join(b).join(c) for a, b, c in zip(raster_rot_frames, raster_frames, raster_fade_frames)]
 joint_corner_frames = [a.join(b).join(c) for a, b, c in zip(rotate_frames, corner_frames, fade_frames)]
 joint_corner_frames = [a[:, :1080//3, -1920//3:] for a in joint_corner_frames]
+
+del raster_rot_frames, raster_frames, raster_fade_frames
+del rotate_frames, corner_frames, fade_frames
 
 myRst = FramesRaster(3, 3)
 full_raster_frames = []
@@ -327,6 +329,8 @@ for rFrms, cFrms in zip(joint_raster_frames, joint_corner_frames):
 # vis_ut.show(full_raster_frames)
 
 full_rstFrms = BGRFrames.from_frames(full_raster_frames) ### speed this up...
+
+del full_raster_frames
 
 # DecapStream(full_rstFrms, 0, 100).show()
 # full_rstFrms[-1].show()
@@ -356,6 +360,8 @@ interFrms10_speed = vis_ut.speed_up_frames_progressively(interFrms10, ramp_up_fr
 intermezzo_stop_early = 50 ### stop early so that we have the windup of the serve later.
 interFrms10_speed_pre, interFrms_10_speed_post = interFrms10_speed[:-intermezzo_stop_early], interFrms10_speed[-intermezzo_stop_early:]
 interFrms_10_speed_post_dim = interFrms_10_speed_post.dim(0.5)
+
+del interFrms10
 
 retShots_before_fair_rectified = retShots_before_fair.enforce_direction('Top')
 kde_whole = vis_ut.kde_func(retShots_before_fair_rectified, **kdeDict)
@@ -435,22 +441,28 @@ diagFrms3, _ = vs.animate_sequence(example_splns, start_cam = brestCam_full, sto
                                     previous_dummy_scene = kde_whole_dim, 
                                     annotated_points = [srvPt, retPt],
                                     background_scene = courtScn, **prmDict_static)
-diagFrms4_dim, _ = vs.animate_static(Scene(exampleSpLns), static_cam = brestCam_full, num_frames = 25, 
-                              previous_dummy_scene = kde_whole_dim, 
-                              annotated_points = [srvPt, retPt],
-                              background_scene = courtScn, **prmDict_static)
+# diagFrms4_dim, _ = vs.animate_static(Scene(exampleSpLns), static_cam = brestCam_full, num_frames = 25, 
+#                               previous_dummy_scene = kde_whole_dim, 
+#                               annotated_points = [srvPt, retPt],
+#                               background_scene = courtScn, **prmDict_static)
 diagFrms4_lit, _ = vs.animate_static(Scene(exampleSpLns), static_cam = brestCam_full, num_frames = 25, 
                               previous_dummy_scene = kde_whole, 
                               annotated_points = [srvPt, retPt],
                               background_scene = courtScn, **prmDict_static)
 
-brighteningFrms = vs.interpolate_frames(diagFrms4_dim[0], diagFrms4_lit[0], num_frames = 15)
-dimmingFrms = vs.interpolate_frames(diagFrms4_lit[0], diagFrms4_dim[0], num_frames = 15)
+# brighteningFrms = vs.interpolate_frames(diagFrms4_dim[0], diagFrms4_lit[0], num_frames = 15)
+# dimmingFrms = vs.interpolate_frames(diagFrms4_lit[0], diagFrms4_dim[0], num_frames = 15)
 
-diagFrms4 = BGRFrames.from_frames([brighteningFrms, dimmingFrms, 
-                                   brighteningFrms, dimmingFrms,
-                                   brighteningFrms, dimmingFrms,
-                                   brighteningFrms])
+# diagFrms4 = BGRFrames.from_frames([brighteningFrms, dimmingFrms, 
+#                                    brighteningFrms, dimmingFrms,
+#                                    brighteningFrms, dimmingFrms,
+#                                    brighteningFrms])
+# DecapStream(diagFrms4, 0, 100).show()
+
+diagFrms4 = vs.interpolate_frames(diagFrms3[-1], diagFrms4_lit[0], 25)
+# DecapStream(diagFrms4, 0, 100).show()
+
+del diagFrms4_lit
 
 # diagFrms5 = BGRFrames.from_frame(brighteningFrms[-1], 25)
 
@@ -466,6 +478,8 @@ diagFrms4 = BGRFrames.from_frames([brighteningFrms, dimmingFrms,
 
 diagFrms_all = BGRFrames.from_frames([diagFrms0, diagFrms1, diagFrms2, diagFrms3, diagFrms4])
 # DecapStream(diagFrms_all, 0, 100).show()
+
+del diagFrms0
 
 #### more expressive diagram of the 
 
@@ -487,6 +501,8 @@ interFrms_before, _ = vs.animate_sequence([kde_whole for _ in range(interFrms_10
                                             animate_over = interFrms_10_speed_post,
                                             **prmDict_static)
 # DecapStream(interFrms_before, 0, 100).show()
+
+del interFrms10_speed_pre, interFrms_10_speed_post
 
 beforeFrms = lastPnt[:2].stream(confs = confs).join().maybe_to_stream().decap().frames.rescale(3)
 afterFrms = lastPnt[2:].stream(confs = confs).join().maybe_to_stream().decap().frames.rescale(3)
@@ -526,6 +542,8 @@ animFrms_after_with_final = BGRFrames.from_frames([animFrms_after, finalFrms])
 # DecapStream(animFrms_after_with_final, 0, 100).show()
 animFrms_after_with_final_dim = animFrms_after_with_final.dim_progressively(1, 0, exp = 0.5)
 # DecapStream(animFrms_after_with_final_dim, 0, 100).show()
+
+del animFrms_before, animFrms_after, animFrms_after_with_final
 
 fadeinFrms = vs.interpolate_frames(rotate_backFrms_void[-1], interFrms_before[0], 50)
 # DecapStream(fadeinFrms, 0, 100).show()
@@ -571,6 +589,8 @@ for frm_num, myFrm, featDict in myStm.generator():
 
 combFrms = BGRFrames.from_single_frames(comb_frames)
 # DecapStream(combFrms, 0, 100).show()
+
+del comb_frames
 
 ### hold
 staticFrms = BGRFrames.from_frame(combFrms[-1], 100)
@@ -656,6 +676,8 @@ full_rstFrms_accel = vis_ut.speed_up_frames_progressively(full_rstFrms,
 all_frames.append(full_rstFrms_accel)
 script_lines.append(script_line)
 
+del full_rstFrms, full_rstFrms_accel
+
 script_line =   """
                     In the course of his previous matches in this tournament, 
                     when facing deuce serves out wide...
@@ -667,8 +689,8 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    ... it seems that Brandon Nakashima typically goes for a safe return played to the center of the court
-                    right back at the server, or a down-the line return to the backhand.
+                    ... it seems that Brandon Nakashima typically goes for a safe return played to the center of the court,
+                    slightly to the server's backhand side.
                 """ # 9 seconds
 # DecapStream(diagFrms4, 0, 100).show()
 all_frames.append(diagFrms4)
@@ -712,6 +734,8 @@ script_line =   """
 all_frames.append(animFrms_after_with_final_dim)
 script_lines.append(script_line)
 
+del animFrms_after_with_final_dim
+
 script_line =   """
                     If you would like to learn more about the workings of ATMAN...
                 """ # 4 seconds
@@ -730,7 +754,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     For a look into exploitable player-specific serve patterns, 
-                    check out "On the Impact of Leverage on Serve Location".
+                    check out our analysis "On the Impact of Leverage on Serve Selection".
                 """
 
 rstFrms2 = BGRFrames.from_frame(rstFrm2, 100)
@@ -738,7 +762,7 @@ all_frames.append(rstFrms2)
 script_lines.append(script_line)
 
 script_line =   """
-                    For a more general case study, take a look at "On the Effectiveness of the Chipped Return".
+                    For a more general case study, take a look at our analysis "On the Effectiveness of the Chipped Return".
                 """
 
 # script_line =   """
@@ -750,7 +774,7 @@ rstFrms3 = BGRFrames.from_frame(rstFrm3, 100)
 all_frames.append(rstFrms3)
 script_lines.append(script_line)
 
-vis_ut.show(all_frames)
+# vis_ut.show(all_frames)
 
 ### Saving the separate MultiFrame objects and the Joint Script
 if SAVE:
