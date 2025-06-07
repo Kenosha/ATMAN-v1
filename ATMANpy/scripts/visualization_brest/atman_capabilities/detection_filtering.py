@@ -247,7 +247,7 @@ avg_ret_wins = cnt_ret_wins / all_ret_wins
 tab_dims = (1920 // 2, 1080 // 2)
 kwargs = {'number_format': '>11,', 'index_offset': 0.25, 'index_col_width': 1, 'skeleton_shrinkage': 0.025,
             'dimensions': tab_dims, 'data_text_size': 2, 'index_text_size': 2, 'header_text_size': 2,
-            'automatic_vertical_offset_text_line_height': 0.3}
+            'automatic_vertical_offset_text_line_height': 0.3, 'resolution': 100}
 
 col_name = 'Return Statistics\n(Simple Averages)'
 row0 = {col_name: f'{avg_speed:.0f} km/h'}
@@ -294,14 +294,6 @@ tlPt_tab_corner = Point2D((0, 0))
 
 all_frames = []
 script_lines = []
-
-script_line =   """
-                    Having detected lines, players and ball trajectories, and having segmented every Match into 
-                    distinct Points and Shots, we now show how the data gathered is accessed directly within the ATMAN framework.
-                """ # 11 seconds
-zeroFrms = BGRFrames.from_frame(zeroFrm, 25)
-all_frames.append(zeroFrms)
-script_lines.append(script_line)
 
 script_line =   "We have analysed 20 matches played in the course of the 2021 Brest challenger tournament."
 

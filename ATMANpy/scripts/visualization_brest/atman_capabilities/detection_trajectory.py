@@ -138,8 +138,8 @@ str0, str1, str2 = vis_ut.get_shot_string(sht0), vis_ut.get_shot_string(sht1), v
 dat0, dat1, dat2 = vis_ut.get_data_string(sht0), vis_ut.get_data_string(sht1), vis_ut.get_data_string(sht2)
 
 tab_params = {  'index_offset': 1, 'index_col_width': 0.5, 'dimensions': (960, 540), 'skeleton_shrinkage': 0.2, 
-                'automatic_vertical_offset_text_line_height': 0.4,
-                'null_columns': 0
+                'automatic_vertical_offset_text_line_height': 0.55,
+                'null_columns': 0, 'resolution': 100
                 }
 
 tab_data0 = {'': {'Description': '', 'Data': ''}}
@@ -246,7 +246,7 @@ def animate_example_trajectory(ypf, zpf, rpf, ballScn, sim_frames = 62, sim_res 
     return outFrms, prevScn, currCam
 
 ### parameters
-sim_res = 0.5 # 25
+sim_res = 25
 sim_frames = 62
 
 ### SIMULATION ANIMATION ###
@@ -480,7 +480,7 @@ df1 = 0.25
 df2 = 0.15
 
 script_line =   """
-                    The actual trajectory is then chosen among these possible trajectories as the one with which empirical evidence agrees with the most.
+                    The actual trajectory is then chosen among these possible trajectories as the one which empirical evidence agrees with the most.
                     In this way, we get a trajectory that fits what ATMAN sees and hears, and also obeys the laws of physics.
                 """
 dimmed_candScn = Scene([])

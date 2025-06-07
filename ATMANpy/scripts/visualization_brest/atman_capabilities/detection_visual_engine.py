@@ -414,7 +414,7 @@ jntFrms = BGRFrames.from_frames([moveFrms, axisFrms, annotFrms1, annotFrms2, ang
 all_frames.append(jntFrms)
 script_lines.append(script_line)
 
-script_line = "... to find that the average launch angle of returns on these ad-side, out-wide serves is 8.9 degrees."
+script_line = f"... to find that the average launch angle of returns on these ad-side, out-wide serves is {mean_angle:.1f} degrees."
 
 from ATMANpy.types.Shapes3D import Circle3D
 degCrc = Circle3D.from_point3D(meanPt, radius = 0.85 * z_len, limit_theta = (0, mean_rad), fixed_dimension = 'x').recolor(ang_color)

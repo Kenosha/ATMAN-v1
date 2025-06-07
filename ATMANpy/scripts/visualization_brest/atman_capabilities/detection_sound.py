@@ -358,7 +358,7 @@ fs_prob_graphFrm = prob_graphFrms[0].rescale(rescale_ratio)
 curr_legFrm = legFrm.rescale(rescale_ratio)
 
 script_line =   """
-                    The sound of the ball being hit or bouncing on the ground gives us a very good idea of when exactly these events occur.
+                    The sound of the ball being hit or bouncing on the ground gives us a very good idea about when exactly these events occur.
                     Knowing the timing of hits and bounces greatly improves our ability to construct ball trajectories.
                 """
 
