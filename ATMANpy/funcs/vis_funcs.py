@@ -767,7 +767,7 @@ def kde_hillmap(myShots,
     return kdeScn
 
 def kde_contourmap(myShots, 
-                   showReg = None, resolution = 1, 
+                   showReg = None, reg_scale_factor = 1, resolution = 1, 
                    position_func = 'get_first_bounce_position',
                    weight_func_or_arr = None,
                    bandwidth = 30, threshold_proportion = 0.5, 
@@ -781,7 +781,7 @@ def kde_contourmap(myShots,
     
     ### Gather courtlines
     if showReg is None:
-        showReg = CourtLines.make().get_court_region()
+        showReg = CourtLines.make().get_court_region().scale(reg_scale_factor)
     
     ### Get first bounce position
     if isinstance(position_func, str):
