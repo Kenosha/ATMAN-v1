@@ -730,11 +730,9 @@ wave_form = my_wave[start_sample:stop_sample]
 wave_form = fade_out(wave_form, exp = sound_fade_exp)
 wave_form = wave_form * sound_softly_factor
 
-extFrms = BGRFrames.from_frame(overFrms[-1], 100)
+# extFrms = BGRFrames.from_frame(overFrms[-1], 100)
 
-jointFrms = BGRFrames.from_frames([overFrms, extFrms])
-
-all_frames.append(jointFrms)
+all_frames.append(overFrms)
 script_lines.append(script_line)
 wave_forms.append(wave_form)
 
@@ -745,7 +743,9 @@ script_line =   """
                     actually being hit, we analyse the hitting motion of both players visually.
                 """
 
-all_frames.append(extFrms)
+statFrms = BGRFrames.from_frame(overFrms[-1], 50)
+
+all_frames.append(statFrms)
 script_lines.append(script_line)
 wave_forms.append(wave_form)
 

@@ -468,7 +468,7 @@ all_frames.append(prexFrms_dimmed)
 script_lines.append(script_line)
 
 script_line =   """
-                    In this simple example, we can for instance show the bounce points of all returns made,
+                    We can for instance show the bounce points of all ad-side, out-wide returns made,
                     after rectifying them to be all on one side of the court. 
                     Note that two bounce points on the other side of the court stem from mishit returns on serves that were practically aces.
                 """

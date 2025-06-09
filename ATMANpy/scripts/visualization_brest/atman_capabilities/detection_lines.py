@@ -71,7 +71,7 @@ segBFs = segBF.filter(segBF).split()
 seg_idx = 0 ### lines -> index 0
 my_segBF = segBFs[seg_idx]
 
-fs, ls = 200, 750 ### this may be needed in the next video!
+fs, ls = 360, segBFs[1].first()[0] ### this may be needed in the next video!
 myStm = Stream(cap, fs, ls)
 myDtm = myStm.decap()
 myFrms = myDtm.frames
@@ -79,7 +79,7 @@ scaledFrms = myFrms.rescale(3)
 
 ### pre-frames
 dim_factor = 0.5
-pre_frames = 300
+pre_frames = 215
 preFrms = myFrms[:pre_frames]
 preArr_dimmed = np.stack([f.dim(min((idx / pre_frames) ** 2, dim_factor)).array for idx, f in enumerate(preFrms)], axis = 0)
 preFrms_dimmed = BGRFrames(preArr_dimmed).rescale(3)
@@ -243,7 +243,7 @@ script_lines.append(script_line)
 #######
 
 script_line =   """
-                    Lines are detected using the probabilistic hough line finding algorithm. 
+                    The court lines - and, by extension, the net - are detected using the probabilistic hough line finding algorithm. 
                 """ # 4 seconds
 
 ### recreate the line finding steps
@@ -292,17 +292,14 @@ currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms2 = lineFrms.mask(lineMask) + currFrms.mask(~lineMask) * dim_factor
 mixFrms2 = mixFrms2.rescale(3)
 
-mixFrms = BGRFrames.from_frames([preFrms_rest, mixFrms0, mixFrms1, mixFrms2])
+mixFrms_all = BGRFrames.from_frames([preFrms_rest, mixFrms0, mixFrms1, mixFrms2])
 
-all_frames.append(mixFrms)
-script_lines.append(script_line)
+# ### finally, show the court lines detected 
+# script_line =   """
+#                     Having detected the lines, we can immediately reconstruct the location of the net.
+#                 """ # 5 secs
 
-### finally, show the court lines detected 
-script_line =   """
-                    Having detected the lines, we can immediately reconstruct the location of the net.
-                """ # 5 secs
-
-start, stop = fs_adj+3*step_frames, fs_adj+3*step_frames+150
+start, stop = fs_adj+3*step_frames, fs_adj+3*step_frames+125
 HSF = ConstFeature.from_store(vid, sto, featname = 'H')
 H = HSF.feature
 courtLines = sa.find_courtlines(H).drop('Net Line')
@@ -326,19 +323,21 @@ net_mesh_density = 0.65
 myNet = Net.make_doubles(color = net_color, alpha = net_alpha, net_mesh_density = net_mesh_density)
 myNet_null = Net.make_doubles(color = net_color, alpha = 0, net_mesh_density = net_mesh_density)
 
-netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 100)
+netScns = vs.interpolate_scenes(Scene([myNet_null]), Scene([myNet]), num_frames = 50)
 
-netScns = [*[myNet_null] * 50, *netScns]
+netScns = [*[myNet_null] * 15, *netScns, *[myNet] * 60]
 
 cam0 = Camera.calibrated_brest_behind().resize(3)
 netFrms, _ = vs.animate_sequence(netScns, start_cam = cam0, stop_cam = cam0, animate_over = mixFrms)
 # DecapStream(netFrms, 0, 100).show()
 
-all_frames.append(netFrms)
+jointFrms = BGRFrames.from_frames([mixFrms_all, netFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 ### rotate back to starting position, in time for detection_player to start.
-script_line = "Let's see how ATMAN detects the players on the field." # 4 secs
+script_line = "" 
 
 start, stop = stop, segBFs[1].first()[0]
 
@@ -347,7 +346,7 @@ court_frames = [zeroFrm.put(courtLines, color = line_color) for _ in range(start
 courtFrms = BGRFrames.from_single_frames(court_frames)
 courtMask = courtFrms.to_grey() > 1
 
-currFrms = Stream(cap, start, stop - 1).decap().frames
+currFrms = myDtm.conform(start, stop - 1).frames
 mixFrms = courtFrms.mask(courtMask) + currFrms.mask(~courtMask) * dim_factor
 mixFrms = mixFrms.rescale(3)
 
