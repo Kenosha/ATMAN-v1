@@ -202,7 +202,7 @@ jointFrms = BGRFrames.from_frames([interFrms, animFrms1])
 all_frames.append(jointFrms)
 script_lines.append(script_line)
 
-script_line = "For example, let's find the typical point where the return is hit."
+script_line = "For example, let's find the typical point from where the return is hit."
 
 animFrms2, animDict = vs.animate_cam_motion(splnLns, start_cam = cnt_sideCam, stop_cam = behindCam, background_scene = courtScn,
                                 interpolate_func = vs.interpolate_camera_naive, num_frames = 50, 
@@ -273,13 +273,13 @@ script_lines.append(script_line)
 
 ### splines rectified to average hitting point
 script_line =   """
-                    ... or we can visualize the average return launch angle with ease. 
+                    ... and we can visualize the average return launch angle with ease. 
                 """
 
 all_frames.append(annFrms)
 script_lines.append(script_line)
 
-script_line = "To ths end, we make as if all shots had originated from the mean impact point..."
+script_line = "To this end, we make as if all shots had originated from the mean impact point..."
 
 reanchored_trajs = [shot.shotTraj.reanchor(meanPt) for shot in retShots_rect_in]
 reanchored_splnLns = [full_splines_until_bounce(myTraj) for myTraj in reanchored_trajs]

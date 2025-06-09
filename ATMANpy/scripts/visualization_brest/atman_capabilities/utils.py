@@ -365,7 +365,7 @@ def make_point_descriptor_box(myPnt, dims = (200, 100), origin = (10, 20), para_
 def kde_func(someShots, bandwidth = 40, normalize_density = True, props = [0.2, 0.4, 0.6, 0.8], 
              display_at_height = False, resolution = 2,
              heat_bgr = const.BGR['intense_red'], background_bgr = (0, 0, 0),
-             exp_bgr = 1):
+             exp_bgr = 1, reg_scale_factor = 1):
     ### bulls eye look
     from ATMANpy.funcs.util_funcs import interpolate_tuples
     from ATMANpy.types.Visual3D import DummyScene
@@ -374,6 +374,7 @@ def kde_func(someShots, bandwidth = 40, normalize_density = True, props = [0.2, 
 
     from functools import reduce
     cont_scenes = [vs.kde_contourmap(someShots, bandwidth = bandwidth,
+                                     reg_scale_factor = reg_scale_factor,
                                      normalize_density = normalize_density, 
                                      display_at_height = display_at_height,
                                      resolution = resolution, 
