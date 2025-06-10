@@ -71,7 +71,7 @@ segBFs = segBF.filter(segBF).split()
 seg_idx = 0 ### lines -> index 0
 my_segBF = segBFs[seg_idx]
 
-fs, ls = 360, segBFs[1].first()[0] ### this may be needed in the next video!
+fs, ls = 390, segBFs[1].first()[0] ### this may be needed in the next video!
 myStm = Stream(cap, fs, ls)
 myDtm = myStm.decap()
 myFrms = myDtm.frames
@@ -243,7 +243,8 @@ script_lines.append(script_line)
 #######
 
 script_line =   """
-                    The court lines - and, by extension, the net - are detected using the probabilistic hough line finding algorithm. 
+                    First of all, the court lines - and, by extension, the net - 
+                    are detected using the probabilistic hough line finding algorithm. 
                 """ # 4 seconds
 
 ### recreate the line finding steps

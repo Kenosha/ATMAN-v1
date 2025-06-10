@@ -116,7 +116,7 @@ my_segBF = segBFs[1] ### on to the next point!
 
 ### fade out the lines!
 script_line =   """
-                    ATMAN first synthesizes a background image; a still frame of the court only, 
+                    To detect the players, ATMAN first synthesizes a background image; a still frame of the court only, 
                     against which we can easily detect foreground objects.
                 """
 duration = 50
