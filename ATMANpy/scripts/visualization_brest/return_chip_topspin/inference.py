@@ -2393,9 +2393,10 @@ script_line =   """
                     as we have shown earlier, is often employed prematurely against the chip, 
                     with a markedly lower success rate than a serve + 2 combination.
                 """
-
-statFrms = BGRFrames.from_frame(jointFrms[-1], 150)
-fadeFrms = vs.interpolate_frames(jointFrms[-1], shr_graphFrm, 150)
+from ATMANpy.types.Overlays import overlay_center
+graphFrm = overlay_center(BGRFrame.make_black(), shr_graphFrm)
+statFrms = BGRFrames.from_frame(jointFrms[-1], 125)
+fadeFrms = vs.interpolate_frames(jointFrms[-1], graphFrm, 100)
 jointFrms = BGRFrames.from_frames([statFrms, fadeFrms])
 
 all_frames.append(jointFrms)
@@ -2799,7 +2800,7 @@ script_line =   """
                     the chip return is a viable strategy as long as it is hit low and wide to the forehand of the server, 
                     with maybe an exception on a serve out wide from the server's backhand side. 
                     The topspin return is always a solid choice: The way to go here is to hit cross court if pulled out wide, 
-                    and back down the middle or away from the server if the serve is down the middle. 
+                    and to the feet or away from the server if the serve is down the middle. 
                     Note that these are aggregate results; they relate to the "average" challenger-level player.
                     Strictly speaking, however, the "average" challenger-level player does not exist:
                     This analysis would be more actionable if it was tailor-made for one specific player, 
