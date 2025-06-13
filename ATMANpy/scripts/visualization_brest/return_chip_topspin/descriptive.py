@@ -1322,7 +1322,9 @@ if DO_LAUNCH_ANGLE_MODES:
     script_line =   f"""
                         Our example chip return left the racket at {ang:.1f} degrees, making it a good representative of the low angle mode. 
                     """
-    lnFrms, animDict = vs.animate_sequence(itpl_lns_ex, background_scene = court_and_axScn, **prmDict_angle, **animDict,
+    prmDict_angle_super = {**prmDict_angle}
+    prmDict_angle_super['argument_resolution'] = 100
+    lnFrms, animDict = vs.animate_sequence(itpl_lns_ex, background_scene = court_and_axScn, **prmDict_angle_super, **animDict,
                                     start_cam = sideretCam, stop_cam = sideretCam, annotated_points = [angPt0, angPt1, angPt2])
     lnFrms = overlay(lnFrms, leg3Frm, top_left_point = anchorPt_middle)
     # DecapStream(lnFrms, 0, 100).show()
@@ -2485,10 +2487,10 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # DecapStream(crcFrms, 0, 100).show()
 
     myRst.add(crcFrms_best[-1].framed(FRAME_THICKNESS, FRAME_COLOR), 1, 1)
-    myRst.add(BGRFrames.from_frame(tabFrm_best1, 50), 1, 0)
+    myRst.add(BGRFrames.from_frame(tabFrm_best1, 25), 1, 0)
     statFrms = myRst.render()
 
-    itplFrms = vs.interpolate_frames(crcFrms[-1], statFrms[0], 50)
+    itplFrms = vs.interpolate_frames(crcFrms[-1], statFrms[0], 25)
 
     jointFrms = BGRFrames.from_frames([revFrms, srvFrms, crcFrms, itplFrms, statFrms])
     # DecapStream(jointFrms, 0, 100).show()

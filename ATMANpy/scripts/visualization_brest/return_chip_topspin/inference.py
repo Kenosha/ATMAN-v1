@@ -825,31 +825,31 @@ leg2 = Legend([avgRow, shrRow], legend_dimensions = (300, 150), borders = False,
 legFrm1 = leg1.render()
 legFrm2 = leg2.render()
 
-tlPt = Point2D((900, 100))
+tlPt_graph = Point2D((900, 100))
 
 myGraph = Graph([nullChart, avgChart], **graph_kwargs)
 avg_graphFrm0 = myGraph.render()
-avg_graphFrm0 = overlay(avg_graphFrm0, legFrm1, top_left_point = tlPt)
+avg_graphFrm0 = overlay(avg_graphFrm0, legFrm1, top_left_point = tlPt_graph)
 # avg_graphFrm0.show()
 
 myGraph.add(vChart1)
 avg_graphFrm1 = myGraph.render()
 avg_graphFrm1 = avg_graphFrm1.put('Serve+1', color = const.BGR['intense_red'], where = (460, 425), size = 1)
-avg_graphFrm1 = overlay(avg_graphFrm1, legFrm1, top_left_point = tlPt)
+avg_graphFrm1 = overlay(avg_graphFrm1, legFrm1, top_left_point = tlPt_graph)
 # avg_graphFrm1.show()
 
 myGraph.add(vChart2)
 avg_graphFrm2 = myGraph.render()
 avg_graphFrm2 = avg_graphFrm2.put('Serve+1', color = const.BGR['intense_red'], where = (460, 425), size = 1)
 avg_graphFrm2 = avg_graphFrm2.put('Serve+2', color = const.BGR['intense_red'], where = (716, 425), size = 1)
-avg_graphFrm2 = overlay(avg_graphFrm2, legFrm1, top_left_point = tlPt)
+avg_graphFrm2 = overlay(avg_graphFrm2, legFrm1, top_left_point = tlPt_graph)
 # avg_graphFrm2.show()
 
 myGraph.add(shrChart)
 shr_graphFrm = myGraph.render()
 shr_graphFrm = shr_graphFrm.put('Serve+1', color = const.BGR['intense_red'], where = (460, 425), size = 1)
 shr_graphFrm = shr_graphFrm.put('Serve+2', color = const.BGR['intense_red'], where = (716, 425), size = 1)
-shr_graphFrm = overlay(shr_graphFrm, legFrm2, top_left_point = tlPt)
+shr_graphFrm = overlay(shr_graphFrm, legFrm2, top_left_point = tlPt_graph)
 # shr_graphFrm.show()
 
 ###### DEUCE WIDE ######
@@ -2173,11 +2173,13 @@ script_lines.append(script_line)
 #     print(p)
 #     print('_')
 
-jntLns_tops = [*jntLns[:-1], jntLns[-1].dim(0.5)]
-jntLns_chip = [*jntLns[:-2], jntLns[-2].dim(0.5), jntLns[-1]]
+line_dim = 0.35
 
-annPnts_tops = [*annotated_points, *graph_annPnts[:6], *[p.dim(0.5) for p in graph_annPnts[6:10]], graph_annPnts[10]]
-annPnts_chip = [*annotated_points, *graph_annPnts[:2], *[p.dim(0.5) for p in graph_annPnts[2:6]], *graph_annPnts[6:]]
+jntLns_tops = [*jntLns[:-1], jntLns[-1].dim(line_dim)]
+jntLns_chip = [*jntLns[:-2], jntLns[-2].dim(line_dim), jntLns[-1]]
+
+annPnts_tops = [*annotated_points, *graph_annPnts[:6], *[p.dim(line_dim) for p in graph_annPnts[6:10]], graph_annPnts[10]]
+annPnts_chip = [*annotated_points, *graph_annPnts[:2], *[p.dim(line_dim) for p in graph_annPnts[2:6]], *graph_annPnts[6:]]
 
 script_line =   """
                     While the returner's success rate on a topspin ball generally increases as the ball is hit farther to the backhand...
@@ -2292,11 +2294,11 @@ script_line =   """
                     However, more than 80% of chipped returns into C are run around, and hit with the forehand. 
                 """
 
-jntLns_tops = [*jntLns[:-1], jntLns[-1].dim(0.5)]
-jntLns_chip = [*jntLns[:-2], jntLns[-2].dim(0.5), jntLns[-1]]
+jntLns_tops = [*jntLns[:-1], jntLns[-1].dim(line_dim)]
+jntLns_chip = [*jntLns[:-2], jntLns[-2].dim(line_dim), jntLns[-1]]
 
-annPnts_tops = [*annotated_points, *graph_annPnts[:6], *[p.dim(0.5) for p in graph_annPnts[6:10]], graph_annPnts[10]]
-annPnts_chip = [*annotated_points, *graph_annPnts[:2], *[p.dim(0.5) for p in graph_annPnts[2:6]], *graph_annPnts[6:]]
+annPnts_tops = [*annotated_points, *graph_annPnts[:6], *[p.dim(line_dim) for p in graph_annPnts[6:10]], graph_annPnts[10]]
+annPnts_chip = [*annotated_points, *graph_annPnts[:2], *[p.dim(line_dim) for p in graph_annPnts[2:6]], *graph_annPnts[6:]]
 
 graphFrms_chip_c, _ = vs.animate_static(Scene([*jntLns_chip, top_c_3D_trunc]), static_cam = topCam, **prmDict, 
                                         background_scene = courtScn_subset,
@@ -2498,7 +2500,7 @@ back_c_cands = [1, 3, 8, 10, 11, 12, 14, 20, 26, 27, 28, 29, 31, 32, 37]
 back_d_cands = [0, 1, 2, 3, 7, 9, 12, 15, 16, 17, 18, 22, 24, 25, 31]
 
 script_line =   """
-                    If the chip is run around, the server has two attacking options: 
+                    If the chip is run around, the server has two attacking options, not just one: 
                     he can still go down the line with the forehand inside-in - forcing, but risky.
                 """
 
