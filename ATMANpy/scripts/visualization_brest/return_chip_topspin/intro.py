@@ -396,6 +396,52 @@ shr_graphFrm = shr_graphFrm.put('Serve+2', color = const.BGR['intense_red'], whe
 shr_graphFrm = overlay(shr_graphFrm, legFrm2, top_left_point = tlPt)
 # shr_graphFrm.show()
 
+
+### Attribution Chart ###
+attrib_func = lambda x: DECAY_RATE ** (x + 1 - 2) ### + 1, because for aesthetic reasons, the xs are shifted
+string_func = lambda x: str(x + 1) if x % 2 != 0 else ''
+
+xs = list(np.arange(1, 20))
+x_labels = [string_func(x) for x in xs]
+xs_long = [0, *xs, xs[-1] + 1]
+
+null_ys = [0.5 for _ in xs_long]
+attrib_ys = [attrib_func(x) for x in xs]
+win_ys = [y + 0.5 * (1 - y) for y in attrib_ys]
+los_ys = [1 - y for y in win_ys]
+
+nulChart = LineChart(xs_long, null_ys, color = const.BGR['bright_grey'], thickness = 0)
+winChart = LineChart(xs, win_ys, color = const.BGR['leafy_green'], x_labels = x_labels, annotate_line_heights = False, thickness = 0.125)
+losChart = LineChart(xs, los_ys, color = const.BGR['intense_red'], x_labels = x_labels, annotate_line_heights = False, thickness = 0.125)
+
+attr_graph_kwargs = {**graph_kwargs}
+attr_graph_kwargs['y_label'] = 'Attribution'
+attr_graph_kwargs['header_text'] = ''
+attr_graph_kwargs['header_horizontal_offset'] = 10.5
+attr_graph_kwargs['offset'] = 0.35
+attr_graph_kwargs['y_label_dist'] = 2.75
+
+myGraph = Graph([nulChart, winChart, losChart], **attr_graph_kwargs)
+graphScn, graphPnts = myGraph.preview()
+graphPnts[0] = graphPnts[0].retext('Full Credit\nfor Loss').left(2.5).front(0.25).recolor(const.BGR['intense_red'])
+graphPnts[1] = graphPnts[1].retext('Full Credit\nfor Win').left(2.5).front(0.25).recolor(const.BGR['leafy_green'])
+graphPnts[-1] = graphPnts[-1].front(0.25).retext('Neutralized\nRally')
+
+attr_graphFrm = View.make(myGraph.cam, graphScn, graphPnts, resolution = attr_graph_kwargs['resolution']).snap()
+
+### make legend
+winRow = LegendRow(text = '... Returner Wins Point', shape_color = const.BGR['leafy_green'], text_size = 2, shape_offset = 0.25, text_vertical_offset = 0.3)
+losRow = LegendRow(text = '... Returner Loses Point', shape_color = const.BGR['intense_red'], text_size = 2, shape_offset = 0.25, text_vertical_offset = 0.3)
+
+attrLeg = Legend([winRow, losRow], legend_dimensions = (600, 150), borders = False, 
+                 header_text = 'Return Attribution if ...', header_offset = 0, header_thickness = 1,
+                 resolution = 2000)
+attr_legFrm = attrLeg.render()
+# attr_legFrm.show()
+
+attr_graphFrm = overlay(attr_graphFrm, attr_legFrm, Point2D((400, 25)))
+# attr_graphFrm.show()
+
 ###### INVESTIGATE SELECTION BIAS #########
 
 TABLE_RESOLUTION = 2500
@@ -957,6 +1003,9 @@ script_lines.append(script_line)
 script_line =   """
                     The primary goal of this analysis is to take a good look at these chip return varieties, 
                     and try to understand their effectiveness compared to the topspin return, as measured by the expected probability to win the point.
+                
+                    If you would like the results right away, check out the short version of this video; 
+                    Here, we build up towards the results first, and outline them at the end. 
                 """
 typeFrms = typewriter_effect(someStr, frames_per_char = 1, 
                              overFrm = combFrms[-1],
@@ -972,16 +1021,23 @@ tFrms = BGRFrames.from_frame(tFrm, 100)
 moveFrms = moveFrms + BGRFrames.from_frame(lnFrm, 50)
 fadeFrms2 = vs.interpolate_frames(moveFrms[-1], tabFrm, 50)
 
-jointFrms = BGRFrames.from_frames([typeFrms, tFrms, fadeFrms, moveFrms, fadeFrms2])
+jointFrms = BGRFrames.from_frames([typeFrms, tFrms])
 
 all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = ""
+all_frames.append(fadeFrms)
 script_lines.append(script_line)
 
 script_line =   "At first glance, it doesn't look good for the chipped return."
 
 tabFrm = overlay_center(BGRFrame.make_black(), sample_and_win_table_null.render())
 tabFrms = BGRFrames.from_frame(tabFrm, 25)
-all_frames.append(tabFrms)
+
+jointFrms = BGRFrames.from_frames([moveFrms, fadeFrms2, tabFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   "On average, in our sample, the returner wins around 40% of points whenever he returns topspin, ..."
@@ -1298,7 +1354,7 @@ script_line =   """
                 """
 
 ### fade into virtual court
-back_res = 5
+back_res = 15
 arrScn_pre = Scene([speedArr, depthArr, heightArr, retArr, stretchArr])
 arrPts_pre = [speedPt, depthPt, heightPt, retPt, stretchPt]
 virtFrms, animDict2 = vs.animate_static(arrScn_pre, static_cam = brestCam_full, 
@@ -1458,7 +1514,7 @@ probFrms4, animDict_2 = vs.animate_static(stretchArr_diag.dim(brighten_factor), 
                                 previous_foreground_scene = arrScn_post_dim, previous_annotated_points = annPnts_dim
                                 )
 
-itplFrms = vs.interpolate_frames(probFrms[-1], probFrms4[0], 25)
+itplFrms = vs.interpolate_frames(probFrms1[-1], probFrms4[0], 25)
 jointFrms = BGRFrames.from_frames([itplFrms, probFrms4])
 
 all_frames.append(jointFrms)
@@ -1769,21 +1825,37 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line = ""
-all_frames.append(tabFrms)
+all_frames.append(tabFrms[:50])
 script_lines.append(script_line)
 
 script_line =   """
                     Our third and final adjustment is connected to something we have just mentioned. 
+                """
+all_frames.append(tabFrms)
+script_lines.append(script_line)
+
+script_line =   """
                     The longer a rally goes on, the less the serve and the return matter to the outcome of the point.
                     Therefore, the longer a rally goes on, the less we ought to attribute whether a point has been won or lost 
                     to the quality of the serve and the return. 
-                    Theoretically, if the rally were to go on for almost ever, we shouldn't credit the return with winning (or losing) the rally, 
-                    but only with neutralizing the serve and bringing the probability of winning the point to 50%.
                     This is exactly what we do with our attribution adjustment. 
                     If the point is over fast, the return is credited for winning or losing the point to a greater extent;
                     if the point ends only after a long rally, the return is only credited with neutralizing the serve.
                 """
-all_frames.append(tabFrms)
+
+graphFrm = overlay(BGRFrame.make_black(), attr_graphFrm, top_left_point = Point2D((370, 200)))
+itplFrms = vs.interpolate_frames(tabFrms[-1], graphFrm, 50)
+graphFrms = BGRFrames.from_frame(graphFrm, 50)
+jointFrms = BGRFrames.from_frames([itplFrms, graphFrms])
+# DecapStream(jointFrms, 0, 100).show()
+
+all_frames.append(jointFrms)
+script_lines.append(script_line)
+
+script_line = ""
+# itplFrms = vs.interpolate_frames(graphFrm, tabFrms[-1], 50)
+
+all_frames.append(graphFrms)
 script_lines.append(script_line)
 
 script_line =   """
@@ -1797,11 +1869,11 @@ tabFrm_len = smart_bal_len_table.render()
 tabFrm_len = overlay_center(BGRFrame.make_black(), tabFrm_len)
 tabFrms_len = BGRFrames.from_frame(tabFrm_len, STATIC_FRAMES)
 
-fadeFrms = vs.interpolate_frames(tabFrm, tabFrm_len, 25)
-jointFrms = BGRFrames.from_frames([fadeFrms, tabFrms_len])
+# fadeFrms = vs.interpolate_frames(tabFrm, tabFrm_len, 25)
+# jointFrms = BGRFrames.from_frames([fadeFrms, tabFrms_len])
 # DecapStream(jointFrms, 0, 100).show()
 
-all_frames.append(jointFrms)
+all_frames.append(tabFrms_len)
 script_lines.append(script_line)
 
 
@@ -1858,7 +1930,7 @@ script_line =   """
 ### 
 tabScn, annPnts = smart_bal_len_table.preview()
 
-topsPt, chipPt = annPnts[-5].right(1.10).back(0.5).up(1), annPnts[-1].right(1.1).front(1).up(1)
+topsPt, chipPt = annPnts[-5].right(1.09).back(0.5).up(1), annPnts[-1].right(1.09).front(1).up(1)
 
 deltArr = Arrow.make(topsPt, chipPt, color = const.BGR['intense_red'])
 tabScn = tabScn.put(deltArr)
