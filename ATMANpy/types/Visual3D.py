@@ -1069,7 +1069,11 @@ class View:
 
                 prev_idx = idx
 
-            currView = sortView_px[idx:]
+            try:
+                currView = sortView_px[idx:]
+            except UnboundLocalError: ### in this case, there was never a switch -> all pixels are mapped to the same point!
+                currView = sortView_px
+                
             currSPView = SinglePixelView(currView.ptArr, currView.clArr, currView.alArr, currView.pxArr, currView.dsArr)
             out_sp_views.append(currSPView)
 
