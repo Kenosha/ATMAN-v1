@@ -1202,7 +1202,7 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The PSM looks at the speed of the serve...
+                    Our PSM model looks at the speed of the serve...
                 """
 
 ### speed arrow:
@@ -1349,7 +1349,7 @@ all_frames.append(statFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    From this data, the PSM predicts the probability of the ball being chipped back by the returner, 
+                    From this data, PSM predicts the probability of the ball being chipped back by the returner, 
                     as opposed to being returned with topspin.
                 """
 
@@ -1597,7 +1597,7 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    If the PSM predicts a high propensity to chip, 
+                    If PSM predicts a high propensity to chip, 
                     then it effectively believes that there was no way that specific serve could have been returned with topspin.
                     It is a forced chip return.
                 """
