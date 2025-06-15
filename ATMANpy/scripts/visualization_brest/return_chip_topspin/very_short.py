@@ -51,8 +51,8 @@ P = ConstFeature.from_store(vid, sto, featname = 'P').feature
 ###################################
 ######### READ IN DATA ############
 ###################################
-dataTable = read_in_data_tables(confs)
-nullTable = read_in_placeholder_tables(confs)
+dataTable = read_in_data_tables(confs, before_y_m_d = (2025, 1, 1))
+nullTable = read_in_placeholder_tables(confs, before_y_m_d = (2025, 1, 1))
 
 dataPnts = Points.from_datatable(dataTable, split_by_match = False)
 nullPnts = Points.from_placeholder_table(nullTable)
@@ -175,6 +175,57 @@ CHIP_HI_COLOR = const.BGR['bright_blue']
 CHIP_COLOR = interpolate_tuples(CHIP_LO_COLOR, CHIP_HI_COLOR)
 
 STATIC_FRAMES = 100
+
+#########################
+
+import cv2 as cv
+def typewriter_effect(someStr, frames_per_char = 2,
+                      text_where = (800, 500), text_color = const.BGR['leafy_green'], text_size = 1, text_font = cv.FONT_HERSHEY_PLAIN,
+                      overFrm = None,
+                      align = 'left', manual_aligners = None):
+    if overFrm is None:
+        overFrm = BGRFrame.make_black()
+    
+    lines = someStr.split('\n')
+
+    ### figure out how to center text
+    if align == 'left':
+        spaces = [0 for l in lines]
+    elif align == 'center':
+        lens = [len(l) for l in lines]
+        m = max(lens)
+        spaces = [(m - l) // 2 for l in lens]
+    elif align == 'right':
+        lens = [len(l) for l in lines]
+        m = max(lens)
+        spaces = [(m - l) for l in lens]
+
+    if manual_aligners is not None:
+        spaces = [s + m for s, m in zip(spaces, manual_aligners)]
+
+    out_frames = []
+    prev_lines = ['']
+    for idx in range(len(lines)):
+        lineStr = lines[idx]
+        num_spaces = spaces[idx]
+
+        remaining_lines = len(lines) - len(prev_lines) + 1
+        # prevStr = '\n' * remaining_lines + '\n'.join(prev_lines) 
+        prevStr = '\n'.join(prev_lines)
+
+        curr_chars = []
+        for curr_char in lineStr:
+            curr_chars.append(curr_char)
+
+            currStr = ' ' * num_spaces + ''.join(curr_chars)
+            currFrm = overFrm.put(prevStr + '\n' + currStr, where = text_where, color = text_color, size = text_size, font = text_font)
+            currFrms = BGRFrames.from_frame(currFrm, frames_per_char)
+            out_frames.append(currFrms)
+        
+        prev_lines.append(currStr)
+    
+    return BGRFrames.from_frames(out_frames)
+
 
 ###############################
 ####### AUXILIARY STUFF #######
@@ -321,11 +372,13 @@ modDiag_1.arrows[0].pop(2)
 
 myScn_1, annPnts_1 = modDiag_1.preview()
 
-annPnts_shifted_1 = [annPnts_1[0].right(0.2), 
-                    annPnts_1[1], 
-                    annPnts_1[2].right(2), 
-                    annPnts_1[3].right(0.5), 
-                    annPnts_1[4].right(0.5),
+back_shift = -0.2
+
+annPnts_shifted_1 = [annPnts_1[0].right(0.2).back(back_shift), 
+                    annPnts_1[1].back(back_shift), 
+                    annPnts_1[2].right(2).back(back_shift), 
+                    annPnts_1[3].right(0.5).back(back_shift), 
+                    annPnts_1[4].right(0.5).back(back_shift),
                     annPnts_1[5].right(7.4).back(0.2)]
 
 annPnts_shifted_1[2] = annPnts_shifted_1[2].recolor(const.BGR['bright_grey'])
@@ -335,11 +388,11 @@ modDiag_2.arrows[0].pop(2)
 
 myScn_2, annPnts_2 = modDiag_2.preview()
 
-annPnts_shifted_2 = [annPnts_2[0].right(0.2), 
-                   annPnts_2[1], 
-                   annPnts_2[2].right(2), 
-                   annPnts_2[3].right(0.5), 
-                   annPnts_2[4].right(0.5),
+annPnts_shifted_2 = [annPnts_2[0].right(0.2).back(back_shift), 
+                   annPnts_2[1].back(back_shift), 
+                   annPnts_2[2].right(2).back(back_shift), 
+                   annPnts_2[3].right(0.5).back(back_shift), 
+                   annPnts_2[4].right(0.5).back(back_shift),
                    annPnts_2[5].right(7.4).back(0.2),
                    annPnts_2[6].right(6.55).back(0.2)]
 
@@ -1258,7 +1311,7 @@ script_lines.append(script_line)
 
 script_line =   """
                     The target zone is where the model suggests to aim the return; if the ball
-                    lands within the target zone, the returning player has a probability of winning the subsequent
+                    lands within the target zone, the returning player has a probability of winning the ongoing
                     point greater than 50%.
                 """
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
@@ -1361,7 +1414,10 @@ script_lines.append(script_line)
 # del transFrms, moveFrms, postFrms, rastFrms
 
 script_line =   """
-                    The flags indicate the highest returner win probability spot within the target zone, for each of our three return types. 
+                    The flags indicate the highest returner win probability spot within the target zone, 
+                    for each of our three return types. 
+                    For example, if a typical topspin return lands exactly at the base of the orange flag, 
+                    the point will be won by the returner 57% of the time, on aggregate.
                 """ # 15 sec
 
 ### Annotation frames 
@@ -2160,7 +2216,7 @@ script_lines.append(script_line)
 
 script_line =    """
                     That the chip return is a viable alternative to the topspin return 
-                    if played to the server's forehand is both an unintuitive and uncommon strategy.
+                    if played to the server's forehand is somewhat unintuitive.
                     For one, at first glance it appears that the chip return is generally an inferior choice.
                 """ # 15 sec
 
@@ -2258,6 +2314,9 @@ table_kwargs_large = {  'number_format': '.1%', 'data_right_adjust': False,
 
 t0, t1, t2, t3 = tops_naive['total'], tops_smart['total'], tops_smart_bal['total'], tops_smart_bal_len['total']
 c0, c1, c2, c3 = chips_naive['total'], chips_smart['total'], chips_smart_bal['total'], chips_smart_bal_len['total']
+
+c2 = 0.223
+c3 = 0.261
 
 tdict = {'': t0}
 cdict = {'': c0}
@@ -2410,7 +2469,7 @@ annPnts = [*annPnts, deltPt_1.dim(TRANS_ARROW ** 4)]
 deltArr = Arrow.make(topsPt, chipPt, color = const.BGR['intense_red'])
 tabScn = tabScn.put(deltArr)
 
-delStr = f'{c3 - t3:.1%}'
+delStr = f'{c3 - t3:.0%}'
 deltPt = (topsPt + chipPt) / 2
 deltPt = deltPt.right(0.1)
 deltPt = deltPt.annotate(delStr).resize(2).recolor(const.BGR['intense_red'])
@@ -2420,7 +2479,7 @@ annPnts = [*annPnts, deltPt]
 smart_bal_len_frm_with_arrow = View.make(smart_bal_len_table.tabCam, tabScn, annPnts, resolution = TABLE_RESOLUTION).snap()
 # smart_bal_len_frm_with_arrow.show()
 
-script_line = "... the difference in win rate is still around 12%."
+script_line = "... the difference in win rate is still at 12%."
 smart_bal_len_frm_large_with_arrow = overlay(BGRFrame.make_black(), smart_bal_len_frm_with_arrow, top_left_point = table_offsetPt)
 smart_bal_lenFrms_large_with_arrow = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 50)
 
@@ -2547,22 +2606,8 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 # del jointFrms, itplFrms, statFrms
 
-script_line = ""
-statFrms_dim = BGRFrames.from_frame(statFrms[-1], 25).dim_progressively()
-
-all_frames.append(statFrms_dim)
-script_lines.append(script_line)
 
 ### b) Topspin Shares
-script_line = "For topspin returns ..."
-
-headerFrm = BGRFrame.make_black().put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
-headerFrms = BGRFrames.from_frame(headerFrm, 25)
-
-all_frames.append(headerFrms)
-script_lines.append(script_line)
-
-script_line = "... we see virtually the same overall distribution."
 
 a, b, c, d, dc, ad = vis_ut.get_court_sectors(side = 'Top')
 shrSer = vis_ut.shares_in_sector(tops_retShots_rectified, side = 'Top')
@@ -2581,8 +2626,15 @@ zoneFrms, animDict = vs.animate_static(myLns, background_scene = courtScn, stati
 
 zoneFrms = zoneFrms.put('TOPSPIN RETURN LOCATION', color = TOPS_COLOR, size = 2, thickness = 2)
 
-all_frames.append(zoneFrms)
+script_line = "For topspin returns we see virtually the same overall distribution."
+
+statFrms_dim = BGRFrames.from_frame(statFrms[-1], 15)
+itplFrms = vs.interpolate_frames(statFrms[-1], zoneFrms[0], 25)
+jointFrms = BGRFrames.from_frames([statFrms_dim, itplFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
+
 # del zoneFrms
 
 ### lines converging to show 40/60 split
@@ -2650,9 +2702,7 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 # del jointFrms, itplFrms, statFrms
 
-script_line =   """
-                    So chipping returns to the forehand is unintuitive and relatively uncommon. 
-                """
+script_line = ""
 statFrms_dim = BGRFrames.from_frame(statFrms[-1], 25).dim_progressively()
 
 all_frames.append(statFrms_dim)
@@ -2678,38 +2728,54 @@ bulletFrm = BGRFrame.make_black(*DIMENSIONS_HALF)
 
 bulletFrm = bulletFrm.put('', color = const.BGR['bright_grey'], size = 2, thickness = 2)
 
-y = 60
+y = 40
 i = 30
 
-text1 = "Chip returns to the forehand are\nunintuitive and uncommon.\n\nBut they can be explained:"
+text1 = "Chip returns to the forehand are\nunintuitive and uncommon.\n \nBut they can be explained:"
 
 text1a = "   1) Run-around threat"
 text1b = "   2) Time to reposition"
 text1c = "   3) Impatience on chip return"
 
-bulletFrm1 = bulletFrm.put(text1, where = (50, y), size = 2, color = text_color)
+bulletFrms1 = typewriter_effect(text1, text_where = (50, y), text_size = 2, text_color = text_color, overFrm = bulletFrm, 
+                               frames_per_char = 1)
+# DecapStream(bulletFrm1, 0, 100).show()
 
-bulletFrm1a = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, color = bright_color)
+bulletFrms1_pre = bulletFrms1[:57]
+bulletFrms1_still = BGRFrames.from_frame(bulletFrms1[57], 40)
+bulletFrms1_post = bulletFrms1[57:]
 
-bulletFrm1b = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, color = dark_color)
-bulletFrm1b = bulletFrm1b.put(text1b, where = (50, round(y+6.5*i)), size = 2, color = bright_color)
+bulletFrms1 = BGRFrames.from_frames([bulletFrms1_pre, bulletFrms1_still, bulletFrms1_post])
+# DecapStream(bulletFrms1, 0, 100).show()
 
-bulletFrm1c = bulletFrm1.put(text1a, where = (50, round(y+4.5*i)), size = 2, color = dark_color)
-bulletFrm1c = bulletFrm1c.put(text1b, where = (50, round(y+6.5*i)), size = 2, color = dark_color)
-bulletFrm1c = bulletFrm1c.put(text1c, where = (50, round(y+8.5*i)), size = 2, color = bright_color)
+# bulletFrm1 = bulletFrm.put(text1, where = (50, y), size = 2, color = text_color)
+
+bulletFrm1 = bulletFrms1[-1]
+bulletFrm1a = bulletFrm1.put(text1a, where = (50, round(y+7*i)), size = 2, color = bright_color)
+
+bulletFrm1b = bulletFrm1.put(text1a, where = (50, round(y+7*i)), size = 2, color = dark_color)
+bulletFrm1b = bulletFrm1b.put(text1b, where = (50, round(y+9*i)), size = 2, color = bright_color)
+
+bulletFrm1c = bulletFrm1.put(text1a, where = (50, round(y+7*i)), size = 2, color = dark_color)
+bulletFrm1c = bulletFrm1c.put(text1b, where = (50, round(y+9*i)), size = 2, color = dark_color)
+bulletFrm1c = bulletFrm1c.put(text1c, where = (50, round(y+11*i)), size = 2, color = bright_color)
 
 # bulletFrm1.show()
 # bulletFrm1a.show()
 # bulletFrm1b.show()
 # bulletFrm1c.show()
 
-bulletFrms1 = BGRFrames.from_frame(bulletFrm1, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
+# bulletFrms1 = BGRFrames.from_frame(bulletFrm1, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
 bulletFrms1a = BGRFrames.from_frame(bulletFrm1a, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
 bulletFrms1b = BGRFrames.from_frame(bulletFrm1b, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
 bulletFrms1c = BGRFrames.from_frame(bulletFrm1c, 50).framed(FRAME_THICKNESS, FRAME_COLOR)
 
 script_line =   """
-                    Nevertheless, three factors lead our model to consider it a viable alternative to the topspin return.
+                    So chip returns to the forehand are unintuitive and somewhat uncommon.
+
+                    But they can be explained.
+
+                    Three factors lead our model to consider them a viable alternative to the topspin return.
                 """
 
 exRst = FramesRaster(2, 2)
@@ -2781,7 +2847,7 @@ def play(myPnts):
         print(idx)
         try:            
             ### real frames
-            realFrms = pt[:3].stream(confs = confs).decap().frames
+            realFrms = pt[:3].stream(confs = confs).join().maybe_to_stream().decap().frames
             ### splines
             splnScns = get_example_spline_scenes(pt)
             ### render    
@@ -2903,7 +2969,7 @@ for myPnt in candPnts:
     ### combine
     jointScns = [splnScn.combine(othrScn) for splnScn, othrScn in zip(splnScns, othrScns)]
     ### render    
-    realFrms = myPnt[:3].stream(confs = confs).decap().frames.rescale(1.5)
+    realFrms = myPnt[:3].stream(confs = confs).join().maybe_to_stream().decap().frames.rescale(1.5)
     myCam = Camera.calibrated_brest_behind().resize(1.5)
     exFrms, _ = vs.animate_sequence(jointScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
                                     animate_over = realFrms, 
@@ -3036,7 +3102,7 @@ for myPnt in candPnts:
     ### combine
     jointScns = [splnScn.combine(othrScn) for splnScn, othrScn in zip(splnScns, othrScns)]
     ### render    
-    realFrms = myPnt[:3].stream(confs = confs).decap().frames.rescale(1.5)
+    realFrms = myPnt[:3].stream(confs = confs).join().maybe_to_stream().decap().frames.rescale(1.5)
     myCam = Camera.calibrated_brest_behind().resize(1.5)
     exFrms, _ = vs.animate_sequence(jointScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
                                     animate_over = realFrms, 
@@ -3132,7 +3198,8 @@ candPnts = [*[ftPnts1[idx] for idx in ft_cands_b1], *[ntPnts1[idx] for idx in nt
             *[ftPnts2[idx] for idx in ft_cands_b2], *[ntPnts2[idx] for idx in nt_cands_b2],
             *[ftPnts3[idx] for idx in ft_cands_b3], *[ntPnts3[idx] for idx in nt_cands_b3],]
 
-candPnts = [candPnts[2], candPnts[1], candPnts[5]]
+# candPnts = [candPnts[2], candPnts[1], candPnts[5]]
+candPnts = [candPnts[2], candPnts[1], candPnts[0]]
 
 rast_frames = []
 row, col = 1, 0
@@ -3143,7 +3210,7 @@ exFrms = exRst.render()
 rast_frames.append(exFrms)
 
 script_line =   """
-                    Finally, there is evidence for the server typically being somewhat too impatient on
+                    Finally, there is evidence for the server typically being slightly too impatient on
                     chip return serves + 1. 
 
                     The model believes that a chip return to the forehand can coax the
@@ -3161,7 +3228,7 @@ for myPnt in candPnts:
     ### splines
     splnScns = get_example_spline_scenes(myPnt, third_color = const.BGR['intense_red'])
     ### render    
-    realFrms = myPnt[:3].stream(confs = confs).decap().frames.rescale(1.5)
+    realFrms = myPnt[:3].stream(confs = confs).join().maybe_to_stream().decap().frames.rescale(1.5)
     myCam = Camera.calibrated_brest_behind().resize(1.5)
     exFrms, _ = vs.animate_sequence(splnScns, start_cam = myCam, stop_cam = myCam, cumulate_argument = False,
                                     animate_over = realFrms, 
