@@ -19,6 +19,8 @@ from dataclasses import dataclass
 
 from fractions import Fraction
 
+import cv2 as cv
+
 def maybe_data_to_text(data_or_string, number_format, target_len = None):
     if isinstance(data_or_string, str):
         myStr = data_or_string
@@ -1025,75 +1027,6 @@ class Legend:
 
         return legFrm
 
-def overlay(baseFrm, overFrm, top_left_point = None, 
-            start_alpha = 1, stop_alpha = 1, alpha_exp = 1):
-    from ATMANpy.types.Frames import BGRFrame
-    from ATMANpy.types.MultiFrames import BGRFrames
-    
-    if top_left_point is None:
-        tl_col, tl_row = 0, 0
-    else:
-        tl_col, tl_row = top_left_point.coords
-
-    if isinstance(baseFrm, BGRFrame):
-        bs_row, bs_col, _ = baseFrm.array.shape
-        bs_t = None
-    elif isinstance(baseFrm, BGRFrames):
-        bs_t, bs_row, bs_col, _ = baseFrm.array.shape
-    
-    if isinstance(overFrm, BGRFrame):
-        lg_row, lg_col, _ = overFrm.array.shape
-        lg_t = None
-    elif isinstance(overFrm, BGRFrames):
-        lg_t, lg_row, lg_col, _ = overFrm.array.shape
-    
-    if lg_t is not None: ### if we have a legend with a time dimension...
-        assert bs_t == lg_t
-
-    assert tl_col + lg_col <= bs_col and tl_row + lg_row <= bs_row
-
-    combArr = baseFrm.array.copy()
-    legArr = overFrm.array.copy()
-
-    ### bring to have four dims, so we can add in, and squeeze later
-    if len(combArr.shape) == 3:
-        combArr = combArr[np.newaxis]
-    if len(legArr.shape) == 3:
-        legArr = legArr[np.newaxis]
-
-    t = combArr.shape[0]
-
-    ### use alphas to fade out or in if necessary
-    itpl_alphas = np.linspace(start_alpha, stop_alpha, num = t) ** alpha_exp
-    itpl_alphas = itpl_alphas[:, np.newaxis, np.newaxis, np.newaxis]
-    
-    subArr = combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col]
-    legArr_alpha = (legArr * itpl_alphas)
-    subArr_alpha = subArr * (1 - itpl_alphas)
-
-    combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col] = (legArr_alpha + subArr_alpha).astype('uint8')
-
-    if t == 1:    
-        return BGRFrame(combArr[0])
-    else:
-        return BGRFrames(combArr)
-
-def overlay_center(baseFrm, overFrm, start_alpha = 1, stop_alpha = 1, alpha_exp = 1):
-    try:
-        base_rs, base_cs = baseFrm.rows(), baseFrm.cols()
-    except TypeError:
-        base_rs, base_cs = baseFrm.rows, baseFrm.cols
-    
-    try:
-        over_rs, over_cs = overFrm.rows(), overFrm.cols()
-    except TypeError:
-        over_rs, over_cs = overFrm.rows, overFrm.cols
-    
-    rs, cs = (base_rs - over_rs) // 2, (base_cs - over_cs) // 2
-    outFrm = overlay(baseFrm, overFrm, top_left_point = Point2D((cs, rs)),
-                    start_alpha = start_alpha, stop_alpha = stop_alpha, alpha_exp = alpha_exp)
-    return outFrm
-
 class FrameRaster: ### a tiling of a Frame with smaller Frames, in rows and columns
     def __init__(self, rows, cols, borders = None):
         self.rows = rows
@@ -1313,6 +1246,95 @@ class FramesRaster: ### a tiling of MultiFrames with smaller MultiFrames, in row
         else:
             return BGRFrames(jointArr)
 
+####################################
+############ OVERLAYS ##############
+####################################
+def overlay(baseFrm, overFrm, top_left_point = None, 
+            start_alpha = 1, stop_alpha = 1, alpha_exp = 1):
+    from ATMANpy.types.Frames import BGRFrame
+    from ATMANpy.types.MultiFrames import BGRFrames
+    
+    if top_left_point is None:
+        tl_col, tl_row = 0, 0
+    else:
+        tl_col, tl_row = top_left_point.coords
+
+    if isinstance(baseFrm, BGRFrame):
+        bs_row, bs_col, _ = baseFrm.array.shape
+        bs_t = None
+    elif isinstance(baseFrm, BGRFrames):
+        bs_t, bs_row, bs_col, _ = baseFrm.array.shape
+    
+    if isinstance(overFrm, BGRFrame):
+        lg_row, lg_col, _ = overFrm.array.shape
+        lg_t = None
+    elif isinstance(overFrm, BGRFrames):
+        lg_t, lg_row, lg_col, _ = overFrm.array.shape
+    
+    if lg_t is not None: ### if we have a legend with a time dimension...
+        assert bs_t == lg_t
+
+    assert tl_col + lg_col <= bs_col and tl_row + lg_row <= bs_row
+
+    combArr = baseFrm.array.copy()
+    legArr = overFrm.array.copy()
+
+    ### bring to have four dims, so we can add in, and squeeze later
+    if len(combArr.shape) == 3:
+        combArr = combArr[np.newaxis]
+    if len(legArr.shape) == 3:
+        legArr = legArr[np.newaxis]
+
+    t = combArr.shape[0]
+
+    ### use alphas to fade out or in if necessary
+    itpl_alphas = np.linspace(start_alpha, stop_alpha, num = t) ** alpha_exp
+    itpl_alphas = itpl_alphas[:, np.newaxis, np.newaxis, np.newaxis]
+    
+    subArr = combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col]
+    legArr_alpha = (legArr * itpl_alphas)
+    subArr_alpha = subArr * (1 - itpl_alphas)
+
+    combArr[:, tl_row:tl_row + lg_row, tl_col:tl_col + lg_col] = (legArr_alpha + subArr_alpha).astype('uint8')
+
+    if t == 1:    
+        return BGRFrame(combArr[0])
+    else:
+        return BGRFrames(combArr)
+
+def overlay_center(baseFrm, overFrm, start_alpha = 1, stop_alpha = 1, alpha_exp = 1):
+    try:
+        base_rs, base_cs = baseFrm.rows(), baseFrm.cols()
+    except TypeError:
+        base_rs, base_cs = baseFrm.rows, baseFrm.cols
+    
+    try:
+        over_rs, over_cs = overFrm.rows(), overFrm.cols()
+    except TypeError:
+        over_rs, over_cs = overFrm.rows, overFrm.cols
+    
+    rs, cs = (base_rs - over_rs) // 2, (base_cs - over_cs) // 2
+    outFrm = overlay(baseFrm, overFrm, top_left_point = Point2D((cs, rs)),
+                    start_alpha = start_alpha, stop_alpha = stop_alpha, alpha_exp = alpha_exp)
+    return outFrm
+
+def overlay_footnote(someFrms, timeStr, footnoteStr, frame_thickness = 2, frame_color = const.BGR['bright_grey']):
+    footnote_where = (50, 950)
+    footnote_dims = (500, 100)
+    
+    blackFrm = BGRFrame.make_black(*footnote_dims)
+
+    footnoteFrm = blackFrm.put(timeStr, size = 1, where = (30, 40), color = const.BGR['grass_green'])
+    footnoteFrm = footnoteFrm.put(footnoteStr, size = 1, where = (150, 40), color = const.BGR['grass_green'])
+
+    footnoteFrm_framed = footnoteFrm.framed(frame_thickness, frame_color)
+    # footnoteFrm_framed.show()
+
+    return overlay(someFrms, footnoteFrm_framed, top_left_point = Point2D(footnote_where))
+
+################################
+########## CASCADES ############
+################################
 def frame_cascade(list_of_cascFrms, baseRst):
     num_rows, num_cols = baseRst.rows, baseRst.cols
 
@@ -1388,6 +1410,10 @@ def reverse_cascade(finalRst, keep_which = None,
     jntFrms = BGRFrames.from_frames(list_of_renderedFrms)
     return myRst, jntFrms
 
+##################################
+########## MISCELLANEOUS #########
+##################################
+
 def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = '', game_string2 = '',
                serving = 1, 
                frame_thickness = None, frame_color = const.BGR['bright_grey']):
@@ -1430,19 +1456,53 @@ def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = 
 
     return tabFrm
 
-def overlay_footnote(someFrms, timeStr, footnoteStr, frame_thickness = 2, frame_color = const.BGR['bright_grey']):
-    footnote_where = (50, 950)
-    footnote_dims = (500, 100)
+def typewriter_effect(someStr, frames_per_char = 2,
+                      text_where = (800, 500), text_color = const.BGR['leafy_green'], text_size = 1, text_font = cv.FONT_HERSHEY_PLAIN,
+                      overFrm = None,
+                      align = 'left', manual_aligners = None):
+    if overFrm is None:
+        overFrm = BGRFrame.make_black()
     
-    blackFrm = BGRFrame.make_black(*footnote_dims)
+    lines = someStr.split('\n')
 
-    footnoteFrm = blackFrm.put(timeStr, size = 1, where = (30, 40), color = const.BGR['grass_green'])
-    footnoteFrm = footnoteFrm.put(footnoteStr, size = 1, where = (150, 40), color = const.BGR['grass_green'])
+    ### figure out how to center text
+    if align == 'left':
+        spaces = [0 for l in lines]
+    elif align == 'center':
+        lens = [len(l) for l in lines]
+        m = max(lens)
+        spaces = [(m - l) // 2 for l in lens]
+    elif align == 'right':
+        lens = [len(l) for l in lines]
+        m = max(lens)
+        spaces = [(m - l) for l in lens]
 
-    footnoteFrm_framed = footnoteFrm.framed(frame_thickness, frame_color)
-    # footnoteFrm_framed.show()
+    if manual_aligners is not None:
+        spaces = [s + m for s, m in zip(spaces, manual_aligners)]
 
-    return overlay(someFrms, footnoteFrm_framed, top_left_point = Point2D(footnote_where))
+    out_frames = []
+    prev_lines = ['']
+    for idx in range(len(lines)):
+        lineStr = lines[idx]
+        num_spaces = spaces[idx]
+
+        remaining_lines = len(lines) - len(prev_lines) + 1
+        # prevStr = '\n' * remaining_lines + '\n'.join(prev_lines) 
+        prevStr = '\n'.join(prev_lines)
+
+        curr_chars = []
+        for curr_char in lineStr:
+            curr_chars.append(curr_char)
+
+            currStr = ' ' * num_spaces + ''.join(curr_chars)
+            currFrm = overFrm.put(prevStr + '\n' + currStr, where = text_where, color = text_color, size = text_size, font = text_font)
+            currFrms = BGRFrames.from_frame(currFrm, frames_per_char)
+            out_frames.append(currFrms)
+        
+        prev_lines.append(currStr)
+    
+    return BGRFrames.from_frames(out_frames)
+
 
 if __name__ == '__main__':
     TEST_CHART = True
