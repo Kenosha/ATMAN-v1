@@ -379,8 +379,8 @@ script_lines.append(script_line)
 
 script_line =   """
                     The same holds for Hugo Gaston, another lefty. 
-                    Even though it looks like they both mix in serves down the middle at low leverage,
-                    and rely on the slice out wide almost exclusively at higher leverages, 
+                    Even though it looks like Gaston especially mixes in serves down the middle at low leverage,
+                    and relies on the slice out wide almost exclusively at higher leverages, 
                     our tests can not establish a statistically significant difference in serve locations
                     due to very limited sample size: for both Liam Broady, and Hugo Gaston, we only have one match in our sample.
                 """

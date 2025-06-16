@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 ########### SAVE FOLDER ################
 ########################################
 
-SAVE = True
+SAVE = False
 
 DESCRIPTOR = 'first_part'
 SAVE_FOLDER = 'serve_pressure_new'
@@ -527,9 +527,23 @@ scoreFrm_lose_unknown_with_box = BGRFrame(np.concatenate([percFrm_lose_unknown.a
 curr_scoreFrm = moveFrms[-1]
 
 script_line = "The leverage of a point should quantify to what extent the outcome of the point influences the outcome of the match."
-currFrms = BGRFrames.from_frame(curr_scoreFrm, 50)
 
-all_frames.append(currFrms)
+from ATMANpy.types.Overlays import typewriter_effect
+
+type_size = 2
+type_color = const.BGR['bright_grey']
+type_where = (200, 800)
+
+text_line = "The LEVERAGE of a point\nshould quantify to what extent\nthe outcome of the point influences\nthe outcome of the match."
+curr_scoreFrms_type = typewriter_effect(text_line, frames_per_char = 1, overFrm = curr_scoreFrm,
+                                       text_where = type_where, text_color = type_color, text_size = type_size)
+text_line = '\n' + text_line
+# DecapStream(curr_scoreFrms_type, 0, 100).show()
+
+statFrms = BGRFrames.from_frame(curr_scoreFrms_type[-1], 40)
+jointFrms = BGRFrames.from_frames([curr_scoreFrms_type, statFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 # script_line = "The outcome of a point is among two possibilities: Joao Sousa can win the point, or he can lose it."
@@ -544,6 +558,9 @@ curr_scoreFrm1 = curr_scoreFrm1.put(arr_lose, color = arr_color_lose)
 currFrms1 = BGRFrames.from_frame(curr_scoreFrm1, 40)
 
 currFrms = BGRFrames.from_frames([currFrms0, currFrms1])
+
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
+# currFrms[0].show()
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -567,6 +584,8 @@ fadeFrms2 = vs.interpolate_frames(statFrms[-1], curr_scoreFrm, 25)
 statFrms2 = BGRFrames.from_frame(curr_scoreFrm, 40)
 
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms, fadeFrms2, statFrms2])
+
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -594,6 +613,8 @@ fadeFrms2 = vs.interpolate_frames(statFrms[-1], curr_scoreFrm)
 statFrms2 = BGRFrames.from_frame(curr_scoreFrm, 50)
 
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms, fadeFrms2, statFrms2])
+
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -625,9 +646,10 @@ currFrms = BGRFrames.from_frames([BGRFrames.from_frame(curr_scoreFrm0, 25),
                                   BGRFrames.from_frame(curr_scoreFrm4, 25)])
 prevFrm = curr_scoreFrm4
 
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
+
 all_frames.append(currFrms)
 script_lines.append(script_line)
-
 
 script_line = "If Joao Sousa wins two points consecutively, he wins the match 8-6."
 ### brighten top path
@@ -654,6 +676,8 @@ statFrms = BGRFrames.from_frame(curr_scoreFrm4, 50)
 prevFrm = curr_scoreFrm4
 
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -684,6 +708,8 @@ prevFrm = curr_scoreFrm4
 
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
 
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
+
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
@@ -713,6 +739,8 @@ prevFrm = curr_scoreFrm4
 
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
 
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
+
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
@@ -724,6 +752,8 @@ arrFrm = prevFrm.put(backArr, color = const.BGR['bright_grey'])
 
 currFrms = BGRFrames.from_frame(arrFrm, 50)
 
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
+
 all_frames.append(currFrms)
 script_lines.append(script_line)
 
@@ -731,6 +761,8 @@ script_line = "At 6-6, 7-7, 8-8, and so on, play continues until either player w
 ### ...
 
 currFrms = BGRFrames.from_frame(arrFrm, 270)
+
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
 
 all_frames.append(currFrms)
 script_lines.append(script_line)
@@ -759,6 +791,8 @@ currFrms = BGRFrames.from_frames([BGRFrames.from_frame(curr_scoreFrm4, 10),
                                   BGRFrames.from_frame(curr_scoreFrm0, 10),
                                   statFrms, fadeFrms, statFrms2])
 
+currFrms = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
+
 # DecapStream(currFrms, 0, 100).show()
 
 all_frames.append(currFrms)
@@ -780,12 +814,22 @@ fadeFrms = vs.interpolate_frames(currFrms[-1], resFrm, 50)
 statFrms = BGRFrames.from_frame(resFrm, 50)
 
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms])
+currFrms_type = currFrms.put(text_line, size = type_size, color = type_color, where = type_where)
 
-all_frames.append(currFrms)
+all_frames.append(currFrms_type)
 script_lines.append(script_line)
 
 script_line = "Our measure of leverage is therefore at 50%."
 ### difference = 50%
+
+
+start_coords = (276, 834)
+
+currFrm_last = currFrms[-1].put('LEVERAGE', where = start_coords, size = type_size, color = type_color)
+currFrm_last_type = currFrms_type[-1].put('LEVERAGE', where = start_coords, size = type_size, color = type_color)
+
+currFrms_itpl = vs.interpolate_frames(currFrm_last_type, currFrm_last, 25)
+# DecapStream(currFrms_itpl, 0, 100).show()
 
 winArr = make_arrow_from_to(tlPt_win.down(40), tlPt_losewin)
 loseArr = make_arrow_from_to(tlPt_lose.up(40), tlPt_losewin)
@@ -793,15 +837,29 @@ loseArr = make_arrow_from_to(tlPt_lose.up(40), tlPt_losewin)
 meanPt = (winArr[0].rightPt + loseArr[0].rightPt) / 2
 meanPt = meanPt.down(8).right(10)
 
+stop_coords = meanPt.round_coords()
+
+move_frames = []
+for i in range(50):
+    lmbd = i / (50 - 1)
+    curr_coords = interpolate_tuples(start_coords, stop_coords, itpl_lambda = lmbd, as_integer = True)
+    currFrm = currFrms[-1].put('LEVERAGE', where = curr_coords, size = type_size, color = type_color)
+    move_frames.append(currFrm)
+
+moveFrms = BGRFrames.from_single_frames(move_frames)
+# DecapStream(moveFrms, 0, 100).show()
+
 resFrm2 = resFrm.put(winArr, color = const.BGR['bright_grey'])
 resFrm2 = resFrm2.put(loseArr, color = const.BGR['bright_grey'])
 
-lvrStr = 'Leverage = 100% - 50% = 50%'
-resFrm2 = resFrm2.put(lvrStr, where = meanPt.round_coords(), size = 2, color = const.BGR['bright_grey'])
+lvrStr = 'LEVERAGE = 100% - 50% = 50%'
+resFrm2 = resFrm2.put(lvrStr, where = stop_coords, size = 2, color = const.BGR['bright_grey'])
 
-currFrms = BGRFrames.from_frame(resFrm2, 110)
+resFrms = BGRFrames.from_frame(resFrm2, 110)
 
-all_frames.append(currFrms)
+jointFrms = BGRFrames.from_frames([currFrms_itpl, moveFrms, resFrms])
+
+all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line = "In fact, this is the highest possible leverage in a standard tennis match; with no-ad scoring, a leverage of 100% is possible."
@@ -823,7 +881,8 @@ all_frames.append(currFrms)
 script_lines.append(script_line)
 
 script_line = ""
-holdFrms = BGRFrames.from_frame(statFrms[-1], 25)
+
+holdFrms = BGRFrames.from_frame(currFrms[-1], 25)
 all_frames.append(holdFrms)
 script_lines.append(script_line)
 
