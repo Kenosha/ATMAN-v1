@@ -2742,7 +2742,7 @@ bulletFrms1 = typewriter_effect(text1, text_where = (50, y), text_size = 2, text
 # DecapStream(bulletFrm1, 0, 100).show()
 
 bulletFrms1_pre = bulletFrms1[:57]
-bulletFrms1_still = BGRFrames.from_frame(bulletFrms1[57], 40)
+bulletFrms1_still = BGRFrames.from_frame(bulletFrms1[57], 50)
 bulletFrms1_post = bulletFrms1[57:]
 
 bulletFrms1 = BGRFrames.from_frames([bulletFrms1_pre, bulletFrms1_still, bulletFrms1_post])
