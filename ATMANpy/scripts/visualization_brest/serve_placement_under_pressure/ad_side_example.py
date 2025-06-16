@@ -91,7 +91,7 @@ adPnts = firstPnts.filter('is_serve_ad')
 
 ### PARAMETERS
 RESOLUTION_MODIFIER = 30 # 2
-RESOLUTION_BACKGROUND = 1 * RESOLUTION_MODIFIER
+RESOLUTION_BACKGROUND = 1.5 * RESOLUTION_MODIFIER
 RESOLUTION_OBJECTS = 1 * RESOLUTION_MODIFIER
 RESOLUTION_KDE = 1 * RESOLUTION_MODIFIER
 MIX_COLORS_KDE = True
@@ -754,7 +754,7 @@ statFrms, _ = vs.animate_static(grnScn, static_cam = straightCam, text_cam = box
                                 **prmDict)
 statFrms = overlay(statFrms, legFrm, tlPt_leg)
 
-itplScns = vs.interpolate_dummy_scenes(grnScn, old_splitScn, 15)
+itplScns = vs.interpolate_dummy_scenes(grnScn, old_splitScn, 30)
 
 moveFrms_back, _ = vs.animate_sequence(itplScns, start_cam = straightCam, stop_cam = boxCam, background_scene = xyScn,
                                     annotated_points = annPnts_curr, text_cam = boxCam,
