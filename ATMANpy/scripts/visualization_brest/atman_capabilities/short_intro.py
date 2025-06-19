@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
-SAVE = True
+SAVE = False
 
 ########################################
 ########### SAVE FOLDER ################
@@ -191,7 +191,7 @@ animFrms0 = vis_ut.animate_bounce_and_mark_scenes(lastPnt, start_cam = brestCam_
 # DecapStream(animFrms0, 0, 100).show()
 
 ### figure out intermezzi.
-initial_widen_by = 480 + 21 + 12 + 9 + 12 ### -> lineFrms_silent, lineFrms_voice, playerFrms_silent, playerFrms_voice
+initial_widen_by = 450 + 21 + 12 + 9 + 12 ### -> lineFrms_silent, lineFrms_voice, playerFrms_silent, playerFrms_voice
 preFrms = prevPnt2.stream(confs = confs).widen(initial_widen_by).decap().frames[:initial_widen_by].rescale(3)
 
 # frms3 = prevPnt3.get_frames()
@@ -547,10 +547,12 @@ for alpha in alpha_factors:
     curr_courtScn = courtScn.put(subReg3D)
     court_scenes_fadein.append(curr_courtScn)
 
+# View.make(brestCam_full_fit, court_scenes_fadein[0], resolution = 10).snap(over_array = interFrms21_speed_last[0].array).show()
+
 moveFrms, _ = vs.animate_sequence(court_scenes_fadein, start_cam = brestCam_full_fit, stop_cam = downCam,
                                   animate_over = interFrms21_speed_last,
                                   **prmDict)
-# DecapStream(moveFrms, 0, 100).show()
+
 
 animFrms_down = vis_ut.animate_bounce_and_mark_scenes(prevPnt1, start_cam = downCam, stop_cam = downCam, confs = confs, 
                                                         background_scene = Scene.make_court(net_mesh_density = 0.75), 
