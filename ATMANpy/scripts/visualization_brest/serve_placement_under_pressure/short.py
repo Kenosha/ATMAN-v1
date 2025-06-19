@@ -298,7 +298,9 @@ rstFrms5 = myRst.render()
 rst_frames = [rstFrms_fade, rstFrms0, rstFrms1, rstFrms2, rstFrms3, rstFrms4, rstFrms5]
 
 script_line =   """
-                    Why might this be interesting? Consider this match point on Joao Sousa's serve.
+                    Why might this be interesting? Well, consider this situation here: 
+                    In the quartefinals of the 2021 Brest Challenger Tournament, where all our data is taken from, 
+                    Joao Sousa has match point on his serve.
                 """
 currFrms = BGRFrames.from_frames([rstFrms_fade, rstFrms0])
 all_frames.append(currFrms)
@@ -355,15 +357,32 @@ vChart1 = ScatterChart(xs1, ys12, color = const.BGR['bright_blue'])
 vChart2 = ScatterChart(xs2, ys12, color = const.BGR['bright_blue'])
 
 myGraph = Graph([pressChart, vChart1, vChart2], make_default_x_labels = False, y_label_format = '>5.0%', y_label_dist = 1.5, 
-                header_text = 'Score Leverage: Gaio v. Sousa', header_horizontal_offset = 5, max_y_override = 0.5, 
+                header_text = 'Score Leverage: Gaio v. Sousa', header_horizontal_offset = 5, 
+                header_vertical_offset = 0.5, 
+                max_y_override = 0.5, 
                 x_label_dist = 0, tick_label_size = 1, x_tick_label_left_shift = 0, header_size = 1, 
                 color = const.BGR['bright_grey'],
                 resolution = 100)
 
-graphFrm = myGraph.render()
+graphScn, graphPnts = myGraph.preview()
+
+p1 = graphScn[1].rightPt
+p2 = graphScn[3].devectorize()[0]
+p3 = graphScn[4].devectorize()[0]
+
+p1 = p1.annotate('Set 1').recolor(const.BGR['bright_blue']).back(0.5).right(0.2)
+p2 = p2.annotate('Set 2').back(0.5).right(0.2)
+p3 = p3.annotate('Set 3').back(0.5).right(0.2)
+
+add_graphPnts = [*graphPnts, p1, p2, p3]
+
+graphFrm = View.make(myGraph.cam, graphScn, annotatedPoints = add_graphPnts, resolution = myGraph.resolution).snap()
 
 graphFrm = graphFrm.framed(2, const.BGR['bright_grey'])
 # graphFrm.show()
+
+### put set denoters
+
 
 dim_factor = 0.25
 last_rastFrm = rstFrms5[-1]
@@ -917,6 +936,8 @@ script_line =   """
                     
                     As an opponent, figuring this out during the match can be costly, or even outright impossible,
                     since high leverage points are consequential, but few in number.
+
+                    On the other hand, knowing the serve mix at different leverages ahead of time, there is no need to guess.
 
                     For a deeper look into a few more players' serve mixes, and the methodology employed, consult the longer version of this video.
                 """
