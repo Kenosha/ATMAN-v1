@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 ########### SAVE FOLDER ################
 ########################################
 
-SAVE = False
+SAVE = True
 
 DESCRIPTOR = 'first_part'
 SAVE_FOLDER = 'serve_pressure_new'
@@ -547,7 +547,7 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 # script_line = "The outcome of a point is among two possibilities: Joao Sousa can win the point, or he can lose it."
-script_line = "Let's go through the possibilities."
+script_line = "So let's go through the possible match outcomes."
 
 curr_scoreFrm0 = overlay(curr_scoreFrm, scoreFrm_win, top_left_point = tlPt_win)
 curr_scoreFrm0 = curr_scoreFrm0.put(arr_win, color = arr_color_win)
@@ -910,12 +910,26 @@ vChart1 = ScatterChart(xs1, ys12, color = const.BGR['bright_blue'])
 vChart2 = ScatterChart(xs2, ys12, color = const.BGR['bright_blue'])
 
 myGraph = Graph([pressChart, vChart1, vChart2], make_default_x_labels = False, y_label_format = '>5.0%', y_label_dist = 1.5, 
-                header_text = 'Score Leverage: Gaio v. Sousa', header_horizontal_offset = 5, max_y_override = 0.5, 
+                header_text = 'Score Leverage: Gaio v. Sousa', header_horizontal_offset = 5, 
+                header_vertical_offset = 0.5, 
+                max_y_override = 0.5, 
                 x_label_dist = 0, tick_label_size = 1, x_tick_label_left_shift = 0, header_size = 1, 
                 color = const.BGR['bright_grey'],
                 resolution = 100)
 
-graphFrm = myGraph.render()
+graphScn, graphPnts = myGraph.preview()
+
+p1_graph = graphScn[1].rightPt
+p2_graph = graphScn[3].devectorize()[0]
+p3_graph = graphScn[4].devectorize()[0]
+
+p1_graph = p1_graph.annotate('Set 1').recolor(const.BGR['bright_blue']).back(0.5).right(0.2)
+p2_graph = p2_graph.annotate('Set 2').back(0.5).right(0.2)
+p3_graph = p3_graph.annotate('Set 3').back(0.5).right(0.2)
+
+add_graphPnts = [*graphPnts, p1_graph, p2_graph, p3_graph]
+
+graphFrm = View.make(myGraph.cam, graphScn, annotatedPoints = add_graphPnts, resolution = myGraph.resolution).snap()
 
 graphFrm = graphFrm.framed(2, const.BGR['bright_grey'])
 # graphFrm.show()
@@ -1021,7 +1035,7 @@ all_frames.append(outFrms)
 script_lines.append(script_line)
 
 
-vis_ut.show(all_frames)
+# vis_ut.show(all_frames)
 
 
 ### Saving the separate MultiFrame objects and the Joint Script
