@@ -347,13 +347,13 @@ nullChart = LineChart([0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0], color 
 shrChart = LineChart(xs, shr_ys, color = shr_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
 avgChart = LineChart(xs, avg_ys, color = avg_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
 
-n = 30
+n = 50
 x_idx = 1
 v_xs = np.ones(n) * xs[x_idx]
 v_ys = np.linspace(0, avg_ys[x_idx], num = n)
 vChart1 = ScatterChart(v_xs, v_ys, color = const.BGR['intense_red'])
 
-n = 40
+n = 65
 x_idx = 3
 v_xs = np.ones(n) * xs[x_idx]
 v_ys = np.linspace(0, avg_ys[x_idx], num = n)
@@ -850,7 +850,7 @@ all_frames.append(titleFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The chipped return is infrequently employed; 
+                    Between these two options, the topspin return is favored:
                     in our sample of 1,451 first-serve returns observed in 20 matches of the 2021 Brest Challenger Tournament...
                 """
 fadeFrms = titleFrms[:50].dim_progressively()

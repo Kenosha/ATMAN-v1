@@ -504,7 +504,7 @@ if DO_METHOD_SECTION:
     all_frames.append(markFrms)
     script_lines.append(script_line)
 
-    script_line = "First, consider the empirical distribution of topspin returns."
+    script_line = "Now, consider the empirical distribution of topspin returns."
     
     topsFrms, animDict = vs.animate_static(tops_markScn, background_scene = courtScn, static_cam = heatCam, 
                                     annotated_points = [fhPt, bhPt], **prmDict)
@@ -1549,11 +1549,11 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, skeleton_vertical_offset = 1, 
-                  title = 'Initial Conditions', title_horizontal_offset = 11, title_vertical_offset = 0.5,
+                  title = 'Initial Conditions', title_horizontal_offset = 9.6, title_vertical_offset = 0.5,
                   header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
                   index_offset = 0.25, 
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
-                  skip_after_how_many_symbols = None,
+                  skip_after_how_many_symbols = None, resolution = 2000,
                   automatic_vertical_offset_text_line_height = 0.25)
     tabFrm_match = myTab.render()
     # tabFrm_match.show()
@@ -1588,7 +1588,6 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     hi_hori = bestShots[1].get_post_bounce_horizontal_speed(how = 'corrected_next')
     
     dims = (splineFrms_orig.cols(), splineFrms_orig.rows())
-
 
     table_data = {  'Apex':                     {lo_name: f'{lo_apx:.1f} m',        hi_name: f'{hi_apx:.1f} m'},
                     'Apex post-bounce':         {lo_name: f'{lo_apx_pst:.1f} m',    hi_name: f'{hi_apx_pst:.1f} m'},
@@ -1630,7 +1629,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1,
                   title_vertical_offset = 0.5, skeleton_vertical_offset = 1, 
-                  title = 'Trajectory Comparison', title_horizontal_offset = 10, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 9.6, 
                   header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
                   skip_after_how_many_symbols = None, resolution = 2000,
@@ -1643,7 +1642,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
                   title_vertical_offset = 0.5, skeleton_vertical_offset = 1, 
-                  title = 'Trajectory Comparison', title_horizontal_offset = 10, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 9.6, 
                   header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
                   skip_after_how_many_symbols = None, resolution = 2000,
@@ -1656,7 +1655,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
 
     myTab = Table(table_data, dimensions = dims, skeleton_shrinkage = 0.2, index_offset = 0.1, 
                   title_vertical_offset = 0.5, skeleton_vertical_offset = 1, 
-                  title = 'Trajectory Comparison', title_horizontal_offset = 10, 
+                  title = 'Trajectory Comparison', title_horizontal_offset = 9.6, 
                   header_text_color = const.BGR['leafy_green'], title_color = const.BGR['bright_grey'],
                   header_text_size = 1, index_text_size = 1, data_text_size = 1, 
                   skip_after_how_many_symbols = None, resolution = 2000,
@@ -2672,7 +2671,7 @@ if DO_LAUNCH_ANGLE_EXAMPLE:
     # de-render the shapes in the top left
     script_line =   """
                         Up until this point, we have tackled the chip return entirely descriptively.
-                        We know, roughly, what an average challenger-level player does;
+                        We know, roughly, what an average challenger-level player does, with respect to the chip return;
                         what we are lacking is an answer to the question: what should he do.
 
                         Given the 12% win-rate deficit of the chip return on aggregate: 

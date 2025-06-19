@@ -803,13 +803,13 @@ nullChart = LineChart([0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0], color 
 shrChart = LineChart(xs, shr_ys, color = shr_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
 avgChart = LineChart(xs, avg_ys, color = avg_color, x_labels = x_labels, annotate_line_heights = True, thickness = 0.125)
 
-n = 30
+n = 50
 x_idx = 1
 v_xs = np.ones(n) * xs[x_idx]
 v_ys = np.linspace(0, avg_ys[x_idx], num = n)
 vChart1 = ScatterChart(v_xs, v_ys, color = const.BGR['intense_red'])
 
-n = 40
+n = 65
 x_idx = 3
 v_xs = np.ones(n) * xs[x_idx]
 v_ys = np.linspace(0, avg_ys[x_idx], num = n)
@@ -2391,9 +2391,10 @@ script_lines.append(script_line)
 
 script_line =   """
                     This might be the key in understanding why the chip return should be played to the forehand right away:
-                    if it goes to the forehand, the only real attacking shot is a high-risk topspin down-the-line serve + 1, which, 
-                    as we have shown earlier, is often employed prematurely against the chip, 
-                    with a markedly lower success rate than a serve + 2 combination.
+                    if it goes to the forehand, the server may be tempted to attack the return with a serve + 1 down the line, 
+                    a risky shot that the server has to generate most of the speed and all of the topspin on. 
+                    However, as we have shown earlier, attacking a chip on a serve + 1 is premature, on aggregate; 
+                    A server is typically much better off setting up a serve + 2 combination against a chip return.
                 """
 from ATMANpy.types.Overlays import overlay_center
 graphFrm = overlay_center(BGRFrame.make_black(), shr_graphFrm)
@@ -2500,8 +2501,8 @@ back_c_cands = [1, 3, 8, 10, 11, 12, 14, 20, 26, 27, 28, 29, 31, 32, 37]
 back_d_cands = [0, 1, 2, 3, 7, 9, 12, 15, 16, 17, 18, 22, 24, 25, 31]
 
 script_line =   """
-                    If the chip is run around, the server has two attacking options, not just one: 
-                    he can still go down the line with the forehand inside-in - forcing, but risky.
+                    If the chip can be run around, the server has two ways to do so: 
+                    He can still go down the line with the forehand inside-in - forcing, but risky.
                 """
 
 bigRst = FramesRaster(4, 4, borders = None)
@@ -2541,8 +2542,8 @@ all_frames.append(jointFrms)
 script_lines.append(script_line)
 
 script_line =   """
-                    The additional option is the forehand inside-out, attacking the returner's backhand cross-court. 
-                    At comparatively low risk, it lends itself well as a setup shot in a serve + 2 combination.
+                    Additionally, there is the forehand inside-out, attacking the returner's backhand cross-court. 
+                    At comparatively low risk, it lends itself especially well as a setup shot in a serve + 2 combination.
 
                     The 16 cases we are showing here are chosen to be representative 
                     with respect to where the server places them when he can run around the backhand;                   
