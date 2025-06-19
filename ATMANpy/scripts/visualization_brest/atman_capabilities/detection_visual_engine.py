@@ -352,21 +352,25 @@ ax_color = const.BGR['marine_blue']
 
 y_len = 35
 z_len = 25
-yLn = Arrow.make(meanPt, meanPt.back(y_len), rot_angle = np.pi / 2, color = ax_color)
-zLn = Arrow.make(meanPt, meanPt.up(z_len), rot_angle = np.pi / 2, color = ax_color)
+yLn = Arrow.make(meanPt, meanPt.back(y_len), rot_angle = np.pi / 2, color = ax_color).resize(0.15)
+zLn = Arrow.make(meanPt, meanPt.up(z_len), rot_angle = np.pi / 2, color = ax_color).resize(0.15)
 lineScn = Scene([yLn, zLn])
 
-nullLn = Arrow.make(meanPt, meanPt.back(0.1), color = ax_color)
-nullScn = Scene([nullLn, nullLn])
+nullLn_y = Arrow.make(meanPt, meanPt.back(0.1), rot_angle = np.pi / 2, color = ax_color).resize(0.15)
+nullLn_z = Arrow.make(meanPt, meanPt.up(0.1), rot_angle = np.pi / 2, color = ax_color).resize(0.15)
+nullScn = Scene([nullLn_y, nullLn_z])
 
 axisScns = vs.interpolate_scenes(nullScn, lineScn, num_frames = 25)
 axisScns = [myScn.put(meanBall) for myScn in axisScns] ### avoid the transparification of the ball
+
+# View.make(ax_sideCam, axisScns[-1], resolution = shape_res).snap().show()
 
 axisFrms, animDict = vs.animate_sequence(axisScns, start_cam = ax_sideCam, stop_cam = ax_sideCam, background_scene = courtScn,
                                         cumulative_foreground_transparence = 0.925, 
                                         argument_resolution = shape_res, foreground_resolution = shape_res, background_resolution = back_res,
                                         **animDict
                                         ) 
+# DecapStream(axisFrms, 0, 100).show()
 
 ### annotate axes
 yPt = (meanPt + meanPt.back(y_len)) / 2

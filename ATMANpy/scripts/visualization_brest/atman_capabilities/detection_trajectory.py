@@ -696,7 +696,7 @@ stm_p2 = nextPnt2.stream(cap = cap)
 
 ### next few rallyes --> slowly zoom out at the end of the last shot.
 script_line =   """
-                    Let us now take a look at the next few rallyes to see more of the trajectory detection at work.
+                    Let us now take a look at the next rally to see more of the trajectory detection at work.
                 """
 fs_zoom, ls_zoom = stm2.stop_frame + 1, stm2.stop_frame + 101
 zoomStm = Stream(cap, fs_zoom, ls_zoom - 1)
