@@ -111,25 +111,43 @@ filtPnts = filtPnts.filter(is_serve_ad)
 s5 = summ_pnts2(filtPnts)
 filtPnts = filtPnts.filter(is_serve_out_wide)
 s6 = summ_pnts2(filtPnts)
-ss = [s1, s2, s3, s4, s5, s6]
+
+
+velo = filtPnts.get_returns().get_initial_speed().mean()
+spin = filtPnts.get_returns().get_initial_spin().mean()
+
+s7 = f'{velo:.0f} km/h'
+s8 = f'{spin:.0f} rpm'
+
+ss = [s1, s3, s4, s5, s6, s7, s8]
 
 p1 = None
-p2 = 'is_tracked'
+# p2 = 'is_tracked'
 p3 = 'is_returned_by, "Brandon Nakashima"'
 p4 = 'is_first_serve'
 p5 = 'is_serve_ad'
 p6 = 'is_serve_out_wide'
-ps = [p1, p2, p3, p4, p5, p6]
+
+p7 = 'get_initial_speed'
+p8 = 'get_initial_spin'
+
+ps = [p1, p3, p4, p5, p6, p7, p8]
+
 
 l1 = 'dataPnts'
-l2 = f'filtPnts = dataPnts.filter({p2})'
+# l2 = f'filtPnts = dataPnts.filter({p2})'
 l3 = f'filtPnts = filtPnts.filter({p3})'
 l4 = f'filtPnts = filtPnts.filter({p4})'
 l5 = f'filtPnts = filtPnts.filter({p5})'
 l6 = f'filtPnts = filtPnts.filter({p6})'
-ls = [l1, l2, l3, l4, l5, l6]
 
-frame_offset = len('filtPnts = filtPnts.filter(')
+l7 = f'filtPnts.get_returns().{p7}().mean()'
+l8 = f'filtPnts.get_returns().{p8}().mean()'
+
+ls = [l1, l3, l4, l5, l6, l7, l8]
+
+frame_offset_1 = len('filtPnts = filtPnts.filter(')
+frame_offset_2 = len('filtPnts.get_returns().')
 
 from ATMANpy.types.Overlays import typewriter_effect
 import cv2 as cv
@@ -141,14 +159,17 @@ cons_color = const.BGR['bright_grey']
 arrw_color = const.BGR['bright_blue']
 left_base_x = 37
 right_base_x = 400
-offset_y = 20
+offset_y = 17
 offset_x_emph = 203
 
-curr_y = offset_y
+curr_y = offset_y // 2
 
 all_frames = []
+
 currFrm = BGRFrame.make_black(*DIMS)
-currFrm_with_arr = currFrm.put('\n>>', color = emph_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
+startFrm_with_arr = currFrm.put('\n>>', color = arrw_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
+startFrms_with_arr = BGRFrames.from_frame(startFrm_with_arr, 25)
+all_frames.append(startFrms_with_arr)
 
 for l, p, s in zip(ls, ps, ss):
 
@@ -159,15 +180,24 @@ for l, p, s in zip(ls, ps, ss):
     if p is not None:
         if 'data' in l:
             pos_x = left_base_x + offset_x_emph + 12
-        else:
+        elif 'filter' in l:
             pos_x = left_base_x + offset_x_emph
+        else:
+            pos_x = left_base_x + offset_x_emph - 19
+
+        if 'filter' in l:
+            frame_offset_prev = frame_offset_1
+            frame_offset_post = 1
+        else:
+            frame_offset_prev = frame_offset_2
+            frame_offset_post = 9
 
         emphFrms = typewriter_effect(p, **type_kwargs, overFrm = BGRFrame.make_black(*DIMS),
                                      text_where = (pos_x, curr_y),
                                      text_color = emph_color)
         
-        prevFrms = BGRFrames.from_frame(BGRFrame.make_black(*DIMS), frame_offset)
-        postFrms = BGRFrames.from_frame(emphFrms[-1], 1)
+        prevFrms = BGRFrames.from_frame(BGRFrame.make_black(*DIMS), frame_offset_prev)
+        postFrms = BGRFrames.from_frame(emphFrms[-1], frame_offset_post)
         emphFrms = BGRFrames.from_frames([prevFrms, emphFrms, postFrms])
     else:
         emphFrms = BGRFrames.from_frame(currFrm, outFrms.length())
@@ -196,6 +226,9 @@ for l, p, s in zip(ls, ps, ss):
     all_frames.append(outFrms_with_arr)
     all_frames.append(statFrms_1)
     all_frames.append(statFrms_2_with_arr)
+
+lastFrms = BGRFrames.from_frame(statFrms_2_with_arr[-1], 50)
+all_frames.append(lastFrms)
 
 jointFrms = BGRFrames.from_frames(all_frames)
 # DecapStream(jointFrms, 0, 100).show()
