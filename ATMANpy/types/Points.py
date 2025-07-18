@@ -73,10 +73,16 @@ class Point2D:
         return Point2D((self.x + points, self.y))
     
     def distance_to(self, aPt):
-        x_dist_64 = int(self.x - aPt.x) ### to prevent overflow when squaring.
-        y_dist_64 = int(self.y - aPt.y) ### to prevent overflow when squaring.
+        x_dist_64 = float(self.x - aPt.x) ### to prevent overflow when squaring.
+        y_dist_64 = float(self.y - aPt.y) ### to prevent overflow when squaring.
         res = (x_dist_64 ** 2 + y_dist_64 ** 2) ** 0.5
         return res
+    
+    def length(self):
+        return self.distance_to(Point2D((0, 0)))
+    
+    def normalize(self):
+        return self / self.length()
     
     def conform_to(self, image):
         # force the point to be in bounds
