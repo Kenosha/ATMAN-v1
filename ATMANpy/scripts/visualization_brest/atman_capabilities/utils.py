@@ -206,7 +206,7 @@ def render_many_over_frames(myTabs, myFrms, tlPt = Point2D((0, 0))):
     outFrms = overlay(myFrms, renFrms, top_left_point = tlPt)
     return outFrms
 
-def get_shot_scenes(myPnt, ball_color = const.BGR['ball_yellow'], 
+def get_shot_scenes(myPnt, ball_color = const.BGR['ball_yellow'], net_color = const.BGR['ball_yellow'],
                     mark_size = 2, mark_color = const.BGR['bright_blue']):
     from ATMANpy.types.ShapesTennis3D import Mark
 
@@ -223,7 +223,12 @@ def get_shot_scenes(myPnt, ball_color = const.BGR['ball_yellow'],
             print(f'Frames until next hit: {n}')
             print(f'Shot splines created: {len(shot_splines)}')
 
-        shotScns = [Scene([spln.recolor(ball_color).resize(1.5)]) for spln in shot_splines if spln is not None]
+        if myShot.is_in_net():
+            spline_color = net_color
+        else:
+            spline_color = ball_color
+
+        shotScns = [Scene([spln.recolor(spline_color).resize(1.5)]) for spln in shot_splines if spln is not None]
         ### pad the initial None
         shotScns = [Scene.make_empty(), *shotScns] 
         ### pad the final frames, if splines are nan
@@ -276,10 +281,13 @@ def animate_bounce_and_mark_scenes(myPnt, start_cam, stop_cam, confs,
                                     over = False, over_scale = 3, init_over_dim = 1, last_over_dim = 1,
                                     sub_region = True, region_color = const.BGR['smokey_grey'],
                                     mark_size = 2, mark_color = const.BGR['bright_blue'],
+                                    ball_color = const.BGR['ball_yellow'], net_color = const.BGR['ball_yellow'],
                                     **anim_kwargs):
     from ATMANpy.types.Abstract import Point
 
-    spline_scenes, bounce_scenes = get_shot_scenes(myPnt, mark_size = mark_size, mark_color = mark_color)
+    spline_scenes, bounce_scenes = get_shot_scenes(myPnt, 
+                                                   mark_size = mark_size, mark_color = mark_color,
+                                                   ball_color = ball_color, net_color = net_color)
 
     if over:
         if isinstance(myPnt, Point):
