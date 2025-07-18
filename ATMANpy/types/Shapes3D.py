@@ -511,6 +511,7 @@ class Circle3D(Point3D):
     color: tuple = _DEFAULT_COLOR
     alpha: float = _DEFAULT_ALPHA
     limit_theta: tuple = None
+    start_theta: float = 0 ### this is to start the circle somewhere else than (x, y) = (-1, 0)
     fixed_dimension: str = 'z' ### this is the dimension along which the circle is flat
 
     rot_x: float = 0
@@ -539,12 +540,14 @@ class Circle3D(Point3D):
             return rad_eq and lim_eq and fix_eq
 
     @staticmethod
-    def from_point3D(myPnt, radius = 1, limit_theta = None, fixed_dimension = 'z', name = 'Circle3D', 
+    def from_point3D(myPnt, radius = 1, limit_theta = None, start_theta = 0,
+                     fixed_dimension = 'z', name = 'Circle3D', 
                      rot_x = 0, rot_y = 0, rot_z = 0):
         if limit_theta is None:
             limit_theta = (0, 2 * np.pi)
         return Circle3D(myPnt.coords, color = myPnt.color, alpha = myPnt.alpha,
-                        radius = radius, limit_theta = limit_theta, fixed_dimension = fixed_dimension,
+                        radius = radius, limit_theta = limit_theta, start_theta = start_theta,
+                        fixed_dimension = fixed_dimension,
                         rot_x = rot_x, rot_y = rot_y, rot_z = rot_z,
                         name = name)
 
@@ -565,11 +568,12 @@ class Circle3D(Point3D):
 
         itpl_color = interpolate_tuples(self.color, otherCrc.color, itpl_lambda = itpl_lambda)
         itpl_limit_theta = interpolate_tuples(self.limit_theta, otherCrc.limit_theta, itpl_lambda = itpl_lambda)
+        itpl_start_theta = (1 - itpl_lambda) * self.start_theta + itpl_lambda * otherCrc.start_theta
         itpl_alpha = (1 - itpl_lambda) * self.alpha + itpl_lambda * otherCrc.alpha
         itpl_radius = (1 - itpl_lambda) * self.radius + itpl_lambda * otherCrc.radius
 
         return Circle3D(coords = itpl_coords, color = itpl_color, alpha = itpl_alpha,
-                        radius = itpl_radius, limit_theta = itpl_limit_theta, 
+                        radius = itpl_radius, limit_theta = itpl_limit_theta, start_theta = itpl_start_theta,
                         fixed_dimension = self.fixed_dimension)
 
     def rasterize(self, resolution):
@@ -591,7 +595,7 @@ class Circle3D(Point3D):
         theta_filter = (lo < theta) & (theta < hi)
         
         zeros_filtered = zeros[theta_filter]
-        theta_filtered = theta[theta_filter]
+        theta_filtered = theta[theta_filter] + self.start_theta
         
         if self.fixed_dimension == 'x':
             unit_circle = np.array([zeros_filtered, np.cos(theta_filtered), np.sin(theta_filtered)]).T
