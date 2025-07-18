@@ -299,11 +299,11 @@ class Trajectory:
         x, y, z = itpl_func(x0, x1), net_y, itpl_func(z0, z1)
         return x, y, z
     
-    def get_flight_line(self):
+    def get_flight_line(self, force_l2r = True):
         hit_x, hit_y, _ = self.get_initial_position()
         lst_x, lst_y, _ = self.get_last_hit_position()
 
-        flightLn = Line(Point2D((hit_x, hit_y)), Point2D((lst_x, lst_y)))
+        flightLn = Line(Point2D((hit_x, hit_y)), Point2D((lst_x, lst_y)), force_l2r = force_l2r)
         return flightLn
 
     def get_initial_width(self, courtLines = None):
@@ -858,8 +858,8 @@ class Shot:
     def get_net_crossing_position(self, net_y = 637):
         return self.shotTraj.get_net_crossing_position(net_y = net_y)
     
-    def get_flight_line(self):
-        return self.shotTraj.get_flight_line()
+    def get_flight_line(self, force_l2r = True):
+        return self.shotTraj.get_flight_line(force_l2r = force_l2r)
 
     def get_num_bounces(self):
         return self.shotTraj.get_num_bounces()
