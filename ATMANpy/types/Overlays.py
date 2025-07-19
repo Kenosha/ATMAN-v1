@@ -1457,7 +1457,9 @@ def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = 
     return tabFrm
 
 def typewriter_effect(someStr, frames_per_char = 2,
-                      text_where = (800, 500), text_color = const.BGR['leafy_green'], text_size = 1, text_font = cv.FONT_HERSHEY_PLAIN,
+                      text_where = (800, 500), text_size = 1, text_font = cv.FONT_HERSHEY_PLAIN,
+                      text_color = const.BGR['leafy_green'], secondary_text_color = const.BGR['leafy_green'],
+                      secondary_text_dict = None,
                       overFrm = None,
                       align = 'left', manual_aligners = None):
     if overFrm is None:
@@ -1482,20 +1484,39 @@ def typewriter_effect(someStr, frames_per_char = 2,
 
     out_frames = []
     prev_lines = ['']
-    for idx in range(len(lines)):
-        lineStr = lines[idx]
-        num_spaces = spaces[idx]
+    for line_idx in range(len(lines)):
+        lineStr = lines[line_idx]
+        num_spaces = spaces[line_idx]
 
         remaining_lines = len(lines) - len(prev_lines) + 1
         # prevStr = '\n' * remaining_lines + '\n'.join(prev_lines) 
         prevStr = '\n'.join(prev_lines)
 
+        if secondary_text_dict is None:
+            use_secondary_color = False
+        else:
+            try:
+                secondary_color_position_indices = secondary_text_dict[line_idx]
+            except:
+                use_secondary_color = False
+            else:
+                use_secondary_color = True ### this could still be false, but we need it to be true for a while
+                
         curr_chars = []
-        for curr_char in lineStr:
+        for char_idx, curr_char in enumerate(lineStr):
             curr_chars.append(curr_char)
 
             currStr = ' ' * num_spaces + ''.join(curr_chars)
-            currFrm = overFrm.put(prevStr + '\n' + currStr, where = text_where, color = text_color, size = text_size, font = text_font)
+            
+            if not use_secondary_color:
+                char_color = text_color
+            elif char_idx in secondary_color_position_indices:
+                char_color = secondary_text_color
+            else:
+                char_color = text_color
+                use_secondary_color = False
+                
+            currFrm = overFrm.put(prevStr + '\n' + currStr, where = text_where, color = char_color, size = text_size, font = text_font)
             currFrms = BGRFrames.from_frame(currFrm, frames_per_char)
             out_frames.append(currFrms)
         
