@@ -307,7 +307,7 @@ camEll = Ellipse3D(cnt_3D.coords, radius_short = 2 * w, radius_long = 1.1 * l, r
 
 tstScn = tstScn.combine(courtScn).put(camEll)
 
-View.make(tstCam, tstScn).snap().show()
+# View.make(tstCam, tstScn).snap().show()
 
 ### create camera points from ellipse
 originArr = camEll.rasterize(0.01)
@@ -369,7 +369,26 @@ while fs_frame < num_shot_frames:
     fs_frame = ls_frame
 
 rotFrms = BGRFrames.from_frames(all_frames)
-DecapStream(rotFrms, 0, 100).show()
+# DecapStream(rotFrms, 0, 100).show()
+
+### previous rotations, without ball
+frames_before = 25
+frames_per = 5
+
+cams_before = frames_before // frames_per
+
+curr_cam = cams[-cams_before]
+next_cams = [*cams[-cams_before+1:], cams[0]]
+pre_frames = []
+for next_cam in next_cams:
+    animFrms, animDict = vs.animate_sequence([Scene.make_empty() for _ in range(frames_per)], 
+                                            start_cam = curr_cam, stop_cam = next_cam, 
+                                            **animDict, **prmDict)
+    pre_frames.append(animFrms)
+    curr_cam = next_cam
+
+preFrms = BGRFrames.from_frames(pre_frames)
+# DecapStream(preFrms, 0, 100).show()
 
 ### after the rotations, we take one shots time to move into position for the axis
 
@@ -399,7 +418,7 @@ frm_offset = 4
 frm_grow = 15
 frm_hold = 75
 
-frm_hold_net = frm_hold - frm_grow
+frm_hold_net = frm_hold - frm_grow - frm_offset
 
 shtScns4_pre, shtScns4_post = shtScns4[:frm_offset], shtScns4[frm_offset:]
 shtScns3_pre, shtScns3_post = shtScns3[:frm_offset], shtScns3[frm_offset:]
@@ -656,7 +675,7 @@ axCam1 = get_cam(stopShot1, **cam_kwargs)
 tst_combScn = shtScns4_pre[1].combine(shtScns4_pre[2]).combine(shtScns4_pre[3])
 tstScn = tst_combScn.combine(courtScn)
 tstView = View.make(axCam4, tstScn)
-tstView.snap().show()
+# tstView.snap().show()
 
 moveFrms4, animDict4 = vs.animate_sequence(shtScns_move, start_cam = curr_cam, stop_cam = axCam4,
                                     **animDict, **prmDict)
@@ -668,11 +687,11 @@ itplScns = interpolate_initial_condition_scenes(stopShot4, itpl_frames = frm_gro
 
 tstScn = tst_combScn.combine(courtScn).combine(itplScns[-1])
 tstView = View.make(axCam4, tstScn)
-tstView.snap().show()
+# tstView.snap().show()
 
 growFrms4, animDict4b = vs.animate_sequence(itplScns, start_cam = axCam4, stop_cam = axCam4,
                                             **animDict4a, **prmDict_no_cum)
-DecapStream(growFrms4, 0, 100).show()
+# DecapStream(growFrms4, 0, 100).show()
 
 ### add held frames with annotated points
 
@@ -683,29 +702,30 @@ stopFrms4, animDict4c = vs.animate_static(itplScns[-1], static_cam = axCam4,
                                             annotated_points = annPnts,
                                             **animDict4b, **prmDict_static)
 
-jointFrms4 = BGRFrames.from_frames([moveFrms4, holdFrms4, growFrms4, stopFrms4])
-DecapStream(jointFrms4, 0, 100).show()
-
 ### move on to next shot
 moveFrms3, animDict3 = vs.animate_sequence(shtScns4, start_cam = axCam4, stop_cam = axCam3,
                                            **animDict4c, **prmDict,
                                            stop_earlier = 3)
 
+
+jointFrms4 = BGRFrames.from_frames([holdFrms4, growFrms4, stopFrms4, moveFrms3])
+# DecapStream(jointFrms4, 0, 100).show()
+
 holdFrms3, animDict3a = vs.animate_sequence(shtScns3_pre, start_cam = axCam3, stop_cam = axCam3,
                                             **prmDict)
 
-DecapStream(holdFrms3, 0, 100).show()
+# DecapStream(holdFrms3, 0, 100).show()
 
 
 itplScns = interpolate_initial_condition_scenes(stopShot3, itpl_frames = frm_grow)
 
 tstScn = tst_combScn.combine(courtScn).combine(itplScns[-1])
 tstView = View.make(axCam3, tstScn)
-tstView.snap().show()
+# tstView.snap().show()
 
 growFrms3, animDict3b = vs.animate_sequence(itplScns, start_cam = axCam3, stop_cam = axCam3,
                                             **animDict3a, **prmDict_no_cum)
-DecapStream(growFrms3, 0, 100).show()
+# DecapStream(growFrms3, 0, 100).show()
 
 annPnts = make_annotated_points(stopShot3, 
                                 desc_offset_back = -10, 
@@ -718,12 +738,12 @@ stopFrms3, animDict3c = vs.animate_static(itplScns[-1], static_cam = axCam3,
                                             annotated_points = annPnts,
                                             **animDict3b, **prmDict_static)
 
-jointFrms3 = BGRFrames.from_frames([moveFrms3, holdFrms3, growFrms3, stopFrms3])
-DecapStream(jointFrms3, 0, 100).show()
-
 ### and the next
 moveFrms2, _ = vs.animate_sequence(shtScns3, start_cam = axCam3, stop_cam = axCam2,
                                    **animDict3c, **prmDict)
+
+jointFrms3 = BGRFrames.from_frames([holdFrms3, growFrms3, stopFrms3, moveFrms2])
+# DecapStream(jointFrms3, 0, 100).show()
 
 holdFrms2, animDict2a = vs.animate_sequence(shtScns2_pre, start_cam = axCam2, stop_cam = axCam2,
                                             **prmDict)
@@ -732,7 +752,7 @@ itplScns = interpolate_initial_condition_scenes(stopShot2, itpl_frames = frm_gro
 
 growFrms2, animDict2b = vs.animate_sequence(itplScns, start_cam = axCam2, stop_cam = axCam2,
                                             **animDict2a, **prmDict_no_cum)
-DecapStream(growFrms2, 0, 100).show()
+# DecapStream(growFrms2, 0, 100).show()
 
 ### add held frames with annotated points
 
@@ -746,26 +766,27 @@ stopFrms2, animDict2c = vs.animate_static(itplScns[-1], static_cam = axCam2,
                                             num_frames = frm_hold_net,
                                             annotated_points = annPnts,
                                             **animDict2b, **prmDict_static)
-stopFrms2[-1].show()
+# stopFrms2[-1].show()
 
-jointFrms2 = BGRFrames.from_frames([moveFrms2, holdFrms2, growFrms2, stopFrms2])
-DecapStream(jointFrms2, 0, 100).show()
 
 ### and the last
 moveFrms1, _ = vs.animate_sequence(shtScns2, start_cam = axCam2, stop_cam = axCam1,
                                            **animDict2c, **prmDict,
                                            stop_earlier = 3)
 
+jointFrms2 = BGRFrames.from_frames([holdFrms2, growFrms2, stopFrms2, moveFrms1])
+# DecapStream(jointFrms2, 0, 100).show()
+
 holdFrms1, animDict1a = vs.animate_sequence(shtScns1_pre, start_cam = axCam1, stop_cam = axCam1,
                                             **prmDict)
 
-DecapStream(holdFrms1, 0, 100).show()
+# DecapStream(holdFrms1, 0, 100).show()
 
 itplScns = interpolate_initial_condition_scenes(stopShot1, itpl_frames = frm_grow)
 
 growFrms1, animDict1b = vs.animate_sequence(itplScns, start_cam = axCam1, stop_cam = axCam1,
                                             **animDict1a, **prmDict_no_cum)
-DecapStream(growFrms1, 0, 100).show()
+# DecapStream(growFrms1, 0, 100).show()
 
 annPnts = make_annotated_points(stopShot1, 
                                 desc_offset_back = -10, 
@@ -778,11 +799,34 @@ stopFrms1, animDict1c = vs.animate_static(itplScns[-1], static_cam = axCam1,
                                             annotated_points = annPnts,
                                             **animDict1b, **prmDict_static)
 
-jointFrms1 = BGRFrames.from_frames([moveFrms1, holdFrms1, growFrms1, stopFrms1])
-DecapStream(jointFrms1, 0, 100).show()
+axCam0 = axCam1.right(45)
 
-jointFrms = BGRFrames.from_frames([jointFrms4, jointFrms3, jointFrms2, jointFrms1])
-DecapStream(jointFrms, 0, 100).show()
+prmDict_final = {**prmDict}
+prmDict_final['cumulative_foreground_transparence'] = 1
+
+moveFrms0, _ = vs.animate_sequence(shtScns1, start_cam = axCam1, stop_cam = axCam0,
+                                           **animDict1c, **prmDict_final,
+                                           stop_earlier = 20)
+# DecapStream(moveFrms0, 0, 100).show()
+
+jointFrms1 = BGRFrames.from_frames([holdFrms1, growFrms1, stopFrms1, moveFrms0])
+# DecapStream(jointFrms1, 0, 100).show()
+
+
+startstopFrms = BGRFrames.from_frames([jointFrms4, jointFrms3, jointFrms2, jointFrms1])
+# DecapStream(startstopFrms, 0, 100).show()
+
+
+#### after -> 50 frames to move back to starting position
+
+postFrms, _ = vs.animate_sequence([Scene.make_empty() for _ in range(50)],
+                                  start_cam = axCam0, stop_cam = cams[-cams_before],
+                                  **prmDict)
+DecapStream(postFrms, 0, 100).show()
+
+virtualFrms = BGRFrames.from_frames([preFrms, rotFrms, moveFrms4, startstopFrms, postFrms])
+# DecapStream(virtualFrms, 0, 100).show()
+
 
 ############################
 #### THE MAIN ANIMATION ####
@@ -917,7 +961,13 @@ jointFrms = BGRFrames.from_frames([fsFrms, animFrms_pre,
                                    combFrms4_joint, combFrms3_joint, combFrms2_joint, combFrms1_joint,
                                    lsFrms_with_marks, transFrms])
 
+### check the lengths
+
+animFrms_pre.length() + combFrms4_joint.length() + combFrms3_joint.length() +  combFrms2_joint.length() + combFrms1_joint.length()
+
+rotFrms.length() + moveFrms4.length() + startstopFrms.length()
+
 # DecapStream(jointFrms, 0, 100).show()
 
-lsFrms[-1].show()
+# lsFrms[-1].show()
 
