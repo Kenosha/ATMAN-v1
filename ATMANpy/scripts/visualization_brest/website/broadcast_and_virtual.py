@@ -74,169 +74,6 @@ allPnts = dataPnts.join(nullPnts).sort()
 
 DIMS = (1920 // 3, 1080 // 3)
 
-### FILTER ANIMATION
-import ATMANpy.funcs.filter_shots_funcs as filt_s
-import ATMANpy.funcs.filter_points_funcs as filt_p
-
-def is_tracked(somePnt):
-    return not isinstance(somePnt, NullPoint)
-
-def is_returned_by(somePnt, name):
-    return filt_p.is_returner(somePnt, name = name) and filt_p.is_longer_than(somePnt, threshold = 1)
-
-def is_first_serve(somePnt):
-    return somePnt.is_first_serve()
-
-def is_serve_ad(somePnt):
-    return somePnt.is_serve_ad()
-
-def is_serve_out_wide(somePnt):
-    return filt_p.is_serve_out_wide(somePnt)
-
-def summ_pnts(somePnts):
-    return f'{len(somePnts)} points available.'
-
-def summ_pnts2(somePnts):
-    return f'{len(somePnts)} points remaining.'
-
-allPnts
-s1 = summ_pnts(allPnts)
-trackPnts = allPnts.filter(is_tracked)
-s2 = summ_pnts2(trackPnts)
-filtPnts = trackPnts.filter(is_returned_by, name = 'Brandon Nakashima')
-s3 = summ_pnts2(filtPnts)
-filtPnts = filtPnts.filter(is_first_serve)
-winArr = vis_ut.get_winners_from_score(filtPnts, allPnts)
-decArr = winArr != 0
-filtPnts = filtPnts.filter(decArr)
-s4 = summ_pnts2(filtPnts)
-filtPnts = filtPnts.filter(is_serve_ad)
-s5 = summ_pnts2(filtPnts)
-filtPnts = filtPnts.filter(is_serve_out_wide)
-s6 = summ_pnts2(filtPnts)
-
-
-velo = filtPnts.get_returns().get_initial_speed().mean()
-spin = filtPnts.get_returns().get_initial_spin().mean()
-
-s7 = f'{velo:.0f} km/h'
-s8 = f'{spin:.0f} rpm'
-
-ss = [s1, s3, s4, s5, s6, s7, s8]
-
-p1 = None
-# p2 = 'is_tracked'
-p3 = 'is_returned_by, "Brandon Nakashima"'
-p4 = 'is_first_serve'
-p5 = 'is_serve_ad'
-p6 = 'is_serve_out_wide'
-
-p7 = 'get_initial_speed'
-p8 = 'get_initial_spin'
-
-ps = [p1, p3, p4, p5, p6, p7, p8]
-
-
-l1 = 'dataPnts'
-# l2 = f'filtPnts = dataPnts.filter({p2})'
-l3 = f'filtPnts = filtPnts.filter({p3})'
-l4 = f'filtPnts = filtPnts.filter({p4})'
-l5 = f'filtPnts = filtPnts.filter({p5})'
-l6 = f'filtPnts = filtPnts.filter({p6})'
-
-l7 = f'filtPnts.get_returns().{p7}().mean()'
-l8 = f'filtPnts.get_returns().{p8}().mean()'
-
-ls = [l1, l3, l4, l5, l6, l7, l8]
-
-frame_offset_1 = len('filtPnts = filtPnts.filter(')
-frame_offset_2 = len('filtPnts.get_returns().')
-
-from ATMANpy.types.Overlays import typewriter_effect
-import cv2 as cv
-
-type_kwargs = {'frames_per_char': 1, 'text_size': 1, 'text_font': cv.FONT_HERSHEY_PLAIN}
-code_color = (0, 255, 0) #const.BGR['leafy_green']
-emph_color = const.BGR['soft_yellow']
-cons_color = const.BGR['bright_grey']
-arrw_color = const.BGR['bright_blue']
-left_base_x = 37
-right_base_x = 400
-offset_y = 17
-offset_x_emph = 203
-
-curr_y = offset_y // 2
-
-all_frames = []
-
-currFrm = BGRFrame.make_black(*DIMS)
-startFrm_with_arr = currFrm.put('\n>>', color = arrw_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
-startFrms_with_arr = BGRFrames.from_frame(startFrm_with_arr, 25)
-all_frames.append(startFrms_with_arr)
-
-for l, p, s in zip(ls, ps, ss):
-
-    outFrms = typewriter_effect(l, **type_kwargs, overFrm = currFrm, 
-                                text_where = (left_base_x, curr_y), 
-                                text_color = code_color)
-    
-    if p is not None:
-        if 'data' in l:
-            pos_x = left_base_x + offset_x_emph + 12
-        elif 'filter' in l:
-            pos_x = left_base_x + offset_x_emph
-        else:
-            pos_x = left_base_x + offset_x_emph - 19
-
-        if 'filter' in l:
-            frame_offset_prev = frame_offset_1
-            frame_offset_post = 1
-        else:
-            frame_offset_prev = frame_offset_2
-            frame_offset_post = 9
-
-        emphFrms = typewriter_effect(p, **type_kwargs, overFrm = BGRFrame.make_black(*DIMS),
-                                     text_where = (pos_x, curr_y),
-                                     text_color = emph_color)
-        
-        prevFrms = BGRFrames.from_frame(BGRFrame.make_black(*DIMS), frame_offset_prev)
-        postFrms = BGRFrames.from_frame(emphFrms[-1], frame_offset_post)
-        emphFrms = BGRFrames.from_frames([prevFrms, emphFrms, postFrms])
-    else:
-        emphFrms = BGRFrames.from_frame(currFrm, outFrms.length())
-
-    outFrms = outFrms + emphFrms
-    outFrms_with_arr = outFrms.put('\n>>', color = arrw_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
-
-    currFrm = outFrms[-1]
-
-    curr_y += offset_y
-    
-    statFrms_1 = BGRFrames.from_frame(currFrm, 5)
-
-    outFrms = typewriter_effect(f'{s:>25}', **type_kwargs, overFrm = currFrm, 
-                                text_where = (right_base_x, curr_y), text_color = cons_color)
-    statFrms_2 = BGRFrames.from_frame(outFrms[-1], 15)
-
-    currFrm = statFrms_2[-1]
-    
-    curr_y += 2 * offset_y
-    
-    statFrms_1_with_arr = statFrms_1.put('\n>>', color = arrw_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
-    statFrms_2_with_arr = statFrms_2.put('\n>>', color = arrw_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
-
-    ### add little arrows for line indicator
-    all_frames.append(outFrms_with_arr)
-    all_frames.append(statFrms_1)
-    all_frames.append(statFrms_2_with_arr)
-
-lastFrms = BGRFrames.from_frame(statFrms_2_with_arr[-1], 50)
-all_frames.append(lastFrms)
-
-jointFrms = BGRFrames.from_frames(all_frames)
-# DecapStream(jointFrms, 0, 100).show()
-# jointFrms[-1].show()
-
 ####################
 #### 3D Engine #####
 ####################
@@ -244,7 +81,7 @@ jointFrms = BGRFrames.from_frames(all_frames)
 from ATMANpy.types.ShapesTennis3D import Net
 net_color = const.BGR['smokey_grey']
 net_alpha = 0.75
-net_mesh_density = 0.65
+net_mesh_density = 3
 
 line_color = const.BGR['bright_grey']
 
@@ -310,13 +147,18 @@ tstScn = tstScn.combine(courtScn).put(camEll)
 # View.make(tstCam, tstScn).snap().show()
 
 ### create camera points from ellipse
-originArr = camEll.rasterize(0.01)
+originArr = camEll.rasterize(0.0075)
 originPts = [Point3D(tuple(coords)) for coords in originArr]
 cams = [Camera.from_to(origPt, cnt_3D).resize(1/3).zoom(1.2) for origPt in originPts]
 
-
-prmDict = {'foreground_resolution': 1, 'background_resolution': 1, 'argument_resolution': 1,
+res = 5
+prmDict = {'foreground_resolution': 0.35 * res, 'background_resolution': res, 'argument_resolution': 0.4 * res,
            'cumulative_foreground_transparence': 0.8, 'cumulate_argument': True,
+           'background_scene': courtScn, 'interpolate_func': vs.interpolate_camera_naive}
+
+res = 13
+prmDict = {'foreground_resolution': res, 'background_resolution': res, 'argument_resolution': res,
+           'cumulative_foreground_transparence': 0.9, 'cumulate_argument': True,
            'background_scene': courtScn, 'interpolate_func': vs.interpolate_camera_naive}
 
 prmDict_no_cum = {**prmDict}
@@ -347,29 +189,11 @@ shtScns, bncScns = vis_ut.get_shot_scenes(  prevPnt2[:-5],
 num_shot_frames = len(shtScns)
 
 num_rotations = 2
-increase_rot_frames_by = 1
+increase_rot_frames_by = 2
 
 rot_frames = num_shot_frames // (num_rotations * num_cams) + increase_rot_frames_by
 
 animDict = {}
-all_frames = []
-
-fs_frame = 0
-while fs_frame < num_shot_frames:
-    ls_frame = min(fs_frame + rot_frames, num_shot_frames)
-
-    next_cam = next(cam_cycle)
-
-    animFrms, animDict = vs.animate_sequence(shtScns[fs_frame:ls_frame], 
-                                            start_cam = curr_cam, stop_cam = next_cam, 
-                                            **animDict, **prmDict)
-    all_frames.append(animFrms)
-
-    curr_cam = next_cam
-    fs_frame = ls_frame
-
-rotFrms = BGRFrames.from_frames(all_frames)
-# DecapStream(rotFrms, 0, 100).show()
 
 ### previous rotations, without ball
 frames_before = 25
@@ -389,6 +213,26 @@ for next_cam in next_cams:
 
 preFrms = BGRFrames.from_frames(pre_frames)
 # DecapStream(preFrms, 0, 100).show()
+
+all_frames = []
+
+fs_frame = 0
+while fs_frame < num_shot_frames:
+    ls_frame = min(fs_frame + rot_frames, num_shot_frames)
+
+    next_cam = next(cam_cycle)
+
+    animFrms, animDict = vs.animate_sequence(shtScns[fs_frame:ls_frame], 
+                                            start_cam = curr_cam, stop_cam = next_cam, 
+                                            **animDict, **prmDict)
+    all_frames.append(animFrms)
+
+    curr_cam = next_cam
+    fs_frame = ls_frame
+
+rotFrms = BGRFrames.from_frames(all_frames)
+# DecapStream(rotFrms, 0, 100).show()
+
 
 ### after the rotations, we take one shots time to move into position for the axis
 
@@ -432,7 +276,7 @@ shtScns1_pre_hold = [*shtScns1_pre, *[shtScns1_pre[-1] for _ in range(frm_grow -
 
 someShot = stopShot4
 
-def get_cam(someShot, x_off = 20, y_off = 20, shift_target_point = False,
+def get_cam(someShot, x_off = 20, y_off = 20, z_off = 0, shift_target_point = False,
             zoom_factor = 1):
     hitPt = Point3D(someShot.get_ball_hit_position())
     side = someShot.get_hit_side()
@@ -443,9 +287,9 @@ def get_cam(someShot, x_off = 20, y_off = 20, shift_target_point = False,
 
     fromPt = hitPt.right(x_off).front(offset)
     if shift_target_point:
-        toPt = hitPt.front(offset)
+        toPt = hitPt.front(offset).up(z_off)
     else:
-        toPt = hitPt
+        toPt = hitPt.up(z_off)
     return Camera.from_to(fromPt, toPt).resize(1/3).zoom(zoom_factor)
 
 def get_axes(someShot):
@@ -506,10 +350,9 @@ def get_angle(someShot):
 
     return degCrc, nullCrc
 
-def get_speed(someShot):
+def get_speed(someShot, rot_angle = np.pi / 2):
     hat_length = 4
     arr_length = 50
-    rot_angle = np.pi / 2
     arr_color = const.BGR['bright_blue']
     arr_thickness = 0.1
 
@@ -566,13 +409,13 @@ def get_spin(someShot):
 
     return degCrc, nullCrc
 
-def interpolate_initial_condition_scenes(someShot, itpl_frames = 25):     
+def interpolate_initial_condition_scenes(someShot, itpl_frames = 25, rot_angle = np.pi / 2):     
     crc_arr_share = 0.1
 
     hit_side = someShot.get_hit_side()
 
     degCrc, degCrc_null = get_angle(someShot)
-    velArr, velArr_null = get_speed(someShot)
+    velArr, velArr_null = get_speed(someShot, rot_angle = rot_angle)
     rpmCrc, rpmCrc_null = get_spin(someShot)
 
     fullScn = Scene([degCrc, velArr, rpmCrc])
@@ -664,13 +507,15 @@ def make_annotated_points(someShot,
     annPnts = [descPt, velPt, rpmPt, angPt]
     return annPnts
 
-cam_kwargs = {'x_off': 50, 'y_off': -25, 'shift_target_point': True, 'zoom_factor': 1}
-cam_kwargs = {'x_off': 100, 'y_off': -25, 'shift_target_point': True, 'zoom_factor': 1.5}
+# cam_kwargs = {'x_off': 50, 'y_off': -25, 'z_off': 10, 'shift_target_point': True, 'zoom_factor': 1}
+cam_kwargs = {'x_off': 100, 'y_off': -25, 'z_off': 10, 'shift_target_point': True, 'zoom_factor': 1.5}
+cam_kwargs_last = {**cam_kwargs}
+cam_kwargs_last['z_off'] = -5
 
 axCam4 = get_cam(stopShot4, **cam_kwargs)
 axCam3 = get_cam(stopShot3, **cam_kwargs)
 axCam2 = get_cam(stopShot2, **cam_kwargs)
-axCam1 = get_cam(stopShot1, **cam_kwargs)
+axCam1 = get_cam(stopShot1, **cam_kwargs_last)
 
 tst_combScn = shtScns4_pre[1].combine(shtScns4_pre[2]).combine(shtScns4_pre[3])
 tstScn = tst_combScn.combine(courtScn)
@@ -695,7 +540,7 @@ growFrms4, animDict4b = vs.animate_sequence(itplScns, start_cam = axCam4, stop_c
 
 ### add held frames with annotated points
 
-annPnts = make_annotated_points(stopShot4)
+annPnts = make_annotated_points(stopShot4, ang_offset_up = -1)
 
 stopFrms4, animDict4c = vs.animate_static(itplScns[-1], static_cam = axCam4,
                                             num_frames = frm_hold_net,
@@ -782,15 +627,15 @@ holdFrms1, animDict1a = vs.animate_sequence(shtScns1_pre, start_cam = axCam1, st
 
 # DecapStream(holdFrms1, 0, 100).show()
 
-itplScns = interpolate_initial_condition_scenes(stopShot1, itpl_frames = frm_grow)
+itplScns = interpolate_initial_condition_scenes(stopShot1, itpl_frames = frm_grow, rot_angle = np.pi)
 
 growFrms1, animDict1b = vs.animate_sequence(itplScns, start_cam = axCam1, stop_cam = axCam1,
                                             **animDict1a, **prmDict_no_cum)
 # DecapStream(growFrms1, 0, 100).show()
 
 annPnts = make_annotated_points(stopShot1, 
-                                desc_offset_back = -10, 
-                                vel_offset_back = -15, vel_offset_up = 18,
+                                desc_offset_back = -10, desc_offset_up = 22,
+                                vel_offset_back = -15, vel_offset_up = 12,
                                 spin_offset_back = 23, spin_offset_up = -1,
                                 ang_offset_back = -37, ang_offset_up = -5)
 
@@ -798,6 +643,7 @@ stopFrms1, animDict1c = vs.animate_static(itplScns[-1], static_cam = axCam1,
                                             num_frames = frm_hold_net,
                                             annotated_points = annPnts,
                                             **animDict1b, **prmDict_static)
+# stopFrms1[-1].show()
 
 axCam0 = axCam1.right(45)
 
@@ -822,7 +668,7 @@ startstopFrms = BGRFrames.from_frames([jointFrms4, jointFrms3, jointFrms2, joint
 postFrms, _ = vs.animate_sequence([Scene.make_empty() for _ in range(50)],
                                   start_cam = axCam0, stop_cam = cams[-cams_before],
                                   **prmDict)
-DecapStream(postFrms, 0, 100).show()
+# DecapStream(postFrms, 0, 100).show()
 
 virtualFrms = BGRFrames.from_frames([preFrms, rotFrms, moveFrms4, startstopFrms, postFrms])
 # DecapStream(virtualFrms, 0, 100).show()
@@ -865,25 +711,25 @@ skip_px = 18
 
 fullFrms_hi0 = vis_ut.make_point_descriptor_box(prevPnt2, dims = (cols, rows), origin = (o_x, o_y), 
                                                 para_px = para_px, skip_px = skip_px,
-                                                highlight_which = 0,
+                                                highlight_which = 0, highlight_color = const.BGR['ball_yellow'],
                                                 back_color = back_color, text_color = (255, 255, 255), text_size = 1,
                                                 border_color = const.BGR['bright_grey'], border_thickness = 2)
 
 fullFrms_hi1 = vis_ut.make_point_descriptor_box(prevPnt2, dims = (cols, rows), origin = (o_x, o_y), 
                                                 para_px = para_px, skip_px = skip_px,
-                                                highlight_which = 1,
+                                                highlight_which = 0, highlight_color = const.BGR['ball_yellow'],
                                                 back_color = back_color, text_color = (255, 255, 255), text_size = 1,
                                                 border_color = const.BGR['bright_grey'], border_thickness = 2)
 
 fullFrms_hi2 = vis_ut.make_point_descriptor_box(prevPnt2, dims = (cols, rows), origin = (o_x, o_y), 
                                                 para_px = para_px, skip_px = skip_px,
-                                                highlight_which = 2,
+                                                highlight_which = 0, highlight_color = const.BGR['ball_yellow'],
                                                 back_color = back_color, text_color = (255, 255, 255), text_size = 1,
                                                 border_color = const.BGR['bright_grey'], border_thickness = 2)
 
 fullFrms_hi3 = vis_ut.make_point_descriptor_box(prevPnt2, dims = (cols, rows), origin = (o_x, o_y), 
                                                 para_px = para_px, skip_px = skip_px,
-                                                highlight_which = 3,
+                                                highlight_which = 0, highlight_color = const.BGR['intense_red'],
                                                 back_color = back_color, text_color = (255, 255, 255), text_size = 1,
                                                 border_color = const.BGR['bright_grey'], border_thickness = 2)
 
@@ -909,10 +755,10 @@ stopFrms3 = animFrms2[frm3:frm2]
 stopFrms2 = animFrms2[frm2:frm1]
 stopFrms1 = animFrms2[frm1:]
 
-combFrms4 = overlay(stopFrms4.dim(dim_factor), fullFrm4, top_left_point = Point2D((550, 20)))
-combFrms3 = overlay(stopFrms3.dim(dim_factor), fullFrm3, top_left_point = Point2D((600, 270)))
-combFrms2 = overlay(stopFrms2.dim(dim_factor), fullFrm2, top_left_point = Point2D((550, 20)))
-combFrms1 = overlay(stopFrms1.dim(dim_factor), fullFrm1, top_left_point = Point2D((650, 270)))
+combFrms4 = overlay(stopFrms4.dim(dim_factor), fullFrm4, top_left_point = Point2D((600, 20)))
+combFrms3 = overlay(stopFrms3.dim(dim_factor), fullFrm3, top_left_point = Point2D((650, 270)))
+combFrms2 = overlay(stopFrms2.dim(dim_factor), fullFrm2, top_left_point = Point2D((600, 20)))
+combFrms1 = overlay(stopFrms1.dim(dim_factor), fullFrm1, top_left_point = Point2D((675, 270)))
 
 combFrms4_freeze = BGRFrames.from_frame(combFrms4[0], 75)
 combFrms3_freeze = BGRFrames.from_frame(combFrms3[0], 75)
@@ -966,6 +812,8 @@ jointFrms = BGRFrames.from_frames([fsFrms, animFrms_pre,
 animFrms_pre.length() + combFrms4_joint.length() + combFrms3_joint.length() +  combFrms2_joint.length() + combFrms1_joint.length()
 
 rotFrms.length() + moveFrms4.length() + startstopFrms.length()
+
+### TODO: put boxes on the same x-coordinate -> no jumping left and right!
 
 # DecapStream(jointFrms, 0, 100).show()
 
