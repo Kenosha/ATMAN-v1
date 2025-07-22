@@ -417,10 +417,10 @@ class Stream:
         frmList = []
         while True:
             sendFrm = drawFunc({'cFrm': myFrm}, myDict) ### TODO: Clean this up! myFrm is not always cFrm!
-                 
+            frmList.append(sendFrm)
+
             try:
-                frmNum, myFrm, myDict = gen.send(sendFrm)
-                frmList.append(sendFrm)
+                frmNum, myFrm, myDict = gen.send(sendFrm)    
             except StopIteration:
                 cv.destroyAllWindows()
                 break 
