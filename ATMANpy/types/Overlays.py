@@ -180,7 +180,7 @@ class Graph:
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
                  header_size = 1, header_height = 1, graph_height = 9, z_epsilon = 0.01,
                  cam = None, render_height = 100, dimensions = (600, 400), resolution = 10, 
-                 max_y_override = None):
+                 max_y_override = None, cam_reg_override = None):
         ### TODO: add axis labels (y-axis vertical! how?)
         self.charts = charts
         self.color = color
@@ -221,7 +221,10 @@ class Graph:
         self.resolution = resolution
 
         ### Graph Regions
-        camReg = cam.approximate_fov(render_height)
+        if cam_reg_override is None:
+            camReg = cam.approximate_fov(render_height)
+        else:
+            camReg = cam_reg_override
         headerReg, otherReg = camReg.split(numerator = header_height, denominator = graph_height, how = 'horizontal')
         self.headerReg = headerReg
         self.otherReg = otherReg
