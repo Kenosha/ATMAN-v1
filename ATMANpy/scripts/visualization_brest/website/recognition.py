@@ -119,9 +119,10 @@ all_frames = []
 
 ##### NOTES
 # court, net and players have to be breathing in and out of the thing with a fade
+initial_frames = 100
 dim_factor = 0.25
 myStm = myPnt.stream(confs = confs)
-myDtm = myStm.widen(100).decap()
+myDtm = myStm.widen(initial_frames).decap()
 stream_start = myDtm.start_frame
 
 
@@ -915,11 +916,11 @@ res = 1
 prmDict = {'foreground_resolution': res, 'background_resolution': res, 'argument_resolution': res,
            'cumulative_foreground_transparence': 0.9, 'cumulate_argument': True,}
 
-trajFrms, _ = vs.animate_sequence(shtScns, 
-                                   start_cam = Camera.calibrated_brest_behind(), 
-                                   stop_cam = Camera.calibrated_brest_behind(),
-                                   animate_over = lstFrms,
-                                    **prmDict)
+trajFrms, animDict = vs.animate_sequence(shtScns, 
+                                        start_cam = Camera.calibrated_brest_behind(), 
+                                        stop_cam = Camera.calibrated_brest_behind(),
+                                        animate_over = lstFrms,
+                                        **prmDict)
 
 trajFrms_ovl1 = trajFrms[:overlap_frames_curr]
 trajFrms_main = trajFrms[overlap_frames_curr:-overlap_frames_next]
@@ -933,6 +934,25 @@ trajFrms = typewriter_with_ellipses(text, trajFrms)
 DecapStream(trajFrms, 0, 100).show()
 
 all_frames.append(trajFrms)
+
+### transition to beginning
+transition_frames = 25
+lsFrms = myStm.widen(transition_frames).decap().frames[-transition_frames:]
+fsFrms = myStm.widen(transition_frames + initial_frames).decap().frames[:transition_frames]
+
+lsFrms_with_fading, _ = vs.animate_sequence([Scene.make_empty() for _ in range(transition_frames)],
+                                            start_cam = Camera.calibrated_brest_behind(), 
+                                            stop_cam = Camera.calibrated_brest_behind(),
+                                            animate_over = lsFrms.dim(dim_factor),
+                                            **animDict,
+                                            **prmDict)
+
+DecapStream(lsFrms_with_fading, 0, 100).show()
+
+transFrms = lsFrms_with_fading.dim_progressively(1, 0) + fsFrms.dim_progressively(0, 1)
+DecapStream(transFrms, 0, 100).show()
+
+all_frames.append(transFrms)
 
 vis_ut.show(all_frames)
 
