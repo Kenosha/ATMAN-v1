@@ -9,7 +9,7 @@ from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
 from ATMANpy.types.ShapesTennis3D import Arrow
 
 from ATMANpy.types.Frames import Frame, BGRFrame
-from ATMANpy.types.MultiFrames import BGRFrames
+from ATMANpy.types.MultiFrames import Frames, BGRFrames
 
 import ATMANpy.auxil.constants as const
 import ATMANpy.funcs.util_funcs as ut
@@ -1467,7 +1467,7 @@ def typewriter_effect(someStr, frames_per_char = 2,
                       align = 'left', manual_aligners = None):
     if overFrm is None:
         overFrm = BGRFrame.make_black()
-    
+
     lines = someStr.split('\n')
 
     ### figure out how to center text
@@ -1485,8 +1485,14 @@ def typewriter_effect(someStr, frames_per_char = 2,
     if manual_aligners is not None:
         spaces = [s + m for s, m in zip(spaces, manual_aligners)]
 
+    if isinstance(overFrm, Frame):
+        over_frames = [overFrm]
+    elif isinstance(overFrm, Frames):
+        over_frames = [overFrm for overFrm in overFrm]
+
     out_frames = []
     prev_lines = ['']
+    curr_idx = 0
     for line_idx in range(len(lines)):
         lineStr = lines[line_idx]
         num_spaces = spaces[line_idx]
@@ -1518,14 +1524,26 @@ def typewriter_effect(someStr, frames_per_char = 2,
             else:
                 char_color = text_color
                 use_secondary_color = False
-                
-            currFrm = overFrm.put(prevStr + '\n' + currStr, where = text_where, color = char_color, size = text_size, font = text_font)
+            
+            try:
+                curr_overFrm = over_frames[curr_idx]
+            except IndexError:
+                curr_overFrm = over_frames[-1]
+
+            currFrm = curr_overFrm.put(prevStr + '\n' + currStr, where = text_where, color = char_color, size = text_size, font = text_font)
             currFrms = BGRFrames.from_frame(currFrm, frames_per_char)
+            
             out_frames.append(currFrms)
+            curr_idx += 1
         
         prev_lines.append(currStr)
+
+    typedFrms = BGRFrames.from_frames(out_frames)
+    untypedFrms = BGRFrames.from_single_frames(over_frames[curr_idx:]).put(prevStr + '\n' + currStr,
+                                                                           where = text_where, color = char_color, 
+                                                                           size = text_size, font = text_font)
     
-    return BGRFrames.from_frames(out_frames)
+    return typedFrms.join(untypedFrms)
 
 
 if __name__ == '__main__':
