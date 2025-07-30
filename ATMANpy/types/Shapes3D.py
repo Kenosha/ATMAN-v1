@@ -698,7 +698,7 @@ class Ellipse3D(Point3D):
     @classmethod
     def get_container(cls):
         # return Circles3D
-        pass
+        return Ellipses3D
 
     ### METHODS ###
     def get_point(self):
@@ -1791,6 +1791,18 @@ class Circles3D(Container3D):
         coordArr = np.array([myCrc.coords for myCrc in self])
         return Circle3D(coordArr.T, color = self.color, alpha = self.alpha, 
                         radius = canonical_radius, limit_theta = canonical_limit_theta)
+    
+@dataclass(frozen = True, eq = False)
+class Ellipses3D(Container3D):
+    """
+    A list of Ellipses3D
+    """
+
+    name: str = 'Ellipseses3D'
+    
+    @classmethod
+    def get_constituent(cls):
+        return Ellipse3D
     
 
 @dataclass(frozen = True, eq = False)
