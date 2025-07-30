@@ -36,6 +36,18 @@ from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 from ATMANpy.types.Overlays import typewriter_effect
 import cv2 as cv
 
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'recognition'
+SAVE_FOLDER = 'website_snippets'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
 #############################
 #### READ IN CONFIGS ########
 #############################
@@ -111,6 +123,15 @@ segBFs = segBF.filter(segBF).split()
 # -> then, as the serve + 1 is hit, we freeze on the player, 
 #           display the shot info, and show the trajectory as it develops. 
 
+
+# TODO:
+# text closer to left edge
+# collecting ball candidates could be a bit faster
+# smoothing ball candidates could be a bit faster
+# speed changes in the ball part a bit too hectic
+# ball tracking a bit too fast, smoothing ball tracking a bit too slow
+# transition is too fast at the end.
+
 mtc_idx, pnt_idx = 0, 111 ### the first point of atman short intro video
 myPnt = allPnts.get(mtc_idx, pnt_idx)
 seg_idx = 112
@@ -132,7 +153,11 @@ line_color = const.BGR['rose_orange']
 net_color = const.BGR['salmon_pink']
 player_color = const.BGR['strong_pink']
 
-type_kwargs = {'frames_per_char': 1, 'text_where': (30, 15), 'text_size': 1, 
+cand_color = const.BGR['fair_yellow']
+kita_color = const.BGR['soft_yellow']
+ball_color = const.BGR['ball_yellow']
+
+type_kwargs = {'frames_per_char': 1, 'text_where': (15, 15), 'text_size': 1, 
                'text_font': cv.FONT_HERSHEY_PLAIN, 'text_color': const.BGR['leafy_green']}
 
 first_trajectory_shot_idx = -2
@@ -284,14 +309,13 @@ overlap_frames_curr = overlap_frames_next
 overlap_frames_next = 5
 
 ### the candidate contours
-ball_color = const.BGR['ball_yellow']
 sec_frms = 65 ### TODO: needs to be longer! 8 seconds (plus slight adjustments to make SVM part look sensible) --> done with slow!
 start, stop = stop - overlap_frames_curr, stop + sec_frms
 
 cnt_vals = cntSF.conform(list(range(start, stop))).values()
 
 currFrms = Stream(cap, start, stop - 1).decap().frames
-currFrms_with_contours = BGRFrames.from_single_frames([currFrm.put(candCnts, color = ball_color, thickness = 2) for currFrm, candCnts in zip(currFrms, cnt_vals)])
+currFrms_with_contours = BGRFrames.from_single_frames([currFrm.put(candCnts, color = cand_color, thickness = 2) for currFrm, candCnts in zip(currFrms, cnt_vals)])
 
 cntFrms = BGRFrames.from_single_frames([blackFrm.put(cnts, thickness = 2) for cnts in cnt_vals])
 cntMask = cntFrms.to_grey() > 0
@@ -305,9 +329,9 @@ mixFrms_ovl1 = mixFrms[:overlap_frames_curr]
 mixFrms_main = mixFrms[overlap_frames_curr:-overlap_frames_next]
 mixFrms_ovl2 = mixFrms[-overlap_frames_next:]
 
-mixFrms_ovl = plyFrms_ovl2.slow(2).dim_progressively(1, 0) + mixFrms_ovl1.slow(2).dim_progressively(0, 1) 
+mixFrms_ovl = plyFrms_ovl2.dim_progressively(1, 0) + mixFrms_ovl1.dim_progressively(0, 1) 
 
-mixFrms = BGRFrames.from_frames([mixFrms_ovl, mixFrms_main.slow(2)])
+mixFrms = BGRFrames.from_frames([mixFrms_ovl, mixFrms_main])
 
 mixFrms = typewriter_with_ellipses(text, mixFrms)
 DecapStream(mixFrms, 0, 100).show()
@@ -420,9 +444,6 @@ vis_ut.show(all_frames)
 ### PARTICLE FILTER ###
 text = 'Tracking Ball'
 
-overlap_frames_curr = overlap_frames_next
-overlap_frames_next = 10
-
 ### Combine ball contours with hypothesized hit contours
 cntplusSF = cndSF.rename('candCnts').merge(hitcntSF, how = 'outer').apply(sa.merge_contour_into_contours)
 
@@ -465,43 +486,41 @@ kitaSF = sf.kitagawa_smooth(partSF)
 ### some parameters
 N = 100 # how many particles to show
 scale = (10, 10, 1, 1) ### standard deviation for kitagawa perturbation
-part_color = const.BGR['fair_yellow']
-kita_color = const.BGR['ball_yellow']
 
-sec_frms = 25
-start, stop = stop - overlap_frames_curr, stop + sec_frms
+# sec_frms = 25
+# start, stop = stop - overlap_frames_curr, stop + sec_frms
 
-subStm = Stream(cap, start, stop - 1)
-subFrms = subStm.decap().frames * dim_factor
-# subFrms_slow = subFrms.slow(2).slow(2).slow(2)
+# subStm = Stream(cap, start, stop - 1)
+# subFrms = subStm.decap().frames * dim_factor
+# # subFrms_slow = subFrms.slow(2).slow(2).slow(2)
 
-my_partSF = partSF['particles'].conform(list(range(start, stop)))
-partArrs = np.array(list(my_partSF.values()))
-# partArrs_slow = np.repeat(partArrs, repeats = 8, axis = 0)
+# my_partSF = partSF['particles'].conform(list(range(start, stop)))
+# partArrs = np.array(list(my_partSF.values()))
+# # partArrs_slow = np.repeat(partArrs, repeats = 8, axis = 0)
 
-part_frames = [subFrm.put(particles_to_points(partArr, N), color = part_color, size = 0) for subFrm, partArr in zip(subFrms, partArrs)]
-partFrms = BGRFrames.from_single_frames(part_frames)
+# part_frames = [subFrm.put(particles_to_points(partArr, N), color = part_color, size = 0) for subFrm, partArr in zip(subFrms, partArrs)]
+# partFrms = BGRFrames.from_single_frames(part_frames)
 
-partFrms_ovl1 = partFrms[:overlap_frames_curr]
-partFrms_main = partFrms[overlap_frames_curr:-overlap_frames_next]
-partFrms_ovl2 = partFrms[-overlap_frames_next:]
+# partFrms_ovl1 = partFrms[:overlap_frames_curr]
+# partFrms_main = partFrms[overlap_frames_curr:-overlap_frames_next]
+# partFrms_ovl2 = partFrms[-overlap_frames_next:]
 
-partFrms_ovl = probFrms_ovl2.slow(2).slow(2).dim_progressively(1, 0) + partFrms_ovl1.slow(2).slow(2).dim_progressively(0, 1) 
+# partFrms_ovl = probFrms_ovl2.slow(2).slow(2).dim_progressively(1, 0) + partFrms_ovl1.slow(2).slow(2).dim_progressively(0, 1) 
 
-partFrms = BGRFrames.from_frames([partFrms_ovl, partFrms_main.slow(2)])
+# partFrms = BGRFrames.from_frames([partFrms_ovl, partFrms_main.slow(2)])
 
-partFrms = typewriter_with_ellipses(text, partFrms)
-DecapStream(partFrms, 0, 100).show()
+# partFrms = typewriter_with_ellipses(text, partFrms)
+# DecapStream(partFrms, 0, 100).show()
 
-all_frames.append(partFrms)
+# all_frames.append(partFrms)
 
 ### KITAGAWA SMOOTHING ###
-text = 'Smoothing Ball Tracking'
+# text = 'Smoothing Ball Tracking'
 
 overlap_frames_curr = overlap_frames_next
 overlap_frames_next = 10
 
-sec_frms = 50 
+sec_frms = 55 
 start, stop = stop - overlap_frames_curr, stop + sec_frms
 
 subStm = Stream(cap, start, stop - 1)
@@ -540,9 +559,9 @@ smoothFrms_ovl1 = smoothFrms[:overlap_frames_curr]
 smoothFrms_main = smoothFrms[overlap_frames_curr:-overlap_frames_next]
 smoothFrms_ovl2 = smoothFrms[-overlap_frames_next:]
 
-smoothFrms_ovl = partFrms_ovl2.slow(2).slow(2).dim_progressively(1, 0) + smoothFrms_ovl1.slow(2).slow(2).dim_progressively(0, 1) 
+smoothFrms_ovl = probFrms_ovl2.slow(2).dim_progressively(1, 0) + smoothFrms_ovl1.slow(2).dim_progressively(0, 1) 
 
-smoothFrms = BGRFrames.from_frames([smoothFrms_ovl, smoothFrms_main.slow(2).slow(2)])
+smoothFrms = BGRFrames.from_frames([smoothFrms_ovl, smoothFrms_main.slow(2)])
 
 smoothFrms = typewriter_with_ellipses(text, smoothFrms)
 DecapStream(smoothFrms, 0, 100).show()
@@ -555,7 +574,7 @@ text = 'Ball detected'
 overlap_frames_curr = overlap_frames_next
 overlap_frames_next = 10
 
-sec_frms = 25
+sec_frms = 35
 start, stop = stop - overlap_frames_curr, stop + sec_frms
 
 sub_pntSF = pntSF.conform(list(range(start, stop)))
@@ -581,9 +600,9 @@ ballFrms_ovl1 = ballFrms[:overlap_frames_curr]
 ballFrms_main = ballFrms[overlap_frames_curr:-overlap_frames_next]
 ballFrms_ovl2 = ballFrms[-overlap_frames_next:]
 
-ballFrms_ovl = smoothFrms_ovl2.slow(2).slow(2).dim_progressively(1, 0) + ballFrms_ovl1.slow(2).slow(2).dim_progressively(0, 1) 
+ballFrms_ovl = smoothFrms_ovl2.slow(2).dim_progressively(1, 0) + ballFrms_ovl1.slow(2).dim_progressively(0, 1) 
 
-ballFrms = BGRFrames.from_frames([ballFrms_ovl, ballFrms_main.slow(2).slow(2)])
+ballFrms = BGRFrames.from_frames([ballFrms_ovl, ballFrms_main.slow(2)])
 
 ballFrms = typewriter_with_ellipses(text, ballFrms)
 DecapStream(ballFrms, 0, 100).show()
@@ -591,6 +610,7 @@ DecapStream(ballFrms, 0, 100).show()
 all_frames.append(ballFrms)
 
 vis_ut.show(all_frames)
+
 
 ##############
 ### VISUAL ###
@@ -600,7 +620,7 @@ text = 'Analysing Swing Motion'
 overlap_frames_curr = overlap_frames_next
 overlap_frames_next = 10
 
-sec_frms = 75
+sec_frms = 85
 start, stop = stop - overlap_frames_curr, stop + sec_frms
 
 topFrm = ff.read_feature_frame('top_hitTable', vid, sto)
@@ -849,7 +869,7 @@ for frame in range(start, stop):
 
     waveGraph = Graph([waveChart, nowChart], make_default_x_labels = False, as_density = False, resolution = 20,
                         tick_label_size = 0, color = const.BGR['bright_grey'], dimensions = chart_dims, offset = 0.25,
-                        header_text = 'Sound\nAnalysis', header_height = 1, header_size = 1, header_horizontal_offset = 10,
+                        header_text = ' ', header_height = 1, header_size = 1, header_horizontal_offset = 10,
                         cam_reg_override = box3D,
                     )
     waveScn, annPnts = waveGraph.preview()
@@ -865,7 +885,7 @@ for frame in range(start, stop):
     else:
         currStr = ''
 
-    annPnts.append(annPnts[2].left(115).back(150).retext(currStr))
+    annPnts.append(annPnts[2].left(115).back(175).retext(currStr))
 
     # waveView = View.make(waveGraph.cam, waveScn, annotatedPoints = annPnts, resolution = 20)
     waveView = View.make(Camera.calibrated_brest_behind(), waveScn, annotatedPoints = annPnts, resolution = 20)
@@ -936,9 +956,11 @@ DecapStream(trajFrms, 0, 100).show()
 all_frames.append(trajFrms)
 
 ### transition to beginning
-transition_frames = 25
+hold_frames = 25
+fade_frames = 50
+transition_frames = hold_frames + fade_frames
 lsFrms = myStm.widen(transition_frames).decap().frames[-transition_frames:]
-fsFrms = myStm.widen(transition_frames + initial_frames).decap().frames[:transition_frames]
+fsFrms = myStm.widen(fade_frames + initial_frames).decap().frames[:fade_frames]
 
 lsFrms_with_fading, _ = vs.animate_sequence([Scene.make_empty() for _ in range(transition_frames)],
                                             start_cam = Camera.calibrated_brest_behind(), 
@@ -947,17 +969,28 @@ lsFrms_with_fading, _ = vs.animate_sequence([Scene.make_empty() for _ in range(t
                                             **animDict,
                                             **prmDict)
 
-DecapStream(lsFrms_with_fading, 0, 100).show()
+lsFrms_hold, lsFrms_fade = lsFrms_with_fading[:hold_frames], lsFrms_with_fading[hold_frames:]
 
-transFrms = lsFrms_with_fading.dim_progressively(1, 0) + fsFrms.dim_progressively(0, 1)
+holdFrms = lsFrms_hold
+fadeFrms = lsFrms_fade.dim_progressively(1, 0) + fsFrms.dim_progressively(0, 1)
+transFrms = BGRFrames.from_frames([holdFrms, fadeFrms])
 DecapStream(transFrms, 0, 100).show()
 
 all_frames.append(transFrms)
 
 vis_ut.show(all_frames)
 
+allFrms = BGRFrames.from_frames(all_frames)
 
-### SVM ###
+allFrms.save(fullPath, f'recognition', lossless = True, save_as = 'mp4')
+
+# TODO:
+# text closer to left edge
+# collecting ball candidates could be a bit faster
+# smoothing ball candidates could be a bit faster
+# speed changes in the ball part a bit too hectic
+# ball tracking a bit too fast, smoothing ball tracking a bit too slow
+# transition is too fast at the end.
 
 
 

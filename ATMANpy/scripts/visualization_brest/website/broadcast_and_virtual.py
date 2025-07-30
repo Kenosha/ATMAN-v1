@@ -1,7 +1,7 @@
 import os 
 import numpy as np
 import pandas as pd
-        
+      
 from ATMANpy.funcs.util_funcs import get_folder_struct
 import ATMANpy.scripts.pipeline_brest_tightseg as ppl
 
@@ -29,6 +29,19 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 
 from ATMANpy.types.ShapesTennis3D import Arrow
 from ATMANpy.types.Shapes3D import Circle3D
+
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'broadcast_and_virtual'
+SAVE_FOLDER = 'website_snippets'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
 
 #############################
 #### READ IN CONFIGS ########
@@ -158,7 +171,7 @@ prmDict = {'foreground_resolution': 0.35 * res, 'background_resolution': res, 'a
 
 res = 13
 prmDict = {'foreground_resolution': res, 'background_resolution': res, 'argument_resolution': res,
-           'cumulative_foreground_transparence': 0.9, 'cumulate_argument': True,
+           'cumulative_foreground_transparence': 0.85, 'cumulate_argument': True,
            'background_scene': courtScn, 'interpolate_func': vs.interpolate_camera_naive}
 
 prmDict_no_cum = {**prmDict}
@@ -673,6 +686,8 @@ postFrms, _ = vs.animate_sequence([Scene.make_empty() for _ in range(50)],
 virtualFrms = BGRFrames.from_frames([preFrms, rotFrms, moveFrms4, startstopFrms, postFrms])
 # DecapStream(virtualFrms, 0, 100).show()
 
+virtualFrms.save(fullPath, f'virtual', lossless = True, save_as = 'mp4')
+
 
 ############################
 #### THE MAIN ANIMATION ####
@@ -682,17 +697,18 @@ virtualFrms = BGRFrames.from_frames([preFrms, rotFrms, moveFrms4, startstopFrms,
 # -> ball recognized, shots categorized.
 
 
+res = 13
 # prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
 #            'interpolate_func': vs.interpolate_camera_naive} ### TAKES VERY LONG! TRY LOWER OR DO SOMETHING ELSE IN THE MEANTIME
-prmDict = {'background_resolution': 0.5, 'argument_resolution': 1, 'foreground_resolution': 1,
+prmDict = {'background_resolution': res, 'argument_resolution': res, 'foreground_resolution': res,
            'interpolate_func': vs.interpolate_camera_naive} ### TAKES VERY LONG! TRY LOWER OR DO SOMETHING ELSE IN THE MEANTIME
-
 
 brestCam_full = Camera.calibrated_brest_behind().resize(1.5)
 animFrms2 = vis_ut.animate_bounce_and_mark_scenes(  prevPnt2, start_cam = brestCam_full, stop_cam = brestCam_full, confs = confs, 
                                                     over = True, over_scale = 1.5,
                                                     sub_region = False,  mark_size = mark_size, mark_color = mark_color,
                                                     ball_color = ball_color, net_color = net_ball_color,
+                                                    spline_cumulative_transparence = 0.75,
                                                     **prmDict)
 # DecapStream(animFrms2, 0, 100).show()
 
@@ -817,5 +833,6 @@ rotFrms.length() + moveFrms4.length() + startstopFrms.length()
 
 # DecapStream(jointFrms, 0, 100).show()
 
-# lsFrms[-1].show()
+jointFrms.save(fullPath, f'broadcast', lossless = True, save_as = 'mp4')
 
+# lsFrms[-1].show()

@@ -30,6 +30,18 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.types.ShapesTennis3D import Arrow
 from ATMANpy.types.Shapes3D import Circle3D
 
+########################################
+########### SAVE FOLDER ################
+########################################
+
+DESCRIPTOR = 'recognition'
+SAVE_FOLDER = 'website_snippets'
+savePath = get_folder_struct('results_video')[SAVE_FOLDER]
+
+from ATMANpy.funcs.util_funcs import make_timestamp, maybe_make_folder
+saveFolder = DESCRIPTOR + '_' + str(make_timestamp())
+fullPath = maybe_make_folder(savePath, saveFolder)
+
 #############################
 #### READ IN CONFIGS ########
 #############################
@@ -236,3 +248,6 @@ all_frames.append(lastFrms)
 jointFrms = BGRFrames.from_frames(all_frames)
 # DecapStream(jointFrms, 0, 100).show()
 # jointFrms[-1].show()
+
+
+jointFrms.save(fullPath, f'filtering', lossless = True, save_as = 'mp4')
