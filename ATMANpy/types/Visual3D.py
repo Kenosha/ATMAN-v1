@@ -899,7 +899,8 @@ class View:
 
     @staticmethod
     def make_with_single_pixel_pruning(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05,
-                                        adaptive_resolution_exponent = 0, opacity_pruning_threshold = 50):
+                                        adaptive_resolution_exponent = 0, opacity_pruning_threshold = 50,
+                                        force_concatenate = False):
 
         ### Deal with annotated points
         if annotatedPoints is not None:
@@ -932,14 +933,28 @@ class View:
                 cntPt = None
 
             ### 1) Collect real world points and their colors
-            ptArrs, clArrs, alArrs = myScene.rasterize(resolution, alpha_threshold = alpha_threshold, 
-                                                    camera_point = camPt, 
-                                                    resnorm_point = cntPt,
-                                                    adaptive_resolution_exponent = adaptive_resolution_exponent,
-                                                    concatenate = False)
-            
-            if ptArrs is None:
-                return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
+            if force_concatenate:
+                ### this option is to be chosen if the many shapes in the Scene
+                ### are in fact a single shaped that can not be containerized
+                ### (as occurs during cumulative transparence in vs.animate_sequence)
+                ptArr, clArr, alArr = myScene.rasterize(resolution, alpha_threshold = alpha_threshold, 
+                                                        camera_point = camPt, 
+                                                        resnorm_point = cntPt,
+                                                        adaptive_resolution_exponent = adaptive_resolution_exponent,
+                                                        concatenate = True)
+                if ptArr is None:
+                    return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
+                else:
+                    ptArrs, clArrs, alArrs = [ptArr], [clArr], [alArr]
+
+            else:
+                ptArrs, clArrs, alArrs = myScene.rasterize(resolution, alpha_threshold = alpha_threshold, 
+                                                        camera_point = camPt, 
+                                                        resnorm_point = cntPt,
+                                                        adaptive_resolution_exponent = adaptive_resolution_exponent,
+                                                        concatenate = False)
+                if ptArrs is None:
+                    return View.make_empty(sensor_dims = myCamera.sensor_dims, text_param_dicts = text_param_dicts)
 
             sub_views = []
             for ptArr, clArr, alArr in zip(ptArrs, clArrs, alArrs): ### for each shape in the scene, we have our own subView
@@ -994,14 +1009,16 @@ class View:
 
     @staticmethod
     def make(myCamera, myScene, annotatedPoints = None, resolution = 10, alpha_threshold = 0.05,
-            adaptive_resolution_exponent = 0, opacity_pruning_threshold = 50):
+            adaptive_resolution_exponent = 0, opacity_pruning_threshold = 50, 
+            force_concatenate = False):
         
         if isinstance(myScene, DummyScene) and resolution > 6 or resolution > 12:
             return View.make_with_single_pixel_pruning(myCamera, myScene, resolution = resolution, 
                                                        alpha_threshold = alpha_threshold,
                                                        annotatedPoints = annotatedPoints,
                                                        adaptive_resolution_exponent = adaptive_resolution_exponent, 
-                                                       opacity_pruning_threshold = opacity_pruning_threshold)
+                                                       opacity_pruning_threshold = opacity_pruning_threshold,
+                                                       force_concatenate = force_concatenate)
         else:
             return View.make_without_single_pixel_pruning(myCamera, myScene, resolution = resolution, 
                                                           annotatedPoints = annotatedPoints,

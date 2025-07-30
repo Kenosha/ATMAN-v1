@@ -219,6 +219,10 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         for scn in previous_dummy_scenes:
             previous_dummy_scene = previous_dummy_scene.combine(scn)
 
+    ### previous_cumulative_scene
+    # -> this is where we collect objects that are arguments in one frame, and become foreground in the next.
+    previous_cumulative_scene = Scene.make_empty()
+
     ### create joint_annotated_points -> previous points and current foreground point
     if annotated_points is None: annotated_points = []
     if previous_annotated_points is None: previous_annotated_points = []
@@ -241,7 +245,8 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         if cumulative_foreground_transparence is not None:
             previous_foreground_scene = previous_foreground_scene.transparify(cumulative_foreground_transparence)
             previous_dummy_scene = previous_dummy_scene.transparify(cumulative_foreground_transparence)
-              
+            previous_cumulative_scene = previous_cumulative_scene.transparify(cumulative_foreground_transparence)  
+            
         ### create current view
         current_object = animation_sequence_objects[idx]
         if isinstance(current_object, DummyScene) or isinstance(current_object, Scene):
@@ -261,11 +266,12 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
             text_view = View.make(text_cam, Scene.make_empty(), annotatedPoints = annotated_points_to_show)
 
         ### create previous and base views
-        front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent)
+        front_view = View.make(current_cam, previous_foreground_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent, force_concatenate = True)
+        cumul_view = View.make(current_cam, previous_cumulative_scene, resolution = foreground_resolution, adaptive_resolution_exponent = adaptive_resolution_exponent, force_concatenate = True)
         dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution) ### TODO: adaptive resolution not done for dummy scenes
         base_view = View.make(current_cam, background_scene, resolution = background_resolution) ### TODO: adaptive resolution redundant for the background?
 
-        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
+        joint_view = base_view.combine(dummy_view).combine(front_view).combine(cumul_view).combine(current_view).combine(text_view)
         
         if animate_over is None:
             over_array = None
@@ -281,17 +287,17 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         frameList.append(myFrm)
 
         if cumulate_argument: ### this allows the animation_sequence_objects (the argument of the function) to be faded out in trailing motion.
-            previous_foreground_scene = previous_foreground_scene.combine(current_scene_brightened, keep_which = 'other')
+            previous_cumulative_scene = previous_cumulative_scene.combine(current_scene_brightened, keep_which = 'other')
 
     myFrms = BGRFrames(np.array([f.array for f in frameList]))
 
     ### make a kwarg dictionary for the next animation
     if isinstance(current_scene, Scene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(current_scene_dimmed, keep_which = 'other'), ### TODO: might have to be adapted to the case in which cumulate_argument = True
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(previous_cumulative_scene).combine(current_scene_dimmed, keep_which = 'other'), ### TODO: might have to be adapted to the case in which cumulate_argument = True
                                      'previous_dummy_scene': previous_dummy_scene,
                                      'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
     elif isinstance(current_scene, DummyScene):
-        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene,
+        next_animation_dictionary = {'previous_foreground_scene': previous_foreground_scene.combine(previous_cumulative_scene),
                                      'previous_dummy_scene': previous_dummy_scene.combine(current_scene_dimmed, keep_which = 'other'),
                                      'previous_annotated_points': [*argument_annotated_points_dimmed, *previous_annotated_points]}
 
