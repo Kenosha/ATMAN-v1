@@ -1539,11 +1539,15 @@ def typewriter_effect(someStr, frames_per_char = 2,
         prev_lines.append(currStr)
 
     typedFrms = BGRFrames.from_frames(out_frames)
-    untypedFrms = BGRFrames.from_single_frames(over_frames[curr_idx:]).put(prevStr + '\n' + currStr,
-                                                                           where = text_where, color = char_color, 
-                                                                           size = text_size, font = text_font)
-    
-    return typedFrms.join(untypedFrms)
+
+    rest_frames = over_frames[curr_idx:]
+    if len(rest_frames) == 0:
+        return typedFrms
+    else:
+        untypedFrms = BGRFrames.from_single_frames(rest_frames).put(prevStr + '\n' + currStr,
+                                                                where = text_where, color = char_color, 
+                                                                size = text_size, font = text_font)
+        return typedFrms.join(untypedFrms)
 
 
 if __name__ == '__main__':
