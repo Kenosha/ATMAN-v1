@@ -351,7 +351,16 @@ class Frame:
         
         blurArr = cv.GaussianBlur(self_copy, kernelSize, 0)
         return InstClass(blurArr)
-    
+        
+    def gaussian_noise(self, mean = 0, std = 25):    
+        self_copy = self.array.copy()
+        InstClass = self.__class__
+
+        noise = np.random.normal(mean, std, self.shape)
+        noisy_image = self_copy + noise
+        noisy_image = noisy_image.clip(0, 255).astype(np.uint8)
+        return InstClass(noisy_image)
+
     def find_contours(self, contour_retrieval_mode, contour_approx_mode):
         ### retrieval: cv.RETR_TREE
         ### approx: cv.CHAIN_APPROX_SIMPLE
