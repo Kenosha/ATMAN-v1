@@ -75,6 +75,11 @@ class PlayerMovement:
         # return Point3D((x, y, 0))
         return x, y
     
+    def get_final_position(self):
+        x, y = self.playerFrm.iloc[-2][['x', 'y']]
+        # return Point3D((x, y, 0))
+        return x, y
+    
     def get_name(self):
         return self.playerFrm.loc[0, 'name']
        
@@ -110,7 +115,9 @@ class PlayerMovement:
             
         return PlayerMovement(newFrm)
     
-    def feat_player(self):
+    def feat_player(self, smoothing_span = 1, rolling_window = 1):
+        from scipy.signal import gaussian
+
         def applicator(x, y):
             coords = x, y, 0
             player = Player.make(coords)
@@ -120,7 +127,12 @@ class PlayerMovement:
         sfFrm.index = self.playerFrm['frame_num']
         sfFrm = sfFrm.loc[sfFrm.index[:-1]] ### last element is the next player!
 
-        plSF = StreamFeatures.from_dataframe(sfFrm).apply(applicator)
+        sfFrm_smoothed = sfFrm.rolling(window = rolling_window, center = True, 
+                                       closed = 'both', win_type = 'triang',
+                                       min_periods = 1).mean()
+        sfFrm_smoothed = sfFrm_smoothed.ewm(span = smoothing_span).mean()
+
+        plSF = StreamFeatures.from_dataframe(sfFrm_smoothed.astype(int)).apply(applicator)
         plSF = plSF.rename('Player3D')
         return plSF
     
@@ -791,6 +803,12 @@ class Shot:
     
     def get_player_rec_position(self):
         return self.recPlayer.get_initial_position()
+    
+    def get_hit_player_final_position(self):
+        return self.hitPlayer.get_final_position()
+    
+    def get_rec_player_final_position(self):
+        return self.recPlayer.get_final_position()
 
     def get_ball_hit_position(self):
         return self.shotTraj.get_initial_position()
@@ -1215,23 +1233,23 @@ class Shot:
     def feat_ball(self, how = 'trajectory', which_endpoint = 'smooth'):
         return self.shotTraj.feat_ball(how = how, which_endpoint = which_endpoint)
     
-    def feat_hit_player(self):
-        return self.hitPlayer.feat_player()
+    def feat_hit_player(self, smoothing_span = 1, rolling_window = 1):
+        return self.hitPlayer.feat_player(smoothing_span = smoothing_span, rolling_window = rolling_window)
     
-    def feat_rec_player(self):
-        return self.recPlayer.feat_player()
+    def feat_rec_player(self, smoothing_span = 1, rolling_window = 1):
+        return self.recPlayer.feat_player(smoothing_span = smoothing_span, rolling_window = rolling_window)
     
-    def feat_top_player(self):
+    def feat_top_player(self, smoothing_span = 1, rolling_window = 1):
         if self.hitPlayer.get_side() == 'top':
-            return self.hitPlayer.feat_player()
+            return self.hitPlayer.feat_player(smoothing_span = smoothing_span, rolling_window = rolling_window)
         else:
-            return self.recPlayer.feat_player()
+            return self.recPlayer.feat_player(smoothing_span = smoothing_span, rolling_window = rolling_window)
         
-    def feat_bot_player(self):
+    def feat_bot_player(self, smoothing_span = 1, rolling_window = 1):
         if self.hitPlayer.get_side() == 'bot':
-            return self.hitPlayer.feat_player()
+            return self.hitPlayer.feat_player(smoothing_span = smoothing_span, rolling_window = rolling_window)
         else:
-            return self.recPlayer.feat_player()
+            return self.recPlayer.feat_player(smoothing_span = smoothing_span, rolling_window = rolling_window)
         
     def feat_spline(self, how = 'trajectory', which_endpoint = 'smooth',
                     color = const.BGR['bright_grey'], thickness = 0, alpha = 1):
