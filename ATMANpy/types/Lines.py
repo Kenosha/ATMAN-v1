@@ -458,13 +458,17 @@ class Lines:
         return Lines(sorted(self.lineList, key = key_func))
     
     def up(self, points):
-        return Lines([myLn.up(points) for myLn in self.lineList], name = self.name)
+        instClass = self.__class__
+        return instClass([myLn.up(points) for myLn in self.lineList], name = self.name)
     def down(self, points):
-        return Lines([myLn.down(points) for myLn in self.lineList], name = self.name)
+        instClass = self.__class__
+        return instClass([myLn.down(points) for myLn in self.lineList], name = self.name)
     def left(self, points):
-        return Lines([myLn.left(points) for myLn in self.lineList], name = self.name)
+        instClass = self.__class__
+        return instClass([myLn.left(points) for myLn in self.lineList], name = self.name)
     def right(self, points):
-        return Lines([myLn.right(points) for myLn in self.lineList], name = self.name)
+        instClass = self.__class__
+        return instClass([myLn.right(points) for myLn in self.lineList], name = self.name)
     
     def merge(self, mergeFunc, flushedLines = None):
         """
