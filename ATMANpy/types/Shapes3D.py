@@ -221,7 +221,13 @@ class Point3D:
             return self.rerot_z(self.rot_z + rot_z)
     
     def interpolate(self, otherPt, itpl_lambda = 0.5):
-        avg_coords = interpolate_tuples(self.coords, otherPt.coords, itpl_lambda = itpl_lambda)
+        if not self.is_vectorized() and not otherPt.is_vectorized():
+            avg_coords = interpolate_tuples(self.coords, otherPt.coords, itpl_lambda = itpl_lambda)
+        elif self.is_vectorized() and otherPt.is_vectorized():
+            avg_coords = self.coords * (1 - itpl_lambda) + otherPt.coords * itpl_lambda
+        else:
+            print(f'Cannot interpolate vectorized and unvectorized Point.')
+
         avg_color = interpolate_tuples(self.color, otherPt.color, itpl_lambda = itpl_lambda)
         avg_alpha = self.alpha * (1 - itpl_lambda) + otherPt.alpha * itpl_lambda
         
