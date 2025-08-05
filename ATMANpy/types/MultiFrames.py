@@ -386,6 +386,12 @@ class Frames:
         resArr = np.array([cv.GaussianBlur(imgArr, kernelSize, 0) for imgArr in self.array])
         return framesType(resArr)
     
+    def gaussian_noise(self, mean = 0, std = 25):
+        framesType = self.__class__
+        
+        resArr = np.array([subFrm.gaussian_noise(mean = mean, std = std).array for subFrm in self])
+        return framesType(resArr)
+    
     # def dim(self, dim_factor):
     #     framesType = self.__class__
     #     single_frames = [f.dim(dim_factor) for f in self]
