@@ -103,7 +103,8 @@ def make_text_in(subReg, data_or_string, target_len = None,
 
 class LineChart:
     def __init__(self, xs, ys, color = const.BGR['intense_red'], dashed = False, x_labels = None,
-                 annotate_line_heights = False, annotate_line_heights_where = 'above', thickness = 0):
+                 annotate_line_heights = False, annotate_line_heights_where = 'above', 
+                 annotation_size = 1, thickness = 0):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
         
@@ -115,6 +116,7 @@ class LineChart:
         self.x_labels = x_labels
         self.annotate_line_heights = annotate_line_heights
         self.annotate_line_heights_where = annotate_line_heights_where
+        self.annotation_size = annotation_size
 
     def __len__(self):
         return len(self.xs)
@@ -136,7 +138,7 @@ class ScatterChart(LineChart):
 
 class BarChart:
     def __init__(self, xs, ys, color = const.BGR['intense_red'], 
-                 x_labels = None, annotate_bar_heights = False,
+                 x_labels = None, annotate_bar_heights = False, annotation_size = 1,
                  internal_gap = 0, external_gap = 0.1):
         if len(xs) != len(ys):
             raise Exception(f'x-values and y-values need to be of same length!')
@@ -146,6 +148,7 @@ class BarChart:
         self.color = color
         self.x_labels = x_labels
         self.annotate_bar_heights = annotate_bar_heights
+        self.annotation_size = annotation_size
         self.internal_gap = internal_gap
         self.external_gap = external_gap
 
@@ -375,7 +378,7 @@ class Graph:
 
                         labelStr = maybe_data_to_text(y_val, number_format = self.y_label_format)
                         anchorPnt = Point3D(coords).front(sign * self.x_label_dist).left(self.x_tick_label_left_shift)
-                        annPnt = anchorPnt.recolor(chart.color).annotate(labelStr)
+                        annPnt = anchorPnt.recolor(chart.color).annotate(labelStr).resize(chart.annotation_size)
                         val_label_pnts.append(annPnt)
 
             elif isinstance(chart, BarChart):
@@ -418,7 +421,7 @@ class Graph:
 
                         labelStr = maybe_data_to_text(y_val, number_format = self.y_label_format)
                         anchorPnt = Point3D(coords).front(self.x_label_dist).left(self.x_tick_label_left_shift)
-                        annPnt = anchorPnt.recolor(chart.color).annotate(labelStr)
+                        annPnt = anchorPnt.recolor(chart.color).annotate(labelStr).resize(chart.annotation_size)
                         val_label_pnts.append(annPnt)
 
             up_idx += 1
@@ -1418,11 +1421,13 @@ def reverse_cascade(finalRst, keep_which = None,
 ##################################
 
 def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = '', game_string2 = '',
-               serving = 1, 
-               frame_thickness = None, frame_color = const.BGR['bright_grey']):
+               serving = 1, winner = None,
+               frame_thickness = None, frame_color = const.BGR['bright_grey'],
+               resolution = 10000, line_thickness = 0):
     ### this scoreboard is our approximation of the one in 2021 Brest Challenger
+    from ATMANpy.funcs.util_funcs import interpolate_tuples
 
-    assert serving in [1, 2] ### 1 is the top player, 2 is the bottom player
+    assert serving in [None, 1, 2] ### None is no-one, 1 is the top player, 2 is the bottom player
 
     p1Dict = {' ' * i: val for i, val in enumerate([point_score1, *game_string1])}
     p2Dict = {' ' * i: val for i, val in enumerate([point_score2, *game_string2])}
@@ -1431,9 +1436,10 @@ def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = 
 
     myTab = Table(table_data, number_format = '.0f', dimensions = (280, 65), header_row_height = 0,
               index_col_width = 5, skeleton_horizontal_offset = 0.2, index_offset = 0.1, automatic_vertical_offset_text_line_height = 0.275,
-              skeleton_shrinkage = 0.025, resolution = 10000, horizontal_lines = True, vertical_lines = True,
+              skeleton_shrinkage = 0.025, resolution = resolution, horizontal_lines = True, vertical_lines = True,
               data_offset = 0.25, data_text_color = const.BGR['bright_grey'], index_text_color = const.BGR['bright_grey'],
-              data_text_thickness = 1, index_text_thickness = 1)
+              data_text_thickness = 1, index_text_thickness = 1, 
+              data_line_thickness = line_thickness, index_line_thickness = line_thickness, header_line_thickness = line_thickness)
 
     ### background color and text for point score 
     myTab.set_back_color(const.BGR['bright_grey'], 1, 1)
@@ -1442,16 +1448,41 @@ def scoreboard(name1, name2, point_score1 = 0, point_score2 = 0, game_string1 = 
     myTab.set_text_color(const.BGR['darker_grey'], 1, 1)
     myTab.set_text_color(const.BGR['darker_grey'], 2, 1)
 
+    ### deal with winner/loser coloring
+    lmbd = 0.75
+    win_color_dark = interpolate_tuples(const.BGR['leafy_green'], (0, 0, 0), itpl_lambda = lmbd)
+    win_color_lite = interpolate_tuples(const.BGR['leafy_green'], const.BGR['bright_grey'], itpl_lambda = lmbd)
+    los_color_dark = interpolate_tuples(const.BGR['intense_red'], (0, 0, 0), itpl_lambda = lmbd)
+    los_color_lite = interpolate_tuples(const.BGR['intense_red'], const.BGR['bright_grey'], itpl_lambda = lmbd)
+    
+    if winner == 'upper':
+        for i in range(myTab.tabSket.cols):
+            if i == 1:
+                myTab.set_back_color(win_color_lite, 1, i)
+                myTab.set_back_color(los_color_lite, 2, i)
+            else:
+                myTab.set_back_color(win_color_dark, 1, i)
+                myTab.set_back_color(los_color_dark, 2, i)
+    elif winner == 'lower':
+        for i in range(myTab.tabSket.cols):
+            if i == 1:
+                myTab.set_back_color(los_color_lite, 1, i)
+                myTab.set_back_color(win_color_lite, 2, i)
+            else:
+                myTab.set_back_color(los_color_dark, 1, i)
+                myTab.set_back_color(win_color_dark, 2, i)
+
     tabFrm = myTab.render()
 
     ### yellow line for serve indication
-    if serving == 1:
-        lnPt1, lnPt2 = Point2D((8, 8)), Point2D((8, 28))
-    else:
-        lnPt1, lnPt2 = Point2D((8, 35)), Point2D((8, 57))
-    
-    yellowLn = Line(lnPt1, lnPt2)
-    tabFrm = tabFrm.put(yellowLn, color = const.BGR['ball_yellow'], thickness = 3)
+    if serving is not None:
+        if serving == 1:
+            lnPt1, lnPt2 = Point2D((8, 8)), Point2D((8, 28))
+        else:
+            lnPt1, lnPt2 = Point2D((8, 35)), Point2D((8, 57))
+        
+        yellowLn = Line(lnPt1, lnPt2)
+        tabFrm = tabFrm.put(yellowLn, color = const.BGR['ball_yellow'], thickness = 3)
 
     ### frame it
     if frame_thickness is not None:
@@ -1551,11 +1582,12 @@ def typewriter_effect(someStr, frames_per_char = 2,
 
 
 if __name__ == '__main__':
-    TEST_CHART = True
+    TEST_CHART = False
     TEST_TABLES = False
     TEST_RASTERS = False    
     TEST_DIAGRAMS = False
     TEST_LEGEND = False
+    TEST_SCOREBOARD = True
 
     #####################
     ### CHART TESTING ###
@@ -1735,3 +1767,87 @@ if __name__ == '__main__':
         Legend(rows).render().show()
 
         Legend(rows, header_text = '').render().show()
+
+    if TEST_SCOREBOARD:
+        
+        ####################
+        name1 = 'F.GAIO'
+        name2 = 'J.SOUSA'
+        point_score1 = 5
+        point_score2 = 6
+        game_string1 = '376'
+        game_string2 = '667'
+        serving = 2
+        winner = None
+
+        scoreFrm = scoreboard(name1, name2, 
+                                point_score1, point_score2, 
+                                game_string1, game_string2, 
+                                serving = serving,
+                                winner = winner,
+                                frame_thickness = 2)
+        
+        scoreFrm.show()
+
+        #######################
+        name1 = 'F.GAIO'
+        name2 = 'J.SOUSA'
+        point_score1 = 5
+        point_score2 = 7
+        game_string1 = '376'
+        game_string2 = '667'
+        serving = None
+        winner = 'lower'
+
+        scoreFrm = scoreboard(name1, name2, 
+                                point_score1, point_score2, 
+                                game_string1, game_string2, 
+                                serving = serving,
+                                winner = winner,
+                                frame_thickness = 2)
+        
+        scoreFrm.show()
+        
+        #######################
+        name1 = 'F.GAIO'
+        name2 = 'J.SOUSA'
+        point_score1 = 5
+        point_score2 = 7
+        game_string1 = '376'
+        game_string2 = '667'
+        serving = None
+        winner = 'lower'
+
+        scoreFrm = scoreboard(name1, name2, 
+                                point_score1, point_score2, 
+                                game_string1, game_string2, 
+                                serving = serving,
+                                winner = winner,
+                                frame_thickness = 2,
+                                line_thickness = 0.01, 
+                                resolution = 15000)
+        
+        scoreFrm.show()
+
+        
+        #######################
+        name1 = 'F.GAIO'
+        name2 = 'J.SOUSA'
+        point_score1 = 5
+        point_score2 = 7
+        game_string1 = '376'
+        game_string2 = '667'
+        serving = 1
+        winner = None
+
+        scoreFrm = scoreboard(name1, name2, 
+                                point_score1, point_score2, 
+                                game_string1, game_string2, 
+                                serving = serving,
+                                winner = winner,
+                                frame_thickness = 2,
+                                line_thickness = 0.01, 
+                                resolution = 15000)
+        
+        scoreFrm.show()
+
