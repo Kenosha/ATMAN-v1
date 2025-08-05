@@ -34,7 +34,7 @@ from ATMANpy.types.Shapes3D import Circle3D
 ########### SAVE FOLDER ################
 ########################################
 
-DESCRIPTOR = 'recognition'
+DESCRIPTOR = 'filtering'
 SAVE_FOLDER = 'website_snippets'
 savePath = get_folder_struct('results_video')[SAVE_FOLDER]
 
