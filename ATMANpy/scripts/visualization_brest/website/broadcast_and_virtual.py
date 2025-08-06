@@ -208,6 +208,8 @@ rot_frames = num_shot_frames // (num_rotations * num_cams) + increase_rot_frames
 
 animDict = {}
 
+overFrm = BGRFrame.make_black(640, 360) + const.BGR['darker_grey']
+
 ### previous rotations, without ball
 frames_before = 25
 frames_per = 5
@@ -220,7 +222,8 @@ pre_frames = []
 for next_cam in next_cams:
     animFrms, animDict = vs.animate_sequence([Scene.make_empty() for _ in range(frames_per)], 
                                             start_cam = curr_cam, stop_cam = next_cam, 
-                                            **animDict, **prmDict)
+                                            **animDict, **prmDict, 
+                                            animate_over = overFrm)
     pre_frames.append(animFrms)
     curr_cam = next_cam
 
@@ -237,7 +240,8 @@ while fs_frame < num_shot_frames:
 
     animFrms, animDict = vs.animate_sequence(shtScns[fs_frame:ls_frame], 
                                             start_cam = curr_cam, stop_cam = next_cam, 
-                                            **animDict, **prmDict)
+                                            **animDict, **prmDict,
+                                            animate_over = overFrm)
     all_frames.append(animFrms)
 
     curr_cam = next_cam
@@ -536,10 +540,12 @@ tstView = View.make(axCam4, tstScn)
 # tstView.snap().show()
 
 moveFrms4, animDict4 = vs.animate_sequence(shtScns_move, start_cam = curr_cam, stop_cam = axCam4,
-                                    **animDict, **prmDict)
+                                    **animDict, **prmDict,
+                                    animate_over = overFrm)
 
 holdFrms4, animDict4a = vs.animate_sequence(shtScns4_pre, start_cam = axCam4, stop_cam = axCam4,
-                                    **animDict, **prmDict)
+                                    **animDict, **prmDict,
+                                    animate_over = overFrm)
 
 itplScns = interpolate_initial_condition_scenes(stopShot4, itpl_frames = frm_grow)
 
@@ -548,7 +554,8 @@ tstView = View.make(axCam4, tstScn)
 # tstView.snap().show()
 
 growFrms4, animDict4b = vs.animate_sequence(itplScns, start_cam = axCam4, stop_cam = axCam4,
-                                            **animDict4a, **prmDict_no_cum)
+                                            **animDict4a, **prmDict_no_cum,
+                                            animate_over = overFrm)
 # DecapStream(growFrms4, 0, 100).show()
 
 ### add held frames with annotated points
@@ -558,19 +565,22 @@ annPnts = make_annotated_points(stopShot4, ang_offset_up = -1)
 stopFrms4, animDict4c = vs.animate_static(itplScns[-1], static_cam = axCam4,
                                             num_frames = frm_hold_net,
                                             annotated_points = annPnts,
-                                            **animDict4b, **prmDict_static)
+                                            **animDict4b, **prmDict_static,
+                                            animate_over = overFrm)
 
 ### move on to next shot
 moveFrms3, animDict3 = vs.animate_sequence(shtScns4, start_cam = axCam4, stop_cam = axCam3,
                                            **animDict4c, **prmDict,
-                                           stop_earlier = 3)
+                                           stop_earlier = 3,
+                                            animate_over = overFrm)
 
 
 jointFrms4 = BGRFrames.from_frames([holdFrms4, growFrms4, stopFrms4, moveFrms3])
 # DecapStream(jointFrms4, 0, 100).show()
 
 holdFrms3, animDict3a = vs.animate_sequence(shtScns3_pre, start_cam = axCam3, stop_cam = axCam3,
-                                            **prmDict)
+                                            **prmDict,
+                                            animate_over = overFrm)
 
 # DecapStream(holdFrms3, 0, 100).show()
 
@@ -582,7 +592,8 @@ tstView = View.make(axCam3, tstScn)
 # tstView.snap().show()
 
 growFrms3, animDict3b = vs.animate_sequence(itplScns, start_cam = axCam3, stop_cam = axCam3,
-                                            **animDict3a, **prmDict_no_cum)
+                                            **animDict3a, **prmDict_no_cum,
+                                            animate_over = overFrm)
 # DecapStream(growFrms3, 0, 100).show()
 
 annPnts = make_annotated_points(stopShot3, 
@@ -594,22 +605,26 @@ annPnts = make_annotated_points(stopShot3,
 stopFrms3, animDict3c = vs.animate_static(itplScns[-1], static_cam = axCam3,
                                             num_frames = frm_hold_net,
                                             annotated_points = annPnts,
-                                            **animDict3b, **prmDict_static)
+                                            **animDict3b, **prmDict_static,
+                                            animate_over = overFrm)
 
 ### and the next
 moveFrms2, _ = vs.animate_sequence(shtScns3, start_cam = axCam3, stop_cam = axCam2,
-                                   **animDict3c, **prmDict)
+                                   **animDict3c, **prmDict,
+                                   animate_over = overFrm)
 
 jointFrms3 = BGRFrames.from_frames([holdFrms3, growFrms3, stopFrms3, moveFrms2])
 # DecapStream(jointFrms3, 0, 100).show()
 
 holdFrms2, animDict2a = vs.animate_sequence(shtScns2_pre, start_cam = axCam2, stop_cam = axCam2,
-                                            **prmDict)
+                                            **prmDict,
+                                            animate_over = overFrm)
 
 itplScns = interpolate_initial_condition_scenes(stopShot2, itpl_frames = frm_grow)
 
 growFrms2, animDict2b = vs.animate_sequence(itplScns, start_cam = axCam2, stop_cam = axCam2,
-                                            **animDict2a, **prmDict_no_cum)
+                                            **animDict2a, **prmDict_no_cum,
+                                            animate_over = overFrm)
 # DecapStream(growFrms2, 0, 100).show()
 
 ### add held frames with annotated points
@@ -623,27 +638,31 @@ annPnts = make_annotated_points(stopShot2,
 stopFrms2, animDict2c = vs.animate_static(itplScns[-1], static_cam = axCam2,
                                             num_frames = frm_hold_net,
                                             annotated_points = annPnts,
-                                            **animDict2b, **prmDict_static)
+                                            **animDict2b, **prmDict_static,
+                                            animate_over = overFrm)
 # stopFrms2[-1].show()
 
 
 ### and the last
 moveFrms1, _ = vs.animate_sequence(shtScns2, start_cam = axCam2, stop_cam = axCam1,
                                            **animDict2c, **prmDict,
-                                           stop_earlier = 3)
+                                           stop_earlier = 3,
+                                            animate_over = overFrm)
 
 jointFrms2 = BGRFrames.from_frames([holdFrms2, growFrms2, stopFrms2, moveFrms1])
 # DecapStream(jointFrms2, 0, 100).show()
 
 holdFrms1, animDict1a = vs.animate_sequence(shtScns1_pre, start_cam = axCam1, stop_cam = axCam1,
-                                            **prmDict)
+                                            **prmDict,
+                                            animate_over = overFrm)
 
 # DecapStream(holdFrms1, 0, 100).show()
 
 itplScns = interpolate_initial_condition_scenes(stopShot1, itpl_frames = frm_grow, rot_angle = np.pi)
 
 growFrms1, animDict1b = vs.animate_sequence(itplScns, start_cam = axCam1, stop_cam = axCam1,
-                                            **animDict1a, **prmDict_no_cum)
+                                            **animDict1a, **prmDict_no_cum,
+                                            animate_over = overFrm)
 # DecapStream(growFrms1, 0, 100).show()
 
 annPnts = make_annotated_points(stopShot1, 
@@ -655,7 +674,8 @@ annPnts = make_annotated_points(stopShot1,
 stopFrms1, animDict1c = vs.animate_static(itplScns[-1], static_cam = axCam1,
                                             num_frames = frm_hold_net,
                                             annotated_points = annPnts,
-                                            **animDict1b, **prmDict_static)
+                                            **animDict1b, **prmDict_static,
+                                            animate_over = overFrm)
 # stopFrms1[-1].show()
 
 axCam0 = axCam1.right(45)
@@ -665,7 +685,8 @@ prmDict_final['cumulative_foreground_transparence'] = 1
 
 moveFrms0, _ = vs.animate_sequence(shtScns1, start_cam = axCam1, stop_cam = axCam0,
                                            **animDict1c, **prmDict_final,
-                                           stop_earlier = 20)
+                                           stop_earlier = 20,
+                                           animate_over = overFrm)
 # DecapStream(moveFrms0, 0, 100).show()
 
 jointFrms1 = BGRFrames.from_frames([holdFrms1, growFrms1, stopFrms1, moveFrms0])
@@ -680,14 +701,16 @@ startstopFrms = BGRFrames.from_frames([jointFrms4, jointFrms3, jointFrms2, joint
 
 postFrms, _ = vs.animate_sequence([Scene.make_empty() for _ in range(50)],
                                   start_cam = axCam0, stop_cam = cams[-cams_before],
-                                  **prmDict)
+                                  **prmDict, animate_over = overFrm)
 # DecapStream(postFrms, 0, 100).show()
 
 virtualFrms = BGRFrames.from_frames([preFrms, rotFrms, moveFrms4, startstopFrms, postFrms])
 # DecapStream(virtualFrms, 0, 100).show()
 
-virtualFrms.save(fullPath, f'virtual', lossless = True, save_as = 'mp4')
+virtualFrms = virtualFrms.rescale(2).gaussian_noise(std = 10).gaussian_blur((5, 5)).rescale(0.5)
+# DecapStream(virtualFrms, 0, 100).show()
 
+virtualFrms.save(fullPath, f'virtual', lossless = True, save_as = 'mp4')
 
 ############################
 #### THE MAIN ANIMATION ####

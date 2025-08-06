@@ -181,7 +181,7 @@ curr_y = offset_y // 2
 
 all_frames = []
 
-currFrm = BGRFrame.make_black(*DIMS)
+currFrm = BGRFrame.make_black(*DIMS) + const.BGR['darker_grey']
 startFrm_with_arr = currFrm.put('\n>>', color = arrw_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
 startFrms_with_arr = BGRFrames.from_frame(startFrm_with_arr, 25)
 all_frames.append(startFrms_with_arr)
@@ -214,10 +214,11 @@ for l, p, s in zip(ls, ps, ss):
         prevFrms = BGRFrames.from_frame(BGRFrame.make_black(*DIMS), frame_offset_prev)
         postFrms = BGRFrames.from_frame(emphFrms[-1], frame_offset_post)
         emphFrms = BGRFrames.from_frames([prevFrms, emphFrms, postFrms])
+        outFrms = outFrms + emphFrms
     else:
-        emphFrms = BGRFrames.from_frame(currFrm, outFrms.length())
+        # emphFrms = BGRFrames.from_frame(currFrm, outFrms.length())
+        pass
 
-    outFrms = outFrms + emphFrms
     outFrms_with_arr = outFrms.put('\n>>', color = arrw_color, where = (10, curr_y), font = cv.FONT_HERSHEY_PLAIN)
 
     currFrm = outFrms[-1]
@@ -249,5 +250,7 @@ jointFrms = BGRFrames.from_frames(all_frames)
 # DecapStream(jointFrms, 0, 100).show()
 # jointFrms[-1].show()
 
+jointFrms = jointFrms.gaussian_noise(std = 5)
+# DecapStream(jointFrms, 0, 100).show()
 
 jointFrms.save(fullPath, f'filtering', lossless = True, save_as = 'mp4')
