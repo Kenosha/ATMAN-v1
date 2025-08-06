@@ -94,7 +94,8 @@ def shorten_scoreboard(scoreFrm):
     return shortFrm
 
 def make_sequential_scoreboards(conf_idx, winner = 'upper', upper_idx = 0, lower_idx = 0, 
-                                repl_name_upper = None, repl_name_lower = None):
+                                repl_name_upper = None, repl_name_lower = None,
+                                switch_upper_lower = False):
     vid, sto = confs[conf_idx]['video_id'], confs[conf_idx]['store_name']
     scoreSF = StreamFeatures.from_store(vid, sto, featnameList = [  'sb_games_upper_cleaned_Flag',
                                                                     'sb_games_lower_cleaned_Flag'])
@@ -123,6 +124,10 @@ def make_sequential_scoreboards(conf_idx, winner = 'upper', upper_idx = 0, lower
     if repl_name_lower is not None:
         lower_name = repl_name_lower
 
+    ### potentially switch -> this is for aesthetics
+    if switch_upper_lower:
+        upper_name, lower_name = lower_name, upper_name
+
     scoreboards = []
     for score in unique_scores:
         upper_score, lower_score = score.replace('-', '').split('__')
@@ -136,10 +141,14 @@ def make_sequential_scoreboards(conf_idx, winner = 'upper', upper_idx = 0, lower
         upper_score = upper_score + (3 - len(upper_score)) * ' '
         lower_score = lower_score + (3 - len(lower_score)) * ' '
 
+        if switch_upper_lower:
+            upper_score, lower_score = lower_score, upper_score
+
         scoreFrm = scoreboard(upper_name, lower_name, 
                                 '', '', upper_score, lower_score, 
                                 serving = serving,
-                                frame_thickness = 2)
+                                frame_thickness = 2, 
+                                resolution = 15000)
         scoreboards.append(scoreFrm)
 
     upper_score, lower_score = score.replace('-', '').split('__')
@@ -152,11 +161,21 @@ def make_sequential_scoreboards(conf_idx, winner = 'upper', upper_idx = 0, lower
     upper_score = upper_score + (3 - len(upper_score)) * ' '
     lower_score = lower_score + (3 - len(lower_score)) * ' '
 
+    if switch_upper_lower:
+        upper_score, lower_score = lower_score, upper_score
+        
+        if winner == 'lower':
+            winner = 'upper'
+        elif winner == 'upper':
+            winner = 'lower'
+
     scoreFrm = scoreboard(upper_name, lower_name, 
                             '', '', upper_score, lower_score, 
                             serving = None,
                             frame_thickness = 2,
-                            winner = winner)
+                            winner = winner,
+                            resolution = 15000,
+                            line_thickness = 0.01)
     scoreboards.append(scoreFrm)
 
     ### shorten
@@ -164,19 +183,27 @@ def make_sequential_scoreboards(conf_idx, winner = 'upper', upper_idx = 0, lower
 
     return scoreboards
 
-final_boards = make_sequential_scoreboards(0, upper_idx = 0, lower_idx = 1, winner = 'upper')
+final_boards = make_sequential_scoreboards(0, upper_idx = 0, lower_idx = 1, winner = 'upper', 
+                                           switch_upper_lower = True)
 
-semi1_boards = make_sequential_scoreboards(1, upper_idx = 0, lower_idx = 0, winner = 'lower')
-semi2_boards = make_sequential_scoreboards(2, upper_idx = 0, lower_idx = 1, winner = 'lower')
+semi1_boards = make_sequential_scoreboards(1, upper_idx = 0, lower_idx = 0, winner = 'lower',
+                                           switch_upper_lower = True)
+semi2_boards = make_sequential_scoreboards(2, upper_idx = 0, lower_idx = 1, winner = 'lower',
+                                           switch_upper_lower = True)
 
-qurt1_boards = make_sequential_scoreboards(3, upper_idx = 0, lower_idx = 1, winner = 'lower')
-qurt2_boards = make_sequential_scoreboards(4, upper_idx = 0, lower_idx = 0, winner = 'upper')
+qurt1_boards = make_sequential_scoreboards(3, upper_idx = 0, lower_idx = 1, winner = 'lower',
+                                           switch_upper_lower = True)
+qurt2_boards = make_sequential_scoreboards(4, upper_idx = 0, lower_idx = 0, winner = 'upper',
+                                           switch_upper_lower = True)
 # qurt3_boards = make_sequential_scoreboards(5, upper_idx = 0, lower_idx = 0, winner = 'upper')
-qurt4_boards = make_sequential_scoreboards(6, upper_idx = 0, lower_idx = 1, winner = 'lower')
+qurt4_boards = make_sequential_scoreboards(6, upper_idx = 0, lower_idx = 1, winner = 'lower',
+                                           switch_upper_lower = True)
 
 repl_boards = make_sequential_scoreboards(7, upper_idx = 0, lower_idx = 0,
                                           repl_name_upper = 'R.GASQUET', repl_name_lower = 'M.JANVIER',
-                                          winner = 'lower')
+                                          winner = 'lower', switch_upper_lower = True)
+
+quarter_boards = [qurt4_boards, repl_boards, qurt2_boards, qurt1_boards]
 
 ### TODO: when ready to animate, put line_thickness of scoreboard to 0.01 and up the resolution to 15000
 ######### (at least for the last, winner frame thing)
@@ -213,15 +240,17 @@ width_u_d = int((1 + spacing_u_d) * rs)
 
 fPt = cPt_adj.right(width_l_r)
 
-s1Pt = cPt_adj.up(int(1.5 * width_u_d))
-s2Pt = cPt_adj.down(int(1.5 * width_u_d))
+s1Pt = cPt_adj.down(int(1.5 * width_u_d))
+s2Pt = cPt_adj.up(int(1.5 * width_u_d))
 
-q1Pt = cPt_adj.left(width_l_r).up(2 * width_u_d)
-q2Pt = cPt_adj.left(width_l_r).up(1 * width_u_d)
-q3Pt = cPt_adj.left(width_l_r).down(1 * width_u_d)
-q4Pt = cPt_adj.left(width_l_r).down(2 * width_u_d)
+q1Pt = cPt_adj.left(width_l_r).down(2 * width_u_d)
+q2Pt = cPt_adj.left(width_l_r).down(1 * width_u_d)
+q3Pt = cPt_adj.left(width_l_r).up(1 * width_u_d)
+q4Pt = cPt_adj.left(width_l_r).up(2 * width_u_d)
 
-###### A LOOK AT PLACEMENT 
+quarter_points = [q4Pt, q3Pt, q2Pt, q1Pt]
+
+# ##### A LOOK AT PLACEMENT 
 # fFrm = overlay(blackFrm, final_boards[-1], top_left_point = fPt)
 
 # sFrm = overlay(fFrm, semi1_boards[-1], top_left_point = s1Pt)
@@ -233,5 +262,162 @@ q4Pt = cPt_adj.left(width_l_r).down(2 * width_u_d)
 # qFrm = overlay(qFrm, qurt4_boards[-1], top_left_point = q4Pt)
 
 # qFrm.show()
+
+total_frames = 250 
+trans_frames = 35
+still_frames = 2
+start_offset = 2 ### number of steps, measured in still_frames
+
+anim_frames = total_frames - trans_frames
+anim_steps = anim_frames // still_frames
+
+currFrm = blackFrm + const.BGR['darker_grey']
+
+semi1_has_been_started = False
+semi2_has_been_started = False
+final_has_been_started = False
+
+all_frames = []
+for step_idx in range(anim_steps):
+
+    ### quarter finals
+    step_idxs_quarters = [step_idx - q for q in range(4)]
+    done_idxs_quarters = []
+
+    for qrt_idx, qrt_pnt, qrt_brds in zip(step_idxs_quarters, quarter_points, quarter_boards):
+
+        if qrt_idx < 0:
+            done_idxs_quarters.append(False)
+        elif qrt_idx < len(qrt_brds):
+            currFrm = overlay(currFrm, qrt_brds[qrt_idx], qrt_pnt)
+            done_idxs_quarters.append(False)
+        else:
+            currFrm = overlay(currFrm, qrt_brds[-1], qrt_pnt)
+            done_idxs_quarters.append(True)
+    
+    ### semis
+    semis_have_started = semi1_has_been_started and semi2_has_been_started
+
+    ### semi final 2 (is the upper one, due to reversal for aesthetic reasons)
+    if done_idxs_quarters[0] and done_idxs_quarters[1] and not semi2_has_been_started:
+        semi2_idx = -start_offset
+        semi2_has_been_started = True
+
+    if semi2_has_been_started:
+        if semis_have_started:
+            if semi2_idx < 0:
+                semi2_done = False
+            elif semi2_idx < len(semi2_boards):
+                currFrm = overlay(currFrm, semi2_boards[semi2_idx], s2Pt)
+                semi2_done = False
+            else:
+                currFrm = overlay(currFrm, semi2_boards[-1], s2Pt)
+                semi2_done = True
+
+            semi2_idx += 1
+        else:
+            currFrm = overlay(currFrm, semi2_boards[0], s2Pt)
+
+    else:
+        semi2_done = False
+
+    ### semi final 1 (is the upper one, due to reversal for aesthetic reasons)
+    if done_idxs_quarters[2] and done_idxs_quarters[3] and not semi1_has_been_started:
+        semi1_idx = -start_offset
+        semi1_has_been_started = True
+
+    if semi1_has_been_started:
+        if semis_have_started:
+            if semi1_idx < 0:
+                semi1_done = False
+            elif semi1_idx < len(semi1_boards):
+                currFrm = overlay(currFrm, semi1_boards[semi1_idx], s1Pt)
+                semi1_done = False
+            else:
+                currFrm = overlay(currFrm, semi1_boards[-1], s1Pt)
+                semi1_done = True
+
+            semi1_idx += 1
+        else:
+            currFrm = overlay(currFrm, semi1_boards[0], s1Pt)
+
+    else:
+        semi1_done = False
+
+    ### final
+    if semi2_done and semi1_done and not final_has_been_started:
+        final_idx = -start_offset
+        final_has_been_started = True
+        currFrm = overlay(currFrm, final_boards[0], fPt)
+
+    if final_has_been_started:
+        if final_idx < 0:
+            final_done = False
+        elif final_idx < len(final_boards):
+            currFrm = overlay(currFrm, final_boards[final_idx], fPt)
+            final_done = False
+        else:
+            currFrm = overlay(currFrm, final_boards[-1], fPt)
+            final_done = True
+
+        final_idx += 1
+
+    currFrms = BGRFrames.from_frame(currFrm, still_frames)
+
+    all_frames.append(currFrms)
+
+jointFrms = BGRFrames.from_frames(all_frames)
+
+DecapStream(jointFrms, 0, 100).show()
+
+#### TRANSITION BACK ###
+trans_frames = total_frames - jointFrms.length()
+
+currFrm = blackFrm + const.BGR['darker_grey']
+
+last_frames = [qurt4_boards[-1], repl_boards[-1], qurt2_boards[-1], qurt1_boards[-1],
+               semi2_boards[-1], semi1_boards[-1]]
+
+pts = [q4Pt, q3Pt, q2Pt, q1Pt, s2Pt, s1Pt]
+
+trans_frames_static = [currFrm]
+for frm, pt in zip(last_frames, pts):
+    currFrm = overlay(currFrm, frm, pt)
+    trans_frames_static.append(currFrm)
+
+trans_frames_repeated = [BGRFrames.from_frame(frm, trans_frames // len(trans_frames_static)) for frm in reversed(trans_frames_static)]
+transFrms = BGRFrames.from_frames(trans_frames_repeated)
+
+# transFrms = vs.interpolate_frames(jointFrms[-1], blackFrm + const.BGR['darker_grey'], trans_frames)
+
+outFrms = BGRFrames.from_frames([jointFrms, transFrms])
+
+outFrms = outFrms.rescale(2).gaussian_noise(std = 10).gaussian_blur((3, 3)).rescale(1/3)
+
+from ATMANpy.types.Lines import Region
+cropReg = Region.from_points(Point2D((40, 30)), Point2D((600, 330)))
+
+outFrms = outFrms.crop(cropReg)
+
+outFrms.save(fullPath, f'tournament', lossless = True, save_as = 'mp4')
+
+tstFrms = BGRFrames.from_frames([outFrms, outFrms, outFrms, outFrms])
+
+DecapStream(tstFrms, 0, 100).show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

@@ -348,12 +348,15 @@ backFrm_leg = BGRFrame.make_black(rows = 200, cols = 400) + const.BGR['darker_gr
 
 from ATMANpy.types.Overlays import Legend, LegendRow, overlay
 
+leg_rescale_factor = 0.8
+
 # a) chip / tops
 legRows = [LegendRow('... Topspin', TOPS_COLOR, text_size = 2),
            LegendRow('... Chip', CHIP_COLOR, text_size = 2)]
 myLeg_chip_tops = Legend(legRows, header_text = 'Return is ...', header_offset = 2.7, header_thickness = 1,
                             legend_dimensions = (400, 200), resolution = 2000, borders = None)
 legFrm_chip_tops = myLeg_chip_tops.render(over_array = backFrm_leg.array)
+legFrm_chip_tops = legFrm_chip_tops.rescale(leg_rescale_factor)
 # legFrm_chip_tops.show()
 
 # b) fore / back
@@ -362,6 +365,7 @@ legRows = [LegendRow('... Forehand', fore_color, text_size = 2),
 myLeg_chip_tops = Legend(legRows, header_text = 'Serve + 1 is ...', header_offset = 2.7, header_thickness = 1,
                             legend_dimensions = (400, 200), resolution = 2000, borders = None)
 legFrm_fore_back = myLeg_chip_tops.render(over_array = backFrm_leg.array)
+legFrm_fore_back = legFrm_fore_back.rescale(leg_rescale_factor)
 # legFrm_fore_back.show()
 
 ########################################
@@ -410,7 +414,7 @@ top_a_3D, top_b_3D, top_c_3D, top_d_3D = Region3D.from_region2D(top_a, z = 0), R
 regLines3D = [myLn for myReg in [top_a_3D, top_b_3D, top_c_3D, top_d_3D] for myLn in myReg.lineList]
 regLines3D = [myLn.recolor(const.BGR['leafy_green']).resize(0.5) for myLn in regLines3D]
 
-abcd_params = {'color': const.BGR['leafy_green'], 'size': 2, 'horizontal_offset': 25}
+abcd_params = {'color': const.BGR['leafy_green'], 'size': 3, 'horizontal_offset': 24, 'vertical_offset': 5}
 aPt, bPt, cPt, dPt = make_text_in(top_a_3D, 'A', **abcd_params), make_text_in(top_b_3D, 'B', **abcd_params), make_text_in(top_c_3D, 'C', **abcd_params), make_text_in(top_d_3D, 'D', **abcd_params)
 
 # annotated points
@@ -504,6 +508,9 @@ motionFrms_into = motionFrms_into_graphed.dim_progressively(0, 1) + motionFrms_i
 
 DecapStream(motionFrms_into, 0, 100).show()
 
+# motionFrms_into[0].show()
+# motionFrms_into[-1].show()
+
 staticFrms, _= vs.animate_static(regLines3D, static_cam = topCam, **prmDict, 
                                       background_scene = courtScn,
                                       annotated_points = annotated_points, num_frames = 25,
@@ -580,6 +587,12 @@ allFrms = allFrms.gaussian_noise(std = 10).gaussian_blur((3, 3))
 allFrms = allFrms.rescale(1/3)
 
 DecapStream(allFrms, 0, 100).show()
+
+from ATMANpy.types.Lines import Region
+cropReg = Region.from_points(Point2D((20, 0)), Point2D((620, 340)))
+# allFrms[-100].put(cropReg).show()
+
+allFrms = allFrms.crop(cropReg)
 
 allFrms.save(fullPath, f'analyst', lossless = True, save_as = 'mp4')
 
