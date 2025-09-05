@@ -151,7 +151,7 @@ ps = [p1, p3, p4, p5, p6, p7, p8]
 
 l1 = 'dataPnts'
 # l2 = f'filtPnts = dataPnts.filter({p2})'
-l3 = f'filtPnts = filtPnts.filter({p3})'
+l3 = f'filtPnts = dataPnts.filter({p3})'
 l4 = f'filtPnts = filtPnts.filter({p4})'
 l5 = f'filtPnts = filtPnts.filter({p5})'
 l6 = f'filtPnts = filtPnts.filter({p6})'

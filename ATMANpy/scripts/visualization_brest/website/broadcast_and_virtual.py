@@ -159,6 +159,11 @@ tstScn = tstScn.combine(courtScn).put(camEll)
 
 # View.make(tstCam, tstScn).snap().show()
 
+# BLUR PARAMETERS
+blur_rescale = 2
+blur_std = 10
+blur_kernel = (5, 5)
+
 ### create camera points from ellipse
 originArr = camEll.rasterize(0.0075)
 originPts = [Point3D(tuple(coords)) for coords in originArr]
@@ -172,7 +177,8 @@ prmDict = {'foreground_resolution': 0.35 * res, 'background_resolution': res, 'a
 res = 13
 prmDict = {'foreground_resolution': res, 'background_resolution': res, 'argument_resolution': res,
            'cumulative_foreground_transparence': 0.85, 'cumulate_argument': True,
-           'background_scene': courtScn, 'interpolate_func': vs.interpolate_camera_naive}
+           'background_scene': courtScn, 'interpolate_func': vs.interpolate_camera_naive,
+           'blur_rescale': 2, 'blur_std': 10, 'blur_kernel': (5, 5)}
 
 prmDict_no_cum = {**prmDict}
 prmDict_no_cum['cumulate_argument'] = False
@@ -181,6 +187,7 @@ prmDict_no_cum['cumulative_foreground_transparence'] = 1
 prmDict_static = {key: value for key, value in prmDict.items() if key not in [  'cumulate_argument',
                                                                                 'interpolate_func',
                                                                                 'cumulative_foreground_transparence']}
+
 
 from itertools import cycle
 cam_cycle = cycle(cams)
@@ -191,8 +198,8 @@ num_cams = len(cams)
 mtc_idx, pnt_idx = 0, 111 ### the first point of atman short intro video
 prevPnt2 = allPnts.get(mtc_idx, pnt_idx)
 
-mark_color = const.BGR['bright_blue']
-mark_size = 6
+mark_color = const.BGR['leafy_green']
+mark_size = 7
 ball_color = const.BGR['ball_yellow']
 net_ball_color = const.BGR['intense_red']
 
@@ -367,7 +374,7 @@ def get_angle(someShot):
 
     return degCrc, nullCrc
 
-def get_speed(someShot, rot_angle = np.pi / 2):
+def get_speed(someShot, rot_angle = np.pi / 2, angle_adjust = 0):
     hat_length = 4
     arr_length = 50
     arr_color = const.BGR['bright_blue']
@@ -386,7 +393,7 @@ def get_speed(someShot, rot_angle = np.pi / 2):
     flight_norm_vec = Point3D((x_norm * hori_norm, y_norm * hori_norm, vert_norm))
     
     startPt = hitPt.up(10)
-    endPt = startPt + flight_norm_vec * arr_length
+    endPt = startPt + flight_norm_vec * arr_length + Point3D((0, 0, angle_adjust))
     endPt_null = startPt + flight_norm_vec * 0.01
 
     flyArr = Arrow.make(startPt, endPt, hat_length = hat_length, rot_angle = rot_angle,
@@ -426,13 +433,13 @@ def get_spin(someShot):
 
     return degCrc, nullCrc
 
-def interpolate_initial_condition_scenes(someShot, itpl_frames = 25, rot_angle = np.pi / 2):     
+def interpolate_initial_condition_scenes(someShot, itpl_frames = 25, rot_angle = np.pi / 2, angle_adjust = 0):     
     crc_arr_share = 0.1
 
     hit_side = someShot.get_hit_side()
 
     degCrc, degCrc_null = get_angle(someShot)
-    velArr, velArr_null = get_speed(someShot, rot_angle = rot_angle)
+    velArr, velArr_null = get_speed(someShot, rot_angle = rot_angle, angle_adjust = angle_adjust)
     rpmCrc, rpmCrc_null = get_spin(someShot)
 
     fullScn = Scene([degCrc, velArr, rpmCrc])
@@ -536,7 +543,7 @@ axCam1 = get_cam(stopShot1, **cam_kwargs_last)
 
 tst_combScn = shtScns4_pre[1].combine(shtScns4_pre[2]).combine(shtScns4_pre[3])
 tstScn = tst_combScn.combine(courtScn)
-tstView = View.make(axCam4, tstScn)
+tstView = View.make(axCam4, tstScn, resolution = res)
 # tstView.snap().show()
 
 moveFrms4, animDict4 = vs.animate_sequence(shtScns_move, start_cam = curr_cam, stop_cam = axCam4,
@@ -547,7 +554,7 @@ holdFrms4, animDict4a = vs.animate_sequence(shtScns4_pre, start_cam = axCam4, st
                                     **animDict, **prmDict,
                                     animate_over = overFrm)
 
-itplScns = interpolate_initial_condition_scenes(stopShot4, itpl_frames = frm_grow)
+itplScns = interpolate_initial_condition_scenes(stopShot4, itpl_frames = frm_grow, angle_adjust = 0.5)
 
 tstScn = tst_combScn.combine(courtScn).combine(itplScns[-1])
 tstView = View.make(axCam4, tstScn)
@@ -658,7 +665,7 @@ holdFrms1, animDict1a = vs.animate_sequence(shtScns1_pre, start_cam = axCam1, st
 
 # DecapStream(holdFrms1, 0, 100).show()
 
-itplScns = interpolate_initial_condition_scenes(stopShot1, itpl_frames = frm_grow, rot_angle = np.pi)
+itplScns = interpolate_initial_condition_scenes(stopShot1, itpl_frames = frm_grow, rot_angle = np.pi, angle_adjust = 0.1)
 
 growFrms1, animDict1b = vs.animate_sequence(itplScns, start_cam = axCam1, stop_cam = axCam1,
                                             **animDict1a, **prmDict_no_cum,
@@ -719,32 +726,42 @@ virtualFrms.save(fullPath, f'virtual', lossless = True, save_as = 'mp4')
 # on the landing page: an animation similar to the beginning of atman_short
 # -> ball recognized, shots categorized.
 
-
 res = 13
 # prmDict = {'background_resolution': 2, 'argument_resolution': 10, 'foreground_resolution': 10,
 #            'interpolate_func': vs.interpolate_camera_naive} ### TAKES VERY LONG! TRY LOWER OR DO SOMETHING ELSE IN THE MEANTIME
 prmDict = {'background_resolution': res, 'argument_resolution': res, 'foreground_resolution': res,
            'interpolate_func': vs.interpolate_camera_naive} ### TAKES VERY LONG! TRY LOWER OR DO SOMETHING ELSE IN THE MEANTIME
 
+default_dim = 0.75
+stat_dim = 0.5
+
 brestCam_full = Camera.calibrated_brest_behind().resize(1.5)
 animFrms2 = vis_ut.animate_bounce_and_mark_scenes(  prevPnt2, start_cam = brestCam_full, stop_cam = brestCam_full, confs = confs, 
-                                                    over = True, over_scale = 1.5,
+                                                    over = True, over_scale = 1.5, 
+                                                    init_over_dim = default_dim, last_over_dim = default_dim,
                                                     sub_region = False,  mark_size = mark_size, mark_color = mark_color,
                                                     ball_color = ball_color, net_color = net_ball_color,
-                                                    spline_cumulative_transparence = 0.75,
+                                                    spline_cumulative_transparence = 0.75, 
                                                     **prmDict)
-# DecapStream(animFrms2, 0, 100).show()
+
+animFrms2_dimmed = vis_ut.animate_bounce_and_mark_scenes(  prevPnt2, start_cam = brestCam_full, stop_cam = brestCam_full, confs = confs, 
+                                                    over = True, over_scale = 1.5, 
+                                                    init_over_dim = default_dim * stat_dim, last_over_dim = default_dim * stat_dim,
+                                                    sub_region = False,  mark_size = mark_size, mark_color = mark_color,
+                                                    ball_color = ball_color, net_color = net_ball_color,
+                                                    spline_cumulative_transparence = 0.75, 
+                                                    **prmDict)
+# DecapStream(animFrms2_dimmed, 0, 100).show()
 
 num_frames = 250
 fade_in_frames = 25
 
-dim_factor = 0.5
 frm_offset = 4 ### so the motion is complete.
 
 cols, rows = 243, 100
 back_color = (60, 60, 60)
 text_color = const.BGR['leafy_green']
-o_x, o_y = 10, 20
+o_x, o_y = 10, 25
 para_px = 25
 skip_px = 18
 
@@ -786,18 +803,20 @@ fullFrm1 = fullFrms_hi3[frm1]
 
 ### anim frames split to have little progressive dim
 animFrms_pre_normal = animFrms2[:frm4 - 25]
-animFrms_pre_fade = animFrms2[frm4 - 25:frm4].dim_progressively(1, dim_factor)
+animFrms_pre_fade = animFrms2[frm4 - 25:frm4].dim_progressively(1, 0) + animFrms2_dimmed[frm4 - 25:frm4].dim_progressively(0, 1)
 animFrms_pre = BGRFrames.from_frames([animFrms_pre_normal, animFrms_pre_fade])
 
-stopFrms4 = animFrms2[frm4:frm3]
-stopFrms3 = animFrms2[frm3:frm2]
-stopFrms2 = animFrms2[frm2:frm1]
-stopFrms1 = animFrms2[frm1:]
+# DecapStream(animFrms_pre, 0, 100).show()
 
-combFrms4 = overlay(stopFrms4.dim(dim_factor), fullFrm4, top_left_point = Point2D((600, 20)))
-combFrms3 = overlay(stopFrms3.dim(dim_factor), fullFrm3, top_left_point = Point2D((650, 270)))
-combFrms2 = overlay(stopFrms2.dim(dim_factor), fullFrm2, top_left_point = Point2D((600, 20)))
-combFrms1 = overlay(stopFrms1.dim(dim_factor), fullFrm1, top_left_point = Point2D((675, 270)))
+stopFrms4 = animFrms2_dimmed[frm4:frm3]
+stopFrms3 = animFrms2_dimmed[frm3:frm2]
+stopFrms2 = animFrms2_dimmed[frm2:frm1]
+stopFrms1 = animFrms2_dimmed[frm1:]
+
+combFrms4 = overlay(stopFrms4, fullFrm4, top_left_point = Point2D((600, 20)))
+combFrms3 = overlay(stopFrms3, fullFrm3, top_left_point = Point2D((650, 270)))
+combFrms2 = overlay(stopFrms2, fullFrm2, top_left_point = Point2D((600, 20)))
+combFrms1 = overlay(stopFrms1, fullFrm1, top_left_point = Point2D((675, 270)))
 
 combFrms4_freeze = BGRFrames.from_frame(combFrms4[0], 75)
 combFrms3_freeze = BGRFrames.from_frame(combFrms3[0], 75)
@@ -815,8 +834,8 @@ transition_frames = 25
 
 wideFrms = prevPnt2.stream(confs = confs).widen(transition_frames).decap().frames.rescale(1.5)
 
-fsFrms = wideFrms[:transition_frames]
-lsFrms = wideFrms[-transition_frames:]
+fsFrms = wideFrms[:transition_frames].dim(default_dim)
+lsFrms = wideFrms[-transition_frames:].dim_progressively(stat_dim * default_dim, default_dim)
 
 
 _, markScns = vis_ut.get_shot_scenes(prevPnt2, mark_size = mark_size, mark_color = mark_color)
@@ -829,13 +848,12 @@ for alpha in alpha_factors:
     markScns_fade.append(markScn.realpha(alpha))
 
 lsFrms_with_marks, _ = vs.animate_sequence(markScns_fade, start_cam = brestCam_full, stop_cam = brestCam_full,
-                                            animate_over = lsFrms, 
+                                            animate_over = lsFrms,
                                             **prmDict)
 
-lsFrms_with_marks = lsFrms_with_marks.dim_progressively(dim_factor, 1)
 
 ### make it so the whole thing loops!
-widerFrms = prevPnt2.stream(confs = confs).widen(2 * transition_frames).decap().frames.rescale(1.5)
+widerFrms = prevPnt2.stream(confs = confs).widen(2 * transition_frames).decap().frames.rescale(1.5).dim(default_dim)
 
 fsFrms2 = widerFrms[:transition_frames]
 lsFrms2 = widerFrms[-transition_frames:]
@@ -854,7 +872,7 @@ rotFrms.length() + moveFrms4.length() + startstopFrms.length()
 
 ### TODO: put boxes on the same x-coordinate -> no jumping left and right!
 
-# DecapStream(jointFrms, 0, 100).show()
+DecapStream(jointFrms, 0, 100).show()
 
 jointFrms.save(fullPath, f'broadcast', lossless = True, save_as = 'mp4')
 

@@ -392,6 +392,12 @@ RESOLUTION_MODIFIER_HEATMAP = 0.5
 prmDict = make_prm_dict(resolution_modifier = RESOLUTION_MODIFIER_NORMAL, argument_luminosity = 1.25, 
                         adaptive_resolution_exponent = 1.5, argument_blinks_per_second = None)
 
+prmDict_blur = {**prmDict}
+prmDict_blur['blur_std'] = 10
+prmDict_blur['blur_kernel'] = (3, 3)
+
+backFrm_blurred = backFrm.gaussian_noise(std = prmDict_blur['blur_std']).gaussian_blur(prmDict_blur['blur_kernel'])
+
 ##########################
 ### ANIMATE THE GRAPHS ###
 ##########################
@@ -492,12 +498,12 @@ jntPts3 = [*annotated_points, *graph_annPnts]
 # and then animate the lines over it
 
 
-motionFrms_into_virtual, _ = vs.animate_sequence([regLines3D for _ in range(25)], start_cam = heatCam.resize(2), stop_cam = topCam, **prmDict, 
+motionFrms_into_virtual, _ = vs.animate_sequence([regLines3D for _ in range(25)], start_cam = heatCam.resize(2), stop_cam = topCam, **prmDict_blur, 
                                                     background_scene = courtScn, interpolate_func = vs.interpolate_camera_naive,
                                                     annotated_points = annotated_points,
                                                     animate_over = backFrm)
 
-motionFrms_into_graphed, _ = vs.animate_sequence([graphScn1 for _ in range(25)], start_cam = heatCam.resize(2), stop_cam = topCam, **prmDict, 
+motionFrms_into_graphed, _ = vs.animate_sequence([graphScn1 for _ in range(25)], start_cam = heatCam.resize(2), stop_cam = topCam, **prmDict_blur, 
                                                     background_scene = None, interpolate_func = vs.interpolate_camera_naive,
                                                     annotated_points = jntPts1,
                                                     animate_over = backFrm)
@@ -511,26 +517,26 @@ DecapStream(motionFrms_into, 0, 100).show()
 # motionFrms_into[0].show()
 # motionFrms_into[-1].show()
 
-staticFrms, _= vs.animate_static(regLines3D, static_cam = topCam, **prmDict, 
+staticFrms, _= vs.animate_static(regLines3D, static_cam = topCam, **prmDict_blur, 
                                       background_scene = courtScn,
                                       annotated_points = annotated_points, num_frames = 25,
                                       animate_over = backFrm)
 
 
 # a) fading transitions with just point
-staticFrms1, _ = vs.animate_static(Scene.make_empty(), static_cam = topCam, **prmDict, 
+staticFrms1, _ = vs.animate_static(Scene.make_empty(), static_cam = topCam, **prmDict_blur, 
                                     background_scene = courtScn_subset,
                                     annotated_points = jntPts1, num_frames = 45,
                                     animate_over = backFrm)
 staticFrms1 = overlay(staticFrms1, legFrm_chip_tops, top_left_point = tlPt)
 
-staticFrms2, _ = vs.animate_static(Scene.make_empty(), static_cam = topCam, **prmDict, 
+staticFrms2, _ = vs.animate_static(Scene.make_empty(), static_cam = topCam, **prmDict_blur, 
                                     background_scene = courtScn_subset,
                                     annotated_points = jntPts2, num_frames = 45,
                                     animate_over = backFrm)
 staticFrms2 = overlay(staticFrms2, legFrm_chip_tops, top_left_point = tlPt)
 
-staticFrms3, _ = vs.animate_static(Scene.make_empty(), static_cam = topCam, **prmDict, 
+staticFrms3, _ = vs.animate_static(Scene.make_empty(), static_cam = topCam, **prmDict_blur, 
                                     background_scene = courtScn_subset,
                                     annotated_points = jntPts3, num_frames = 45,
                                     animate_over = backFrm)
@@ -561,12 +567,12 @@ DecapStream(animFrms, 0, 100).show()
 
 ### transition back to initial scene
 
-motionFrms_back_virtual, _ = vs.animate_sequence([regLines3D for _ in range(25)], start_cam = topCam, stop_cam = heatCam.resize(2), **prmDict, 
+motionFrms_back_virtual, _ = vs.animate_sequence([regLines3D for _ in range(25)], start_cam = topCam, stop_cam = heatCam.resize(2), **prmDict_blur, 
                                         background_scene = courtScn, interpolate_func = vs.interpolate_camera_naive,
                                         annotated_points = annotated_points, 
                                         animate_over = backFrm)
 
-motionFrms_back_graphed, _ = vs.animate_sequence([graphScn3 for _ in range(25)], start_cam = topCam, stop_cam = heatCam.resize(2), **prmDict, 
+motionFrms_back_graphed, _ = vs.animate_sequence([graphScn3 for _ in range(25)], start_cam = topCam, stop_cam = heatCam.resize(2), **prmDict_blur, 
                                         background_scene = None, interpolate_func = vs.interpolate_camera_naive,
                                         annotated_points = jntPts3, 
                                         animate_over = backFrm)
@@ -582,7 +588,7 @@ motionFrms_hold = BGRFrames.from_frame(motionFrms_back[-1], 25)
 allFrms = BGRFrames.from_frames([motionFrms_into, animFrms, motionFrms_back, motionFrms_hold])
 DecapStream(allFrms, 0, 100).show()
 
-allFrms = allFrms.gaussian_noise(std = 10).gaussian_blur((3, 3))
+# allFrms = allFrms.gaussian_noise(std = 10).gaussian_blur((3, 3))
 
 allFrms = allFrms.rescale(1/3)
 
