@@ -184,7 +184,8 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
                     argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
                     start_cam = None, stop_cam = None, animate_over = None,
                     start_later = 0, stop_earlier = 0,
-                    text_cam = None):
+                    text_cam = None,
+                    blur_rescale = None, blur_std = None, blur_kernel = None):
     ### animation_sequence_objects: a list of shapes, scenes or dummy scenes that are animated in sequence -> one list element per frame
     ### other scenes are static/previous scenes that are not animated, but can be faded out/in
     num_frames = len(animation_sequence_objects)
@@ -271,7 +272,8 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution) ### TODO: adaptive resolution not done for dummy scenes
         base_view = View.make(current_cam, background_scene, resolution = background_resolution) ### TODO: adaptive resolution redundant for the background?
 
-        joint_view = base_view.combine(dummy_view).combine(front_view).combine(cumul_view).combine(current_view).combine(text_view)
+        ### text left out because we give option to add cinematic blur, but we don't want to blur text.
+        joint_view_no_text = base_view.combine(dummy_view).combine(front_view).combine(cumul_view).combine(current_view)
         
         if animate_over is None:
             over_array = None
@@ -282,9 +284,21 @@ def animate_sequence(animation_sequence_objects, annotated_points = None,
         else:
             raise TypeError('animate_over has to be None, Frame, or Frames (of appropriate length)')
 
-        myFrm = joint_view.snap(over_array = over_array)
+        myFrm = joint_view_no_text.snap(over_array = over_array)
 
-        frameList.append(myFrm)
+        if blur_rescale is not None:
+            myFrm = myFrm.rescale(blur_rescale)
+        if blur_std is not None:
+            myFrm = myFrm.gaussian_noise(std = blur_std)
+        if blur_kernel is not None:
+            myFrm = myFrm.gaussian_blur(blur_kernel)
+        if blur_rescale is not None:
+            myFrm = myFrm.rescale(1 / blur_rescale)
+
+        ### add text in, unblurred
+        myFrm_and_text = text_view.snap(over_array = myFrm.array.copy())
+
+        frameList.append(myFrm_and_text)
 
         if cumulate_argument: ### this allows the animation_sequence_objects (the argument of the function) to be faded out in trailing motion.
             previous_cumulative_scene = previous_cumulative_scene.combine(current_scene_brightened, keep_which = 'other')
@@ -311,7 +325,8 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
                         argument_blinks_per_second = None, interpolate_func = interpolate_camera_slerp,
                         start_cam = None, stop_cam = None,
                         start_later = 0, stop_earlier = 0,
-                        text_cam = None):
+                        text_cam = None,
+                        blur_rescale = None, blur_std = None, blur_kernel = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -390,11 +405,23 @@ def animate_cam_motion(animation_object, annotated_points = None, num_frames = N
         dummy_view = View.make(current_cam, previous_dummy_scene, resolution = dummy_resolution)
         base_view = View.make(current_cam, background_scene, resolution = background_resolution)
 
-        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
+        joint_view_no_text = base_view.combine(dummy_view).combine(front_view).combine(current_view)
         
-        myFrm = joint_view.snap()
+        myFrm = joint_view_no_text.snap()
 
-        frameList.append(myFrm)
+        if blur_rescale is not None:
+            myFrm = myFrm.rescale(blur_rescale)
+        if blur_std is not None:
+            myFrm = myFrm.gaussian_noise(std = blur_std)
+        if blur_kernel is not None:
+            myFrm = myFrm.gaussian_blur(blur_kernel)
+        if blur_rescale is not None:
+            myFrm = myFrm.rescale(1 / blur_rescale)
+
+        ### add text in, unblurred
+        myFrm_and_text = text_view.snap(over_array = myFrm.array.copy())
+
+        frameList.append(myFrm_and_text)
 
     myFrms = BGRFrames(np.array([f.array for f in frameList]))
 
@@ -416,7 +443,8 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
                     argument_resolution = 1, background_resolution = 1, foreground_resolution = 1, dummy_resolution = 1, 
                     argument_luminosity = 1, adaptive_resolution_exponent = 0,
                     argument_blinks_per_second = None, animate_over = None, 
-                    text_cam = None):
+                    text_cam = None,
+                    blur_rescale = None, blur_std = None, blur_kernel = None):
     ### animation_object: a static shape, list of shapes, scene, or dummyscene. 
     num_frames = int(num_frames)
 
@@ -488,15 +516,42 @@ def animate_static(animation_object, annotated_points = None, num_frames = 100, 
         raise TypeError('animate_over has to be None or Frame')
 
     if argument_blinks_per_second is None:
-        joint_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
-        static_frame = joint_view.snap(over_array = over_array)
-        myFrms = BGRFrames.from_frame(static_frame, repetitions = num_frames)
+        joint_view_no_text = base_view.combine(dummy_view).combine(front_view).combine(current_view)
+        
+        myFrm = joint_view_no_text.snap(over_array = over_array)
+
+        if blur_rescale is not None:
+            myFrm = myFrm.rescale(blur_rescale)
+        if blur_std is not None:
+            myFrm = myFrm.gaussian_noise(std = blur_std)
+        if blur_kernel is not None:
+            myFrm = myFrm.gaussian_blur(blur_kernel)
+        if blur_rescale is not None:
+            myFrm = myFrm.rescale(1 / blur_rescale)
+
+        ### add text in, unblurred
+        myFrm_and_text = text_view.snap(over_array = myFrm.array.copy())
+
+        myFrms = BGRFrames.from_frame(myFrm_and_text, repetitions = num_frames)
     else:
-        on_view = base_view.combine(dummy_view).combine(front_view).combine(current_view).combine(text_view)
-        off_view = base_view.combine(dummy_view).combine(front_view).combine(text_view)
+        on_view = base_view.combine(dummy_view).combine(front_view).combine(current_view)
+        off_view = base_view.combine(dummy_view).combine(front_view)
         onFrm = on_view.snap(over_array = over_array)
         offFrm = off_view.snap(over_array = over_array)
         
+        if blur_rescale is not None:
+            onFrm = onFrm.rescale(blur_rescale)
+            offFrm = offFrm.rescale(blur_rescale)
+        if blur_std is not None:
+            onFrm = onFrm.gaussian_noise(std = blur_std)
+            offFrm = offFrm.rescale(blur_rescale)
+        if blur_kernel is not None:
+            onFrm = onFrm.gaussian_blur(blur_kernel)
+            offFrm = offFrm.rescale(blur_rescale)
+        if blur_rescale is not None:
+            onFrm = onFrm.rescale(1 / blur_rescale)
+            offFrm = offFrm.rescale(1 / blur_rescale)
+
         myFrms = blinking(onFrm, offFrm, blinks_per_second = argument_blinks_per_second, duration_in_frames = num_frames)
 
     ### make a kwarg dictionary for the next animation
