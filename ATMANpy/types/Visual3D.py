@@ -523,7 +523,9 @@ class Camera:
         return Camera(M_int, M_ext, sensor_dims) 
         
     @staticmethod
-    def from_to(origin_point, towards_point, f = 1000, sensor_dims = (1920, 1080)):
+    def from_to(origin_point, towards_point, 
+                f = 1000, f_x = None, f_y = None, 
+                sensor_dims = (1920, 1080)):
         # towards_point, origin_point: Point3D
 
         ##### EXTERIOR CAMERA PARAMETERS #####
@@ -557,9 +559,14 @@ class Camera:
         ##### INTERIOR CAMERA PARAMETERS ####
         ## very simple pinhole
         o_x, o_y = sensor_dims[0] / 2, sensor_dims[1] / 2
-        M_int = np.array([  [ f, 0, o_x, 0],
-                            [ 0, f, o_y, 0],
-                            [ 0, 0,   1, 0]])
+        if f_x is None:
+            f_x = f
+        if f_y is None:
+            f_y = f
+            
+        M_int = np.array([  [ f_x,   0, o_x, 0],
+                            [   0, f_y, o_y, 0],
+                            [   0,   0,   1, 0]])
         
         return Camera(M_int, M_ext, sensor_dims)
 
