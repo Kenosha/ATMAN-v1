@@ -93,7 +93,8 @@ def get_white_lines(gFrm: GreyFrame, width_of_line: int = 5,
       
 
 def get_white_lines_fast(gFrm: GreyFrame, width_of_line: int = 5, 
-                         white_thresh: int = 200, int_diff_thresh: int = 10,
+                         white_thresh: int = 200, white_thresh_upper: int = 255, 
+                         int_diff_thresh: int = 10,
                          verbose = False):
     
     shift = round(width_of_line / 2)
@@ -105,7 +106,7 @@ def get_white_lines_fast(gFrm: GreyFrame, width_of_line: int = 5,
     lfFrm = gFrm.roll(how = 'left', shift = shift, nan_sentinel = NAN_SENTINEL)
     rtFrm = gFrm.roll(how = 'right', shift = shift, nan_sentinel = NAN_SENTINEL)
  
-    whiteMask = (gFrm > white_thresh)
+    whiteMask = (gFrm > white_thresh) & (gFrm <= white_thresh_upper)
     horiMask = (gFrm - upFrm > int_diff_thresh) & (gFrm - dnFrm > int_diff_thresh) & (gFrm > upFrm) & (gFrm > dnFrm)
     vertMask = (gFrm - lfFrm > int_diff_thresh) & (gFrm - rtFrm > int_diff_thresh) & (gFrm > lfFrm) & (gFrm > rtFrm)
     
