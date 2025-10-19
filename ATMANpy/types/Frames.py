@@ -813,7 +813,7 @@ class GreyFrame(Frame):
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
-        np.savetxt(os.path.join(savePath, f'{name}_grey.csv'), self.array, delimiter = ',')
+        np.savetxt(os.path.join(savePath, f'{name}_grey.csv'), self.array, fmt = '%d', delimiter = ',')
     ##################     
     
     def put(self, anyObj, 
