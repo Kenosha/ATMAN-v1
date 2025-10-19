@@ -991,6 +991,10 @@ class ConstFeature(ConstFeaturesBase):
         
         return SFList([ConstFeature(self.name, self.feature, frame_list) for frame_list in list_of_frame_lists])
     
+    def rescale(self, scale_factor):
+        resc_feature = try_getattr(self.feature, 'rescale')(scale_factor)
+        return self.__class__(feature = resc_feature, name = self.name, frameList = self.frameList)
+
     def squeeze(self):
         return self
     
@@ -1143,7 +1147,12 @@ class ConstFeatures(ConstFeaturesBase):
             list_of_frame_lists.append(curr_frame_list)
         
         return SFList([ConstFeatures(self.featDict, frame_list) for frame_list in list_of_frame_lists])
-        
+            
+    def rescale(self, scale_factor):
+        resc_featDict = {k: try_getattr(v, 'rescale')(scale_factor) for k, v in self.featDict.items()}
+        return self.__class__(featDict = resc_featDict, frameList = self.frameList)
+
+
     def squeeze(self):
         if len(self.featDict) == 1:
             name = self.get_features()[0]
