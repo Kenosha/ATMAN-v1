@@ -193,7 +193,11 @@ class Stream:
     def from_SF(mySF, cap, name = None,
                 cap_color_space = 'bgr', target_color_space = 'bgr',
                 scale_factor = 1, warp_dims = None):
-        start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
+        frames = mySF.get_frames()
+        if frames is None:
+            start, stop = 0, int(cap.get(cv.CAP_PROP_FRAME_COUNT)) - 1 ### last frame is included!
+        else:
+            start, stop = mySF.get_frames()[0], mySF.get_frames()[-1]
         return Stream(cap, start, stop, 
                       truncation_anchor = 0,
                       cap_color_space = cap_color_space, target_color_space = target_color_space, 
