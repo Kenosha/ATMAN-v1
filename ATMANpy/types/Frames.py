@@ -989,6 +989,18 @@ class BGRFrame(Frame):
         return f'BGRFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
     
     ### TRANSFORMS ###
+    def B(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 0], name = self.name)
+    
+    def G(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 1], name = self.name)
+    
+    def R(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 2], name = self.name)
+    
     def to_grey(self):
         self_copy = self.array.copy() # to preverve immutability of frame
         return GreyFrame(cv.cvtColor(self_copy, cv.COLOR_BGR2GRAY), name = self.name)
