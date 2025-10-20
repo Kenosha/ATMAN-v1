@@ -820,8 +820,12 @@ class GreyFrame(Frame):
     
     def to_HSV(self):
         self_copy = self.array.copy() # to preverve immutability of frame
-        return HSVFrame(cv.cvtColor(self_copy, cv.COLOR_GRAY2HSV), name = self.name)
+        return HSVFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_GRAY2BGR), cv.COLOR_BGR2HSV), name = self.name)
     
+    def to_YCrCb(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return YCrCbFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_GRAY2BGR), cv.COLOR_BGR2YCrCb), name = self.name)
+
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
@@ -1019,6 +1023,10 @@ class BGRFrame(Frame):
         self_copy = self.array.copy() # to preverve immutability of frame
         return HSVFrame(cv.cvtColor(self_copy, cv.COLOR_BGR2HSV), name = self.name)
     
+    def to_YCrCb(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return YCrCbFrame(cv.cvtColor(self_copy, cv.COLOR_BGR2YCrCb), name = self.name)
+    
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
@@ -1134,6 +1142,10 @@ class HSVFrame(Frame):
         self_copy = self.array.copy() # to preverve immutability of frame
         return BGRFrame(cv.cvtColor(self_copy, cv.COLOR_HSV2BGR), name = self.name)
     
+    def to_YCrCb(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return YCrCbFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_HSV2BGR), cv.COLOR_BGR2YCrCb), name = self.name)
+
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
@@ -1249,6 +1261,10 @@ class YCrCbFrame(Frame):
         self_copy = self.array.copy() # to preverve immutability of frame
         return BGRFrame(cv.cvtColor(self_copy, cv.COLOR_YCrCb2BGR), name = self.name)
     
+    def to_HSV(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return HSVFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_YCrCb2BGR), cv.COLOR_BGR2HSV), name = self.name)
+
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name

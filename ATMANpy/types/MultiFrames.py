@@ -71,6 +71,7 @@ class Frames:
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames,
+                   'ycrcb': YCrCbFrames,
                    'bool': BoolFrames}
         capType = typeMap[cap_color_space]
         
@@ -99,6 +100,7 @@ class Frames:
         typeMap = {'bgr': BGRFrames,
                    'grey': GreyFrames,
                    'hsv': HSVFrames,
+                   'ycrcb': YCrCbFrames,
                    'bool': BoolFrames}
         capType = typeMap[cap_color_space]
         
@@ -650,6 +652,10 @@ class BGRFrames(Frames):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2HSV) for imgArr in self.array])
         return HSVFrames(convArr, name = self.name)
     
+    def to_YCrCb(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2YCrCb) for imgArr in self.array])
+        return YCrCbFrames(convArr, name = self.name)
+    
     def B(self):
         self_copy = self.array.copy()
         return GreyFrames(self_copy[:, :, :, 0], name = 'b_channels')
@@ -682,12 +688,16 @@ class HSVFrames(Frames):
         return 'to_HSV'
     
     def to_grey(self):
-        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_HSV2GRAY) for imgArr in self.array])
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2GRAY) for imgArr in self.to_BGR().array])
         return GreyFrames(convArr, name = self.name)
     
     def to_BGR(self):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_HSV2BGR) for imgArr in self.array])
         return BGRFrames(convArr, name = self.name)
+    
+    def to_YCrCb(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2YCrCb) for imgArr in self.to_BGR().array])
+        return YCrCbFrames(convArr, name = self.name)
      
     def H(self):
         self_copy = self.array.copy()
@@ -727,6 +737,10 @@ class YCrCbFrames(Frames):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_YCrCb2BGR) for imgArr in self.array])
         return BGRFrames(convArr, name = self.name)
      
+    def to_HSV(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2HSV) for imgArr in self.to_BGR().array])
+        return BGRFrames(convArr, name = self.name)
+
     def Y(self):
         self_copy = self.array.copy()
         return GreyFrames(self_copy[:, :, :, 0], name = 'y_channels')
@@ -768,8 +782,12 @@ class GreyFrames(Frames):
         return BGRFrames(convArr, name = self.name)
     
     def to_HSV(self):
-        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_GRAY2HSV) for imgArr in self.array])
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2HSV) for imgArr in self.to_BGR().array])
         return HSVFrames(convArr, name = self.name)
+    
+    def to_YCrCb(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2YCrCb) for imgArr in self.to_BGR().array])
+        return YCrCbFrames(convArr, name = self.name)
         
 @dataclass(frozen = True)
 class BoolFrames(Frames):
