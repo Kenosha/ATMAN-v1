@@ -79,8 +79,10 @@ class Frame:
                    scale_factor = 1):
         typeMap = {'bgr': BGRFrame,
                    'hsv': HSVFrame,
+                   'ycrcb': YCrCbFrame,
                    'grey': GreyFrame,
-                   'bool': BoolFrame}
+                   'bool': BoolFrame,
+                   }
         capType = typeMap[cap_color_space]
         
         frame = get_frame(cap, frame_num)
@@ -1157,6 +1159,121 @@ class HSVFrame(Frame):
         return histFrm.squeeze()
     ###############
     
+
+@dataclass(frozen = True)
+class YCrCbFrame(Frame):
+    ### luminance-chrominance color space
+    array: np.ndarray
+    name: str = 'frame'
+    
+    def __post_init__(self):
+        ### call post init of super class
+        super(YCrCbFrame, self).__post_init__()
+        
+        #### TYPE CHECKS ####
+        arraycheck(self, channel_number = 3, color_channel_length = 3)
+        #####################   
+        
+        #### IMMUTABILITY BREAKS ####
+        # convert grayscale to a grey HSV
+        # if len(self.array.shape) == 2:
+        #     object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_GRAY2))
+        #############################  
+    
+    @staticmethod
+    def from_csv(readpath, name = 'frame'):
+        colMap = {0: 'luminance', 1: 'chroma-red', 2: 'chroma-blue'}
+        arrList = []
+        for idx, col in colMap.items():
+            arr = np.genfromtxt(os.path.join(readpath, f'{name}_{col}.csv'), delimiter = ',', dtype = 'uint8')
+            arrList.append(arr)
+        arr = np.stack(arrList, axis = -1)
+        return YCrCbFrame(arr, name = name)
+    
+    
+    @staticmethod
+    def make_black(cols = 1920, rows = 1080):
+        return YCrCbFrame(np.zeros((rows, cols, 3), dtype = 'uint8'))
+
+    ####################
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_YCrCb'
+    @classmethod
+    def get_color(cls):
+        return 'ycrcb'
+    
+    def __repr__(self):
+        return f'YCrCbFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
+    
+    ### TRANSFORMS ###
+    def Y(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 0], name = self.name)
+    
+    def Cr(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 1], name = self.name)
+    
+    def Cb(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 2], name = self.name)
+    
+    def to_grey(self):
+        return self.Y() ### luminance apparently matches the conversion to Grey in open cv pretty much exactly (up to rounding)
+    
+    def to_BGR(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return BGRFrame(cv.cvtColor(self_copy, cv.COLOR_YCrCb2BGR), name = self.name)
+    
+    def to_csv(self, savePath, name = None):
+        if name is None:
+            name = self.name
+            
+        colMap = {0: 'luminance', 1: 'chroma-red', 2: 'chroma-blue'}
+        for idx, col in colMap.items():
+            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array[:, :, idx], delimiter = ',')
+    ##################     
+    
+    def put(self, anyObj, 
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            font = None, lineType = None,
+            marker = None, annotation = None, enumeration = False, 
+            verbose = False):
+        return put(self, anyObj, 
+                   color = color, radius = radius, thickness = thickness, 
+                   where = where, size = size, marker = marker, 
+                   font = font, lineType = lineType,
+                   annotation = annotation, enumeration = enumeration,
+                   verbose = False)
+        
+    def zero(self):
+        return YCrCbFrame(np.zeros(self.shape[:2], dtype = 'uint8'))
+    
+    def mask(self, boolFrm):
+        maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
+        return YCrCbFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
+        
+    def hist(self, channels, normalize = False):
+        channelDict = {'Y': 0, 'Cr': 1, 'Cb': 2}
+        
+        ### figure out channels
+        chnList = []
+        binList = []
+        rngList = []
+        for c in channels:
+            chnList.append(channelDict[c])
+            binList.append(256)
+            rngList.extend([0, 256])
+            
+        histData = cv.calcHist([self.array], chnList, None, binList, rngList)
+        histFrm = pd.DataFrame(histData, dtype = 'int64')
+        if normalize:
+            histFrm = histFrm / histFrm.sum().sum()
+        return histFrm.squeeze()
+    ###############
+
 
 if __name__ == '__main__':
         

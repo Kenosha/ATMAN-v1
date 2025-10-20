@@ -16,7 +16,7 @@ from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 from ATMANpy.types.Contours import Contour, Contours
-from ATMANpy.types.Frames import HSVFrame, BGRFrame, GreyFrame, BoolFrame, MaskFrame
+from ATMANpy.types.Frames import HSVFrame, BGRFrame, YCrCbFrame, GreyFrame, BoolFrame, MaskFrame
 
 from skvideo.io import FFmpegWriter
 
@@ -690,6 +690,44 @@ class HSVFrames(Frames):
     def V(self):
         self_copy = self.array.copy()
         return GreyFrames(self_copy[:, :, :, 2], name = 'v_channels')
+     
+@dataclass(frozen = True)
+class YCrCbFrames(Frames):
+    name: str = 'ycrcb_frames'
+    
+    def __repr__(self):
+        return Frames.__repr__(self)
+    
+    @classmethod
+    def get_constituent(cls):
+        return YCrCbFrame
+    
+    @classmethod
+    def get_color(cls):
+        return 'ycrcb'
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_YCrCb'
+    
+    def to_grey(self):
+        return self.Y()
+    
+    def to_BGR(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_YCrCb2BGR) for imgArr in self.array])
+        return BGRFrames(convArr, name = self.name)
+     
+    def Y(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 0], name = 'y_channels')
+    
+    def Cr(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 1], name = 'cr_channels')
+    
+    def Cb(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 2], name = 'cb_channels')
      
 @dataclass(frozen = True)
 class GreyFrames(Frames):
