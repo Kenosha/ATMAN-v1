@@ -16,7 +16,7 @@ from ATMANpy.funcs.cv_funcs import get_frames, get_framelist
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region
 from ATMANpy.types.Contours import Contour, Contours
-from ATMANpy.types.Frames import HSVFrame, BGRFrame, YCrCbFrame, GreyFrame, BoolFrame, MaskFrame
+from ATMANpy.types.Frames import HSVFrame, BGRFrame, YCrCbFrame, GreyFrame, BoolFrame, MaskFrame, LABFrame
 
 from skvideo.io import FFmpegWriter
 
@@ -656,6 +656,10 @@ class BGRFrames(Frames):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2YCrCb) for imgArr in self.array])
         return YCrCbFrames(convArr, name = self.name)
     
+    def to_LAB(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2LAB) for imgArr in self.array])
+        return LABFrames(convArr, name = self.name)
+    
     def B(self):
         self_copy = self.array.copy()
         return GreyFrames(self_copy[:, :, :, 0], name = 'b_channels')
@@ -699,6 +703,10 @@ class HSVFrames(Frames):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2YCrCb) for imgArr in self.to_BGR().array])
         return YCrCbFrames(convArr, name = self.name)
      
+    def to_LAB(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2LAB) for imgArr in self.to_BGR().array])
+        return LABFrames(convArr, name = self.name)
+    
     def H(self):
         self_copy = self.array.copy()
         return GreyFrames(self_copy[:, :, :, 0], name = 'h_channels')
@@ -739,7 +747,11 @@ class YCrCbFrames(Frames):
      
     def to_HSV(self):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2HSV) for imgArr in self.to_BGR().array])
-        return BGRFrames(convArr, name = self.name)
+        return HSVFrames(convArr, name = self.name)
+    
+    def to_LAB(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2LAB) for imgArr in self.to_BGR().array])
+        return LABFrames(convArr, name = self.name)
 
     def Y(self):
         self_copy = self.array.copy()
@@ -752,6 +764,52 @@ class YCrCbFrames(Frames):
     def Cb(self):
         self_copy = self.array.copy()
         return GreyFrames(self_copy[:, :, :, 2], name = 'cb_channels')
+     
+@dataclass(frozen = True)
+class LABFrames(Frames):
+    name: str = 'lab_frames'
+    
+    def __repr__(self):
+        return Frames.__repr__(self)
+    
+    @classmethod
+    def get_constituent(cls):
+        return LABFrame
+    
+    @classmethod
+    def get_color(cls):
+        return 'lab'
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_LAB'
+    
+    def to_grey(self):
+        return self.Y()
+    
+    def to_BGR(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_YCrCb2BGR) for imgArr in self.array])
+        return BGRFrames(convArr, name = self.name)
+     
+    def to_HSV(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2HSV) for imgArr in self.to_BGR().array])
+        return BGRFrames(convArr, name = self.name)
+    
+    def to_YCrCb(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2YCrCb) for imgArr in self.to_BGR().array])
+        return BGRFrames(convArr, name = self.name)
+
+    def L(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 0], name = 'l_channels')
+    
+    def A(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 1], name = 'a_channels')
+    
+    def B(self):
+        self_copy = self.array.copy()
+        return GreyFrames(self_copy[:, :, :, 2], name = 'b_channels')
      
 @dataclass(frozen = True)
 class GreyFrames(Frames):
@@ -788,6 +846,10 @@ class GreyFrames(Frames):
     def to_YCrCb(self):
         convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2YCrCb) for imgArr in self.to_BGR().array])
         return YCrCbFrames(convArr, name = self.name)
+    
+    def to_LAB(self):
+        convArr = np.array([cv.cvtColor(imgArr, cv.COLOR_BGR2LAB) for imgArr in self.to_BGR().array])
+        return LABFrames(convArr, name = self.name)
         
 @dataclass(frozen = True)
 class BoolFrames(Frames):

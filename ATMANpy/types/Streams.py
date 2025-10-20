@@ -19,8 +19,8 @@ from collections import deque
 from random import randrange, sample
 from typing import List, Union
 
-from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame, YCrCbFrame
-from ATMANpy.types.MultiFrames import Frames, GreyFrames, BGRFrames, HSVFrames, BoolFrames, MaskFrames, YCrCbFrames
+from ATMANpy.types.Frames import Frame, BGRFrame, GreyFrame, HSVFrame, BoolFrame, MaskFrame, YCrCbFrame, LABFrame
+from ATMANpy.types.MultiFrames import Frames, GreyFrames, BGRFrames, HSVFrames, BoolFrames, MaskFrames, YCrCbFrames, LABFrames
 from ATMANpy.types.Features import StreamFeaturesBase, StreamFeatures, StreamFeature, SFList, ConstFeatures, ConstFeature
 from ATMANpy.types.Caches import Cache
 
@@ -42,6 +42,7 @@ nameMap = {'bgr': 'cFrm',
            'grey': 'gFrm',
            'hsv': 'hFrm',
            'ycrcb': 'yFrm',
+           'lab': 'lFrm',
            'bool': 'bFrm',
            'mask': 'mFrm'}
 
@@ -49,6 +50,7 @@ frameTypeMap = {'bgr': BGRFrame,
                 'grey': GreyFrame,
                 'hsv': HSVFrame,
                 'ycrcb': YCrCbFrame,
+                'lab': LABFrame,
                 'bool': BoolFrame,
                 'mask': MaskFrame}
 
@@ -56,6 +58,7 @@ framesTypeMap = {'bgr': BGRFrames,
                  'grey': GreyFrames,
                  'hsv': HSVFrames,
                  'ycrcb': YCrCbFrames,
+                 'lab': LABFrames,
                  'bool': BoolFrames,
                  'mask': MaskFrames}
 
@@ -64,6 +67,7 @@ def color_converter(imgArr, cap_color_space, target_color_space):
                  'grey': 'to_grey',
                  'hsv': 'to_HSV',
                  'ycrcb': 'to_YCrCb',
+                 'lab': 'to_LAB',
                  'bool': 'to_bool',
                  'mask': 'to_mask'} 
     
@@ -345,7 +349,7 @@ class Stream:
         ### size of raw video in stream
         unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
         
-        if self.target_color_space in ['hsv', 'bgr', 'ycrcb']:
+        if self.target_color_space in ['hsv', 'bgr', 'ycrcb', 'lab']:
             mult = 3
         else:
             mult = 1

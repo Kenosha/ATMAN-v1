@@ -80,6 +80,7 @@ class Frame:
         typeMap = {'bgr': BGRFrame,
                    'hsv': HSVFrame,
                    'ycrcb': YCrCbFrame,
+                   'lab': LABFrame,
                    'grey': GreyFrame,
                    'bool': BoolFrame,
                    }
@@ -826,6 +827,10 @@ class GreyFrame(Frame):
         self_copy = self.array.copy() # to preverve immutability of frame
         return YCrCbFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_GRAY2BGR), cv.COLOR_BGR2YCrCb), name = self.name)
 
+    def to_LAB(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return LABFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_GRAY2BGR), cv.COLOR_BGR2LAB), name = self.name)
+
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
@@ -1027,6 +1032,10 @@ class BGRFrame(Frame):
         self_copy = self.array.copy() # to preverve immutability of frame
         return YCrCbFrame(cv.cvtColor(self_copy, cv.COLOR_BGR2YCrCb), name = self.name)
     
+    def to_LAB(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return LABFrame(cv.cvtColor(self_copy, cv.COLOR_BGR2LAB), name = self.name)
+
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
@@ -1146,6 +1155,10 @@ class HSVFrame(Frame):
         self_copy = self.array.copy() # to preverve immutability of frame
         return YCrCbFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_HSV2BGR), cv.COLOR_BGR2YCrCb), name = self.name)
 
+    def to_LAB(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return LABFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_HSV2BGR), cv.COLOR_BGR2LAB), name = self.name)
+    
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
@@ -1264,7 +1277,11 @@ class YCrCbFrame(Frame):
     def to_HSV(self):
         self_copy = self.array.copy() # to preverve immutability of frame
         return HSVFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_YCrCb2BGR), cv.COLOR_BGR2HSV), name = self.name)
-
+    
+    def to_LAB(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return LABFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_YCrCb2BGR), cv.COLOR_BGR2LAB), name = self.name)
+    
     def to_csv(self, savePath, name = None):
         if name is None:
             name = self.name
@@ -1295,6 +1312,130 @@ class YCrCbFrame(Frame):
         
     def hist(self, channels, normalize = False):
         channelDict = {'Y': 0, 'Cr': 1, 'Cb': 2}
+        
+        ### figure out channels
+        chnList = []
+        binList = []
+        rngList = []
+        for c in channels:
+            chnList.append(channelDict[c])
+            binList.append(256)
+            rngList.extend([0, 256])
+            
+        histData = cv.calcHist([self.array], chnList, None, binList, rngList)
+        histFrm = pd.DataFrame(histData, dtype = 'int64')
+        if normalize:
+            histFrm = histFrm / histFrm.sum().sum()
+        return histFrm.squeeze()
+    ###############
+
+
+@dataclass(frozen = True)
+class LABFrame(Frame):
+    ### lightness/A/B frame
+    array: np.ndarray
+    name: str = 'frame'
+    
+    def __post_init__(self):
+        ### call post init of super class
+        super(LABFrame, self).__post_init__()
+        
+        #### TYPE CHECKS ####
+        arraycheck(self, channel_number = 3, color_channel_length = 3)
+        #####################   
+        
+        #### IMMUTABILITY BREAKS ####
+        # convert grayscale to a grey HSV
+        # if len(self.array.shape) == 2:
+        #     object.__setattr__(self, 'array', cv.cvtColor(self.array,  cv.COLOR_GRAY2))
+        #############################  
+    
+    @staticmethod
+    def from_csv(readpath, name = 'frame'):
+        colMap = {0: 'lightness', 1: 'green-red', 2: 'blue-yellow'}
+        arrList = []
+        for idx, col in colMap.items():
+            arr = np.genfromtxt(os.path.join(readpath, f'{name}_{col}.csv'), delimiter = ',', dtype = 'uint8')
+            arrList.append(arr)
+        arr = np.stack(arrList, axis = -1)
+        return LABFrame(arr, name = name)
+    
+    
+    @staticmethod
+    def make_black(cols = 1920, rows = 1080):
+        return LABFrame(np.zeros((rows, cols, 3), dtype = 'uint8'))
+
+    ####################
+    
+    @classmethod
+    def get_converter(cls):
+        return 'to_LAB'
+    @classmethod
+    def get_color(cls):
+        return 'lab'
+    
+    def __repr__(self):
+        return f'LABFrame({self.cols} by {self.rows} by {self.channels}, name: {self.name})'
+    
+    ### TRANSFORMS ###
+    def L(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 0], name = self.name)
+    
+    def A(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 1], name = self.name)
+    
+    def B(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(self_copy[:, :, 2], name = self.name)
+    
+    def to_grey(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return GreyFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_LAB2BGR), cv.COLOR_BGR2GRAY), name = self.name)
+        
+    def to_BGR(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return BGRFrame(cv.cvtColor(self_copy, cv.COLOR_LAB2BGR), name = self.name)
+    
+    def to_HSV(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return HSVFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_LAB2BGR), cv.COLOR_BGR2HSV), name = self.name)
+
+    def to_YCrCb(self):
+        self_copy = self.array.copy() # to preverve immutability of frame
+        return YCrCbFrame(cv.cvtColor(cv.cvtColor(self_copy, cv.COLOR_LAB2BGR), cv.COLOR_BGR2YCrCb), name = self.name)
+
+    def to_csv(self, savePath, name = None):
+        if name is None:
+            name = self.name
+            
+        colMap = {0: 'lightness', 1: 'green-red', 2: 'blue-yellow'}
+        for idx, col in colMap.items():
+            np.savetxt(os.path.join(savePath, f'{name}_{col}.csv'), self.array[:, :, idx], delimiter = ',')
+    ##################     
+    
+    def put(self, anyObj, 
+            color = (0, 255, 0), radius = 1, thickness = 1, where = (50, 50), size = 1, 
+            font = None, lineType = None,
+            marker = None, annotation = None, enumeration = False, 
+            verbose = False):
+        return put(self, anyObj, 
+                   color = color, radius = radius, thickness = thickness, 
+                   where = where, size = size, marker = marker, 
+                   font = font, lineType = lineType,
+                   annotation = annotation, enumeration = enumeration,
+                   verbose = False)
+        
+    def zero(self):
+        return LABFrame(np.zeros(self.shape[:2], dtype = 'uint8'))
+    
+    def mask(self, boolFrm):
+        maskArr = boolFrm.array.astype('uint8') # cv mask does not accept bools
+        return LABFrame(cv.bitwise_and(self.array, self.array, mask = maskArr))
+        
+    def hist(self, channels, normalize = False):
+        channelDict = {'L': 0, 'A': 1, 'B': 2}
         
         ### figure out channels
         chnList = []
