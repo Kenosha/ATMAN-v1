@@ -445,6 +445,16 @@ class Frames:
 
         return framesType(targetArr, name = self.name)
 
+    def grade_log_to_linear(self, power = 1.9, contrast_boost = 1.2, offset = -0.1):
+        InstClass = self.__class__
+        self_copy = self.array.copy().astype(np.float32) / 255.0
+        
+        linear = np.power(self_copy, power)  # approximate inverse-log curve (with power = 1.9)
+        graded = np.clip(contrast_boost * linear + offset, 0, 1)
+        outArr = (graded * 255).astype(np.uint8)
+        
+        return InstClass(outArr, name = self.name)
+
     def pad(self, to_height = None, to_width = None, height_how = 'center', width_how = 'center'):
         ### height_how: center, up, down; width_how: center, left, right.
         assert height_how in ['center', 'up', 'down']
