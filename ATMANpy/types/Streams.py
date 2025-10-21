@@ -341,8 +341,8 @@ class Stream:
         return self.stop_frame - self.start_frame + 1
     
     def dims(self):
-        width  = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH)) 
-        height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+        width  = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH) * self.scale_factor) 
+        height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT) * self.scale_factor)
         return width, height
     
     def size(self, unit = 'GB'):
@@ -850,8 +850,8 @@ class StillStream:
         return self.stop_frame - self.start_frame + 1
     
     def dims(self):
-        width  = self.stillFrm.cols
-        height = self.stillFrm.rows
+        width  = int(self.stillFrm.cols * self.scale_factor) 
+        height = int(self.stillFrm.rows * self.scale_factor)
         return width, height
     
     def size(self, unit = 'GB'):

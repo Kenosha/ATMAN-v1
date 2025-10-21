@@ -141,6 +141,7 @@ def draw(featList, add_text = None, textRegion = None):
                     
             elif featStr == 'courtLines':
                 sendFrm = sendFrm.put(feat, thickness = THICKNESS, color = LINE_COLOR)
+
             else:
                 if 'good' in featStr:
                     color = (0, 255, 0)
