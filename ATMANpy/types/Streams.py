@@ -846,6 +846,13 @@ class StillStream:
             
         return outFrm
     
+    def get_still(self):
+        ### use this instead of self.stillFrm
+        if self.scale_factor != 1:
+            outFrm = self.stillFrm.rescale(self.scale_factor)
+        else:
+            outFrm = self.stillFrm
+            
     def length(self):
         return self.stop_frame - self.start_frame + 1
     
