@@ -738,6 +738,11 @@ class Stream:
     def apply_chunked_mp(self, featureFunc, num_workers, chunksize, verbose = False, **kwargs):
         return Stream._apply_chunked(self, featureFunc, Pool, num_workers, chunksize, **kwargs, verbose = verbose)
     
+    @extract_mp_timer
+    def apply_chunked_mp_to_disc(self, featureFunc, num_workers, chunksize, 
+                                 videoName, storeName, savekwargs, verbose = False, **kwargs):
+        return Stream._apply_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize, 
+                                             videoName, storeName, savekwargs, verbose = verbose, **kwargs)
        
 @dataclass(frozen = True)
 class StillStream:
