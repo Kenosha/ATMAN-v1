@@ -509,10 +509,12 @@ class Stream:
         else:
             yield self.conform(chunk_start, chunk_stop).decap() ### yield one last time
 
-    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None):
+    def show(self, ms_between_frames = 40, frame_counter = False, text_region = None, drawFunc = None):
         gen = self.generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
         frmNum, myFrm, myDict = next(gen) ### prime the generator
-        drawFunc = draw(self.features.get_features(), textRegion = text_region)
+        
+        if drawFunc is None:
+            drawFunc = draw(self.features.get_features(), textRegion = text_region)
         
         while True:
             sendFrm = drawFunc({'cFrm': myFrm}, myDict) ### TODO: Clean this up! myFrm is not always cFrm!
