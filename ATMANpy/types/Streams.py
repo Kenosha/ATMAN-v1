@@ -260,7 +260,7 @@ class Stream:
             print(f'Negative start frame ({self.start_frame}) not available. Reinitializing with start_frame = 0...')
             object.__setattr__(self, 'start_frame', 0)
         
-        if self.stop_frame > self.start_frame + total_frames:
+        if self.stop_frame > total_frames:
             print(f'{self.stop_frame} not available in cap of length {total_frames}. Reinitializing with stop_frame = {total_frames}...')
             object.__setattr__(self, 'stop_frame', total_frames)
             
