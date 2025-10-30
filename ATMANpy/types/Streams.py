@@ -385,7 +385,7 @@ class Stream:
         updDict = {'scale_factor': new_scale_factor}
         newDict = get_updated_attribute_dictionary(self, updDict)
         return self.__class__(**newDict)
-    
+
     def attach(self, mySF: StreamFeatures):
         updDict = {'features': mySF}
         newDict = get_updated_attribute_dictionary(self, updDict)
@@ -397,11 +397,17 @@ class Stream:
             random_frame = random.randint(self.start_frame, self.stop_frame)
             return self.get(random_frame)
         else:
-            frmNums = list(range(self.start_frame, self.stop_frame))
+            frmNums = self.get_framelist()
             ncStm = NCStream(cap = self.cap, frmNums = frmNums, truncation_anchor = self.truncation_anchor,
                              cap_color_space = self.cap_color_space, target_color_space = self.target_color_space,
                              scale_factor = self.scale_factor, name = self.name, features = self.features)
             return ncStm.sample(number_of_frames)
+
+    def skip(self, skip):
+        ### skip a fixed number of frames
+        attrDict = get_updated_attribute_dictionary(self, {})
+        attrDict['skip'] = skip
+        return SkipStream(**attrDict)
 
     def decap(self):
         framesType = framesTypeMap[self.target_color_space]
@@ -746,6 +752,44 @@ class Stream:
         return Stream._apply_chunked_to_disc(self, featureFunc, Pool, num_workers, chunksize, 
                                              videoName, storeName, savekwargs, verbose = verbose, **kwargs)
        
+@dataclass(frozen = True)
+class SkipStream(Stream):
+    ### A Stream that only reads every 'skip' frames
+    skip: int = 5
+
+    ### TODO: static methods -> implement (maybe write general functions and streamline across classes)
+    
+    def __post_init__(self):
+        super().__post_init__()
+
+    def get(self, frmNum, put = True):
+        assert self.start_frame <= frmNum <= self.stop_frame, f'Frame requested has to be between {self.start_frame} and {self.stop_frame}'
+
+        diff = frmNum - self.start_frame
+        mod = diff % self.skip
+        frmNum -= mod ### rectify
+
+        return super().get(frmNum, put = put)
+    
+    def size(self, unit = 'GB'):
+        return super().size(unit = unit) / self.skip
+    
+    def get_framelist(self):
+        return super().get_framelist()[::self.skip]
+    
+    def to_NCStream(self):
+        return NCStream(self.cap, self.get_framelist(), 
+                        truncation_anchor = self.truncation_anchor,
+                        cap_color_space = self.cap_color_space, target_color_space = self.target_color_space, 
+                        scale_factor = self.scale_factor,
+                        features = self.features, name = self.name)
+
+    def decap(self):
+        return self.to_NCStream().decap()
+
+    def generator(self, ms_between_frames = 40, frame_counter = False):
+        return self.to_NCStream().generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    
 @dataclass(frozen = True)
 class StillStream:
     ### instead of a cap, a StillStream has a single frame!
