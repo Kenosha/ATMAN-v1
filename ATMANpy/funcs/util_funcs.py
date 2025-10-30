@@ -48,6 +48,7 @@ def make_timestamp():
 ####### video read in
 
 
+
 def text_to_dict(textPath):
     with open(textPath) as f:
         lines = f.readlines()
