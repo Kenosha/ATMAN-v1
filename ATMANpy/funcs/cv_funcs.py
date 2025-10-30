@@ -21,7 +21,8 @@ def show(frame, name = 'frame', num_seconds = None):
 
 def show_continuous(frame, name = 'frame', ms_between_frames = 30):
     cv.imshow('frame', frame)
-    if cv.waitKey(ms_between_frames) & 0xFF == ord('q'):
+    wait_return = cv.waitKey(ms_between_frames) ### wait, and check for key input.
+    if wait_return & 0xFF == ord('q'): ### if key input corresponds to character q, break.
         cv.destroyAllWindows()  
         return False ### needed for signalling a possible break condition
     return True
