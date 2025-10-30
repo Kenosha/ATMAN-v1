@@ -321,6 +321,69 @@ def calculate_homography(schemaPts: tuple, projectedPts: tuple):
     H, status = cv.findHomography(schemaPtsArray, projectedPtsArray)
     return H
 
+def get_homography_from_four_points(p1, p2, p3, p4, white_BoolFrm, match_score = 1, unmatch_score = -0.01, force_config_index = None,
+                                    verbose = False, show_threshold_score = 100000, displayFrame = None):
+
+    courtLines = CourtLines.make()
+    if displayFrame is None:
+        displayFrame = white_BoolFrm.to_grey()
+    court_configs = get_court_schema_intersection_points(CourtLines.make())
+
+    if force_config_index is not None:
+        court_configs = [court_configs[force_config_index]]
+
+    ### point permutations
+    from itertools import permutations
+    perms = list(permutations([p1, p2, p3, p4]))
+
+    max_score = 0
+    best_homography = None
+    best_config = None
+    from ATMANpy.funcs.line_funcs import calculate_homography
+    for pts_sel in perms:
+        for pts_crt in court_configs:
+            H = calculate_homography(pts_crt, pts_sel)
+
+            ### iii) given a homography, project court schema onto frame.
+            try:
+                projLines = courtLines.transform('apply_homography', H).transform('round_points')
+                projFrm = (white_BoolFrm.zero().put(projLines) > 0) ### TODO: Thickness of line putting could be adapted?!
+            except: ### ValueError or OverflowError (cannot convert float infinity to integer, or integer too large)
+                continue
+            
+            projected_matches_white = projFrm & white_BoolFrm
+            good_score = match_score * projected_matches_white.array.sum()
+
+            projected_does_not_match_white = projFrm & ~white_BoolFrm
+            bad_score = unmatch_score * projected_does_not_match_white.array.sum()
+
+            score = good_score + bad_score
+            
+            if verbose:
+                if show_threshold_score is None:
+                    show_cond = True
+                else:
+                    show_cond = score > show_threshold_score
+
+                if show_cond:
+                    t1 = f'Match Score: {good_score}'
+                    t2 = f'Non-Match Penalty: {-bad_score}'
+                    t3 = f'TOTAL: {score}'
+                    t4 = f'Best so far: {max_score}'
+                    scoreFrm = displayFrame.to_BGR().put(projLines, thickness = 3) ### THICKNESS: HALF, OR FULL COURT LINE WIDTH?
+                    scoreFrm = scoreFrm.put(t1, where = (50, 50), thickness = 3)
+                    scoreFrm = scoreFrm.put(t2, where = (50, 80), thickness = 3)
+                    scoreFrm = scoreFrm.put(t3, where = (50, 110), thickness = 3)
+                    scoreFrm = scoreFrm.put(t4, where = (50, 140), thickness = 3)
+                    scoreFrm.show()
+
+            if score > max_score:
+                max_score = score
+                best_homography = H.copy()
+                best_config = pts_crt
+
+    return best_homography, best_config
+
 def get_homography(v_Lines, h_Lines, white_BoolFrm, 
                    verbose = False, show_threshold_score = 1000, displayFrame = None):
     ## scores for matched and unmatched
