@@ -113,6 +113,13 @@ def calculate_homography(tl, tr, bl, br):
 def replace_trackflag(trackFlag, replace_value):
     return ''
         
+def region_bottom(someReg):
+    if someReg is None:
+        cntPnt = None
+    else:
+        cntPnt = someReg['Bottom'].center()
+    return cntPnt
+
 # def choose_ball_contour(smooth_particles, candCnts, likelihood_threshold = 10 ** (-15)):
 #     ballCnt = pf.choose_likely_ball_contour(smooth_particles, candCnts, l_threshold = likelihood_threshold)
 #     return ballCnt
