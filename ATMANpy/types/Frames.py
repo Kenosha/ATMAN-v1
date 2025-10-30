@@ -191,6 +191,9 @@ class Frame:
         return InstClass(cropArr)
     
     ### UTILITY METHODS ###
+    def has_color(self):
+        return len(self.shape) == 3
+
     def rename(self, new_name):
         return self.__class__(self.array, name = new_name)
     
@@ -243,6 +246,13 @@ class Frame:
     def sum(self, axes):
         return self.array.sum(axes)
     
+    def norm(self, p = 2):
+        if self.has_color():
+            outArr = np.abs(self.array.astype(float) ** p).sum(axis = -1) ** (1/p)
+            return GreyFrame(outArr.clip(min = 0, max = 255).astype(np.uint8), name = f'norm_{self.name}')
+        else:
+            return GreyFrame(self.array.copy(), name = f'norm_{self.name}')
+        
     def clip_lo(self, y):
         InstClass = self.__class__
         return InstClass(cv.max(self.array, Frame.get_operant(y)))

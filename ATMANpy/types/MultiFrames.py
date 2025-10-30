@@ -277,8 +277,15 @@ class Frames:
         frameType = framesType.get_constituent()
         return FramesIterator(frameType, self.array, self.name)
     
+    def norm(self, p = 2):
+        if self.has_color():
+            outArr = np.abs(self.array.astype(float) ** p).sum(axis = -1) ** (1/p)
+            return GreyFrames(outArr.clip(min = 0, max = 255).astype(np.uint8), name = f'norm_{self.name}')
+        else:
+            return GreyFrames(self.array.copy(), name = f'norm_{self.name}')
+        
     def has_color(self):
-        return self.shape() == 4
+        return len(self.shape()) == 4
     
     def size(self, unit = 'GB'):
         unitMap = {'B': 1, 'KB': 1000, 'MB': 1000 ** 2, 'GB': 1000 ** 3}
