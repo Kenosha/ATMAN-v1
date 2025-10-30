@@ -426,7 +426,7 @@ arrFrms2 = BGRFrames.from_frame(arrFrm2, 100)
 currFrms = BGRFrames.from_frames([fadeFrms, statFrms,
                                   arrFrms1, arrFrms2])
 
-currFrms = overlay_footnote(currFrms, "XX:XX-XX:XX:", "For more info on\nthe construction and interpretation\nof the leverage metric.")
+currFrms = overlay_footnote(currFrms, "00:56-02:49:", "For more info on\nthe construction and interpretation\nof the leverage metric.")
 
 
 all_frames.append(currFrms)

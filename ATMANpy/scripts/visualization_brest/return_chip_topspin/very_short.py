@@ -1316,7 +1316,7 @@ script_line =   """
                 """
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
 
-rastFrms_static = overlay_footnote(rastFrms_static, "XX:XX-XX:XX:", "For more info on the construction\nand interpretation of target zones.")
+rastFrms_static = overlay_footnote(rastFrms_static, "15:13-16:58:", "For more info on the construction\nand interpretation of target zones.")
 
 all_frames.append(rastFrms_static)
 script_lines.append(script_line)
@@ -1373,7 +1373,7 @@ script_line =   """
 
 rastFrms_static = BGRFrames.from_frame(rastFrms[-1], 50)
 
-rastFrms_static = overlay_footnote(rastFrms_static, "XX:XX-XX:XX:", "For more info on the difference\nbetween low and high chip returns.")
+rastFrms_static = overlay_footnote(rastFrms_static, "10:26-12:36:", "For more info on the difference\nbetween low and high chip returns.")
 
 all_frames.append(rastFrms_static)
 script_lines.append(script_line)
@@ -2453,7 +2453,7 @@ smart_bal_lenFrms_large = BGRFrames.from_frame(smart_bal_len_frm_large, 25)
 
 jointFrms = BGRFrames.from_frames([naiveFrms_with_arrow_large, smartFrms_large, smart_balFrms_large, smart_bal_lenFrms_large])
 
-jointFrms = overlay_footnote(jointFrms, "XX:XX-XX:XX:", "For more info on these statistical\nadjustments.")
+jointFrms = overlay_footnote(jointFrms, "01:12-09:00:", "For more info on these statistical\nadjustments.")
 
 all_frames.append(jointFrms)
 script_lines.append(script_line)
@@ -2483,7 +2483,7 @@ script_line = "... the difference in win rate is still at 12%."
 smart_bal_len_frm_large_with_arrow = overlay(BGRFrame.make_black(), smart_bal_len_frm_with_arrow, top_left_point = table_offsetPt)
 smart_bal_lenFrms_large_with_arrow = BGRFrames.from_frame(smart_bal_len_frm_large_with_arrow, 50)
 
-smart_bal_lenFrms_large_with_arrow = overlay_footnote(smart_bal_lenFrms_large_with_arrow, "XX:XX-XX:XX:", "For more info on these statistical\nadjustments.")
+smart_bal_lenFrms_large_with_arrow = overlay_footnote(smart_bal_lenFrms_large_with_arrow, "01:12-09:00:", "For more info on these statistical\nadjustments.")
 
 all_frames.append(smart_bal_lenFrms_large_with_arrow)
 script_lines.append(script_line)
@@ -2901,7 +2901,7 @@ script_line =   """
                     enabling the server to go for a forehand inside-out or inside-in. 
                 """
 
-exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nthe run-around serve+1")
+exFrms = overlay_footnote(exFrms, "21:25-26:00:", "For more info on the impact of\nthe run-around forehand\non a chip return")
 rast_frames.append(exFrms)
 
 def get_return_motion(myPnt, color = const.BGR['intense_red'], cumulative_transparence = 0.95, max_hat_len = 20, which = 'rec', next_frames = 0):
@@ -2996,7 +2996,7 @@ for myPnt in candPnts:
 
     # if i < 6:
     #     exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nthe run-around serve+1")
-    exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nthe run-around serve+1")
+    exFrms = overlay_footnote(exFrms, "21:25-26:00:", "For more info on the impact of\nthe run-around forehand\non a chip return")
 
     rast_frames.append(exFrms)
 
@@ -3087,7 +3087,7 @@ exRst.add(bulletFrms1b, row, col)
 exFrms = exRst.render()
 rast_frames.append(exFrms)
 
-exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
+exFrms = overlay_footnote(exFrms, "12:38-14:46:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
 rast_frames.append(exFrms)
 
 i = 0
@@ -3129,7 +3129,7 @@ for myPnt in candPnts:
     
     # if i < 6:
     #     exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
-    exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
+    exFrms = overlay_footnote(exFrms, "12:38-14:46:", "For more info on the impact of\nreturn shot selection\non time to reposition.")
 
     rast_frames.append(exFrms)
 
@@ -3217,7 +3217,7 @@ script_line =   """
                     server into premature aggression, and entice an error by the server.
                 """
 
-exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on premature aggression\nagainst chip returns.")
+exFrms = overlay_footnote(exFrms, "07:42-08:36:", "For more info on premature aggression\nagainst chip returns.")
 rast_frames.append(exFrms)
 
 i = 0
@@ -3253,7 +3253,7 @@ for myPnt in candPnts:
 
     exFrms = exRst.render()
     
-    exFrms = overlay_footnote(exFrms, "XX:XX-XX:XX:", "For more info on premature aggression\nagainst chip returns.")
+    exFrms = overlay_footnote(exFrms, "07:42-08:36:", "For more info on premature aggression\nagainst chip returns.")
 
     rast_frames.append(exFrms)
 
