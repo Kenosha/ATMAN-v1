@@ -97,12 +97,15 @@ def main(conf, courtline_params, name = None):
     # check(ppl, vid, sto, courtSF, randStm, courtLines, netLines)
     
 if __name__ == '__main__':
-    
+    from ATMANpy.funcs.util_funcs import get_folder_struct
     import ATMANpy.scripts.pipeline_brest_tightseg as ppl
+    
     prm_mod = ppl.parameter_files.default
     cnf_mod = ppl.config_files.default
+
+    avail_vids = [f for f in get_folder_struct('video_files') if 'brest' in f]
+    conf = cnf_mod.get_conf(avail_vids[0])
     
-    conf = cnf_mod.conf
     courtline_params = prm_mod.court_lines.courtline_params
     
     name = ppl._name
