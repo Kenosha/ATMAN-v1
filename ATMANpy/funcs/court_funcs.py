@@ -15,6 +15,7 @@ import ATMANpy.auxil.constants as const
 
 ### PARAMETERS ###
 WHITE_PIXEL_THRESHOLD = 150 #this depends heavily on brightness of picture... lines are white, but they might not appear at 255 intensity.
+WHITE_PIXEL_THRESHOLD_UPPER = 255 # different cameras, different brightness.
 COURT_LINE_WIDTH = 8 ### according to own rough calcs at 1920 x 1080, and also according to vinyes (2018), court line width is equal to 5 pixels
 INTENSITY_DIFFERENCE_THRESHOLD = 30
 
@@ -35,6 +36,7 @@ def find_linesets(gFrm,
                   width_of_line = COURT_LINE_WIDTH, 
                   int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
                   white_thresh = WHITE_PIXEL_THRESHOLD,
+                  white_thresh_upper = WHITE_PIXEL_THRESHOLD_UPPER,
                   rho = RHO, theta = THETA, min_votes = MIN_VOTES,
                   minLineLength = MIN_LINE_LENGTH, maxLineGap = MAX_LINE_GAP,
                   merge_threshold = MERGE_THRESHOLD, 
@@ -46,7 +48,8 @@ def find_linesets(gFrm,
     allBFrm = get_white_lines_fast(gFrm, 
                                    width_of_line = width_of_line,
                                    int_diff_thresh = int_diff_thresh,
-                                   white_thresh = white_thresh)
+                                   white_thresh = white_thresh,
+                                   white_thresh_upper = white_thresh_upper)
     
     if verbose: allBFrm.show()
     
@@ -159,6 +162,7 @@ def find_homography_225_only(gFrm,
 def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH, 
                     int_diff_thresh = INTENSITY_DIFFERENCE_THRESHOLD,
                     white_thresh = WHITE_PIXEL_THRESHOLD,
+                    white_thresh_upper = WHITE_PIXEL_THRESHOLD_UPPER,
                     rho = RHO, theta = THETA, min_votes = MIN_VOTES,
                     minLineLength = MIN_LINE_LENGTH, maxLineGap = MAX_LINE_GAP,
                     merge_threshold = MERGE_THRESHOLD, 
@@ -170,10 +174,12 @@ def find_homography(gFrm, width_of_line = COURT_LINE_WIDTH,
     allBFrm = get_white_lines_fast(gFrm, 
                                    width_of_line = width_of_line,
                                    int_diff_thresh = int_diff_thresh,
-                                   white_thresh = white_thresh)
+                                   white_thresh = white_thresh,
+                                   white_thresh_upper = white_thresh_upper
+                                   )
     
     houghLines = allBFrm.prob_hough(rho = rho, theta = theta, min_votes = min_votes, 
-                                    minLineLength = minLineLength, maxLineGap = maxLineGap)
+                                    minLineLength = 25, maxLineGap = maxLineGap)
     
     if len(houghLines) < 4:
         return None, None
