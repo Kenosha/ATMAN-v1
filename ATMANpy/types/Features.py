@@ -763,6 +763,10 @@ class StreamFeatures(StreamFeaturesBase):
         featList = [self[featName].rescale(scale_factor) for featName in self.get_features()]
         return SFList(featList).join()
 
+    def recolor(self, colorDict):
+        featList = [self[featName].recolor(colorDict[featName]) for featName in self.get_features()]
+        return SFList(featList).join()
+
     def length(self):
         return len(self.streamDict)
     
