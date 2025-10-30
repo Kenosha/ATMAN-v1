@@ -59,6 +59,22 @@ def get_burn_in_mask_simple(hFrms, median_backFrm,
     
     return foregroundMask
 
+def get_burn_in_mask_lab(lFrms, median_backFrm, 
+                         ROI = None, dist_threshold = 15,
+                         gaussian_kernel = (13, 13), closing_kernel = (15, 30)):
+    diffFrms = lFrms - median_backFrm
+    
+    diffFrms = diffFrms.gaussian_blur(gaussian_kernel) ### to combat salt and pepper noise
+
+    if not ROI is None:
+        diffFrms = diffFrms.mask(diffFrms.within_region(ROI))
+
+    foregroundMask = diffFrms.norm() > dist_threshold
+
+    foregroundMask = foregroundMask.close(closing_kernel) ### to close of player shapes, and reduce the number of contours.
+
+    return foregroundMask
+    
 def get_shadow_mask_simple(hFrms, median_backFrm, 
                            ROI = None,
                            h_threshold = 5, s_threshold = 10, 
