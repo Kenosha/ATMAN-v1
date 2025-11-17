@@ -30,7 +30,7 @@ import ATMANpy.scripts.visualization_brest.atman_capabilities.utils as vis_ut
 from ATMANpy.models.ParticleFilter import ParticleFilter
 from ATMANpy.funcs.particle_funcs_vectorized import particles_to_points
 
-SAVE = True
+SAVE = False
 
 ########################################
 ########### SAVE FOLDER ################

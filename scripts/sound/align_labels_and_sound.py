@@ -78,9 +78,11 @@ vidDict = {
             '2021-7341-ms013-brest-richard-gasquet-vs-thomas-fabbiano': (0, 3)
            }
 
+sto = 'segmentation_and_labelling_impactonly'
+kind = 'bounce'
+
 # for vid in vidDict:
 vid = '2021-7341-ms010-brest-brandon-nakashima-vs-bernabe-zapata-miralles'
-sto = 'segmentation_and_labelling_impactonly'
 fs_crt, ls_crt = vidDict[vid]
 videoDir = ut.get_folder_struct('video_files')[vid]
 videoPath = os.path.join(videoDir, 'match.mp4')
@@ -99,12 +101,19 @@ crtBF = crtBFs.concatenate().conform(segBF).fillna(False)
 # split single points
 segBF = segBF.filter(crtBF).filter(segBF)
 
+label_feat_name = f'labelled_{kind}_Flag'
+if kind == 'shot':
+    labSF = StreamFeatures.from_store(vid, sto, featnameList = ['labelled_top_Flag', 'labelled_bot_Flag'])
+    labSF = labSF['labelled_top_Flag'].fillna(labSF['labelled_bot_Flag']).rename(label_feat_name)
+else:
+    labSF = StreamFeature.from_store(vid, sto, featname = label_feat_name)
+# labSF_first = labSF.filter(labSF == 'bounce first') ### only interested in first bounces (others are likely not well perceptible... let's try anyway
 
-labSF = StreamFeatures.from_store(vid, sto, featnameList = ['labelled_top_Flag', 'labelled_bot_Flag'])
+audio_feat_name = f'labelled_{kind}_audio_sample_Flag'
 try:
-    smpSF = StreamFeature.from_store(vid, sto, featname = 'labelled_shot_audio_sample_Flag')
+    smpSF = StreamFeature.from_store(vid, sto, featname = audio_feat_name)
 except:
-    smpSF = StreamFeature({}, name = 'labelled_shot_audio_sample_Flag')
+    smpSF = StreamFeature({}, name = audio_feat_name)
 
 jntSFs = segBF.merge(labSF, how = 'left').merge(smpSF, how = 'left').drop('isPlay').split()
     
@@ -128,13 +137,16 @@ ae_wl = 256
 ae_hl = 16
 
 graph_folder = ut.get_folder_struct('graphs')['audio_analysis']
-save_folder = ut.maybe_make_folder(graph_folder, f'label_alignment_off{offset}_wl{ae_wl}_hl{ae_hl}_{vid}')
+save_folder = ut.maybe_make_folder(graph_folder, f'label_alignment_bounces_off{offset}_wl{ae_wl}_hl{ae_hl}_{vid}')
 
 breakFlag = False
 
 sampleDict = {}
 for seq_idx, mySF in enumerate(jntSFs):
     mySF = mySF.dropna()
+    if mySF.is_empty():
+        continue
+    
     shotSFs = mySF.split() ### this way, double-frame impacts are done only once.
     
     print(f'Sequence {seq_idx} out of {jntSFs.length()}...')
@@ -142,13 +154,14 @@ for seq_idx, mySF in enumerate(jntSFs):
     for hit_idx, shotSF in enumerate(shotSFs):
         name = f'seq{seq_idx}_hit{hit_idx}'
         try:
-            audio_labSF = shotSF['labelled_shot_audio_sample_Flag'].dropna()
+            audio_labSF = shotSF[audio_feat_name].dropna()
         except:
             pass
         else:
             if not audio_labSF.is_empty(): ### already labelled this!
                 if audio_labSF.unique()[0] == 'redo':
-                    name = name + '_redo'
+                    pass
+                    # name = name + '_redo'
                 else:
                     continue
             
@@ -166,13 +179,9 @@ for seq_idx, mySF in enumerate(jntSFs):
             #     which = 'bot'
             
             ### figure out first and last sample within the inmpact frame(s) 
-            if len(frames) == 1:
-                frame1 = frames[0]
-                fs_sample, ls_sample = first_last_sample_index_in_frame(frame1, 0, samples_per_frame)
-            elif len(frames) == 2:
-                frame1, frame2 = frames
-                fs_sample, _ = first_last_sample_index_in_frame(frame1, 0, samples_per_frame)
-                _, ls_sample = first_last_sample_index_in_frame(frame2, 0, samples_per_frame)
+            fs_frame, ls_frame = frames[0], frames[-1]
+            fs_sample, _ = first_last_sample_index_in_frame(fs_frame, 0, samples_per_frame)
+            _, ls_sample = first_last_sample_index_in_frame(ls_frame, 0, samples_per_frame)
 
             
             ### Produce the cropped waveform
@@ -209,13 +218,15 @@ for seq_idx, mySF in enumerate(jntSFs):
             try:
                 choiceInt = int(choiceStr)
             except:
-                if choiceStr == 'l': ### l for listen
-                    slowdown = 4
+                if choiceStr.startswith('l'): ### l for listen
+                    if choiceStr == 'l':
+                        choiceStr = 'l_4'
+                    slowdown = int(choiceStr.split('_')[1])
                     slow_sr = sample_rate // slowdown
                     sd.play(crop_waveform, samplerate = slow_sr)
                     time.sleep(len(crop_waveform) / slow_sr)
                 elif choiceStr == 'v': ### v for view
-                    Stream(cap, frame1 - frames_before, frame1 + frames_after).show(ms_between_frames = 1000)
+                    Stream(cap, fs_frame - frames_before, ls_frame + frames_after).show(ms_between_frames = 1000)
                 elif choiceStr == 'x': ### store and redo
                     chosen_peak_sample_shifted = 'redo'
                 elif choiceStr == 'q':
@@ -247,7 +258,7 @@ for seq_idx, mySF in enumerate(jntSFs):
     if breakFlag:
         break
 
-sampleSF = StreamFeature(sampleDict, name = 'labelled_shot_audio_sample_Flag')
+sampleSF = StreamFeature(sampleDict, name = audio_feat_name)
 sampleSF.save(vid, sto)
 
 #%%% Check on some strange cases

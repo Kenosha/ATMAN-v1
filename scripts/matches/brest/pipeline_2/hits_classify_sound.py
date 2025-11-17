@@ -53,7 +53,6 @@ with open(prm_read_where, 'rb') as fp:
     print('Read parameters: ')
     print(params)
     
-
 if __name__ == '__main__':
         
     ### CNN parameters

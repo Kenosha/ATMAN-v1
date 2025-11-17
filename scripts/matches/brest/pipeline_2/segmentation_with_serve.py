@@ -47,7 +47,7 @@ from ATMANpy.models.TemporalCNN.data import PlayerInferenceDataset
 from ATMANpy.models.TemporalCNN.utils import infer_with_index
 
 def load_cnn(model_name, device = 'cuda'):
-    pathDict = ut.get_folder_struct('cnn')
+    pathDict = ut.get_folder_struct('cnn_player')
     resPath, prmPath = pathDict['weights'], pathDict['params']
     
     res_read_where = os.path.join(resPath, model_name)
@@ -105,7 +105,7 @@ def get_distance_to_baseline(myCnt, which = 'Top'):
     
     return dist
     
- ### Criterion 2) bottom of shape is behind the respective baseline, keep the closest to baseline among these.
+### Criterion 2) bottom of shape is behind the respective baseline, keep the closest to baseline among these.
 def keep_closest_contour_behind_baseline(myCnts, which = 'Top', margin = 5):
     assert which in ['Top', 'Bottom']
    
@@ -131,9 +131,10 @@ if __name__ == '__main__':
         
     ### CNN parameters
     device = 'cuda'
-    loader_workers = 0 ### TODO: Parallelize!
+    loader_workers = 0 ### TODO: Parallelize! (see todo_cnn)
     serve_prob_threshold = 0.5
     serve_frame_shift = 50
+    serve_frames_to_pad_over = 10 ### note that a play sequence could be a first serve straight into the net, so quite short
     
     conf = ut.read_config('brest', config_name = '_config_pipe2')
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
@@ -141,7 +142,8 @@ if __name__ == '__main__':
     cap = conf['cap']
     
     ### Read Courtline Segmenter
-    courtBF = BoolFeature.from_store(vid, sto, featname = 'isCourt')
+    courtBF = BoolFeature.from_store(vid, sto, featname = 'isCourt') ### still need this because masks are tied to it.
+    segBF = BoolFeature.from_store(vid, sto, featname = 'isValidFore') # this is slightly tighter than isCourt.
     
     ### Read Player Candidate Contours
     foreSF = StreamFeature.from_store(vid, sto, featname = 'foreCnts')
@@ -187,7 +189,7 @@ if __name__ == '__main__':
         T = params['T_CROP_SIZE']
         stride_t = model.stride_t
         
-        ds = PlayerInferenceDataset(cap, vid, sto, courtBF, None, candSF,  
+        ds = PlayerInferenceDataset(cap, vid, sto, courtBF, segBF, candSF,  
                                     stride_t = stride_t, T = T, D = D, D_SC = D_SC) 
         
         inf_loader = DataLoader(ds, batch_size = batch_size, num_workers = loader_workers, pin_memory = True)
@@ -207,15 +209,15 @@ if __name__ == '__main__':
         candSF = contours[player]
         
         frm_index = labArr.mean(axis = 1)
+        frm_index_int = frm_index.astype(int)
         
         labels = params['LABELS']
         srv_idxs = [idx for idx, lab in enumerate(labels) if lab[0] == 'any']
         srv_probs = prbArr[:, srv_idxs].sum(axis = 1)
         
-        frm_index_int = frm_index.astype(int)
         probSer = pd.Series(srv_probs, index = frm_index_int)
         # interpolate, so that holes from striding are killed.
-        itplSer = probSer.reindex(courtBF.get_frames())
+        itplSer = probSer.reindex(segBF.get_frames())
         itplSer = itplSer.interpolate(method = 'index', limit_area = 'inside')
             
         # make boolean series by thresholding
@@ -231,25 +233,60 @@ if __name__ == '__main__':
         # shift the boolean
             # right now serves = true occurs at the moment of the serve impact
             # we want it to be centered at the beginning of the serve, roughly.
-        boolSer_shift = boolSer.shift(periods = -serve_frame_shift)
-        
+        boolSer_shift = boolSer.shift(periods = -serve_frame_shift).dropna() # drop frames at the end, created by frameshift
+
         boolSF_shift = BoolFeature.from_series(boolSer_shift)
         boolDict[player] = boolSF_shift
         
     topBF, botBF = boolDict['top'], boolDict['bot']
     topSF, botSF = regDict['top'], regDict['bot']
         
+    ### split to create potential play sequences
+    topBFs = topBF.filter(topBF.neg()).split() ### filter out serves themselves (negation makes them false)
+    botBFs = botBF.filter(botBF.neg()).split() ### filter out serves themselves (negation makes them false)
+    
+    ### filter out from topBF and botBF implied sequences of play shorter than some threshold
+    topfiltBFs = SFList([bf for bf in topBFs if bf.length() > serve_frames_to_pad_over])
+    botfiltBFs = SFList([bf for bf in botBFs if bf.length() > serve_frames_to_pad_over])
+    print(f'Before pad filtering: {topBFs.length()} non-serve sequences, after filtering: {topfiltBFs.length()} sequences')
+    print(f'Before pad filtering: {botBFs.length()} non-serve sequences, after filtering: {botfiltBFs.length()} sequences')
+    
+    ### Use the filter to pad the holes in detected serves
+    topBF_padded = topfiltBFs.concatenate().conform(topBF).fillna(True)
+    botBF_padded = botfiltBFs.concatenate().conform(botBF).fillna(True)
+    print(f'Serve frames before padding: {topBF.true()}, serve frames after padding: {topBF_padded.true()}')
+    print(f'Serve frames before padding: {botBF.true()}, serve frames after padding: {botBF_padded.true()}')
+    
     serveBF = topBF | botBF
     no_serveBF = serveBF.neg()
-    playBFs = no_serveBF.filter(no_serveBF).split()    
-    
-    # StreamList.from_SFList(playBFs, cap).show()
       
-    topBF.save(vid, sto)
-    botBF.save(vid, sto)
+    topBF_padded.save(vid, sto)
+    botBF_padded.save(vid, sto)
     topSF.save(vid, sto)
     botSF.save(vid, sto)
     
+    ### Create a new segmenter for play sequences beginning with serve.
+    playBF_naive = no_serveBF & segBF
+    playBFs_naive = playBF_naive.filter(playBF_naive).split()    
+    # Problem: boolean AND with courtBF causes some sequences at change overs not to begin with serve
+    # idea: find all play segments, get first frame, check if the first frame - 1 is a serve (--> True in serveBF)
+    begin_with_serve_bfs = []
+    for bf in playBFs_naive:
+        first_frame = bf.first()[0]
+        is_serve = serveBF.maybe_get(first_frame - 1)
+        if is_serve:
+            begin_with_serve_bfs.append(bf)
+        
+    ### filter out sequences that are too short
+    LENGTH_THRESHOLD = 25 ## 1 second long at least.
+    playBFs_filtered = SFList([bf for bf in begin_with_serve_bfs if bf.length() > LENGTH_THRESHOLD]) 
+    playBF_filtered = playBFs_filtered.concatenate().conform(playBF_naive).fillna(False)
+
+    print(f'Before length filtering: {len(begin_with_serve_bfs)} non-serve sequences, after filtering: {playBFs_filtered.length()} sequences')
+            
+    ### Save
+    playBF_filtered.rename('isServeStart').save(vid, sto)
+
     
     
     

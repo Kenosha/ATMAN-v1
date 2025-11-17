@@ -77,6 +77,17 @@ if __name__ == '__main__':
                 curr_seg = list(range(x1, x2 - MARGIN)) ### TODO: If necessary, implement max length here!
                 all_segs.extend(curr_seg)
                 x1 = x2
+            ##### IMPORTANT
+            ####### IMPORTANT
+            #### TODO: IMPORTANT ## -> bug! last segment is not appended! needs to go from x2 (now x1) to end of isCourt == True!!
+            ##### IMPORTANT
+            ####### IMPORTANT
+            ##### IMPORTANT
+            ####### IMPORTANT
+            ##### IMPORTANT
+            ####### IMPORTANT
+            ##### IMPORTANT
+            ####### IMPORTANT
                 
             playBF = BoolFeature({frame: frame in all_segs for frame in jntSF.get_frames()}, name = 'isPlay')
             

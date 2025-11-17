@@ -43,7 +43,7 @@ vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often.
 nwo, nch = conf['num_workers'], conf['chunksize']
 cap = conf['cap']
 
-NUM_FRAMES = 400
+NUM_FRAMES = 1000
     
 ####### AUXILIARY FUNCTIONS ##################
 
@@ -90,7 +90,7 @@ def show_and_callback(showFrm1, showFrm2):
 if __name__ == '__main__':
     frameList = list(range(conf['start_frame'], conf['stop_frame'] + 1))
     
-    mySF = StreamFeatures.from_store(vid, sto, featnameList = ['movCnts', 'topPlayer', 'botPlayer']).squeeze()
+    mySF = StreamFeatures.from_store(vid, sto, featnameList = ['large_dilation_movCnts', 'topPlayer', 'botPlayer']).squeeze()
     myStm = NCRandStream.from_SF(mySF, cap, number_of_frames = NUM_FRAMES)
            
     # clickList = []
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     
     for frmNum, myFrm, myFeats in myStm.generator():
         
-        cnts = myFeats['movCnts']
+        cnts = myFeats['large_dilation_movCnts']
         topPlayer, botPlayer = myFeats['topPlayer'], myFeats['botPlayer']
         hFrm = myFrm.to_HSV()
         gFrm = myFrm.to_grey()

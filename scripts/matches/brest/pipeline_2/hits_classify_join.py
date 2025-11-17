@@ -14,6 +14,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from functools import partial
+from scipy.signal import find_peaks
+
 ### GET VIDEO ###
 from ATMANpy.funcs.util_funcs import get_video
 from ATMANpy.funcs.cv_funcs import join_video_captures
@@ -70,22 +73,55 @@ def get_rally_probabilities(hitSer, next_hit_should_come_soon = 20, next_hit_sho
     
     return pd.Series(rally_probabilities, index = hitSer.index, name = 'rally_p')
     
+def make_smoothing_function(kernel):
+    norm_kernel = kernel / kernel.sum()
+    return partial(np.convolve, v = norm_kernel, mode = 'same')
+
+def make_video_hit_series(videoFrm, name = 'video_hit_p'):
+    ### get video
+    tophitSer = 1 - videoFrm['top_oth']
+    bothitSer = 1 - videoFrm['bot_oth']
+    tophitSer.name = 'top_hit_p'
+    bothitSer.name = 'bot_hit_p'
+
+    vidhitSer = pd.concat([tophitSer, bothitSer], axis = 1).max(axis = 1)
+    vidhitSer.name = name
+    
+    return vidhitSer
+
+def make_audio_hit_series(audioSer, name = 'audio_hit_p'):
+    ### get audio
+    audiohitSer = audioSer
+    audiohitSer.name = name
+    return audiohitSer
+        
+def weight_cobb_douglas(leftSer, rightSer, left_lambda, name = 'joint_hit_p'):
+    outSer = leftSer ** left_lambda * rightSer ** (1 - left_lambda)
+    outSer.name = name
+    return outSer
+
 if __name__ == '__main__':
     
-    CONFIDENCE_AUDIO_VS_VIDEO = 0.7 ### we trust the audio a bit more than the video. 
-    CONFIDENCE_VIDEO_VS_AUDIO = 1 - CONFIDENCE_AUDIO_VS_VIDEO
+    #### PARAMETERS #######
     
+    CONFIDENCE_AUDIO_VS_VIDEO = 0.7 ### we trust the audio a bit more than the video. 
+    
+    # for get_rally_probabilities
     prob_params = {'next_hit_should_come_soon': 20,  ### can be early, for serves. set on the basis of above boxplot
                    'next_hit_should_have_come': 120, ### can be late, for high lobs for example. set on the basis of above boxplot
                    'decay_mild': 0.99,
                    'decay_strong': 0.5}
+    
+    # thresholds
     rally_prob_threshold = 0.2 ### lower than this probability, we believe that the rally is over 
-    smoothing_kernel = np.array([0.25, 0.5, 1, 0.5, 0.25]) 
-    smoothing_kernel = smoothing_kernel / smoothing_kernel.sum()
-    minimum_hit_prominence = rally_prob_threshold
+    hit_prob_threshold = rally_prob_threshold
     
-    ### TODO: Convolve (ie smooth) audio and video (esp. video) probabilities before computing hit prob -> this counteracts shifts of video hit against audio hit! 
-    
+    # smoothing 
+    smoothing_kernel_audio = np.array([0.25, 0.5, 1, 0.5, 0.25]) 
+    smoothing_kernel_video = np.array([0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25])
+    smooth_func_audio = make_smoothing_function(smoothing_kernel_audio)
+    smooth_func_video = make_smoothing_function(smoothing_kernel_video)
+     
     conf = ut.read_config('brest', config_name = '_config_pipe2')
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     nwo, nch = conf['num_workers'], conf['chunksize']
@@ -106,139 +142,141 @@ if __name__ == '__main__':
     allSF = topSF.merge(botSF, how = 'outer').merge(hitSF, how = 'outer')
     allSFs = allSF.split()
     
+    ### read in a segmenter -> just for conforming
+    segBF = BoolFeature.from_store(vid, sto, featname = 'isServeStart')
+    
+    frame_event_dict = {} ### this is the dictionary that will get populated with frame keys and identified hit events, to then save as SF
+    frame_rally_dict = {} ### this is the dictionary that will get populated with frame keys and the isRally boolean, to then save as SF
     ### get a feeling for time elapsed between shots
     for idx, mySF in enumerate(allSFs):
         myFrm = mySF.to_dataframe()
         
-        ### get video
-        tophitSer = 1 - myFrm['top_oth']
-        bothitSer = 1 - myFrm['bot_oth']
-        tophitSer.name = 'top_hit_p'
-        bothitSer.name = 'bot_hit_p'
-    
-        vidhitSer = pd.concat([tophitSer, bothitSer], axis = 1).max(axis = 1)
-        vidhitSer.name = 'video_hit_p'
+        ### get data
+        videoFrm = myFrm[[col for col in myFrm if col != 'hitprobFlag']]
+        audioSer = myFrm['hitprobFlag']
         
-        ### get audio
-        audiohitSer = myFrm['hitprobFlag']
-        audiohitSer.name = 'audio_hit_p'
+        ### smooth it out
+        conv_videoFrm = videoFrm.apply(smooth_func_video, axis = 0)
+        conv_audioSer = pd.Series(smooth_func_audio(audioSer), index = audioSer.index)
         
-        ### combine video and audio
-        hitSer = vidhitSer ** CONFIDENCE_VIDEO_VS_AUDIO * audiohitSer ** CONFIDENCE_AUDIO_VS_VIDEO
-        hitSer.name = 'joint_hit_p'
-        smooth_hitSer = pd.Series(np.convolve(hitSer, smoothing_kernel, mode = 'same'), index = hitSer.index)
-        smooth_hitSer.name = 'smooth_hit_p'
+        ### make hit series from the frames
+        video_hitSer = make_video_hit_series(videoFrm)
+        conv_video_hitSer = make_video_hit_series(conv_videoFrm)
+
+        audio_hitSer = make_audio_hit_series(audioSer)
+        conv_audio_hitSer = make_audio_hit_series(conv_audioSer)
         
-        ### get rally probabilities
-        probSer = get_rally_probabilities(hitSer, **prob_params) ### this is a sort of decaying envelope around the hit series
+        ### weight using cobb douglas form
+        hitSer = weight_cobb_douglas(audio_hitSer, video_hitSer, CONFIDENCE_AUDIO_VS_VIDEO)
+        conv_hitSer = weight_cobb_douglas(conv_audio_hitSer, conv_video_hitSer, CONFIDENCE_AUDIO_VS_VIDEO)
+        
+        ### get rally probabilities -> use here the smoothed function; the unsmoothed stuff is done only for showing why it's worse
+        probSer = get_rally_probabilities(conv_hitSer, **prob_params) ### this is a sort of decaying envelope around the hit series
         out_of_rally = probSer < rally_prob_threshold
         earliest_out_of_rally = out_of_rally[out_of_rally].index.min()
         
+        ### create rally segmenter
+        boolDict = {frame: frame < earliest_out_of_rally for frame in mySF.get_frames()}
+        frame_rally_dict.update(boolDict)
+        
         ### truncated values
         if np.isnan(earliest_out_of_rally):
-            trunc_vidhitSer = vidhitSer
-            trunc_audiohitSer = audiohitSer
+            trunc_vidhitSer = video_hitSer
+            trunc_audiohitSer = audio_hitSer
             trunc_hitSer = hitSer
-            trunc_smooth_hitSer = smooth_hitSer
+            trunc_conv_hitSer = conv_hitSer
         else:
-            trunc_vidhitSer = vidhitSer[vidhitSer.index < earliest_out_of_rally]
-            trunc_audiohitSer = audiohitSer[audiohitSer.index < earliest_out_of_rally]
+            trunc_vidhitSer = video_hitSer[video_hitSer.index < earliest_out_of_rally]
+            trunc_audiohitSer = audio_hitSer[audio_hitSer.index < earliest_out_of_rally]
             trunc_hitSer = hitSer[hitSer.index < earliest_out_of_rally]
-            trunc_smooth_hitSer = smooth_hitSer[smooth_hitSer.index < earliest_out_of_rally]
+            trunc_conv_hitSer = conv_hitSer[conv_hitSer.index < earliest_out_of_rally]
         
+        ### get local maxima above certain threshold
+        peak_idxs, peak_dict = find_peaks(trunc_conv_hitSer, height = hit_prob_threshold)
+        peak_frames = probSer.index[peak_idxs]
+        peak_heights = peak_dict['peak_heights']
+        
+        ### understand what is going on at these local maxima
+        # for each peak frame, understand whether something is happening bot or top, then select the likeliest event
+        bot_hit_peak_frames = []
+        top_hit_peak_frames = []
+        bot_srv_peak_frames = []
+        top_srv_peak_frames = []
+        for pf in peak_frames:
+            pfSer = conv_videoFrm.loc[pf]
+            top_oth, bot_oth = pfSer['top_oth'], pfSer['bot_oth']
+            hi_prefix = 'top' if top_oth < bot_oth else 'bot'
+            
+            prefSer = pfSer[[c for c in pfSer.index if hi_prefix in c]]
+            prefSer = prefSer.drop(f'{hi_prefix}_oth')
+            maximum_event = prefSer[prefSer == prefSer.max()].index.item()
+            frame_event_dict[pf] = maximum_event
+            
+            side, evt = maximum_event.split('_')[:2]
+            
+            if side == 'top':
+                if evt == 'srv':
+                    top_srv_peak_frames.append(pf)
+                else:
+                    top_hit_peak_frames.append(pf)
+            elif side == 'bot':
+                if evt == 'srv':
+                    bot_srv_peak_frames.append(pf)
+                else:
+                    bot_hit_peak_frames.append(pf)
+                    
         ### Plot 
-        fig, axes = plt.subplots(3, 1, figsize = (21, 10))
-        for ax in axes:
+        fig, axes = plt.subplots(2, 2, figsize = (16, 16))
+        for ax in axes.flatten():
             ax.set_ylim(0, 1)
             ax.spines[['right', 'top']].set_visible(False)
         
-        # a) video, audio and joint probability
-        ax = axes[0]
-        vidhitSer.plot(ax = ax, color = 'forestgreen', alpha = 0.5, ls = 'dashdot')
-        audiohitSer.plot(ax = ax, color = 'lightgreen', alpha = 0.5, ls = 'dashdot')
+        # a) video, audio and joint probability UNSMOOTHED
+        ax = axes[0, 0]
+        video_hitSer.plot(ax = ax, color = 'forestgreen', alpha = 0.5, ls = 'dashdot')
+        audio_hitSer.plot(ax = ax, color = 'lightgreen', alpha = 0.5, ls = 'dashdot')
         hitSer.plot(ax = ax, color = 'firebrick')
         ax.legend()
         
-        # b) joint probability, rally probability, cutoff
-        ax = axes[1]
-        hitSer.plot(ax = ax, color = 'firebrick', alpha = 0.5)
+        # b) video, audio and joint probability SMOOTHED
+        ax = axes[1, 0]
+        conv_video_hitSer.plot(ax = ax, color = 'forestgreen', alpha = 0.5, ls = 'dashdot')
+        conv_audio_hitSer.plot(ax = ax, color = 'lightgreen', alpha = 0.5, ls = 'dashdot')
+        conv_hitSer.plot(ax = ax, color = 'firebrick')
+        ax.legend()
+        
+        # c) joint probability, rally probability, cutoff
+        ax = axes[0, 1]
+        conv_hitSer.plot(ax = ax, color = 'firebrick', alpha = 0.5)
         probSer.plot(ax = ax, color = 'orangered')
         ax.axvline(earliest_out_of_rally, color = 'chocolate', ls = 'dashdot')
         ax.legend()
         
-        # c) truncated plot
-        ax = axes[2]
+        # d) truncated plot
+        ax = axes[1, 1]
         trunc_vidhitSer.plot(ax = ax, color = 'forestgreen', alpha = 0.5, ls = 'dashdot')
         trunc_audiohitSer.plot(ax = ax, color = 'lightgreen', alpha = 0.5, ls = 'dashdot')
-        trunc_hitSer.plot(ax = ax, color = 'firebrick', alpha = 0.5)
-        trunc_smooth_hitSer.plot(ax = ax, color = 'orangered')
+        trunc_conv_hitSer.plot(ax = ax, color = 'firebrick')
         ax.legend()
+
+        ax.axhline(hit_prob_threshold, color = 'chocolate', ls = 'dashdot')
+
+        # marker points for detected hits 
+        ax.scatter(bot_hit_peak_frames, [0.975] * len(bot_hit_peak_frames), marker = 'v', color = 'darkblue')
+        ax.scatter(top_hit_peak_frames, [0.975] * len(top_hit_peak_frames), marker = 'v', color = 'darkorange')
+        ax.scatter(bot_srv_peak_frames, [0.975] * len(bot_srv_peak_frames), marker = 'x', color = 'darkblue')
+        ax.scatter(top_srv_peak_frames, [0.975] * len(top_srv_peak_frames), marker = 'x', color = 'darkorange')
+                
+        plt.tight_layout()
         
         figname = f'video_audio_{idx}.png'
         fig.savefig(os.path.join(saveDir, figname))
         plt.close()
         
-    #     # get local maxima above a certain threshold
-    #     topMax = (tophitSer > tophitSer.shift(1)) & (tophitSer > tophitSer.shift(-1)) & (tophitSer > 0.5)
-    #     botMax = (bothitSer > bothitSer.shift(1)) & (bothitSer > bothitSer.shift(-1)) & (bothitSer > 0.5) 
-    #     # convert to list, join and sort
-    #     topmaxIdxs = topMax[topMax].index.tolist()
-    #     botmaxIdxs = botMax[botMax].index.tolist()
-    #     maxIdxs = sorted([*topmaxIdxs, *botmaxIdxs])
-    #     maxDiffs = pd.Series(maxIdxs).diff().dropna()
-    #     list_of_maxima_spacings.extend(maxDiffs.values.tolist())
+    outSF = StreamFeature(frame_event_dict, name = 'hitFlag')
+    outSF.save(vid, sto)    
     
-    # Stream.from_SF(allSFs[12], cap).show(frame_counter = True, ms_between_frames = 250)
-    
-    # spaceSer = pd.Series(list_of_maxima_spacings, name = 'frames_elapsed_between_shots')
-    # spaceSer.plot.box(ylim = [0, 200])
-    
-    ### calculate probability of being in rally
-    
-    bfList = []
-    for idx, mySF in enumerate(allSFs):
-        myFrm = mySF.to_dataframe()
-        
-        tophitSer = 1 - myFrm['top_oth']
-        bothitSer = 1 - myFrm['bot_oth']
-        tophitSer.name = 'top_hit_p'
-        bothitSer.name = 'bot_hit_p'
-        
-        hitFrm = pd.concat([tophitSer, bothitSer], axis = 1)
-        probSer = get_rally_probabilities(hitFrm.max(axis = 1), **params)
-        
-        out_of_rally = probSer < rally_prob_threshold
-        earliest_out_of_rally = out_of_rally[out_of_rally].index.min()
-        
-        boolDict = {frame: frame < earliest_out_of_rally for frame in mySF.get_frames()}
-        outBF = BoolFeature(boolDict, name = 'isRally')
-        bfList.append(outBF)
-        
-        ### Plot
-        fig, ax = plt.subplots(1, 1, figsize = (10, 10))
-        ax.set_ylim(0, 1)
-        ax.spines[['right', 'top']].set_visible(False)
-        
-        tophitSer.plot(ax = ax, color = 'forestgreen')
-        bothitSer.plot(ax = ax, color = 'lightgreen')
-        probSer.plot(ax = ax, color = 'firebrick')
-        ax.axvline(earliest_out_of_rally, color = 'chocolate', ls = 'dashdot')
-        
-        plt.legend()
-        
-        figname = f'rally_segmenter_{idx}.png'
-        fig.savefig(os.path.join(saveDir, figname))
-        plt.close()
-        
-    outBF = SFList(bfList).concatenate_and_plug().to_bool().fillna(False)
+    outBF = BoolFeature(frame_rally_dict, name = 'isRally')
+    outBF = outBF.conform(segBF).fillna(False)
     outBF.save(vid, sto)
-    
-    #%% Test
-    
-    # idx = 130
-    
-    # Stream.from_SF(allSFs[idx], cap).show(frame_counter = True)
-    
-    # chk = allSFs[idx].to_dataframe()
-        
         

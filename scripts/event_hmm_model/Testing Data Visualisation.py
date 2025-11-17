@@ -94,7 +94,7 @@ import ATMANpy.funcs.HMM.HPost as HPost
 
 ### read theoretical trajectories
 import ATMANpy.funcs.spin_funcs as sf
-groundArr, vertArr, trajDict = sf.load_trajectories('TrajectoriesRPM', dtype = 'float32')
+groundArr, vertArr, trajDict = sf.load_trajectories('TrajectoriesRPM_small', dtype = 'float32')
 
 ### initialise search spaces with proper arguments
 import inspect

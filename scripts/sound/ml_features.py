@@ -148,6 +148,21 @@ plot_spectrogram(spec, sample_rate, HOP_LENGTH)
 plot_spectrogram(db_spec, sample_rate, HOP_LENGTH)
 plot_spectrogram(db_spec, sample_rate, HOP_LENGTH, y_axis = 'log')
 
+mel_spec = torchaudio.transforms.MelSpectrogram(sample_rate = sample_rate, n_fft = WINDOW_LENGTH,
+                                               hop_length = HOP_LENGTH)
+mel_scale = torchaudio.transforms.MelScale(sample_rate = sample_rate, n_stft = 513)
+
+
+mel_spec_array = melFunc(torch.Tensor(sf_form)).numpy()
+mel_spec_array_2 = mel_scale(torch.Tensor(spec)).numpy()
+
+plot_spectrogram(mel_spec_array, sample_rate, HOP_LENGTH)
+plot_spectrogram(mel_spec_array_2, sample_rate, HOP_LENGTH)
+
+mel_spec_array
+mel_spec_array_2
+
+
 #%% MFCCs
 
 mfccs = librosa.feature.mfcc(sf_form, 

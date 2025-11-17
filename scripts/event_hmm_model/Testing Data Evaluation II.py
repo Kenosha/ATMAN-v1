@@ -6,9 +6,6 @@ Created on Wed Apr 26 17:13:36 2023
 """
 
 
-
-####### READ IN #######
-
 import os
 import pandas as pd
 import numpy as np
@@ -21,35 +18,204 @@ from ATMANpy.funcs.cv_funcs import show_video, get_frame, show, show_continuous
 from ATMANpy.types.Visual3D import View, Camera, Scene
 from ATMANpy.types.ShapesTennis3D import Ball, Player, Racquet, Mark
 
+from ATMANpy.types.Features import StreamFeature, StreamFeatures
+from ATMANpy.funcs.feature_funcs import save_events
+
 import ATMANpy.auxil.constants as const
 
 from ATMANpy.funcs.util_funcs import get_folder_struct, make_timestamp
 graphDir = get_folder_struct('graphs')['hmm_validation']
 
-video_id = 'pqxAmUWIoKc'
-store_name = '10to100_ok2'
-model_name = 'embedded_cyc3_nrel85'
+VIDEO_ID = 'pqxAmUWIoKc'
+STORE_NAME = '10to100_inout_logit_tight'
+MODEL_NAME = 'embedded_cyc3_nrel85_inout_logit'
+GRAMMAR_NAME = 'full_grammar_test'
+
+from ATMANpy.funcs.util_funcs import get_video  
+cap = get_video(VIDEO_ID)
+
+#%% MAKE INFERENCE ON TEST CASES
+
+from ATMANpy.funcs.HMM.utils import read_hmm_params, read_train_test
+train_data, test_data = read_train_test(MODEL_NAME)
+hmmDict = read_hmm_params(MODEL_NAME)
+
+from ATMANpy.funcs.HMM.TokenPass import read_grammar, infer
+grammar = read_grammar(GRAMMAR_NAME)
+
+from ATMANpy.funcs.HMM.HVite import token_pass_sequence
+
+### SAVE TRUE FEATURES
+trueSF = StreamFeature.from_series(test_data.Event).rename('true_event')
+trueSF.save(VIDEO_ID, STORE_NAME)
+
+### FIGURE OUT WHAT WAS INFERRED ALREADY, AND REMOVE FROM TO_DO
+inferSF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME, 
+                                    featnameList = ['arbitrary_event', 'grammatic_event'])
+
+test_data_to_do = test_data[~test_data.index.isin(inferSF.get_frames())]
+sequences_to_do = test_data_to_do.IndexSF.unique()
+
+
+### ENRICH STREAM FEATURES WITH INFERENCE ###
+from ATMANpy.funcs.HMM.HPost import expand_inferred_sequence
+
+arbitrarySFs = []
+grammaticSFs = []
+for test_sequence in sequences_to_do:
+    print(f'Doing Test Sequence {test_sequence}...')
+    
+    randSeq = test_data[test_data.IndexSF == test_sequence]
+    words = randSeq.drop(columns = ['Event', 'IndexSF'])
+    frame_min, frame_max = words.index.min(), words.index.max()
+    
+    print('    Doing arbitrary inference...')
+    arbitrary_sequence = token_pass_sequence(hmmDict, words)
+    print('    Doing grammatical inference...')
+    grammatic_sequence = infer(words, hmmDict, grammar)    
+    
+    arbitrary_expanded = expand_inferred_sequence(arbitrary_sequence, 
+                                                  word_beginning_frame = frame_min)
+    grammatic_expanded = expand_inferred_sequence(grammatic_sequence, 
+                                                  word_beginning_frame = frame_min)
+
+    arbitrarySFs.append(StreamFeature(arbitrary_expanded, name = 'arbitrary_event'))
+    grammaticSFs.append(StreamFeature(grammatic_expanded, name = 'grammatic_event'))
+
+### SAVE
+from ATMANpy.funcs.feature_funcs import join_split_features
+arbitrarySF = StreamFeature(join_split_features(arbitrarySFs), name = 'arbitrary_event')
+grammaticSF = StreamFeature(join_split_features(grammaticSFs), name = 'grammatic_event')
+
+if not arbitrarySF.is_empty():
+    arbitrarySF.save(VIDEO_ID, STORE_NAME)
+if not grammaticSF.is_empty():
+    grammaticSF.save(VIDEO_ID, STORE_NAME)
+
+#%% READ EXISTENT FEATURES
+
+SF = StreamFeatures.from_store(VIDEO_ID, STORE_NAME)
+
+INTERPOLATION_TYPE = 'smart' # linear or smart
+EVENT_SOURCE = 'ground' # ground or inference
+
+from ATMANpy.funcs.feature_funcs import read_feature_frame
+
+try:
+    top_player_3D = read_feature_frame('3D_topPlayer', VIDEO_ID, STORE_NAME)
+except:
+    top_player_3D = pd.DataFrame()
+
+try:
+    bot_player_3D = read_feature_frame('3D_botPlayer', VIDEO_ID, STORE_NAME)
+except:
+    bot_player_3D = pd.DataFrame()
+
+try:
+    ball_3D = read_feature_frame(f'3D_Ball_{INTERPOLATION_TYPE}_{EVENT_SOURCE}', VIDEO_ID, STORE_NAME)
+except:
+    ball_3D = pd.DataFrame()
+
+
+
+#%% CREATE 3D FEATURES
+
+from ATMANpy.funcs.feature_funcs import save_feature_frame
+import ATMANpy.funcs.HMM.HPost as HPost
+
+######## GET SCHEMA ########
+from ATMANpy.types.Lines import CourtLines
+from ATMANpy.funcs.court_funcs import SCHEMA_SIZE, SCHEMA_MARGIN
+from ATMANpy.funcs.line_funcs import fit_frame_to_lines
+schemaLines = CourtLines.make(size = SCHEMA_SIZE, margin = SCHEMA_MARGIN).add_singles_netline()
+schemaRegion = schemaLines.get_court_region()
+schemaFrm = fit_frame_to_lines(schemaLines)
+    
+### CHOOSE A SEQUENCE ###
+for test_sequence in test_data.IndexSF.unique():
+#########################
+    
+    ## PREPARE 3D FEATURES ##
+    seq_data = test_data[test_data.IndexSF == test_sequence] ### Event, here is what was actually marked!
+    seqSF = SF[list(seq_data.index)]
+    
+    if EVENT_SOURCE == 'inference':
+        seq_data_hidden = seq_data.drop(columns = ['Event', 'IndexSF']) ### Drop it, and merge in inference 
+        seq_data = HPost.merge_words_and_event_features(seq_data_hidden, seqSF['grammatic_event'])
+
+    ## UNDERSTAND IF THE FEATURES HAVE ALREADY BEEN CREATED
+    players_done = seq_data.index.isin(top_player_3D.index).all()
+    ball_done = seq_data.index.isin(ball_3D.index).any() ### used to be .all(), but that is slightly too strict, as there is no interpolation if flight at the very end.
+    
+    if players_done and ball_done:
+        print(f'Found in stored 3D features: {test_sequence}...')
+        continue
+    else:
+        print(f'Post Processing Sequence Number: {test_sequence}...')
+    
+    ### POST PROCESS FEATURES
+    projDict = HPost.make_projection_matrices(cap, seqSF, schemaLines)
+    
+    if not players_done:
+        ## 1) Players -> independent of whether we use ground truth events or inferred events!
+        top_player_3D, bot_player_3D = HPost.find_player_positions_3D(projDict, SF)
+        save_feature_frame(top_player_3D, '3D_topPlayer', VIDEO_ID, STORE_NAME)
+        save_feature_frame(bot_player_3D, '3D_botPlayer', VIDEO_ID, STORE_NAME)
+    
+    if not ball_done:
+        ## 2) Ball
+        process_data = HPost.init_spatial_dimensions(seq_data)
+        process_data = HPost.impose_serve(process_data, schemaLines)
+        process_data = HPost.impose_net(process_data, schemaLines)
+        process_data = HPost.impose_bounce(process_data, bounce_height = 0.2)
+        process_data = HPost.impose_hit(process_data, top_player_3D, bot_player_3D)
+        ball_2D = process_data[['x', 'y']]
+        
+        if INTERPOLATION_TYPE == 'linear':
+            ball_3D = HPost.find_known_ball_positions_3D(process_data, projDict)
+            ball_3D = HPost.interpolate_ball_positions_3D(ball_3D)
+            
+        elif INTERPOLATION_TYPE == 'smart':
+            ### Smarter Interpolation of Ball in Flight
+            # Idea: Ball is on a ray for each frame between points where the ball location is known
+            # Additionally, we know that the ball, projected onto the ground, has to be on the line between
+            # the two known ball locations --> no sidespin!
+            # With this, we should be able to identify the ball height.
+            ball_3D = HPost.find_known_ball_positions_3D(process_data, projDict)
+            
+            ### Get Camera Internals and Externals
+            internalDict, externalDict = HPost.make_internal_external_matrices(projDict)
+            internalDict = HPost.interpolate_matrices(internalDict)
+            externalDict = HPost.interpolate_matrices(externalDict)
+            
+            ### Do interpolation
+            ball_3D = HPost.interpolate_ball_positions_3D_smart(ball_3D, ball_2D, internalDict, externalDict)
+            
+        save_feature_frame(ball_3D, f'3D_Ball_{INTERPOLATION_TYPE}_{EVENT_SOURCE}', VIDEO_ID, STORE_NAME)
+    
+
+#%%###### FEATURE READ IN #######
 
 event_name = 'grammatic_event'
 ball_name = '3D_Ball_smart_inference'
 top_player_name = '3D_topPlayer'
 bot_player_name = '3D_botPlayer'
 
-infPts = Points.from_stored_features(video_id, store_name, name = 'Inference',
+infPts = Points.from_stored_features(VIDEO_ID, STORE_NAME, name = 'Inference',
                                      event_name = event_name, ball_name = ball_name,
                                      top_player_name = top_player_name, bot_player_name = bot_player_name,
                                      narrow_instantaneous_events = False) ### get raw, unnarrowed events
 
 event_name = 'true_event'
 ball_name = '3D_Ball_smart_ground'
-truPts = Points.from_stored_features(video_id, store_name, name = 'Ground Truth',
+truPts = Points.from_stored_features(VIDEO_ID, STORE_NAME, name = 'Ground Truth',
                                      event_name = event_name, ball_name = ball_name,
                                      top_player_name = top_player_name, bot_player_name = bot_player_name,
                                      narrow_instantaneous_events = False)  ### get raw, unnarrowed events
 
-#%%
+#%% EVALUATION FUNCTIONS ####
 
-def make_folder(graphDir = graphDir, model_name = model_name):
+def make_folder(graphDir = graphDir, model_name = MODEL_NAME):
     model_folder = os.path.join(graphDir, model_name)
         
     try:
@@ -125,7 +291,7 @@ save_folder = make_folder()
 
 textDict = {}
 textDict['::: 1 ::'] = 'Overview :::'
-paramDict = dict(video_id = 'pqxAmUWIoKc', store_name = '10to100_ok2', model_name = 'embedded_cyc3_nrel85')
+paramDict = dict(video_id = VIDEO_ID, store_name = STORE_NAME, model_name = MODEL_NAME)
 
 textDict = {**textDict, **paramDict}
 

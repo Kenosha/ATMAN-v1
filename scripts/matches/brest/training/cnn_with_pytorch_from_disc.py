@@ -94,7 +94,6 @@ log_save_where = os.path.join(LOG_PATH, LOG_NAME)
 res_save_where = os.path.join(RES_PATH, RES_NAME)
 prm_save_where = os.path.join(PRM_PATH, PRM_NAME)
 
-
 TRAIN_DATA_INDEPENDENT_BASELINE = False
 DO_TEST_PROXFUNC = False
 DO_TENSORBOARD = True
@@ -348,10 +347,9 @@ if __name__ == '__main__':
             pickle.dump(params, f)
             print('Parameters saved to file.')
  
-        
         def train_one_epoch(epoch_index, tb_writer):
             running_loss = 0
-            last_loss = 0
+            mean_loss = 0
             
             for i, data in enumerate(train_loader):
                 inputs, labels = data

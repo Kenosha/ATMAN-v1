@@ -52,7 +52,15 @@ word_training_sample = choose_random_sample_words(train_data)
 
 ### 2) Assign a number of states to each word ####
 # -> for the moment, assume they're all three state hmms, except None, which is one state.
-event_to_num_states = lambda wordStr: 1 if wordStr == 'None' else 3
+def event_to_num_states(wordStr):
+    if wordStr[0] in ['H', 'B', 'C']:
+        return 1
+    elif wordStr == 'None':
+        return 1
+    else:
+        return 3
+    
+# event_to_num_states = lambda wordStr: 1 if wordStr == 'None' else 3
 
 ### 3) Assign features to each word
 all_words = word_training_sample.index.get_level_values('Event').unique()
