@@ -20,6 +20,7 @@ _unused/
 *.csv
 *.stats
 *.txt
+!requirements.txt
 *.wav
 *.lock
 *graphs/
