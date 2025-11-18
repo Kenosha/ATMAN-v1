@@ -1,0 +1,1 @@
+"""ATMANpy package metadata."""
