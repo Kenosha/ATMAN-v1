@@ -13,7 +13,8 @@ import time
 import datetime
 from typing import Union
 
-mainDir = r'C:\Users\gianl\Documents\GitHub\ATMAN'
+### Allow overriding the project root via environment, otherwise derive it from this file
+mainDir = os.environ.get('ATMAN_HOME')
 
 def get_folder_struct(source, verbose = True):
     if source is None:
