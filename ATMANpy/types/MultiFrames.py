@@ -591,21 +591,28 @@ class Frames:
         list_of_typed_cts = [Contours([Contour(cnt) for cnt in cnts]) for cnts in list_of_contour_arrays]
         return list_of_typed_cts, list_of_hierarchies
     
-    def save(self, savePath, saveName, lossless = True, save_as = 'avi'):
+    def save(self, savePath, saveName, save_as = 'avi',
+             vcodec = 'ffv1', crf = 0, preset = 'veryslow', pix_fmt = None):
+        
+        ### codecs tried:
+        # -> ffv1: works flawlessly (so far)
+        # -> libx264: doesn't work (but used to)
+        # -> libx265: doesn't work
+
         if not saveName.endswith(f'.{save_as}'):
             saveName = saveName + f'.{save_as}'
             
         fullPath = os.path.join(savePath, saveName)
         
-        if lossless:
-            outputdict = {
-              '-vcodec': 'libx264',  #use the h.264 codec
-              '-crf': '0',           #set the constant rate factor to 0, which is lossless
-              '-preset':'veryslow'   #the slower the better compression, in princple, try 
-                                     #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
-             }
-        else:
-            outputdict = {}
+        outputdict = {}
+        if vcodec is not None:
+            outputdict['-vcodec'] = str(vcodec)
+        if crf is not None:
+            outputdict['-crf'] = str(crf)
+        if preset is not None:
+            outputdict['-preset'] = str(preset)
+        if pix_fmt is not None:
+            outputdict['-pix_fmt'] = str(pix_fmt)
             
         writer = FFmpegWriter(fullPath, outputdict = outputdict)
         

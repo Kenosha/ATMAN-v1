@@ -427,11 +427,13 @@ class Stream:
             
         return DecapStream(myFrms, self.start_frame, self.stop_frame, self.features)
 
-    def decap_with_features(self):
+    def decap_with_features(self, text_region = None, drawFunc = None):
         gen = self.generator(quiet_and_uninterruptable = True)
         frmNum, myFrm, myDict = next(gen) ### prime the generator
-        drawFunc = draw(self.features.get_features(), textRegion = None)
-        
+
+        if drawFunc is None:
+            drawFunc = draw(self.features.get_features(), textRegion = text_region)
+
         frmList = []
         while True:
             sendFrm = drawFunc({'cFrm': myFrm}, myDict) ### TODO: Clean this up! myFrm is not always cFrm!
@@ -787,8 +789,10 @@ class SkipStream(Stream):
     def decap(self):
         return self.to_NCStream().decap()
 
-    def generator(self, ms_between_frames = 40, frame_counter = False):
-        return self.to_NCStream().generator(ms_between_frames = ms_between_frames, frame_counter = frame_counter)
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False):
+        return self.to_NCStream().generator(ms_between_frames = ms_between_frames, 
+                                            frame_counter = frame_counter, 
+                                            quiet_and_uninterruptable = quiet_and_uninterruptable)
     
 @dataclass(frozen = True)
 class StillStream:
@@ -1549,7 +1553,7 @@ class DecapStream:
     def decap(self):
         return self ### needed, so that chunking can be done with simple chunk_generator functions
     
-    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False): ### cv_funcs.video_stream
     
         for idx, myFrm in enumerate(self.frames):
             frmNum = self.start_frame + idx
@@ -1562,9 +1566,10 @@ class DecapStream:
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
-                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
-                if not still_showing:
-                    break
+                if not quiet_and_uninterruptable:
+                    still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                    if not still_showing:
+                        break
         
         else:
             cv.destroyAllWindows()
@@ -1681,7 +1686,7 @@ class NCDecapStream:
     def decap(self):
         return self ### needed, so that chunking can be done with simple chunk_generator functions
     
-    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False): ### cv_funcs.video_stream
     
         for frmNum, myFrm in zip(self.frmNums, self.frames):
             myDict = self.features.maybe_get(frmNum)
@@ -1691,9 +1696,10 @@ class NCDecapStream:
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
-                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
-                if not still_showing:
-                    break
+                if not quiet_and_uninterruptable:
+                    still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                    if not still_showing:
+                        break
         
         else:
             cv.destroyAllWindows()
@@ -1879,7 +1885,7 @@ class CachedStream(Stream):
             else:
                 return frmNum
             
-    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
             # 2) the featCache -> current feature at center, with future and past features around   
@@ -1935,8 +1941,8 @@ class CachedStream(Stream):
             if myFrm is not None:
                 if frame_counter:
                     myFrm = myFrm.put(str(getNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
-                
-                if myFrm is not None:
+            
+                if not quiet_and_uninterruptable:
                     still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
                     if not still_showing:
                         break
@@ -2083,7 +2089,7 @@ class DecapCachedStream(DecapStream):
     def decap(self):
         return self ### needed, so that chunking can be done with simple chunk_generator functions
     
-    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False): ### cv_funcs.video_stream
         ### as opposed to the simple stream, the cached stream has to generate two caches which are constantly updated:
             # 1) the frameCache -> current frame at center, with future and past frames around
             # 2) the featCache -> current feature at center, with future and past features around    
@@ -2116,8 +2122,8 @@ class DecapCachedStream(DecapStream):
             if myFrm is not None:
                 if frame_counter:
                     myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
-                
-                if myFrm is not None:
+            
+                if not quiet_and_uninterruptable:
                     still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
                     if not still_showing:
                         break
@@ -2161,7 +2167,7 @@ class RandStream(Stream):
                                       name = self.name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
 
-    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False): ### cv_funcs.video_stream
             
         frmNum = randrange(self.start_frame, self.stop_frame)
         frames_yielded = 0
@@ -2189,9 +2195,10 @@ class RandStream(Stream):
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
-                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
-                if not still_showing:
-                    break
+                if not quiet_and_uninterruptable:
+                    still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                    if not still_showing:
+                        break
                 
             frmNum = randrange(self.start_frame, self.stop_frame)
             frames_yielded += 1
@@ -2306,7 +2313,7 @@ class NCStream:
                                       name = self.name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
 
-    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False): ### cv_funcs.video_stream
     
         for frmNum in self.frmNums:
             
@@ -2331,9 +2338,10 @@ class NCStream:
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
-                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
-                if not still_showing:
-                    break
+                if not quiet_and_uninterruptable:
+                    still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                    if not still_showing:
+                        break
         
         else:
             cv.destroyAllWindows()
@@ -2414,7 +2422,7 @@ class NCRandStream(NCStream):
                                       name = self.name) ### TODO: speed up the get_framelist function by threading.
         return NCDecapStream(frames, self.frmNums, self.features, name = self.name)
 
-    def generator(self, ms_between_frames = 40, frame_counter = False): ### cv_funcs.video_stream
+    def generator(self, ms_between_frames = 40, frame_counter = False, quiet_and_uninterruptable = False): ### cv_funcs.video_stream
             
         sampled_frames = sample(self.frmNums, self.number_of_frames) ### TODO: this is without replacement, RandStream is with!!!
                                                                         # -> make explicit whether we want with or without.
@@ -2441,9 +2449,10 @@ class NCRandStream(NCStream):
                 myFrm = myFrm.put(str(frmNum), where = (40, 40), size = 2, color = (0, 255, 0), thickness = 3)
             
             if myFrm is not None:
-                still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
-                if not still_showing:
-                    break
+                if not quiet_and_uninterruptable:
+                    still_showing = myFrm.show_continuous(ms_between_frames = ms_between_frames)
+                    if not still_showing:
+                        break
                 
         else:
             cv.destroyAllWindows()
