@@ -14,7 +14,9 @@ cnn_sound/
 results_video/
 scripts/
 todos_and_notes/
+models/
 _unused/
+
 *.ods
 *.ods#
 *.csv
