@@ -358,6 +358,44 @@ class Frame:
         else:
             return InstClass(zoomArr)
 
+    def collate(self, other, how = 'horizontal', border = 0, border_value = 0, name = None):
+        assert how in ['horizontal', 'vertical']
+
+        if not isinstance(other, Frame):
+            raise TypeError('Can only collate with another Frame!')
+        if self.__class__ != other.__class__:
+            raise TypeError('Frames need to share the same type to collate!')
+        if len(self.shape) != len(other.shape):
+            raise ValueError('Frames must both be color or both be greyscale to collate!')
+        if len(self.shape) == 3 and self.shape[2] != other.shape[2]:
+            raise ValueError('Frames must have matching channel counts to collate!')
+
+        if how == 'horizontal':
+            target_height = max(self.rows, other.rows)
+            first = self.pad(to_height = target_height)
+            second = other.pad(to_height = target_height)
+            concat_axis = 1
+        else:
+            target_width = max(self.cols, other.cols)
+            first = self.pad(to_width = target_width)
+            second = other.pad(to_width = target_width)
+            concat_axis = 0
+
+        parts = [first.array]
+        if border > 0:
+            border_shape = list(first.array.shape)
+            border_shape[concat_axis] = border
+            border_arr = np.full(border_shape, border_value, dtype = self.array.dtype)
+            parts.append(border_arr)
+        parts.append(second.array)
+
+        outArr = np.concatenate(parts, axis = concat_axis)
+
+        InstClass = self.__class__
+        if name is None:
+            name = self.name
+        return InstClass(outArr, name = name)
+
     def gaussian_blur(self, kernelSize):
         self_copy = self.array.copy()
         InstClass = self.__class__
@@ -1483,7 +1521,6 @@ if __name__ == '__main__':
     cFrm.show()
     hFrm.show()
     gFrm.show()
-
 
 
 
