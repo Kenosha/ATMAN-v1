@@ -1011,8 +1011,7 @@ class ConstFeature(ConstFeaturesBase):
     def rename(self, new_name):
         return ConstFeature(new_name, self.feature, self.frameList)
     
-    def save(self, videoName, storeName, extract_func = None, verbose = True):
-        savePath = ff.get_and_make_save_path(self.name, videoName, storeName, verbose = verbose)
+    def save_on_path(self, savePath, extract_func = None):
         if self.frameList is None:
             fileName = 'const.npy'
         else:
@@ -1024,8 +1023,11 @@ class ConstFeature(ConstFeaturesBase):
         else:
             featArr = extract_func(self.feature)
         np.save(fullPath, featArr)
+
+    def save(self, videoName, storeName, extract_func = None, verbose = True):
+        savePath = ff.get_and_make_save_path(self.name, videoName, storeName, verbose = verbose)
+        self.save_on_path(savePath, extract_func = extract_func)
         
-    
 @dataclass(frozen = True)
 class ConstFeatures(ConstFeaturesBase):
     ### a dict of features that is always the same, associated with a set of frames. 
