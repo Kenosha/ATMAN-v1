@@ -9,7 +9,7 @@ import numpy as np
 
 from dataclasses import dataclass
 from ATMANpy.funcs.type_funcs import typecheck, pointcheck
-from typing import Optional
+from typing import List, Optional
 
 @dataclass(frozen = True)
 class Point2D:
@@ -248,6 +248,121 @@ class SafePoint2D(Point2D):
             return Point2D((self.x + int(points), self.y))
         else:
             raise TypeError("Move point by an integer amount!")
+
+
+@dataclass(frozen = True)
+class Points2D:
+    """
+    A list of Point2D, sortable and displayable.
+    """
+    pointList: List[Point2D]
+    name: str = 'Points2D'
+
+    ### CONSTRUCTORS ###
+    @staticmethod
+    def from_coordList(coordList, name: str = 'Points2D'):
+        coordList = np.squeeze(coordList)
+        try:
+            return Points2D([Point2D(tuple(p)) for p in coordList], name=name)
+        except Exception:
+            return Points2D([], name=name)
+
+    ### ARITHMETIC ###
+    def __mul__(self, y):
+        InstClass = self.__class__
+        return InstClass([p * y for p in self.pointList], name=self.name)
+
+    def __add__(self, other):
+        InstClass = self.__class__
+        return InstClass([p + other for p in self.pointList], name=self.name)
+
+    def __sub__(self, other):
+        InstClass = self.__class__
+        return InstClass([p - other for p in self.pointList], name=self.name)
+
+    ### OTHER DUNDER ###
+    def __iter__(self):
+        return iter(self.pointList)
+
+    def __getitem__(self, item):
+        elements = self.pointList[item]
+        if isinstance(elements, List):
+            return Points2D(elements, name=self.name)
+        else:
+            return elements
+
+    def __len__(self):
+        return len(self.pointList)
+
+    ### METHODS ###
+    def append(self, other):
+        try:
+            return Points2D([*self.pointList, *other.pointList], name=self.name)
+        except Exception:
+            return Points2D([*self.pointList, other], name=self.name)
+
+    def up(self, points):
+        return self.__class__([p.up(points) for p in self.pointList], name=self.name)
+
+    def down(self, points):
+        return self.__class__([p.down(points) for p in self.pointList], name=self.name)
+
+    def left(self, points):
+        return self.__class__([p.left(points) for p in self.pointList], name=self.name)
+
+    def right(self, points):
+        return self.__class__([p.right(points) for p in self.pointList], name=self.name)
+
+    def sort(self, direction: str = 'l2r'):
+        if direction == 'l2r':
+            key_func = lambda p: p.x
+            reverse = False
+        elif direction == 'r2l':
+            key_func = lambda p: p.x
+            reverse = True
+        elif direction == 't2b':
+            key_func = lambda p: p.y
+            reverse = False
+        elif direction == 'b2t':
+            key_func = lambda p: p.y
+            reverse = True
+        else:
+            raise ValueError(f'Unknown direction: {direction}')
+        return Points2D(sorted(self.pointList, key=key_func, reverse=reverse), name=self.name)
+
+    def highest(self):
+        extremum = self[0]
+        for p in self:
+            if p.is_above(extremum):
+                extremum = p
+        return extremum
+
+    def lowest(self):
+        extremum = self[0]
+        for p in self:
+            if p.is_below(extremum):
+                extremum = p
+        return extremum
+
+    def leftest(self):
+        extremum = self[0]
+        for p in self:
+            if p.is_left(extremum):
+                extremum = p
+        return extremum
+
+    def rightest(self):
+        extremum = self[0]
+        for p in self:
+            if p.is_right(extremum):
+                extremum = p
+        return extremum
+
+    def rescale(self, scale_factor):
+        return self.__class__([p.rescale(scale_factor) for p in self.pointList], name=self.name)
+
+    def to_array(self):
+        return np.array([p.coords for p in self.pointList])
 
 
 if __name__ == '__main__':
