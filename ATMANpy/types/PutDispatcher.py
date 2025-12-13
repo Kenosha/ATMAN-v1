@@ -38,9 +38,18 @@ def put(someFrm, someObj,
         else:
             myFrm = InstClass(cv.drawMarker(self_copy, someObj.round_coords(), color, markerType = marker, markerSize = size, thickness = thickness))
         if annotation is not None:
-            myFrm = myFrm.put(str(annotation), where = (someObj - offset_margin).coords)
+            myFrm = myFrm.put(str(annotation), where = (someObj - offset_margin).coords, color = color, thickness = thickness, size = size)
+        if someObj.value is not None:
+            myFrm = myFrm.put(str(someObj.value), where = (someObj - offset_margin).coords, color = color, thickness = thickness, size = size)
         return myFrm
     
+    if someObj.__class__.__name__ == 'Points2D':
+        if verbose: print('Points2D!')
+        for pnt in someObj:
+            someFrm = put(someFrm, pnt, 
+                          color = color, thickness = thickness, where = where, size = size)
+        return someFrm
+
     if someObj.__class__.__name__ == 'Line':
         if verbose: print('Line!')
         c1, c2 = someObj.leftPt.round_coords(), someObj.rightPt.round_coords()
