@@ -877,8 +877,11 @@ class Region(Lines):
         return Region.from_points(p1, p2, p3, p4)
     
     @staticmethod
-    def from_points(p1: Point2D, p2: Point2D, p3: Point2D = None, p4: Point2D = None,
-                    area = None, centroid = None):
+    def from_xyxy(x1, y1, x2, y2):
+        return Region.from_points(Point2D((x1, y1)), Point2D((x2, y2)))
+
+    @staticmethod
+    def from_points(p1: Point2D, p2: Point2D, p3: Point2D = None, p4: Point2D = None):
         is_rectangle = p3 is None and p4 is None
         if is_rectangle:
             p3 = Point2D((p1.x, p2.y))
