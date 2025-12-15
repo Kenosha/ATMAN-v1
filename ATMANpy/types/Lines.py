@@ -1195,6 +1195,9 @@ class Regions:
         
         return Region.from_points(Point2D(p1), Point2D(p4))
         
+    def rescale(self, scale_factor):
+        return self.__class__([reg.rescale(scale_factor) for reg in self], name = self.name)
+
 @dataclass(frozen = True)
 class Raster:
     myReg: Region
