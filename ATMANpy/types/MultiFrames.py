@@ -382,11 +382,17 @@ class Frames:
         return self.right_of(l) & self.left_of(r) & self.below(t) & self.above(b)
     
     def mask(self, maskFrms):
-        assert isinstance(maskFrms, MaskFrames)
-        assert self.length() == maskFrms.length()
         framesType = self.__class__
-        
-        outArr = np.array([cv.bitwise_and(imgArr, imgArr, mask = maskArr) for imgArr, maskArr in zip(self.array, maskFrms.array)])
+
+        if isinstance(maskFrms, MaskFrames):
+            assert self.length() == maskFrms.length()
+            mask_list = maskFrms.array
+        elif isinstance(maskFrms, MaskFrame):
+            mask_list = [maskFrms.array for _ in range(self.length())]
+        else:
+            raise TypeError(f"mask() expects MaskFrames or MaskFrame, got {type(maskFrms)}")
+
+        outArr = np.array([cv.bitwise_and(imgArr, imgArr, mask = maskArr) for imgArr, maskArr in zip(self.array, mask_list)])
         return framesType(outArr, name = self.name)
         
     def gaussian_blur(self, kernelSize):
