@@ -16,9 +16,9 @@ Event sub-states come from `ATMANpy/funcs/label_funcs.py:get_event_dict()`:
 
 Scripts driving this stage:
 
-- `scripts/matches/brest/labelling/player_motion_labelling.py`: chooses “what to label next” (video + `{top|bot}×{hit|serve}`) by counting already-recorded `"begin swinging"` markers; then runs `record_events(...)` over each `isCourt` segment.
-- `scripts/matches/brest/labelling/player_motion_labelling_fixed_segment.py`: same as above but for a fixed `VIDNUM` and segment selection.
-- `scripts/matches/brest/labelling/player_motion_labelling_redos.py`: redoes event labeling inside “redo” spans (see 1.3).
+- `scripts/matches/brest/labelling/label_player_motion.py`: chooses “what to label next” (video + `{top|bot}×{hit|serve}`) by counting already-recorded `"begin swinging"` markers; then runs `record_events(...)` over each `isCourt` segment.
+- `scripts/matches/brest/labelling/label_player_motion_fixed_segment.py`: same as above but for a fixed `VIDNUM` and segment selection.
+- `scripts/matches/brest/labelling/label_player_motion_redos.py`: redoes event labeling inside “redo” spans (see 1.3).
 
 Saved feature names follow the pattern:
 
@@ -49,7 +49,7 @@ Saved feature names follow the pattern:
 - `scripts/matches/brest/labelling/player_motion_checking.py`:
   - Finds incomplete groups (`check_group(...)`) and re-runs `record_events(...)` around those spans.
   - Has an “uncaught events” mode: builds a `notLabelled` mask inside `isCourt`, then runs `classify_event(..., event='uncaught_check', category=VERSION, fps=100)` to tag spans as `ok` vs `redo` (via `get_category_dict('uncaught_check', ...)`).
-- `scripts/matches/brest/labelling/player_motion_labelling_redos.py`: reads the `labelled_all_uncaught_check_{VERSION}_Flag` feature and re-labels inside frames tagged `"redo"`.
+- `scripts/matches/brest/labelling/label_player_motion_redos.py`: reads the `labelled_all_uncaught_check_{VERSION}_Flag` feature and re-labels inside frames tagged `"redo"`.
 
 ### 1.4 “Other” labeling is done in gaps between serves/hits
 
