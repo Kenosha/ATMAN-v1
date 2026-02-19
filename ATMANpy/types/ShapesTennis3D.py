@@ -194,9 +194,16 @@ class Ball(Ball3D):
     
     @staticmethod
     def make(coords, color = _BALL_COLOR, alpha = _BALL_ALPHA):
-        return Ball(coords, Ball._RADIUS_IN_FEET * const.SCALE, 
-                    color = color, alpha = alpha, 
-                    name = 'Tennis Ball')
+        # Ball.__init__ signature is (coords, color=..., alpha=..., name=..., radius=..., ...).
+        # The previous implementation accidentally passed the radius as the second positional arg,
+        # which is interpreted as "color" and then also passed "color=" again (TypeError).
+        return Ball(
+            coords,
+            color=color,
+            alpha=alpha,
+            name="Tennis Ball",
+            radius=Ball._RADIUS_IN_FEET * const.SCALE,
+        )
     
     def distance_to(self, otherBall):
         return self.get_point().distance_to(otherBall.get_point())
@@ -702,4 +709,3 @@ if __name__ == '__main__':
 
         netReg = courtScn[-1].get_rectangular_net_region()
         View.make(backCam, Scene([netReg]), resolution = 5).snap().show()
-
