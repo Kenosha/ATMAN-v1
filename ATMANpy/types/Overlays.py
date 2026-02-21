@@ -4,7 +4,7 @@ import numpy as np
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Region, Line
 
-from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D, Line3D, Lines3D, Point3D
+from ATMANpy.types.Shapes3D import Region3D, Regions3D, AnnotatedPoint3D, Line3D, Lines3D, Point3D, Circle3D
 from ATMANpy.types.Visual3D import DummyScene, Scene, Camera, View
 from ATMANpy.types.ShapesTennis3D import Arrow
 
@@ -183,7 +183,7 @@ class Graph:
                  header_text = 'Chart', header_horizontal_offset = 8, header_vertical_offset = 1,
                  header_size = 1, header_height = 1, graph_height = 9, z_epsilon = 0.01,
                  cam = None, render_height = 100, dimensions = (600, 400), resolution = 10, 
-                 max_y_override = None, cam_reg_override = None):
+                 max_x_override = None, max_y_override = None, cam_reg_override = None):
         ### TODO: add axis labels (y-axis vertical! how?)
         self.charts = charts
         self.color = color
@@ -211,6 +211,7 @@ class Graph:
         self.tick_label_size = tick_label_size
 
         self.z_epsilon = z_epsilon
+        self.max_x_override = max_x_override
         self.max_y_override = max_y_override
  
         if cam is None: ### Rendering Camera
@@ -269,7 +270,7 @@ class Graph:
 
             ### rounding to nearest integer TODO: make more dynamic?
             min_x = int(np.floor(min_x))
-            max_x = int(np.ceil(max_x))
+            max_x = int(np.ceil(max_x)) if self.max_x_override is None else self.max_x_override
             min_y = int(np.floor(min_y))
             if self.as_density:
                 max_y = 1.05 * max_y ### scale up a bit
@@ -348,8 +349,12 @@ class Graph:
             coordArr = np.array([xs_rect, ys_rect, zs_zero])
 
             if isinstance(chart, ScatterChart):
-                coordPt_vectorized = Point3D(coordArr, color = chart.color)
-                myScn = myScn.put(coordPt_vectorized.up(self.z_epsilon * up_idx))
+                if chart.thickness > 0:
+                    coordCrc_vectorized = Circle3D(coordArr, color = chart.color, radius = chart.thickness, fixed_dimension = 'z')
+                    myScn = myScn.put(coordCrc_vectorized.up(self.z_epsilon * up_idx))
+                else:
+                    coordPt_vectorized = Point3D(coordArr, color = chart.color)
+                    myScn = myScn.put(coordPt_vectorized.up(self.z_epsilon * up_idx))
             elif isinstance(chart, LineChart):
                 coordArr_prev = coordArr[:, :-1]
                 coordArr_next = ut.shift_array(coordArr, -1, axis = 1)[:, :-1]
@@ -1850,4 +1855,3 @@ if __name__ == '__main__':
                                 resolution = 15000)
         
         scoreFrm.show()
-
