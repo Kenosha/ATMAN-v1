@@ -21,6 +21,7 @@ _unused/
 *.csv
 *.stats
 *.txt
+!docs/**/*.txt
 !requirements.txt
 *.wav
 *.lock
