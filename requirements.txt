@@ -1,6 +1,7 @@
 dill
 distinctipy
 fuzzywuzzy
+fastapi
 librosa
 matplotlib
 moviepy
@@ -29,3 +30,4 @@ torchmetrics
 torchsummary
 torchvision
 ultralytics
+uvicorn
