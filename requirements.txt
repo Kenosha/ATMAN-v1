@@ -8,6 +8,7 @@ moviepy
 multipledispatch
 networkx
 noisereduce
+norfair
 numpy
 opencv-python
 pandas
