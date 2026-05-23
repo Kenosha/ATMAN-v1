@@ -1,5 +1,6 @@
 dill
 distinctipy
+boto3
 fuzzywuzzy
 fastapi
 librosa
@@ -12,6 +13,7 @@ norfair
 numpy
 opencv-python
 pandas
+pyarrow
 pedalboard
 Pillow
 psutil
