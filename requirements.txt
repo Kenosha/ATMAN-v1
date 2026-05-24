@@ -34,3 +34,5 @@ torchsummary
 torchvision
 ultralytics
 uvicorn
+openai
+python-multipart
