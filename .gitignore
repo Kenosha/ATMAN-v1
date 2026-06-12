@@ -13,7 +13,7 @@ cnn_ball/
 cnn_sound/
 results_video/
 todos_and_notes/
-models/
+/models/
 _unused/
 
 *.ods
