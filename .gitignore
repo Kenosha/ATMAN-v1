@@ -130,6 +130,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.atman
 .env.r2
 .env.openai
 .venv
