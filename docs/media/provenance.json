@@ -1,0 +1,59 @@
+{
+  "source": "Original published ATMAN demonstrations, also used by the personal website.",
+  "author": "Gianluca Vagliano",
+  "export": {
+    "fps": 10,
+    "max_colors": 128,
+    "dither": "bayer",
+    "bayer_scale": 5,
+    "loop": "infinite",
+    "trimmed": false
+  },
+  "animations": [
+    {
+      "name": "recognition",
+      "width": 640,
+      "height": 360,
+      "frames": 479,
+      "duration_seconds": 47.9,
+      "loop": 0,
+      "unique_frames": 479,
+      "bytes": 7008383,
+      "sha256": "edd6d7def8217f510e2913331860cffdaab1936b6a952fb3908572fde66f08ab",
+      "file": "recognition.gif",
+      "source_video_id": "6ed3171803f167e60456aa88db56a743",
+      "source_public_manifest": "https://customer-fd2r4sg25ridl3a1.cloudflarestream.com/6ed3171803f167e60456aa88db56a743/manifest/video.m3u8",
+      "source_mp4_sha256": "fb16327e2aa83e5943869496c9a6072417eb9d483c6bffb958ee3f7cdeb8c5b3"
+    },
+    {
+      "name": "query",
+      "width": 640,
+      "height": 360,
+      "frames": 204,
+      "duration_seconds": 20.4,
+      "loop": 0,
+      "unique_frames": 204,
+      "bytes": 3403415,
+      "sha256": "2cedddaaeb37fe0c1074cb08d88fddab6771f498b59319055e578db571418f08",
+      "file": "query.gif",
+      "source_video_id": "cf710d24333cdee9b62ddda39d17383b",
+      "source_public_manifest": "https://customer-fd2r4sg25ridl3a1.cloudflarestream.com/cf710d24333cdee9b62ddda39d17383b/manifest/video.m3u8",
+      "source_mp4_sha256": "17165c9bf62ad1b374a1bcbdb19450b167c851cd49b6e1942ec0de990c1a85e7"
+    },
+    {
+      "name": "visualization",
+      "width": 640,
+      "height": 360,
+      "frames": 313,
+      "duration_seconds": 31.3,
+      "loop": 0,
+      "unique_frames": 313,
+      "bytes": 8083788,
+      "sha256": "1818444560249040f9c42767ac427e417f7527c87cde7f7657cb0741710cc7c2",
+      "file": "visualization.gif",
+      "source_video_id": "aee734d9d463221b969cb528aa1c4130",
+      "source_public_manifest": "https://customer-fd2r4sg25ridl3a1.cloudflarestream.com/aee734d9d463221b969cb528aa1c4130/manifest/video.m3u8",
+      "source_mp4_sha256": "f705bfe16bcad06c9bfc380d281aac09d2e4232da53ddcfd8b5c0c8ea9d96704"
+    }
+  ]
+}
