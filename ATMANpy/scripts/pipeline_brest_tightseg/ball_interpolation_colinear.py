@@ -65,7 +65,7 @@ def main(conf,
     cap = get_video(vid)
     width, height = get_width_height(cap)
         
-    VISUALIZE = True
+    VISUALIZE = conf.get('visualize', True)
     timestamp = ut.make_timestamp() 
 
     #### READ IN ####
@@ -110,7 +110,11 @@ def main(conf,
 
     ##### TRAJECTORIES ####
     from ATMANpy.models.BallTrajectory.flight_bounce_model import load_trajectories, initialize
-    groundArr, vertArr, rpmArr, trajDict = load_trajectories(trajectory_params['traj_name'], dtype = 'float32')
+    use_mmap = conf.get('trajectory_mmap', False)
+    groundArr, vertArr, rpmArr, trajDict = load_trajectories(
+        trajectory_params['traj_name'],
+        dtype = None if use_mmap else 'float32',
+        mmap_mode = 'r' if use_mmap else None)
     
     ### initialise search spaces with proper arguments
     import inspect
@@ -137,7 +141,7 @@ def main(conf,
     
     ### CONSTRUCT ANCHOR POINTS FOR THE HYPOTHETICAL TRAJECTORY PLANES ###
     # a) make hit plane points
-    plane_point_params['serve_height_modifier'] = 2
+    plane_point_params = {**plane_point_params, 'serve_height_modifier': 2}
 
     hit_player_ball_SF = plySF.merge(hitSF, how = 'inner').merge(HPCF['P']).merge(ballSF).merge(infoSF_fix)
     cld3DSF_hits = hit_player_ball_SF.apply(sa.get_3D_hit_plane_point, **plane_point_params)
@@ -177,11 +181,12 @@ def main(conf,
     mySFs = coplSFs.merge(netSFs).merge(hitSFs).merge(bounceSFs)
     traj_params = {'observation_threshold': 3, 'number_of_local_minima': 100}
         
-    nwo_fit = 4
+    nwo_fit = conf.get('trajectory_workers', nwo)
     trajSFs = mySFs.apply_mp(sa.fit_trajectory_colinear, nwo_fit, matchCamera = matchCamera, 
                              groundArr = groundArr, vertArr = vertArr, rpmArr = rpmArr, 
                              height_space = height_space, v_init_ground_space = v_init_ground_space, 
                              v_init_vert_space = v_init_vert_space, spin_rate_space = spin_rate_space,
+                             ram_allowed_in_gb = conf.get('trajectory_ram_gb', 1),
                              **traj_params)
 
     mySFs = trajSFs.merge(netSFs['netBool'])
@@ -261,4 +266,3 @@ if __name__ == '__main__':
          plane_point_params, hit_point_params, 
          downsample_params, viterbi_net_params, penalty_params, 
          viterbi_traj_params, name = name)
-

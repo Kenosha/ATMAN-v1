@@ -1,0 +1,15 @@
+new tighter pipeline:
+
+- use sound classifier to find a new rally segmenter early.
+	(-> could validate the serve beginnings with a video cnn run at the peaks of the rally, and check if the first peak is a serve.)
+	-> a pure audio segmenter "should" be good enough to replace segmentation with serve, and thus simplify the early pipeline a lot.
+	-> this way, our isStartServe segmenter (segmentation with serve) doesn't need to run the video cnns on player candidates
+
+	---> pipeline could look something like this: 
+		-> court lines -> segmentation with lines -> hits_classify_sound -> segmentation with sound 
+		-> player_candidates -> player_tracking -> hits_classify_video -> segmentation with sound/video
+	--> in segmentation with sound/video: confirm serves, make tighter isRally, make serve events/position. 
+
+- does segmentation with fore become redundant? likely not, since it is fairly low cost.
+
+- 

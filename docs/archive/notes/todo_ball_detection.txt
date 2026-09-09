@@ -1,0 +1,3 @@
+ideas: 
+	- use the fine_motMask to train a 2+1D CNN that sees the whole image (!) and tracks the ball automatically.
+	- experiment with YOLO (has tracking?)

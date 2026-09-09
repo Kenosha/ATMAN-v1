@@ -1,0 +1,92 @@
+Kiril's Notes
+
+- ATMAN Capabilities (Long)
+
+	- Title Contraction
+	- First sentence: Insight generation (cut the summary aspect; show, don't tell)
+	- cut "simple but robust"
+	- lines detected faster
+	- simplify camera matrix, has to be dumbed down.
+	- cut rotation animation :(
+	- cut breaks in player detection
+		-> initial
+		-> when players are invisible
+		-> ...
+	- shadow removal: "shadows are detected and removed by ATMAN." suffices.
+
+- ATMAN capabilities (Short)
+	- net flies off weirdly in short version.
+	- lines coming through KDE.
+
+- Return Analysis (INTRO)
+	- first sentence: straight to the point. right now it's too ambiguous -> should be clear.
+	- cut "neutral continental grip" (consider K.'s suggestion)
+	- cut "as we will see..."
+	- data basis at the beginning -> 20 matches, challenger tourney.
+	- data appears as i say it (where?)
+	- emphasis text appearing (where?)
+	- simplify primary goal of this analysis.
+	- tables more dynamic, appear as I speak
+	- faster cuts between return examples
+	- talk on top of the raster (and animation in general)
+	- cut "and not just because a majority..."
+	- consider suggestion for the choice introduction text (2:47)
+	- cut the explanatory variables.
+	- "estimates" instead of "predicts"
+	- cut "of whether the ball will be chipped back"
+	- actually show the calculation of the PSM with one example in motion and some lines (stretch distance, return depth)
+	- PSM has to have % propensities
+	- cut the uncertainty in the attrib. adjustment
+	- S+1 and S+2: show something, examples.
+	- cut the fluff: "Ok then, alright."
+	- Script: "Topspin in orange, chip in blue"
+	- 60% emphasize (blink?)
+	- punchy colors for heatmaps
+	- stress in conclusion that chip returns are 60% backhand, but should go to forehand
+	- smaller square for legend box
+	- draw a little net in the launch angle thing
+
+- Return Analysis (DESC. AND INF.)
+	- angle KDE animation is too long (maybe even ditch all of it? :( )
+	- phrasing: "two modes two angles -> low and high chip."
+	- colors too similar
+	- maybe a little racket at the point of contact (and the origin) of the launch angle.
+	- graph has to be larger
+	- differentiation between slice and chip is useless and confusing.
+	- speed up silence between angles (and sentences in general)
+	- "Note that our example chip" -> already show the video.
+	- show angle of chip (at the bottom).
+	- "the return of comparison is chosen to be maximally similar" -> simplify
+	- "We therefore isolate" -> redundant. drop one of the two times i say it.
+	- no blinking (generally!); draw attention with brightness
+	- cut the agressive on high bounce bla bla -> people know this.
+	- ground speed is unclear!
+	- rewind: show the whole serve again.
+	- while the ball flies slowly increase the range of motion so we see the connection.
+	- player specific running speeds.
+	- maybe a legend for range of motion part.
+	- legend has circles in color.
+	- data for travel times in table
+	- "forcing shot" -> explanation is a bit obvious
+	- for first sentence of short video, where we go through speed, spin, etc; have a few engaging screenshots.
+	- target zone deviation unecessary: go straight to "above 50%"
+	- decide on "we" or "I" in general.
+	- lefty/righty split costs time and momentum! -> explain once and let it go.
+	- angle/angle mix-up -> "acute angle" needs rephrasing so people dont think about launch angle
+	- make quandrant we are talking about more obvious (brightness?)
+	- if the high chip is useless: why have it?
+	- chip zones Q2 and Q4 come in too early
+	- color of player cannot look like the topspin (maybe have player color in legend?)
+	- value of second best option!
+	- once you go into graphs A-D, mention that y-axis (depth) is not depth anymore, but return win %.
+	- 15% in D topspin returns: plausible?
+	- 5% (100 - 95) in B for chipped returns: plausible?
+	- 3rd graph from perspective of the server -> srv win%
+	- cut obvious part ("no surprise")
+	- mention average results earlier!
+	- This can be applied to any specific player. On request, we can do this for everyone: create demand!
+	
+- Generally
+	- fix sound!
+	- footnotes need timestamps
+	- in e-mail: mention wo i am, where i worked, why tennis. give them a name, an intro, a bit of context.

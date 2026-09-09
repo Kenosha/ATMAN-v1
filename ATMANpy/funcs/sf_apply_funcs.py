@@ -1078,7 +1078,11 @@ def fit_trajectory(planeArr, hitFlag,
             else:
                 h_filt = height_space < groundstrokes_are_below
             
-            groundArr_hfilt, vertArr_hfilt, rpmArr_hfilt = groundArr[:, :, :, h_filt], vertArr[:, :, :, h_filt], rpmArr[:, :, :, h_filt]
+            height_indices = np.flatnonzero(h_filt)
+            if not len(height_indices):
+                raise ValueError('The trajectory bank has no allowed initial heights for this shot')
+            height_slice = slice(height_indices[0], height_indices[-1] + 1)
+            groundArr_hfilt, vertArr_hfilt, rpmArr_hfilt = groundArr[:, :, :, height_slice], vertArr[:, :, :, height_slice], rpmArr[:, :, :, height_slice]
             
             ### fit trajectories
             trajArr, groundArr_filt, vertArr_filt, rpmArr_filt = fit_trajectories_pointless(planeArr_filt,
@@ -1103,12 +1107,77 @@ def fit_trajectory(planeArr, hitFlag,
     
     return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt, trajectory_has_enough_observations
 
+def _colinear_trajectory_probabilities(groundArr, vertArr, rpmArr,
+                                     planar_origin_x, planar_origin_y,
+                                     planar_vector_x, planar_vector_y,
+                                     bounceArr, netBool, hitFlag,
+                                     height_space, v_init_ground_space, spin_rate_space,
+                                     ram_allowed_in_gb = 1):
+    """Evaluate every colinear grid candidate with bounded temporary arrays."""
+    if ram_allowed_in_gb <= 0:
+        raise ValueError('ram_allowed_in_gb must be positive')
+    shape = groundArr.shape
+    # Coordinate calculations use float64, as in the original expression.
+    # Include converted bank slices, both deviations, reductions and masks.
+    bytes_per_speed = int(np.prod(shape[1:])) * 8
+    block_size = max(1, min(shape[0],
+                           int(ram_allowed_in_gb * 10 ** 9 / max(1, 10 * bytes_per_speed))))
+    joint_probArr = np.empty(shape[:-1], dtype = 'float64')
+    if netBool:
+        prior0, prior1, prior2 = 0.9, 0.09, 0.01
+    else:
+        prior0, prior1, prior2 = bounceArr[0, 2:]
+    cond_prior1 = bounceArr[:, 0][np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+    cond_prior2 = bounceArr[:, 1][np.newaxis, np.newaxis, np.newaxis, np.newaxis]
+
+    for start in range(0, shape[0], block_size):
+        stop = min(start + block_size, shape[0])
+        ground = groundArr[start:stop].astype(np.result_type(groundArr.dtype, np.float32), copy = False)
+        vertical = vertArr[start:stop].astype(np.result_type(vertArr.dtype, np.float32), copy = False)
+        spin = rpmArr[start:stop].astype(np.result_type(rpmArr.dtype, np.float32), copy = False)
+        rel_ground = planar_origin_x - ground
+        rel_vertical = planar_origin_y - vertical
+        np.multiply(planar_vector_x, rel_vertical, out = rel_vertical)
+        np.multiply(planar_vector_y, rel_ground, out = rel_ground)
+        np.subtract(rel_vertical, rel_ground, out = rel_vertical)
+        del rel_ground
+        np.abs(rel_vertical, out = rel_vertical)
+        distArr_over_traj = np.nanmean(rel_vertical, axis = -1)
+        del rel_vertical
+
+        is_bounce = vertical == 0
+        num_bounces = is_bounce.sum(axis = -1)
+        cond1 = np.prod(np.where(is_bounce, cond_prior1, 1), axis = -1)
+        cond2 = np.prod(np.where(is_bounce, cond_prior2, 1), axis = -1)
+        prior = np.where(num_bounces == 0, prior0, np.where(num_bounces == 1, prior1, prior2))
+        conditional = np.where(num_bounces == 0, 1, np.where(num_bounces == 1, cond1, cond2))
+        bounce_probs = prior * conditional
+        spin_probs = trajectory_spin_prob(spin, hitFlag, spin_rate_space = spin_rate_space)
+        speed_probs = trajectory_hori_prob(ground, hitFlag, v_init_ground_space = v_init_ground_space)
+        height_probs = trajectory_height_prob(vertical, hitFlag, height_space = height_space)
+        joint_probArr[start:stop] = (1 / (1 + distArr_over_traj)) * bounce_probs * spin_probs * speed_probs * height_probs
+    return joint_probArr
+
+
+def _identical_trajectory_counts(groundArr, vertArr):
+    """Count exact duplicates without a quadratic trajectory-by-trajectory array."""
+    trajectories = np.concatenate([groundArr, vertArr], axis = 1)
+    finite = np.isfinite(trajectories).all(axis = 1)
+    counts = np.zeros(len(trajectories), dtype = int)
+    if finite.any():
+        _, inverse, frequencies = np.unique(trajectories[finite], axis = 0,
+                                             return_inverse = True, return_counts = True)
+        counts[finite] = frequencies[inverse]
+    return counts
+
+
 def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitFlag, bounceArr, 
                             matchCamera = None, 
                             groundArr = None, vertArr = None, rpmArr = None, 
                             height_space = None, v_init_ground_space = None, v_init_vert_space = None, spin_rate_space = None,
                             groundstrokes_are_below = 2.5, serves_and_overheads_are_above = 2,
-                            observation_threshold = 3, number_of_local_minima = 100):
+                            observation_threshold = 3, number_of_local_minima = 100,
+                            ram_allowed_in_gb = 1):
     ### update: since we have a colinear plane, the vertical 3D points are all we have, 
     # and finding a good trajectory based on only the deviations is tough.
     # on the other hand, we have only a single plane, which eases finding minima.
@@ -1159,7 +1228,11 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
             else:
                 h_filt = height_space < groundstrokes_are_below
 
-            groundArr_short, vertArr_short, rpmArr_short = groundArr[:, :, :, h_filt, :num_obs], vertArr[:, :, :, h_filt, :num_obs], rpmArr[:, :, :, h_filt, :num_obs]
+            height_indices = np.flatnonzero(h_filt)
+            if not len(height_indices):
+                raise ValueError('The trajectory bank has no allowed initial heights for this shot')
+            height_slice = slice(height_indices[0], height_indices[-1] + 1)
+            groundArr_short, vertArr_short, rpmArr_short = groundArr[:, :, :, height_slice, :num_obs], vertArr[:, :, :, height_slice, :num_obs], rpmArr[:, :, :, height_slice, :num_obs]
 
             ### establish cam line (in meters)
             # a) origin relative to hit point
@@ -1203,51 +1276,13 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
                 planar_vector_y_brdc = planar_vector_y_brdc[:, :, :, :, :num_sim]
                 bounceArr = bounceArr[:num_sim]
 
-            ### calculate deviations from the flight plane for the entire trajectory array
-            rel_groundArr_short = planar_origin_x_brdc - groundArr_short
-            rel_vertArr_short = planar_origin_y_brdc - vertArr_short
-
-            gammaArr = planar_vector_x_brdc * rel_vertArr_short - planar_vector_y_brdc * rel_groundArr_short
-            distArr = np.abs(gammaArr)        
-            distArr_over_traj = np.nanmean(distArr, axis = -1) ### mean deviation over all observations
-
-            ### bounce info
-            is_bounceArr = vertArr_short == 0
-            num_bounceArr = is_bounceArr.sum(axis = -1)
-            
-            if netBool:
-                prior0, prior1, prior2 = 0.9, 0.09, 0.01
-            else:
-                prior0, prior1, prior2 = bounceArr[0, 2:]
-
-            cond_prior1, cond_prior2 = bounceArr[:, 0], bounceArr[:, 1]
-
-            cond_prior1_brdc = cond_prior1[np.newaxis, np.newaxis, np.newaxis, np.newaxis]
-            cond_prior2_brdc = cond_prior2[np.newaxis, np.newaxis, np.newaxis, np.newaxis]
-
-            cond_prior1_mul = np.prod(np.where(is_bounceArr, cond_prior1_brdc, 1), axis = -1)
-            cond_prior2_mul = np.prod(np.where(is_bounceArr, cond_prior2_brdc, 1), axis = -1)
-
-            priorArr = np.where(num_bounceArr == 0, prior0, 
-                                np.where(num_bounceArr == 1, prior1, 
-                                         prior2))
-            cond_priorArr = np.where(num_bounceArr == 0, 1, 
-                                     np.where(num_bounceArr == 1, cond_prior1_mul,
-                                              cond_prior2_mul))
-
-            bounce_probArr = priorArr * cond_priorArr
-
-            ### visual shot info
-            spin_probs = trajectory_spin_prob(rpmArr_short, hitFlag, spin_rate_space = spin_rate_space)
-
-            ### since we have so little to go in in case of co-linearity, 
-            # we put priors over the distribution of speeds and heights, too.
-            hori_probs = trajectory_hori_prob(groundArr_short, hitFlag, v_init_ground_space = v_init_ground_space)
-            height_probs = trajectory_height_prob(vertArr_short, hitFlag, height_space = height_space)
-            
-            ### join deviations and bounce probabilities in a sensible metric
-            dist_probArr = 1 / (1 + distArr_over_traj)
-            joint_probArr = dist_probArr * bounce_probArr * spin_probs * hori_probs * height_probs
+            joint_probArr = _colinear_trajectory_probabilities(
+                groundArr_short, vertArr_short, rpmArr_short,
+                planar_origin_x_brdc, planar_origin_y_brdc,
+                planar_vector_x_brdc, planar_vector_y_brdc,
+                bounceArr, netBool, hitFlag,
+                height_space, v_init_ground_space, spin_rate_space,
+                ram_allowed_in_gb = ram_allowed_in_gb)
 
             ### detect locally maximal probabilities
             from ATMANpy.funcs.util_funcs import detect_local_minima
@@ -1255,23 +1290,16 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
             max_probs = joint_probArr[x_idxs, z_idxs, rpm_idxs, height_idxs]
 
             ### select the minimal initial conditions
-            groundArr_filt = groundArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs]
-            vertArr_filt = vertArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs]
-            rpmArr_filt = rpmArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs]
+            groundArr_filt = groundArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs].astype(np.result_type(groundArr.dtype, np.float32), copy = False)
+            vertArr_filt = vertArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs].astype(np.result_type(vertArr.dtype, np.float32), copy = False)
+            rpmArr_filt = rpmArr_short[x_idxs, z_idxs, rpm_idxs, height_idxs].astype(np.result_type(rpmArr.dtype, np.float32), copy = False)
 
             ### resample 
             # even don't we do the viterbi step, we can resample here to reduce the set of choices 
             # in case for some reason we get way too many local minima
             
             # additional resampling step: if the resulting trajectories are the same (or similar), the probabilities are scaled downward
-            ground_cross_dists = np.abs(groundArr_filt[:, np.newaxis] - groundArr_filt[np.newaxis, :])
-            vert_cross_dists = np.abs(vertArr_filt[:, np.newaxis] - vertArr_filt[np.newaxis, :])
-
-            ground_cross_dist_sum = ground_cross_dists.sum(axis = -1)
-            vert_cross_dist_sum = vert_cross_dists.sum(axis = -1)
-
-            cross_dist_sum = (ground_cross_dist_sum == 0) & (vert_cross_dist_sum == 0)
-            cross_dist_count = cross_dist_sum.sum(axis = 1)
+            cross_dist_count = _identical_trajectory_counts(groundArr_filt, vertArr_filt)
             cross_dist_weight = 1 / cross_dist_count
             
             # pick according to joint probs
@@ -1289,8 +1317,9 @@ def fit_trajectory_colinear(s_on, vertical_3D_points, netBool, proj_netArr, hitF
             traj_ground_idxs = x_idxs[chosen_loc_min_idxs]
             traj_vert_idxs = z_idxs[chosen_loc_min_idxs]
             traj_rpm_idxs = rpm_idxs[chosen_loc_min_idxs]
+            traj_height_idxs = height_indices[height_idxs[chosen_loc_min_idxs]]
             traj_prob_idxs = max_probs[chosen_loc_min_idxs]
-            trajArr = np.stack([traj_ground_idxs, traj_vert_idxs, traj_rpm_idxs, traj_prob_idxs], axis = 1)
+            trajArr = np.stack([traj_ground_idxs, traj_vert_idxs, traj_rpm_idxs, traj_height_idxs, traj_prob_idxs], axis = 1)
             trajArr = trajArr[np.newaxis] ### add the pseudo-plane axis of length 1
 
             ### filter again

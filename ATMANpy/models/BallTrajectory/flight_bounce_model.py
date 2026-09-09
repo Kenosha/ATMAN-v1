@@ -196,7 +196,7 @@ def save_trajectories(name, xArr, zArr, rpmArr, **kwargs):
         with open(os.path.join(trajDir, 'info.txt'), 'w') as f:
             f.writelines(lines_to_write)
         
-def load_trajectories(name, dtype = 'float32'):
+def load_trajectories(name, dtype = 'float32', mmap_mode = None):
     folDict = get_folder_struct('trajectories_stored')
     
     if name not in folDict:
@@ -225,15 +225,15 @@ def load_trajectories(name, dtype = 'float32'):
             infoDict = {x: read_info(y) for x, y in lines}
         
         ### read arrays
-        xArr = np.load(os.path.join(trajDir, 'xArr.npy'))
-        zArr = np.load(os.path.join(trajDir, 'zArr.npy'))
-        rpmArr = np.load(os.path.join(trajDir, 'rpmArr.npy'))
+        xArr = np.load(os.path.join(trajDir, 'xArr.npy'), mmap_mode = mmap_mode)
+        zArr = np.load(os.path.join(trajDir, 'zArr.npy'), mmap_mode = mmap_mode)
+        rpmArr = np.load(os.path.join(trajDir, 'rpmArr.npy'), mmap_mode = mmap_mode)
         
-        if not xArr.dtype == dtype:
+        if dtype is not None and not xArr.dtype == dtype:
             xArr = xArr.astype(dtype)
-        if not zArr.dtype == dtype:
+        if dtype is not None and not zArr.dtype == dtype:
             zArr = zArr.astype(dtype)
-        if not rpmArr.dtype == dtype:
+        if dtype is not None and not rpmArr.dtype == dtype:
             rpmArr = rpmArr.astype(dtype)
         
         return xArr, zArr, rpmArr, infoDict
@@ -700,31 +700,53 @@ def fit_trajectories(planeArr, pointArr,
         
     return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
     
+def _trajectory_deviation_sums(pos_ground_theoretical, pos_vert_theoretical,
+                               pos_ground_measured, pos_vert_measured,
+                               sum_of_squares = True, ram_allowed_in_gb = 1):
+    """Evaluate the unchanged grid in bounded blocks of at least float32.
+
+    The memory allowance covers temporary deviation arrays. The trajectory
+    bank and the small four-dimensional score arrays are additional memory.
+    """
+    if ram_allowed_in_gb <= 0:
+        raise ValueError('ram_allowed_in_gb must be positive')
+    grid_shape = pos_ground_theoretical.shape[:-1]
+    dtype = np.result_type(pos_ground_theoretical.dtype, pos_vert_theoretical.dtype,
+                           pos_ground_measured.dtype, pos_vert_measured.dtype, np.float32)
+    bytes_per_ground_speed = int(np.prod(pos_ground_theoretical.shape[1:])) * dtype.itemsize
+    # Two deviations, a NaN-safe reduction copy, and temporary masks/casts.
+    block_size = max(1, min(grid_shape[0],
+                           int(ram_allowed_in_gb * 10 ** 9 / max(1, 5 * bytes_per_ground_speed))))
+    sum_dev = np.empty((len(pos_ground_measured), *grid_shape), dtype = dtype)
+    for plane_idx, (ground_measured, vert_measured) in enumerate(zip(pos_ground_measured, pos_vert_measured)):
+        for start in range(0, grid_shape[0], block_size):
+            stop = min(start + block_size, grid_shape[0])
+            ground_dev = np.subtract(ground_measured, pos_ground_theoretical[start:stop], dtype = dtype)
+            vert_dev = np.subtract(vert_measured, pos_vert_theoretical[start:stop], dtype = dtype)
+            if sum_of_squares:
+                np.square(ground_dev, out = ground_dev)
+                np.square(vert_dev, out = vert_dev)
+                np.add(ground_dev, vert_dev, out = ground_dev)
+                np.sqrt(ground_dev, out = ground_dev)
+            else:
+                np.abs(ground_dev, out = ground_dev)
+                np.abs(vert_dev, out = vert_dev)
+                np.add(ground_dev, vert_dev, out = ground_dev)
+            del vert_dev
+            sum_dev[plane_idx, start:stop] = np.nansum(ground_dev, axis = -1)
+    return sum_dev
+
+
 def get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
                                            pos_ground_measured, pos_vert_measured,
-                                           sum_of_squares = True, number_of_local_minima = 15):
+                                           sum_of_squares = True, number_of_local_minima = 15,
+                                           ram_allowed_in_gb = 1):
     rng = np.random.default_rng()
     
-    ### shape groundArr_height, vertArr_height: v_ground x v_vert x spin_rpm x time
-    ### shape pos_ground_measured_h, pos_vert_measured_h: dim1 x dim2 x ... x t
-    pos_ground_theoretical_brdcst = pos_ground_theoretical[np.newaxis]
-    pos_vert_theoretical_brdcst = pos_vert_theoretical[np.newaxis]
-    
-    pos_ground_measured_brdcst = pos_ground_measured.copy()
-    pos_vert_measured_brdcst = pos_vert_measured.copy()
-    for _ in range(4):
-        pos_ground_measured_brdcst = pos_ground_measured_brdcst[:, np.newaxis]
-        pos_vert_measured_brdcst = pos_vert_measured_brdcst[:, np.newaxis]
-    
-    ground_dev = pos_ground_measured_brdcst - pos_ground_theoretical_brdcst
-    vert_dev = pos_vert_measured_brdcst - pos_vert_theoretical_brdcst
-    
-    if sum_of_squares:
-        sum_dev = np.nansum((ground_dev ** 2 + vert_dev ** 2) ** 0.5, axis = -1)
-    else:
-        sum_dev = np.nansum(np.abs(ground_dev) + np.abs(vert_dev), axis = -1)
-    
-    del ground_dev, vert_dev
+    sum_dev = _trajectory_deviation_sums(
+        pos_ground_theoretical, pos_vert_theoretical,
+        pos_ground_measured, pos_vert_measured,
+        sum_of_squares = sum_of_squares, ram_allowed_in_gb = ram_allowed_in_gb)
     
     local_minima = [detect_local_minima(traj_sum_dev) for traj_sum_dev in sum_dev] ### shape: trajs, x_idxs, z_idxs, rpm_idxs, height_idxs
     
@@ -792,7 +814,8 @@ def fit_trajectories_pointless(planeArr,
         trajArr = get_locally_minimal_trajectory_indices(pos_ground_theoretical, pos_vert_theoretical, 
                                                          pos_ground_measured[plane_start:plane_stop], pos_vert_measured[plane_start:plane_stop],
                                                          sum_of_squares = sum_of_squares, 
-                                                         number_of_local_minima = number_of_local_minima)
+                                                         number_of_local_minima = number_of_local_minima,
+                                                         ram_allowed_in_gb = ram_allowed_in_gb)
         trajArrs.append(trajArr)
     
     
@@ -803,9 +826,9 @@ def fit_trajectories_pointless(planeArr,
     rpm_idxs = trajArr.take(2, axis = -1).astype(int)
     height_idxs = trajArr.take(3, axis = -1).astype(int)
     
-    groundArr_filt = groundArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
-    vertArr_filt = vertArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]
-    rpmArr_filt = rpmArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames]  
+    groundArr_filt = groundArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames].astype(np.result_type(groundArr.dtype, np.float32), copy = False)
+    vertArr_filt = vertArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames].astype(np.result_type(vertArr.dtype, np.float32), copy = False)
+    rpmArr_filt = rpmArr[vx_idxs, vy_idxs, rpm_idxs, height_idxs, :num_frames].astype(np.result_type(rpmArr.dtype, np.float32), copy = False)
     
     return trajArr, groundArr_filt, vertArr_filt, rpmArr_filt
     
@@ -899,4 +922,4 @@ if __name__ == '__main__':
     
     
     
-        
+

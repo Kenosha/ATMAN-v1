@@ -1,0 +1,61 @@
+{
+  "video_id": "2021-7341-ms001-brest-brandon-nakashima-vs-joao-sousa",
+  "start_frame": 0,
+  "stop_frame": 5999,
+  "fps": 25,
+  "provenance": "Existing historical human identity/handedness and serve review; no detector outputs supplied. Side identity intervals identify where the source human labels are known, not court detections to reuse.",
+  "warmup_policy": "none_in_interval",
+  "tiebreak_corrections": [],
+  "player_identity_intervals": [
+    {
+      "start_frame": 0,
+      "stop_frame": 4740,
+      "top_name_Flag": "Joao Sousa",
+      "bot_name_Flag": "Brandon Nakashima",
+      "top_hand_Flag": "right",
+      "bot_hand_Flag": "right"
+    },
+    {
+      "start_frame": 5208,
+      "stop_frame": 5999,
+      "top_name_Flag": "Brandon Nakashima",
+      "bot_name_Flag": "Joao Sousa",
+      "top_hand_Flag": "right",
+      "bot_hand_Flag": "right"
+    }
+  ],
+  "serve_reviews": [
+    {
+      "reference_frame": 301,
+      "classification": "first_serve"
+    },
+    {
+      "reference_frame": 874,
+      "classification": "first_serve"
+    },
+    {
+      "reference_frame": 1728,
+      "classification": "first_serve"
+    },
+    {
+      "reference_frame": 2470,
+      "classification": "let"
+    },
+    {
+      "reference_frame": 2943,
+      "classification": "first_serve"
+    },
+    {
+      "reference_frame": 3144,
+      "classification": "second_serve"
+    },
+    {
+      "reference_frame": 4124,
+      "classification": "first_serve"
+    },
+    {
+      "reference_frame": 4347,
+      "classification": "second_serve"
+    }
+  ]
+}

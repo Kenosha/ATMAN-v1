@@ -55,7 +55,7 @@ class Contour:
         return Point2D(coords)
     
     def __eq__(self, othCnt):
-        return np.array(self.points == othCnt.points).all()
+        return np.array_equal(self.points, othCnt.points)
     
     def num_points(self):
         return len(self.points)

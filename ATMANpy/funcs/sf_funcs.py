@@ -526,7 +526,7 @@ def split_player_candidate_tracks(plSF,
         gather_time = time.time()
     
     # trackSF = SFList(stream_features).join()
-    trackDF = pd.concat(serList, axis = 1)
+    trackDF = pd.concat(serList, axis = 1).sort_index()
     
     if verbose:
         end_time = time.time()
@@ -2040,7 +2040,7 @@ def find_matching_tracks(candSF, splitDF, frame_offset = 5, num_points = 6, thre
     dicts = []
     for col in splitDF:
         idx = splitDF[col].dropna().index
-        fs, ls = idx[0], idx[-1]
+        fs, ls = idx.min(), idx.max()
         myDict = {'first': fs, 'last': ls}
         dicts.append(myDict)
     fslsFrm = pd.DataFrame(dicts, index = splitDF.columns)

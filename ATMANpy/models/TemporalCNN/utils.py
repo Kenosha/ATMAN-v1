@@ -22,6 +22,11 @@ from ATMANpy.types.Streams import Stream, DecapStream
 
 from itertools import product
 
+
+class NoInferenceSamplesError(ValueError):
+    """A rally group contained no valid player-centered temporal clips."""
+
+
 def clip_to_stream(clip, zoom = 1):
     clipArr = clip.numpy()
     if not clipArr.dtype == 'uint8':
@@ -118,6 +123,8 @@ def infer_with_index(model, loader, device = 'cpu', report_frequency = 10):
             
             labArrs.append(labArr) 
             
+    if not prbArrs:
+        raise NoInferenceSamplesError('No player-centered clips were available for temporal CNN inference.')
     prbArr = torch.cat(prbArrs, dim = 0).cpu() ### concatenate on batch dimension
     if labArr is not None:
         labArr = torch.cat(labArrs, dim = 0).cpu() ### concatenate on batch dimension
@@ -270,7 +277,7 @@ def load_cnn(model_name, model_type, device = 'cuda'):
                        stride_t1 = t1, stride_t2 = t2, stride_t3 = t3, stride_t4 = t4,
                        share_other = 0.9)
     model.to(device)
-    model.load_state_dict(torch.load(res_read_where))
+    model.load_state_dict(torch.load(res_read_where, map_location=device, weights_only=True))
     model.train(False)
 
     return model, params
@@ -311,8 +318,6 @@ def sum_over_distinct_labels(prbArr, labels):
         out_probs.append(sumArr)
     
     return np.array(out_probs).swapaxes(0, 1), unique_labels ### labels x samples --> samples x labels
-
-
 
 
 

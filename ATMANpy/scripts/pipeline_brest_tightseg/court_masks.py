@@ -53,6 +53,11 @@ def save(burnSFs, shadSFs, motSFs, vid, sto, lossless = True):
     shadSFs.rename('shadowMask').save(vid, sto, lossless = lossless)
     motSFs.rename('fine_motMask').save(vid, sto, lossless = lossless)
 
+def find_fine_motion_mask(gFrms, **kwargs):
+    # Streaming saves use the returned variable name as the feature directory.
+    fine_motMask = mx.find_motion_mask(gFrms, **kwargs)
+    return fine_motMask
+
 def main(conf, burn_in_params, shadow_params, motion_params, name = None):
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     nwo, nch = conf['num_workers'], conf['chunksize']
@@ -75,7 +80,7 @@ def main(conf, burn_in_params, shadow_params, motion_params, name = None):
     
     ### Motion Mask
     gStms = StreamList.from_SFList(HSFs, cap, target_color_space = 'grey')
-    gStms.apply_chunked_mp_to_disc(mx.find_motion_mask, nwo, 10 * nch, vid, sto, save_params, **motion_params, ROI = courtROI)
+    gStms.apply_chunked_mp_to_disc(find_fine_motion_mask, nwo, 10 * nch, vid, sto, save_params, **motion_params, ROI = courtROI)
     
     # save(burnSFs, shadSFs, motSFs, vid, sto, lossless = conf['lossless'])
     

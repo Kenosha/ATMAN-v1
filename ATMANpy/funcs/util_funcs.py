@@ -14,7 +14,23 @@ import datetime
 from typing import Union
 
 ### Allow overriding the project root via environment, otherwise derive it from this file
-mainDir = os.environ.get('ATMAN_HOME')
+mainDir = os.environ.get('ATMAN_HOME') or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def get_video(video_id):
+    """Open a local video path or a match ID under ATMAN_HOME/video_files."""
+    video_id = os.fspath(video_id)
+    candidates = [video_id,
+                  os.path.join(mainDir, 'video_files', video_id, 'match.mp4'),
+                  os.path.join(mainDir, 'video_files', video_id),
+                  os.path.join(mainDir, 'video_files', video_id + '.mp4')]
+    path = next((path for path in candidates if os.path.isfile(path)), None)
+    if path is None:
+        raise FileNotFoundError(f'No local video found for {video_id!r}. Supply a path or add video_files/<match>/match.mp4 under ATMAN_HOME.')
+    capture = cv.VideoCapture(os.path.abspath(path))
+    if not capture.isOpened():
+        capture.release()
+        raise ValueError(f'Could not open local video: {path}')
+    return capture
 
 def get_folder_struct(source, verbose = True):
     if source is None:

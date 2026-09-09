@@ -512,6 +512,8 @@ class StreamFeature(StreamFeaturesBase):
         else:
             outputdict = {}
             
+        if os.environ.get('ATMAN_FFMPEG_THREADS'):
+            outputdict['-threads'] = os.environ['ATMAN_FFMPEG_THREADS']
         writer = FFmpegWriter(fullPath, outputdict = outputdict)
         
         for myFrm in self.values():
@@ -606,6 +608,11 @@ class StreamFeatures(StreamFeaturesBase):
     @classmethod
     def from_dataframe(cls, myDF, cast_to = None):
         streamDict = myDF.to_dict(orient = 'index')
+        # Interpolation/CSV loading can represent whole frame numbers as floats.
+        # Preserve their values while making them usable by integer frame lookup.
+        streamDict = {int(frame) if isinstance(frame, (float, np.floating))
+                      and np.isfinite(frame) and frame == int(frame) else frame: values
+                      for frame, values in streamDict.items()}
         if cast_to == int: ### this is for getting an integer type --> dataframes are float if nans are introduced
             def maybe_int(featDict):
                 outDict = {}
@@ -1303,6 +1310,8 @@ class SFList:
     
     @extract_mp_timer
     def apply_mp(self, func, num_workers, **kwargs):
+        if num_workers == 1:
+            return SFList([mySF.apply(func, **kwargs) for mySF in self])
         from multiprocessing.pool import Pool
         
         my_applicator = partial(applicator, func = func, **kwargs)
@@ -1322,6 +1331,8 @@ class SFList:
     
     @extract_mp_timer
     def apply_whole_mp(self, func, num_workers, **kwargs):
+        if num_workers == 1:
+            return SFList([func(mySF, **kwargs) for mySF in self])
         from multiprocessing.pool import Pool
         partFunc = partial(func, **kwargs)
         
@@ -1332,6 +1343,9 @@ class SFList:
     
     @extract_mp_timer
     def apply_whole_mp_starmapped(self, func, num_workers, starmap_iterable, **kwargs):
+        if num_workers == 1:
+            return SFList([func(mySF, other, **kwargs)
+                           for mySF, other in zip(self.sfList, starmap_iterable)])
         from multiprocessing.pool import Pool
         partFunc = partial(func, **kwargs)
         
@@ -1480,9 +1494,6 @@ class SFList:
 # SF.extend(SF2)
 
 # SF.first()
-
-
-
 
 
 

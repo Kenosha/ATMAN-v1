@@ -1,0 +1,6 @@
+- too little time between speech snippets
+	-> tight cropping is good, but we need to leave a second or two of silence.
+
+- somehow equalize sound between takes -> loudness, etc.
+
+- remove plosives

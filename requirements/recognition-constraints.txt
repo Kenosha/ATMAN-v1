@@ -1,0 +1,11 @@
+# Versions exercised with the historical audio model (Python 3.12).
+-c core-constraints.txt
+torch==2.9.1
+torchaudio==2.9.1
+torchvision==0.24.1
+librosa==0.11.0
+scikit-image==0.25.2
+sounddevice==0.5.3
+soundfile==0.13.1
+numba==0.62.1
+llvmlite==0.45.1

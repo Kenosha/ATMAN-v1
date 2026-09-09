@@ -12,7 +12,6 @@ import cv2 as cv
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from fuzzywuzzy import fuzz
 
 ### GET SCHEMA ###
 from ATMANpy.types.Lines import CourtLines, NetLines
@@ -66,12 +65,30 @@ def load(vid, sto):
 def save(trajDFs, coliDFs, placeholderSers, vid, sto):
     trajFrm = pd.concat(trajDFs)
     coliFrm = pd.concat(coliDFs)
-    placeFrm = pd.concat(placeholderSers, axis = 1).T
+    if placeholderSers:
+        placeFrm = pd.concat(placeholderSers, axis = 1).T
+    else:
+        placeFrm = pd.DataFrame(columns = ['point_idx', 'lo_name', 'up_name',
+                                           'lo_score', 'up_score', 'lo_games',
+                                           'up_games', 'lo_sets', 'up_sets'])
     ff.save_feature_frame(trajFrm, 'dataTable', vid, sto)
     ff.save_feature_frame(coliFrm, 'dataTable_colinear', vid, sto)
     ff.save_feature_frame(placeFrm, 'placeTable', vid, sto)
 
+def game_score_as_text(value):
+    """Normalize numeric CSV scores while retaining multi-set score strings."""
+    if pd.isna(value):
+        return '0'
+    if isinstance(value, (int, np.integer)):
+        return str(value)
+    if isinstance(value, (float, np.floating)):
+        if not np.isfinite(value) or not value.is_integer():
+            raise ValueError(f'Game score must be a whole number: {value}')
+        return str(int(value))
+    return value
+
 def main(conf, name = None):
+    from fuzzywuzzy import fuzz
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     nwo, nch = conf['num_workers'], conf['chunksize']
     cap = conf['cap']
@@ -156,6 +173,8 @@ def main(conf, name = None):
 
     gamesFrm = scrSF[['sb_games_lower_cleaned_Flag', 'sb_games_upper_cleaned_Flag']].to_dataframe()
     gamesFrm.columns = lower_upper_names_proper
+    for c in gamesFrm:
+        gamesFrm[c] = gamesFrm[c].map(game_score_as_text)
 
     for c in scoreFrm:
         if scoreFrm[c].dtype != 'object': ### this happens if the player in column c has never reached Advantage ('A'), thus the column is read in as numeric

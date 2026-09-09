@@ -193,10 +193,11 @@ def main(conf, weight_params, smooth_params, viterbi_params, widen_params, name 
 
         # Stream.from_SF(hitSF.conform(rallyBF.filter(rallyBF)), cap).show(ms_between_frames = 100)
         # Stream.from_SF(allSFs[0], cap).show()
-        SAVE_FOLDER_NAME = f'viterbi_connecting_states_lohi_hit5_moreflight_{vid}'
-        plot_hit_probs(conv_video_hitFrm, conv_audio_hitSer, conv_hitFrm, 
-                        hitSF, rallyBF,
-                        idx, SAVE_FOLDER_NAME)
+        if conf.get('save_checks', True):
+            SAVE_FOLDER_NAME = f'viterbi_connecting_states_lohi_hit5_moreflight_{vid}'
+            plot_hit_probs(conv_video_hitFrm, conv_audio_hitSer, conv_hitFrm,
+                            hitSF, rallyBF,
+                            idx, SAVE_FOLDER_NAME)
 
     hitSFs = SFList(hitSFs)
     rallyBFs = SFList(rallyBFs)

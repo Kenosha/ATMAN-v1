@@ -38,7 +38,7 @@ import torch
 from torch.utils.data import DataLoader
 from ATMANpy.models.TemporalCNN.nets import SmallFullConvModel
 from ATMANpy.models.TemporalCNN.data import UncappedPlayerInferenceDataset
-from ATMANpy.models.TemporalCNN.utils import infer_with_index, load_cnn, label_map, sum_over_distinct_labels
+from ATMANpy.models.TemporalCNN.utils import infer_with_index, load_cnn, label_map, sum_over_distinct_labels, NoInferenceSamplesError
 
 def check(vid, sto, name, topFrm, botFrm):
     import numpy as np
@@ -107,9 +107,12 @@ def main(conf, model_params, name = None):
     
     ### additional params which right now can/should not be changed
     loader_workers = 0
-    device = 'cuda'
+    device = conf.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+    torch.set_num_threads(conf.get('torch_threads', 1))
     report_frequency = 100
-    streams_to_decap_at_a_time = 80 ### to avoid RAM fuckery
+    streams_to_decap_at_a_time = conf.get('model_batch_rallies', 80)
+    if streams_to_decap_at_a_time < 1:
+        raise ValueError('model_batch_rallies must be at least one.')
     
     segBF, foreStms, motiStms, playersSF = load(vid, sto)
     
@@ -118,7 +121,9 @@ def main(conf, model_params, name = None):
     
     mulStms = StreamList.combine(cStms, foreStms, motiStms)
     streams_to_decap = mulStms.length()
-    decap_iterations = streams_to_decap // streams_to_decap_at_a_time + 1
+    if streams_to_decap == 0:
+        raise ValueError('No isRally_sound segments are available for video classification.')
+    decap_iterations = (streams_to_decap + streams_to_decap_at_a_time - 1) // streams_to_decap_at_a_time
     
     ### Run models on player contours
     prbDict = {'top': [], 'bot': []}
@@ -137,7 +142,9 @@ def main(conf, model_params, name = None):
             model, params = load_cnn(model_name, SmallFullConvModel, device = device)
             
             ### collect some params
-            batch_size = params['BATCH_SIZE']
+            batch_size = conf.get('model_batch_size', params['BATCH_SIZE'])
+            if batch_size < 1:
+                raise ValueError('model_batch_size must be at least one.')
             D_SC = params['D_SCALE_SIZE']
             D = params['D_CROP_SIZE']
             T = params['T_CROP_SIZE']
@@ -146,9 +153,16 @@ def main(conf, model_params, name = None):
             ds = UncappedPlayerInferenceDataset(decapStms, playerSF,  
                                                 stride_t = stride_t, T = T, D = D, D_SC = D_SC) 
             
-            inf_loader = DataLoader(ds, batch_size = batch_size, num_workers = loader_workers, pin_memory = True)
-            prbArr, labArr = infer_with_index(model, inf_loader, device = device, report_frequency = report_frequency)
-            prbArr = prbArr.squeeze() ### kill T, H, W dims (which remain due to fully convolutional model)
+            inf_loader = DataLoader(ds, batch_size = batch_size, num_workers = loader_workers,
+                                    pin_memory = torch.device(device).type == 'cuda')
+            try:
+                prbArr, labArr = infer_with_index(model, inf_loader, device = device, report_frequency = report_frequency)
+            except NoInferenceSamplesError:
+                # Grouping rallies differently must not turn a short/missing-player
+                # rally into an error when other rallies have valid inference clips.
+                print(f'No {player} player clips in rally group {iter_idx}; no CNN predictions added.')
+                continue
+            prbArr = prbArr[:, :, 0, 0, 0] ### keep the batch axis even for one valid clip
             
             prbDict[player].append(prbArr)
             labDict[player].append(labArr)
@@ -157,6 +171,8 @@ def main(conf, model_params, name = None):
         del decapStms, ds, inf_loader ### free up RAM
 
     for player in ['top', 'bot']:
+        if not prbDict[player]:
+            raise NoInferenceSamplesError(f'No {player} player-centered clips were available in any rally.')
         prbDict[player] = torch.concat(prbDict[player])
         labDict[player] = torch.concat(labDict[player])
         prmDict[player] = prmDict[player][0]
@@ -185,7 +201,8 @@ def main(conf, model_params, name = None):
 
     topFrm, botFrm = frmDict['top'], frmDict['bot']
 
-    check(vid, sto, name, topFrm, botFrm)
+    if conf.get('save_checks', True):
+        check(vid, sto, name, topFrm, botFrm)
 
     save(topFrm, botFrm, vid, sto)
 
@@ -208,4 +225,4 @@ if __name__ == '__main__':
         
         
         
-        
+

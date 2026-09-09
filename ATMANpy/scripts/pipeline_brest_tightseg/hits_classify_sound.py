@@ -22,7 +22,6 @@ from torch.utils.data import DataLoader
 
 from functools import partial
 from scipy.signal import find_peaks
-import sounddevice as sd
 
 import ATMANpy.funcs.util_funcs as ut
 import ATMANpy.funcs.feature_funcs as ff
@@ -49,7 +48,8 @@ def main(conf, model_params, name = None):
     cap = conf['cap']
     
     ### CNN parameters
-    device = 'cuda'
+    device = conf.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+    torch.set_num_threads(conf.get('torch_threads', 1))
     loader_workers = 0 
     report_frequency = 100
 
@@ -63,6 +63,8 @@ def main(conf, model_params, name = None):
     ### Load 
     segBF = load(vid, sto)
     segBFs = segBF.filter(segBF).split()
+    if segBFs.length() == 0:
+        raise ValueError('No isCourt segments are available for sound classification.')
     
     model, params = load_cnn(model_name, SoundModel_MN, device = device)
     
@@ -76,7 +78,8 @@ def main(conf, model_params, name = None):
                           to_db = params['to_db'], norm_value = params['norm_value'], db_reference = params['db_reference'],
                           yield_frame_indices = False)
     
-    inf_loader = DataLoader(ds, batch_size = 1, num_workers = 0, pin_memory = True)
+    inf_loader = DataLoader(ds, batch_size = 1, num_workers = 0,
+                            pin_memory = torch.device(device).type == 'cuda')
     
     ### Run Inference of Spectra
     specArrs, sample_bounds = run_inference_on_arbitrary_spectrum(model, inf_loader, device, 

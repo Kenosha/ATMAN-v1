@@ -1,0 +1,10 @@
+- improve viterbi net recognition
+- pick trajectories which connect to the previous (and the next) trajectory
+	-> find a path through trajectories which minimizes distance between start and end points, in addition to deviations.
+
+- bounce priors given remaining length of rally
+- viterbi net in logs.
+- priors for ball hit height -> unlikely that a rally ball is hit over the head, or very close to ground.
+
+- redo trajectory fit with greater possible height for serves (up to 3.6 metres) and smaller height for rally balls.
+	- > additionally, could also change the spin landscape -> no serve has massive underspin.

@@ -103,13 +103,16 @@ def main(conf, params, name = None):
         windowBFs = segBFs[left_idx:right_idx]
         
         playStms = StreamList.from_SFList(windowBFs, cap).widen(params['widen_play_by_frames'])
+        # Widening a rally at the edge of a clip must stay inside that clip.
+        playStms = StreamList([stream.conform(max(0, stream.start_frame),
+                                          min(conf['stop_frame'], stream.stop_frame))
+                           for stream in playStms])
         playStm = playStms.join()
         
-        if playStm.length() < params['sample_frames']:
-            print('Too few frames in courtStm, consider reducing TRUNC_N')
-            continue
-        
-        sampledStm = playStm.sample(params['sample_frames'])
+        sample_count = min(params['sample_frames'], playStm.length())
+        if sample_count < 2:
+            raise ValueError('Too few play frames to estimate a background.')
+        sampledStm = playStm.sample(sample_count)
         sampledFrms = sampledStm.decap().frames
         
         medFrm, stdFrm = sampledFrms.median(), sampledFrms.std()
@@ -144,4 +147,4 @@ if __name__ == '__main__':
     name = ppl._name
 
     main(conf, params, name = name)
-    
+

@@ -1,6 +1,7 @@
 
 import os
 import time
+import shlex
 
 import cv2 as cv
 import numpy as np
@@ -27,7 +28,6 @@ from ATMANpy.types.Frames import MaskFrame, GreyFrame
 from ATMANpy.types.Points import Point2D
 from ATMANpy.types.Lines import Line, Region
 
-import pytesseract as tess
 
 RESCALE_FACTOR = 2.8 ### at 2.8, our letters come out to roughly 32 pixel height, which is the perfect height apparently for tesseract.
 BACK_PIXEL_ROW = 5
@@ -66,6 +66,7 @@ def preprocess_frame(someFrm,
         return workFrm > threshold_value
 
 def get_upper_lower_string(inFrm, config_string = None, psm = 6):
+    import pytesseract as tess
     if config_string is None:
         config_string = ''
 
@@ -80,6 +81,10 @@ def get_upper_lower_string(inFrm, config_string = None, psm = 6):
     upper_string, lower_string = upper_string.replace('\n', ' '), lower_string.replace('\n', ' ') # replace linebreak with spaces
 
     return upper_string, lower_string
+
+def get_ocr_config(config_name, conf):
+    config_path = conf.get('ocr_configs', {}).get(config_name, config_name)
+    return '--psm 6 ' + shlex.quote(os.fspath(config_path))
 
 def load(vid, sto):
     segBF = StreamFeature.from_store(vid, sto, featname = 'isRally_warmup_removed') ### TODO: once we remove warmups earlier in the pipeline, this will not be necessary!
@@ -97,6 +102,7 @@ def save(vid, sto, outSF):
     botgamesSF.rename('sb_games_lower_Flag').save(vid, sto)
 
 def main(conf, name = None):
+    import pytesseract as tess
     vid, sto = conf['video_id'], conf['store_name'] ### since they come up so often...
     cap = conf['cap']
 
@@ -186,16 +192,16 @@ def main(conf, name = None):
         upper_games_array, lower_games_array = np.split(gamesFrm_processed.array, 2, axis = 0)
 
         ### letters_tennis whitelists the alphabet, - and .
-        upper_letters = tess.image_to_string(upper_letter_array, config = f'--psm 6 letters_tennis')
-        lower_letters = tess.image_to_string(lower_letter_array, config = f'--psm 6 letters_tennis')
+        upper_letters = tess.image_to_string(upper_letter_array, config = get_ocr_config('letters_tennis', conf))
+        lower_letters = tess.image_to_string(lower_letter_array, config = get_ocr_config('letters_tennis', conf))
         
         ### digits_tennis whitelists chars 0123456789AD, AD for advantage
-        upper_numbers = tess.image_to_string(upper_number_array, config = f'--psm 6 digits_tennis')
-        lower_numbers = tess.image_to_string(lower_number_array, config = f'--psm 6 digits_tennis') 
+        upper_numbers = tess.image_to_string(upper_number_array, config = get_ocr_config('digits_tennis', conf))
+        lower_numbers = tess.image_to_string(lower_number_array, config = get_ocr_config('digits_tennis', conf))
         
         ### games_tennis whitelists chars 01234567
-        upper_games = tess.image_to_string(upper_games_array, config = f'--psm 6 games_tennis')
-        lower_games = tess.image_to_string(lower_games_array, config = f'--psm 6 games_tennis') 
+        upper_games = tess.image_to_string(upper_games_array, config = get_ocr_config('games_tennis', conf))
+        lower_games = tess.image_to_string(lower_games_array, config = get_ocr_config('games_tennis', conf))
 
         ### kill the line break
         upper_letters, lower_letters = upper_letters.rstrip('\n'), lower_letters.rstrip('\n')
@@ -238,5 +244,4 @@ if __name__ == '__main__':
 
     name = ppl._name
     main(conf, name = name)
-
 

@@ -1,0 +1,110 @@
+TODO:
+
+- parallelization of playerInferenceDataset. Issue: cap can not be pickled. Instead, 
+
+- to prevent overheads from being read as serves: 
+	- widen the frame window for serve detection?
+	- disqualify detected "serves" that happened clearly inside the court. 
+
+- try for a no-shrink model: all downscaling happens inside cnn.
+- data: more cropping, less scaling! hit and serve detection is fine with a smaller window -> we can then use less downsampling!
+
+- use "player candidate" contours when doing serve detection: 
+	-> infer model only over those patches that are centered on something that could be the player.
+		-> closer to what the model is actually trained for! 
+			Avoid confusion from off-centre snippets: in one (ostensibly good) model iteration, these resulted in a bunch of backhands being detected.
+		-> disadvantage: not convolutional sliding window
+	-> Alternative: Train on off centre snippets also! 
+
+- check performance of hit detector as aid to ball interpolation
+	-> we don't need precise timing, because we can combine the results of the hit detector with the ball trajectory.
+		-> ball trajectory: establish "regimes"! depending on ball traj, we assess whether the ball is moving towards player or away from.
+		-> then, the hit detector is used to improve the "fulcrum point" finder in the interpolation of balls.
+		-> essentially, each frame-to-be-interpolated between regimes "towards player" and "away from player" 
+			may be the frame where the ball is hit. 
+			The hit detector provides for each frame a probability of hit in that exact frame, and a location can be derived from it (next to player).
+			Each of these frame hypotheses is tested, and the best, according to smoothness of path and probability of it (according to hit detector) is chosen.  
+
+- testing: serve detection is much improved in the player-centered version: is this because the search area is not optimal?
+
+- player detection: tracks that are incomplete can be completed by "congruent" tracks
+
+- data augmentation: recoloring! more or less drastically depending on "color distance" to skin color.
+             -> skin color should be the only invariant; everything else is clothing, background, etc.
+	     -> balls will also be recolored in this scheme, but not so problematic
+			-> if background is killed, with rough foreground masks, the ball disappears for most frames anyway.
+
+- modelling: train the model on labels that have two dimensions 
+		-> one specifying the motion that happens, the other specifying timing!
+		-> this way, we avoid conflating probability that something is an event, and the timing of it!
+
+- modelling: to separate and speed up segmentation with serves and hit detection 
+	-> use two different models? for serve detection, we could:
+		-> use maybe only the boolean mask, to speed up inference (serves should be easy enough...) 
+			-> but what if it blends with linesperson (for top player serving?) 
+			-> maybe use only movement mask?? 
+		-> apply inference with convolutional sliding windows!
+		-> feed into the CNN the entire baseline: this way, we don't have to apply sliding windows convolutionally!
+
+- modelling: use weights trained to fit a layer or two on top of CNN which yields the location of the racket at impact
+		-> better: now that we have motionMask --> train it to give location of ball! (very likely to be in frame due to movement.
+
+
+- modelling: maxpool instead of striding? compare first smallfullconv model as is with an "equivalent" maxpool model
+- modelling: t_stride --> right at the start as opposed to at end? temporal downsampling of raw clips shouldn't be problematic for recognition.
+- modelling: increase window to 32 frames
+- modelling: normalize input images (equivalent to batch norm at the very start?)
+- modelling: oversampling of events, undersampling of non-events, weights?
+- modelling: pretrained weights available?
+- modelling: dropout layers?  "does not play nice with batch norm"
+- modelling: sharper proximity functions?
+- modelling: experiment with: batch size, SGD/Adam, learning rate, momentum, weight decay ( == L2 Reg!) [RANDOM SAMPLING of possible hyperparams]
+
+- more data (synthetic) -> empty frames? so we can safely convolve the model over areas and get a non-event result 
+- more data: warmup (for overheads, volleys).
+- more data: location of racket at impact.
+
+- testing: compare top and bot player detection
+
+- testing: check segmentation with artificial lower d stride --> convolve same area twice, but offset by stride_d/2 == 4 
+	--> how to do this in one pass? 
+		--> use activations up until conv4 (here, up to here, stride_d = 4). 
+		--> then, calculate conv4 forward with an offset of 1.
+
+
+DOING: 
+
+
+- testing: use instead of the confusion matrix better metrics for model perf. eval. geared to the purpose of the models
+	--> segmentation with serves (importance here is recognition --> false positives, false negatives)
+	--> hit detection and timing (importance here especially is the implied timing of hits, secondary: false negatives and positives)
+		--> metric: frame difference (mean and std) between predicted hit moment and true hit moment.
+- implementation: write a segmentation script that replaces ballkid seg with serve seg
+
+DONE: 
+
+- By train off-centre snippets (see below) we can not only keep the convolutional sliding window (very elegant!) 
+	but also increase the data the model sees, including giving it more hits and serves!
+	essentially, we create the appropriate crops right in clip creation, depending on the size of the player-cover ROI. 
+	TODO: Train model with randomised off-center snippets for hit, serve.
+	NOTE: convolutional sliding windows not possible with full convolutions in model! 
+		(frames/pixels inside of sample (16 x 56 x 56) are influenced by some of the frames/pixels outside of it, which in training are padded black.)
+
+- modelling: decrease temporal stride size so that the serve finder can be convolutionally applied more finely. (4 --> 2 should be ok.)
+
+
+- bugfix: re-run clip creation: strange bug was fixed when conforming decapstream
+ testing: apply model to whole video sequences, and check if it can reliably find serves.
+	--> test segmentation using serves!
+
+- testing: how to do convolutional sliding window implementation of cnn? (especially for serve detection -> slide over entire top and bot baseline, re-using activations)
+- modelling: is it possible to bring in ball data? 
+		-> What do we know about the ball at the time of model application? 
+		-> can we use the fast moving foreground mask?
+- more data: disappearing points -> fixed!
+- add to labels: right handed, left handed
+- re-check player tracks
+- re-check label completeness --> specification and checking scripts!
+- data augmentation: flipping --> flip also handedness of output!
+- data/model regularization: kill background in clips --> how much dilation?
+

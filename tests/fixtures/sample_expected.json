@@ -1,0 +1,16 @@
+{
+  "feature_rows": 2003,
+  "points": 12,
+  "shots": 65,
+  "serves": 12,
+  "first_serves": 8,
+  "returns": 9,
+  "shots_over_150_kmh": 9,
+  "players": [
+    "Brandon Nakashima",
+    "Joao Sousa"
+  ],
+  "mean_speed_kmh": 119.26198939505673,
+  "mean_spin_rpm": 1434.6153846153845,
+  "numeric_sha256": "d97e0daa75e6b54d7448fae3495c83fa14b53a5ea96cff9c0fdaef5195857cb6"
+}

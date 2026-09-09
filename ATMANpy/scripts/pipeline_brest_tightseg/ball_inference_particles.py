@@ -164,7 +164,8 @@ def main(conf, propagation_params, filter_init_params, filter_run_params, ball_c
     bSFs = hitSFs.apply_whole_mp(sf.create_propagation_models, nwo, courtLines = courtLines)
 
     ### Check propagation models
-    check_prop(vid, sto, name, bSFs, hitcntSFs, cap)
+    if conf.get('visualize', True):
+        check_prop(vid, sto, name, bSFs, hitcntSFs, cap)
 
     bSFs = bSFs.apply_whole_mp(sf.widen_propagation_models, nwo, **propagation_params)
     
@@ -274,4 +275,4 @@ if __name__ == '__main__':
     
     
     
-    
+

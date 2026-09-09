@@ -1,0 +1,7 @@
+- filtering with measures
+- color map
+- extend Point3D as array to Line3D as array
+- KDEs
+- determine first and second serve from segmentation or (consecutive) serve positions
+
+- add player info to playerMovement (using change-overs, change of serve).

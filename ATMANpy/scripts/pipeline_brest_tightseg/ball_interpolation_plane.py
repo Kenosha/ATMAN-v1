@@ -171,7 +171,7 @@ def main(conf,
     cap = get_video(vid)
     width, height = get_width_height(cap)
         
-    VISUALIZE = True
+    VISUALIZE = conf.get('visualize', True)
     timestamp = ut.make_timestamp() 
 
     #### READ IN ####
@@ -200,7 +200,11 @@ def main(conf,
     
     ##### TRAJECTORIES ####
     from ATMANpy.models.BallTrajectory.flight_bounce_model import load_trajectories, initialize
-    groundArr, vertArr, rpmArr, trajDict = load_trajectories(trajectory_params['traj_name'], dtype = 'float32')
+    use_mmap = conf.get('trajectory_mmap', False)
+    groundArr, vertArr, rpmArr, trajDict = load_trajectories(
+        trajectory_params['traj_name'],
+        dtype = None if use_mmap else 'float32',
+        mmap_mode = 'r' if use_mmap else None)
     
     ### initialise search spaces with proper arguments
     import inspect
@@ -314,9 +318,8 @@ def main(conf,
     planeSFs_downsampled = planeSFs_downsampled.merge(hitSFs)
 
     ###### FIT TRAJECTORIES ###   
-    nwo_fit = 4
-    total_ram = 12
-    ram_allowed_in_gb = total_ram / nwo_fit
+    nwo_fit = conf.get('trajectory_workers', nwo)
+    ram_allowed_in_gb = conf.get('trajectory_ram_gb', 1)
     trajSFs_fitted = planeSFs_downsampled.apply_mp(sa.fit_trajectory, nwo_fit, ram_allowed_in_gb = ram_allowed_in_gb, **traj_fit_params)
 
     ###### GET TRAJECTORY COORDINATES ###
@@ -419,8 +422,8 @@ if __name__ == '__main__':
 
     name = ppl._name
 
-    main(conf, trajectory_params, 
-         plane_point_params, hit_point_params, bounce_params,
-         downsample_params, viterbi_net_params, penalty_params, 
-         viterbi_traj_params, name = name)
-
+    main(conf, trajectory_params = trajectory_params,
+         plane_point_params = plane_point_params, hit_point_params = hit_point_params,
+         downsample_params = downsample_params, viterbi_net_params = viterbi_net_params,
+         penalty_params = penalty_params, viterbi_traj_params = viterbi_traj_params,
+         bounce_params = bounce_params, name = name)

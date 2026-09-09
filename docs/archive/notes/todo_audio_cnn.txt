@@ -1,0 +1,6 @@
+experiment with model parameters:
+- smaller hops (more resolution, but: increase kernel size?)
+- window sizes
+- batch size
+
+make model smaller -> right now, it is on the (unnecessarily) large side of things.

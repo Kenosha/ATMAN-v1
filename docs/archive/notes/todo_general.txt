@@ -1,0 +1,5 @@
+- Make a filter_funcs file, where we have filters for Points and Shots that take a Point or a Shot and return a Boolean
+	- filter_shots_funcs, filter_points_funcs separately!
+
+- with respect to the filter_funcs point, but also more generally: look at the vis_ut functions from the visualization scripts, 
+	and check if you can re-factor them into generally usable funcs modules.

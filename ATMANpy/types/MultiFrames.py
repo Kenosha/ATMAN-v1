@@ -620,6 +620,8 @@ class Frames:
         if pix_fmt is not None:
             outputdict['-pix_fmt'] = str(pix_fmt)
             
+        if os.environ.get('ATMAN_FFMPEG_THREADS'):
+            outputdict['-threads'] = os.environ['ATMAN_FFMPEG_THREADS']
         writer = FFmpegWriter(fullPath, outputdict = outputdict)
         
         if self.__class__.get_color() == 'bgr':

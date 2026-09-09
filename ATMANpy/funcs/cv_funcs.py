@@ -35,7 +35,9 @@ def get_frame(cap, frame_num):
         print(f'No such frame, choose number between 0 and {total_frames}')
         return None
     
-    cap.set(cv.CAP_PROP_POS_FRAMES, frame_num)
+    # Avoid decoding the GOP again when this is already the next frame.
+    if cap.get(cv.CAP_PROP_POS_FRAMES) != frame_num:
+        cap.set(cv.CAP_PROP_POS_FRAMES, frame_num)
     ret, frame = cap.read()
     
     return frame
@@ -60,7 +62,8 @@ def get_framelist(cap, frameList):
     outFrames = []
     
     for frmNum in frameList:
-        cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
+        if cap.get(cv.CAP_PROP_POS_FRAMES) != frmNum:
+            cap.set(cv.CAP_PROP_POS_FRAMES, frmNum)
         ret, frame = cap.read()
         
         # if color_space == 'hsv':

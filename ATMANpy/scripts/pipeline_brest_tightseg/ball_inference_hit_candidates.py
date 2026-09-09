@@ -113,7 +113,8 @@ def main(conf, params, name = None):
     ## TODO: maybe add more than just one candidate contour, let the particle filter decide which one is best?
     hitcntSF = mySF.apply(sa.get_inferred_hit_points, **params).dropna()
     
-    check(vid, sto, name, plySF, hitcntSF, cap)
+    if conf.get('visualize', True):
+        check(vid, sto, name, plySF, hitcntSF, cap)
 
     save(hitcntSF, vid, sto, compression = params['resolution'])
 

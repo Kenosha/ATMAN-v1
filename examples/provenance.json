@@ -1,0 +1,44 @@
+{
+  "match": "2021-7341-ms001-brest-brandon-nakashima-vs-joao-sousa",
+  "store": "driver_run_store",
+  "selection": "read_in_data_tables, then the first 12 distinct non-null point_idx values, retaining every row for those points",
+  "rows": 2003,
+  "points": 12,
+  "shots": 65,
+  "source_tables": [
+    {
+      "name": "2024-06-15-18-25-51_882904731.csv",
+      "sha256": "b7903dcb579fc2a7c03f3cb8dae3e71eb036d106bd47e688144f1fdf520d35c2"
+    },
+    {
+      "name": "2024-07-23-20-04-55_220664826.csv",
+      "sha256": "3c29493e80079d5666c75b8bcf3e921969d6b924059f7c9f3f21ba2fd2ba3576"
+    },
+    {
+      "name": "2024-10-31-00-04-07_375053853.csv",
+      "sha256": "3c29493e80079d5666c75b8bcf3e921969d6b924059f7c9f3f21ba2fd2ba3576"
+    },
+    {
+      "name": "2025-03-06-22-37-07_979828932.csv",
+      "sha256": "b49066c13cf762ef6d6b352beeef9750ae59ec5795fc603859c040a60b4ec69a"
+    },
+    {
+      "name": "2025-03-07-22-11-54_679892382.csv",
+      "sha256": "92b7548588ba75defb995c5f347c93f0f3686e04e247872c742fb03e9fe19bef"
+    },
+    {
+      "name": "2025-03-19-11-09-58_659160190.csv",
+      "sha256": "92b7548588ba75defb995c5f347c93f0f3686e04e247872c742fb03e9fe19bef"
+    },
+    {
+      "name": "2025-03-20-14-17-50_280670748.csv",
+      "sha256": "92b7548588ba75defb995c5f347c93f0f3686e04e247872c742fb03e9fe19bef"
+    },
+    {
+      "name": "2025-03-21-21-29-55_711499790.csv",
+      "sha256": "92b7548588ba75defb995c5f347c93f0f3686e04e247872c742fb03e9fe19bef"
+    }
+  ],
+  "sample_sha256": "37679f111fb469554b4c6aaf801eab4206eccaa38da3f35ed558cb689ec0d8d8",
+  "interpretation": "Historical ATMAN model estimates and manual corrections; not independent ground truth. No match video or model weights are embedded."
+}

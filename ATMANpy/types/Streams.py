@@ -109,6 +109,17 @@ def apply_async(poolCls, gen, num_workers, applyFunc, metaFunc = None,
     
     if args is None: args = []
     if kwargs is None: kwargs = {}
+    if num_workers == 1:
+        outList = []
+        for genObj in gen:
+            if metaFunc is None:
+                result = applyFunc(*args, **kwargs)
+            elif isinstance(metaFunc, str):
+                result = getattr(genObj, metaFunc)(applyFunc, *args, **kwargs)
+            else:
+                result = metaFunc(applyFunc, *args, **kwargs)
+            outList.append(result)
+        return outList
     
     def ram_is_ok(max_size_of_stream = 4, buffer_needed_gb = 8):
         ### max size of stream is due to the impossibility of pickling an object larger than 4GB
@@ -255,14 +266,16 @@ class Stream:
         
     def __post_init__(self):
         ### CHECK FRAMES
-        total_frames = self.cap.get(cv.CAP_PROP_FRAME_COUNT)
-        if self.start_frame < 0:
-            print(f'Negative start frame ({self.start_frame}) not available. Reinitializing with start_frame = 0...')
-            object.__setattr__(self, 'start_frame', 0)
+        total_frames = int(self.cap.get(cv.CAP_PROP_FRAME_COUNT))
+        first_available = self.truncation_anchor
+        last_available = first_available + total_frames - 1
+        if self.start_frame < first_available:
+            print(f'Start frame ({self.start_frame}) not available. Reinitializing with start_frame = {first_available}...')
+            object.__setattr__(self, 'start_frame', first_available)
         
-        if self.stop_frame > total_frames:
-            print(f'{self.stop_frame} not available in cap of length {total_frames}. Reinitializing with stop_frame = {total_frames}...')
-            object.__setattr__(self, 'stop_frame', total_frames)
+        if self.stop_frame > last_available:
+            print(f'{self.stop_frame} not available in cap of length {total_frames}. Reinitializing with stop_frame = {last_available}...')
+            object.__setattr__(self, 'stop_frame', last_available)
             
         if self.start_frame > self.stop_frame:
             print(f'Stop frame ({self.stop_frame}) occurs before start frame ({self.start_frame})')
@@ -582,6 +595,8 @@ class Stream:
             -> pass in a Pool to do multiprocessed extraction
             (see extract_threaded and extract_mp below)
         """
+        if num_workers == 1:
+            return self.extract(featureFunc, **kwargs)
         WAIT_SECS = 0.001
         
         ### Set up the pool
@@ -2458,4 +2473,4 @@ class NCRandStream(NCStream):
             cv.destroyAllWindows()
 
     
-    
+

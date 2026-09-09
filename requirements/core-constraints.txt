@@ -1,0 +1,17 @@
+# Direct dependency versions available during the local Python 3.12 preparation.
+# Use with: python -m pip install -e . -c requirements/core-constraints.txt
+# This is not a full lockfile; transitive dependencies are resolved by pip.
+dill==0.4.0
+matplotlib==3.10.7
+multipledispatch==1.0.0
+networkx==3.5
+numpy==1.26.4
+opencv-python==4.11.0.86
+pandas==2.3.3
+Pillow==11.3.0
+psutil==7.1.3
+scikit-learn==1.7.2
+scikit-video==1.1.11
+scipy==1.16.3
+seaborn==0.13.2
+statsmodels==0.14.5

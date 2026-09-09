@@ -231,7 +231,8 @@ def run_inference_on_arbitrary_spectrum(model, data_loader, device, as_logits = 
             specArr, fsArr, lsArr = batchObj
             specArr = specArr.to(device)
             
-            outArr = model(specArr).to('cpu').squeeze()
+            # Retain label/time axes when a short segment yields one prediction.
+            outArr = model(specArr).to('cpu')[0, :, 0, :]
             
             if as_logits:
                 outArr = nn.Sigmoid()(outArr)
@@ -264,11 +265,10 @@ def load_cnn(model_name, model_type, device = 'cuda'):
                        frequencies = params['freqs'], hops = params['hops'], initial_output_shares = [0.1, 0.1])
     
     model.to(device)
-    model.load_state_dict(torch.load(res_read_where))
+    model.load_state_dict(torch.load(res_read_where, map_location=device, weights_only=True))
     model.train(False)
 
     return model, params
-
 
 
 

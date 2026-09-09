@@ -7,8 +7,10 @@ Created on Tue Dec 19 14:21:06 2023
 
 
 import os
+import json
 import math
 import random
+import subprocess
 import librosa
 import numpy as np
 import pandas as pd
@@ -29,6 +31,35 @@ from ATMANpy.models.SoundCNN.utils import first_last_sample_index_in_frame
 
 SAMPLE_RATE = 44100
 FPS = 25
+
+
+def load_mono_video_audio(videoPath):
+    """Decode native-rate audio and average its channels, as in the original loader.
+
+    Current torchaudio versions no longer provide the info/load FFmpeg interface
+    used here originally. Keep decoding separate from the unchanged spectrogram
+    and normalization code; do not resample or apply FFmpeg's channel downmix.
+    """
+    metadata = subprocess.run(
+        ['ffprobe', '-v', 'error', '-select_streams', 'a:0',
+         '-show_entries', 'stream=sample_rate,channels', '-of', 'json', videoPath],
+        check=True, capture_output=True, text=True)
+    streams = json.loads(metadata.stdout)['streams']
+    if not streams:
+        raise ValueError(f'No audio stream in {videoPath}')
+    sample_rate = int(streams[0]['sample_rate'])
+    channels = int(streams[0]['channels'])
+    decoded = subprocess.run(
+        ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-threads', '1',
+         '-i', videoPath, '-map', '0:a:0', '-vn', '-sn', '-dn',
+         '-acodec', 'pcm_f32le', '-f', 'f32le', 'pipe:1'],
+        check=True, capture_output=True)
+    waveform = np.frombuffer(decoded.stdout, dtype='<f4')
+    if waveform.size == 0 or waveform.size % channels:
+        raise ValueError(f'Could not decode complete audio samples from {videoPath}')
+    mono_waveform = waveform.reshape(-1, channels).mean(axis=1)
+    return mono_waveform, sample_rate
+
 
 class LabelledSpectroData(Dataset):
     
@@ -122,15 +153,8 @@ def waveform_generator(vid, sto, segmenter = 'isRally', yield_frame_indices = Tr
     videoPath = os.path.join(videoDir, 'match.mp4')
         
     ### get waveform
-    metadata = torchaudio.info(videoPath)
-    sample_rate = metadata.sample_rate
-    # print(metadata)
+    mono_waveform, sample_rate = load_mono_video_audio(videoPath)
     samples_per_frame = sample_rate // FPS
-
-    # waveform to mono
-    stereo_waveform, sample_rate = torchaudio.load(videoPath)
-    stereo_waveform = stereo_waveform.numpy()
-    mono_waveform = np.mean(stereo_waveform, axis = 0)
 
     ### get segmenter 
     ### TODO: Why do we read this again, and not pass it in?
@@ -160,15 +184,8 @@ def point_sound_generator(vid, sto, segmenter = 'isRally',
     videoPath = os.path.join(videoDir, 'match.mp4')
         
     ### get waveform
-    metadata = torchaudio.info(videoPath)
-    sample_rate = metadata.sample_rate
-    # print(metadata)
+    mono_waveform, sample_rate = load_mono_video_audio(videoPath)
     samples_per_frame = sample_rate // FPS
-
-    # waveform to mono
-    stereo_waveform, sample_rate = torchaudio.load(videoPath)
-    stereo_waveform = stereo_waveform.numpy()
-    mono_waveform = np.mean(stereo_waveform, axis = 0)
     # samples = len(mono_waveform)
     
     ### get segmenter 
@@ -248,5 +265,4 @@ class PointSpectroData(IterableDataset):
             return inf_gen
 
     
-
 

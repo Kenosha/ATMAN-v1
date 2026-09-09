@@ -58,13 +58,16 @@ def main(conf, courtline_params, name = None):
     
     ### Read Courtlines
     # -> since camera is fixed, lines are simply a parameter! we will make a single homography by getting a few random shots
-    randStm = RandStream(cap, conf['start_frame'], conf['stop_frame'], number_of_frames = 1000,
+    sample_count = min(conf.get('court_sample_frames', 1000), stop - start + 1)
+    randStm = RandStream(cap, conf['start_frame'], conf['stop_frame'], number_of_frames = sample_count,
                          cap_color_space = 'bgr', target_color_space = 'grey')
     
     courtSF = randStm.extract_mp(ex.get_courtlines, nwo, **courtline_params)
     
     ### Average out courtlines found.
     HSF = courtSF['H'].dropna()
+    if HSF.length() == 0:
+        raise ValueError('No court could be calibrated from the sampled video frames.')
     cornerSF = HSF.apply(sa.find_courtlines).apply(sa.get_court_corner_points).apply(sa.points_to_coords)
     
     median_points = np.median(cornerSF.to_array(), axis = 0).astype(int)
@@ -123,4 +126,4 @@ if __name__ == '__main__':
     
     
     
-    
+
