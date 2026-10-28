@@ -50,3 +50,13 @@ also use stable arithmetic, and importing the library no longer changes global
 NumPy error handling. These are documented algorithm fixes, not a claim of exact
 old-output equivalence for the affected cases. The extraction is tested with
 synthetic sequences; it does not claim revalidation of historical match accuracy.
+
+## Tests
+
+The base test suite skips the four optional HMM integration checks when the
+library is not installed. CI first checks that base installation, then installs
+`.[hmm]` and runs those four checks. To run them locally after installing the extra:
+
+```bash
+python -m unittest discover -s tests -p test_hmm_package.py -v
+```

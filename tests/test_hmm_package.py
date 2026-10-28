@@ -6,9 +6,15 @@ import unittest
 from unittest.mock import patch
 import numpy as np
 import pandas as pd
-from kenosha_hmm import GaussianHMM
+try:
+    from kenosha_hmm import GaussianHMM
+except ModuleNotFoundError as error:
+    if error.name != 'kenosha_hmm':
+        raise
+    GaussianHMM = None
 
 
+@unittest.skipIf(GaussianHMM is None, 'Install ATMANpy[hmm] to test the optional HMM integration')
 class HMMPackageIntegration(unittest.TestCase):
     def test_historical_namespaces_delegate(self):
         for name in ['HInit', 'HRest', 'HERest', 'HVite', 'high_level']:
