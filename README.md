@@ -84,6 +84,14 @@ These checks establish execution and preservation of the exercised functionality
 python -m unittest discover -s tests -v
 ```
 
+## Reuse the hidden Markov models
+
+The generic HMM algorithms now come from the separate MIT-licensed
+[kenosha-hmm](https://github.com/Kenosha/kenosha-hmm) Python package. ATMAN retains its tennis postprocessing, dataset adapters and historical
+import paths. HMM training is optional; the sample/demo installation above is
+unchanged. See [HMM installation and migration](docs/HMM.md) for package
+installation, examples and the extraction's numerical corrections.
+
 ## Explore the implementation
 
 | Area | Start here |
